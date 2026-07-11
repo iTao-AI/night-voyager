@@ -1,8 +1,40 @@
-import Link from "next/link";
+"use client";
 
-const countries = ["Japan", "Malaysia", "Australia"];
+import Link from "next/link";
+import { useState } from "react";
+
+const countryFixtures = {
+  Japan: {
+    evidenceStatus: "Japan · Conditional",
+    annualCost: "¥2.8m–3.4m",
+    languagePathway: "English program; Japanese plan advised",
+    visaUncertainty: "Financial proof timing",
+    nextAction: "Advisor reviews accepted evidence",
+  },
+  Malaysia: {
+    evidenceStatus: "Malaysia · Blocked · Evidence gap",
+    annualCost: "RM 72k–88k",
+    languagePathway: "English program",
+    visaUncertainty: "Scholarship renewal evidence unresolved",
+    nextAction: "Obtain scholarship renewal terms",
+  },
+  Australia: {
+    evidenceStatus: "Australia · Comparison",
+    annualCost: "A$58k–66k",
+    languagePathway: "English program",
+    visaUncertainty: "Post-study assumptions separated",
+    nextAction: "Confirm affordability ceiling",
+  },
+} as const;
+
+type Country = keyof typeof countryFixtures;
+
+const countries = Object.keys(countryFixtures) as Country[];
 
 export default function DemoPage() {
+  const [selectedCountry, setSelectedCountry] = useState<Country>("Japan");
+  const projection = countryFixtures[selectedCountry];
+
   return (
     <>
       <a className="skip-link" href="#demo-main">Skip to decision workflow</a>
@@ -55,13 +87,24 @@ export default function DemoPage() {
 
           <fieldset className="country-switcher">
             <legend>Choose a country</legend>
-            <div className="switcher-row">{countries.map((country, index) => <button key={country} type="button" aria-pressed={index === 0}>{country}</button>)}</div>
-            <dl className="mobile-dimensions">
-              <div><dt>Evidence status</dt><dd>Japan · Conditional</dd></div>
-              <div><dt>Annual-cost range</dt><dd>¥2.8m–3.4m</dd></div>
-              <div><dt>Language pathway</dt><dd>English program; Japanese plan advised</dd></div>
-              <div><dt>Visa uncertainty</dt><dd>Financial proof timing</dd></div>
-              <div><dt>Next human action</dt><dd>Advisor reviews accepted evidence</dd></div>
+            <div className="switcher-row">
+              {countries.map((country) => (
+                <button
+                  key={country}
+                  type="button"
+                  aria-pressed={selectedCountry === country}
+                  onClick={() => setSelectedCountry(country)}
+                >
+                  {country}
+                </button>
+              ))}
+            </div>
+            <dl className="mobile-dimensions" aria-live="polite">
+              <div><dt>Evidence status</dt><dd>{projection.evidenceStatus}</dd></div>
+              <div><dt>Annual-cost range</dt><dd>{projection.annualCost}</dd></div>
+              <div><dt>Language pathway</dt><dd>{projection.languagePathway}</dd></div>
+              <div><dt>Visa uncertainty</dt><dd>{projection.visaUncertainty}</dd></div>
+              <div><dt>Next human action</dt><dd>{projection.nextAction}</dd></div>
             </dl>
           </fieldset>
 

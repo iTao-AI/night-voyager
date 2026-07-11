@@ -9,7 +9,7 @@
 
 ## Interaction rules
 
-- The country switcher is a fixture-only responsive projection; M1 requires no client-side state change.
+- The country switcher changes local client state to project the selected country’s five static fixture dimensions. It does not write domain state, call a backend, or perform a product mutation.
 - Evidence details and task execution detail use native disclosure controls.
 - Keyboard focus is visible. Disabled controls are paired with adjacent reason text rather than relying on native tooltip behavior.
 - Confirmation copy names the selected route, known trade-offs, and the artifact that would be produced in a future mutation-enabled milestone.

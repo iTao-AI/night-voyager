@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import DemoPage from "../../app/demo/page";
@@ -45,6 +45,30 @@ describe("M1 demo design contract", () => {
     expect(within(malaysia).getByRole("heading", { name: /malaysia remains blocked/i })).toBeInTheDocument();
     expect(within(malaysia).getByText(/evidence gap/i)).toBeInTheDocument();
     expect(within(malaysia).getByRole("button", { name: /choose malaysia/i })).toBeDisabled();
+  });
+
+  it("switches the mobile fixture projection across all three countries", () => {
+    render(<DemoPage />);
+
+    const switcher = screen.getByRole("group", { name: /choose a country/i });
+    const japan = within(switcher).getByRole("button", { name: "Japan" });
+    const malaysia = within(switcher).getByRole("button", { name: "Malaysia" });
+    const australia = within(switcher).getByRole("button", { name: "Australia" });
+
+    expect(japan).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(malaysia);
+    expect(malaysia).toHaveAttribute("aria-pressed", "true");
+    expect(japan).toHaveAttribute("aria-pressed", "false");
+    expect(within(switcher).getByText("Malaysia · Blocked · Evidence gap")).toBeInTheDocument();
+    expect(within(switcher).getByText("RM 72k–88k")).toBeInTheDocument();
+    expect(within(switcher).getByText("Obtain scholarship renewal terms")).toBeInTheDocument();
+
+    fireEvent.click(australia);
+    expect(australia).toHaveAttribute("aria-pressed", "true");
+    expect(malaysia).toHaveAttribute("aria-pressed", "false");
+    expect(within(switcher).getByText("Australia · Comparison")).toBeInTheDocument();
+    expect(within(switcher).getByText("A$58k–66k")).toBeInTheDocument();
+    expect(within(switcher).getByText("Confirm affordability ceiling")).toBeInTheDocument();
   });
 
   it("keeps technical execution detail secondary and disclosure-based", () => {
