@@ -1,30 +1,28 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor demo proof check logs down fixtures-check reset-demo
+.PHONY: help doctor demo proof compose-proof check logs down fixtures-check reset-demo
 
 help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-doctor: ## Verify required local tool versions (MODE=dev)
-	@test "$(MODE)" = "dev" || (echo "MODE must be dev" && exit 1)
-	@uv python find 3.12.13 >/dev/null
-	@test "$$(node --version)" = "v24.18.0" || (echo "Node 24.18.0 required; found $$(node --version)" && exit 1)
-	@docker --version
-	@docker compose version
-	@echo "doctor: bootstrap prerequisites available"
+doctor: ## Verify evaluator prerequisites; MODE=dev adds contributor tools
+	@scripts/doctor.sh
 
 demo: ## Build and start the local bootstrap stack
 	docker compose up --build --wait
 
-proof: ## Run release skeleton, wheel smoke, and public-hygiene proof
-	uv run python scripts/verify_release.py
+proof: ## Run config, hygiene, and wheel proof using Docker only
+	docker build --file Dockerfile.proof --target proof --tag night-voyager-proof:local .
+
+compose-proof: ## Prove service health, probes, and teardown
+	@scripts/verify_compose.sh
 
 check: ## Run backend, frontend, Compose, and proof checks
 	uv lock --check
 	uv run pytest -q
 	uv run ruff check .
 	uv run pyright
-	uv build
+	uv build --build-constraints build-constraints.txt
 	npm --prefix web ci
 	npm --prefix web run lint
 	npm --prefix web run typecheck

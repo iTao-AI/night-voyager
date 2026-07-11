@@ -1,16 +1,16 @@
 [build-system]
-requires = ["hatchling>=1.27,<2"]
+requires = ["hatchling==1.31.0"]
 build-backend = "hatchling.build"
 
 [project]
 name = "night-voyager"
-version = "0.0.0"
+version = "0.1.0"
 description = "Bootstrap foundation for Night Voyager"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
 dependencies = [
-  "fastapi>=0.116,<1",
+  "fastapi>=0.128,<0.129",
   "pydantic-settings>=2.10,<3",
   "uvicorn[standard]>=0.35,<1",
 ]
@@ -29,9 +29,6 @@ packages = ["src/night_voyager"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-filterwarnings = [
-  "ignore:Using `httpx` with `starlette.testclient` is deprecated:starlette.exceptions.StarletteDeprecationWarning",
-]
 
 [tool.ruff]
 target-version = "py312"
