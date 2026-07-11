@@ -84,7 +84,29 @@ def test_build_backend_is_exactly_pinned() -> None:
     assert constraints.startswith("hatchling==1.31.0 --hash=")
     assert constraints.count("--hash=sha256:") == 5
     dockerfile = (ROOT / "Dockerfile.api").read_text(encoding="utf-8")
-    assert "uv build --wheel --build-constraints build-constraints.txt" in dockerfile
+    assert (
+        "uv build --wheel --build-constraints build-constraints.txt --require-hashes" in dockerfile
+    )
+
+
+def test_every_uv_build_path_enforces_hashed_constraints() -> None:
+    surfaces = {
+        "Makefile": (ROOT / "Makefile").read_text(encoding="utf-8"),
+        "Dockerfile.proof": (ROOT / "Dockerfile.proof").read_text(encoding="utf-8"),
+        "Dockerfile.api": (ROOT / "Dockerfile.api").read_text(encoding="utf-8"),
+        "ci.yml": (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"),
+        "verify_release.py": (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8"),
+    }
+
+    for name, content in surfaces.items():
+        assert "UV_BUILD_CONSTRAINT" in content, name
+    for name in ("Makefile", "Dockerfile.proof", "ci.yml"):
+        assert "UV_REQUIRE_HASHES" in surfaces[name], name
+    for name in ("Makefile", "Dockerfile.api", "ci.yml", "verify_release.py"):
+        assert "--require-hashes" in surfaces[name], name
+    assert (
+        'wheel_install_environment.pop("UV_REQUIRE_HASHES", None)' in surfaces["verify_release.py"]
+    )
 
 
 def test_dependabot_covers_approved_ecosystems() -> None:

@@ -1,4 +1,6 @@
 .DEFAULT_GOAL := help
+export UV_BUILD_CONSTRAINT := build-constraints.txt
+export UV_REQUIRE_HASHES := 1
 
 .PHONY: help doctor demo proof compose-proof check logs down fixtures-check reset-demo
 
@@ -22,7 +24,7 @@ check: ## Run backend, frontend, Compose, and proof checks
 	uv run pytest -q
 	uv run ruff check .
 	uv run pyright
-	uv build --build-constraints build-constraints.txt
+	uv build --build-constraints build-constraints.txt --require-hashes
 	npm --prefix web ci
 	npm --prefix web run lint
 	npm --prefix web run typecheck

@@ -8,14 +8,22 @@ fail() {
 
 check_ports() {
     ports=${NIGHT_VOYAGER_DOCTOR_PORTS:-"${WEB_PORT:-3000} ${API_PORT:-8000} ${POSTGRES_PORT:-55432}"}
-    command -v nc >/dev/null 2>&1 || fail \
-        "port probe capability" "nc available" "nc command not found" \
-        "install netcat, then rerun make doctor"
+    probe_image=${NIGHT_VOYAGER_DOCTOR_PROBE_IMAGE:-python:3.12.13-slim}
+    if ! docker image inspect "$probe_image" >/dev/null 2>&1; then
+        docker pull "$probe_image" >/dev/null 2>&1 || fail \
+            "port probe image" "$probe_image is locally available" \
+            "Docker could not pull the probe image" \
+            "run docker pull $probe_image, then rerun make doctor"
+    fi
     for port in $ports; do
-        if [ "${NIGHT_VOYAGER_DOCTOR_ASSUME_PORT_IN_USE:-}" = "$port" ] || \
-            nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then
+        probe_name="night-voyager-port-probe-$$-$port"
+        if probe_output=$(docker run --detach --rm --name "$probe_name" \
+            --publish "127.0.0.1:$port:8000" "$probe_image" \
+            python -c "import time; time.sleep(30)" 2>&1); then
+            docker rm --force "$probe_name" >/dev/null 2>&1 || true
+        else
             fail "port availability" "127.0.0.1:$port is free" \
-                "port is already in use" \
+                "Docker could not bind the port: $probe_output" \
                 "stop the process using the port or override WEB_PORT/API_PORT/POSTGRES_PORT"
         fi
         printf 'PASSED CHECK: port 127.0.0.1:%s is free\n' "$port"

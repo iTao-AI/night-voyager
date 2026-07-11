@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import tempfile
@@ -24,9 +25,12 @@ IGNORED_DIRECTORIES = {
 }
 BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".png", ".webp"}
 
+os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
+os.environ.setdefault("UV_REQUIRE_HASHES", "1")
 
-def run(*command: str, cwd: Path = ROOT) -> None:
-    subprocess.run(command, cwd=cwd, check=True)
+
+def run(*command: str, cwd: Path = ROOT, env: dict[str, str] | None = None) -> None:
+    subprocess.run(command, cwd=cwd, env=env, check=True)
 
 
 def git_available() -> bool:
@@ -155,13 +159,30 @@ def verify_config() -> None:
 
 
 def verify_wheel() -> None:
-    run("uv", "build", "--wheel", "--build-constraints", "build-constraints.txt")
+    run(
+        "uv",
+        "build",
+        "--wheel",
+        "--build-constraints",
+        "build-constraints.txt",
+        "--require-hashes",
+    )
     wheel = max((ROOT / "dist").glob("*.whl"), key=lambda path: path.stat().st_mtime)
     with tempfile.TemporaryDirectory(prefix="night-voyager-wheel-") as temp:
         venv = str(Path(temp) / ".venv")
         run("uv", "venv", venv, "--python", "3.12.13")
         python = f"{venv}/bin/python"
-        run("uv", "pip", "install", "--python", python, str(wheel))
+        wheel_install_environment = os.environ.copy()
+        wheel_install_environment.pop("UV_REQUIRE_HASHES", None)
+        run(
+            "uv",
+            "pip",
+            "install",
+            "--python",
+            python,
+            str(wheel),
+            env=wheel_install_environment,
+        )
         run(
             python,
             "-c",

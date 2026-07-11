@@ -16,6 +16,9 @@ jobs:
   python:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      UV_BUILD_CONSTRAINT: build-constraints.txt
+      UV_REQUIRE_HASHES: "1"
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -29,7 +32,7 @@ jobs:
       - run: uv run pytest -q
       - run: uv run ruff check .
       - run: uv run pyright
-      - run: uv build --build-constraints build-constraints.txt
+      - run: uv build --build-constraints build-constraints.txt --require-hashes
       - run: uv run python scripts/verify_release.py --tree-mode release
 
   frontend:
