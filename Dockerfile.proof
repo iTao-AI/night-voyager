@@ -1,0 +1,9 @@
+FROM python:3.12.13-slim AS proof
+
+WORKDIR /workspace
+ENV UV_BUILD_CONSTRAINT=build-constraints.txt \
+    UV_REQUIRE_HASHES=1
+RUN pip install --no-cache-dir uv==0.11.7
+COPY . .
+RUN uv sync --locked \
+    && uv run python scripts/verify_release.py --tree-mode snapshot

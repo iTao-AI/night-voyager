@@ -1,0 +1,80 @@
+name: night-voyager
+
+x-python-service: &python-service
+  build:
+    context: .
+    dockerfile: Dockerfile.api
+  environment:
+    NIGHT_VOYAGER_ENVIRONMENT: development
+    NIGHT_VOYAGER_SECRET_KEY: change-me-before-production
+    NIGHT_VOYAGER_DATABASE_URL: postgresql://night_voyager:night_voyager@postgres:5432/night_voyager
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-night_voyager}
+      POSTGRES_USER: ${POSTGRES_USER:-night_voyager}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-night_voyager}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql
+
+  migrator:
+    <<: *python-service
+    command: ["python", "-c", "print('No M0 migrations to apply')"]
+    restart: "no"
+
+  api:
+    <<: *python-service
+    ports:
+      - "127.0.0.1:${API_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *python-service
+    command: ["python", "-m", "night_voyager.worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+
+  web:
+    build:
+      context: web
+      dockerfile: Dockerfile
+    environment:
+      API_BASE_URL: http://api:8000
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  postgres-data:
