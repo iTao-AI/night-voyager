@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from httpx import Response
+from httpx2 import Response
 
 from night_voyager.api import create_app
 
