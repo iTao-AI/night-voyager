@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 当前处于 **M0 bootstrap 阶段**。仓库只提供可复现的 Python API、Next.js Web、PostgreSQL 与持久 worker 本地工程基线；尚未实现留学决策工作流、生产租户能力或真实 provider 集成。
+Night Voyager 已具备 **M0 bootstrap 基线**与 **M1 fixture-only design contract**。仓库提供可复现的 Python API、Next.js Web、PostgreSQL 与持久 worker 本地工程基线；`/demo` 使用合成 fixture 演示已批准的 advisor-to-family 产品流程，但不连接 domain backend，也不实现 mutation、生产租户能力或真实 provider 集成。
 
 ## Evaluator 路径
 
@@ -18,6 +18,8 @@ make down
 
 `make demo` 只启动合成的 bootstrap 服务。API 健康检查为 `http://127.0.0.1:8000/health`，Web bootstrap 页面为 `http://127.0.0.1:3000`。所有 host publish 均只绑定 IPv4 loopback。
 
+M1 fixture-only prototype 位于 `http://127.0.0.1:3000/demo`。视觉与产品合同见 [DESIGN.md](DESIGN.md) 和 [docs/design/](docs/design/)。
+
 ## Contributor 路径
 
 Contributor 还需要由 [uv](https://docs.astral.sh/uv/) 管理的 Python 3.12.13、Node.js 24.18.0 与 npm。
@@ -31,7 +33,7 @@ make check
 
 ## 当前边界
 
-- 没有领域状态机、证据工作流、顾问/家庭 UI 或 tenant/RLS migration。
+- 没有领域状态机、证据工作流 backend、顾问/家庭 mutation 或 tenant/RLS migration；`/demo` 只渲染合成 fixture states。
 - 没有真实 DRA、MKE、OpenClaw、模型或消息适配器。
 - 不代表生产部署、真实用户或录取结果。
 

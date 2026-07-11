@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager is currently at the **M0 bootstrap stage**. This repository provides a reproducible local foundation for a Python API, Next.js web application, PostgreSQL, and durable worker process. It does not yet implement study-abroad decision workflows, production tenancy, or live provider integrations.
+Night Voyager has an **M0 bootstrap foundation** and an **M1 fixture-only design contract**. The repository provides a reproducible local foundation for a Python API, Next.js web application, PostgreSQL, and durable worker process. The `/demo` route demonstrates the approved advisor-to-family product flow with synthetic fixtures; it is not connected to a domain backend and does not implement mutations, production tenancy, or live provider integrations.
 
 ## Evaluator lane
 
@@ -18,6 +18,8 @@ make down
 
 `make demo` starts synthetic bootstrap services only. The API health endpoint is `http://127.0.0.1:8000/health`; the web bootstrap page is `http://127.0.0.1:3000`. Published ports bind to IPv4 loopback only.
 
+The fixture-only M1 prototype is available at `http://127.0.0.1:3000/demo`. Its visual and product contracts are documented in [DESIGN.md](DESIGN.md) and [docs/design/](docs/design/).
+
 ## Contributor lane
 
 Contributors additionally need Python 3.12.13 managed by [uv](https://docs.astral.sh/uv/), Node.js 24.18.0, and npm.
@@ -31,7 +33,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/RE
 
 ## Current limits
 
-- No domain state machine, evidence workflow, advisor/family UI, or tenant/RLS migration.
+- No domain state machine, evidence workflow backend, advisor/family mutation, or tenant/RLS migration. `/demo` renders synthetic fixture states only.
 - No real DRA, MKE, OpenClaw, model, or messaging adapter.
 - No production deployment or user/admissions outcome claim.
 
