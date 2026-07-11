@@ -131,8 +131,20 @@ def verify_config() -> None:
     }
     if set(versions.values()) != {VERSION}:
         raise SystemExit(f"identity version mismatch: {versions}")
-    if package_version(uv_lock["package"], "fastapi").split(".")[:2] != ["0", "128"]:
-        raise SystemExit("FastAPI lock must remain on approved 0.128.x")
+    runtime_dependencies = pyproject["project"]["dependencies"]
+    if "fastapi>=0.139,<0.140" not in runtime_dependencies:
+        raise SystemExit("FastAPI runtime dependency must remain on approved 0.139.x")
+    if "starlette>=1.3.1,<1.4" not in runtime_dependencies:
+        raise SystemExit(
+            "Starlette runtime dependency must enforce the approved 1.3.1 security floor"
+        )
+    if package_version(uv_lock["package"], "fastapi").split(".")[:2] != ["0", "139"]:
+        raise SystemExit("FastAPI lock must remain on approved 0.139.x")
+    locked_starlette = tuple(
+        int(part) for part in package_version(uv_lock["package"], "starlette").split(".")
+    )
+    if not (locked_starlette >= (1, 3, 1) and locked_starlette < (1, 4)):
+        raise SystemExit("Starlette lock must remain within the approved >=1.3.1,<1.4 range")
     if pyproject["build-system"]["requires"] != ["hatchling==1.31.0"]:
         raise SystemExit("build backend must be exactly pinned")
     if not constraint.startswith("hatchling==1.31.0 --hash=sha256:"):
@@ -153,7 +165,10 @@ def verify_config() -> None:
     if (ROOT / ".node-version").read_text(encoding="utf-8").strip() != "24.18.0":
         raise SystemExit("Node.js patch version drift")
     print(f"proof identity: Night Voyager package surfaces agree on version {VERSION}")
-    print("proof dependencies: FastAPI 0.128.x and hashed Hatchling 1.31.0 constraints confirmed")
+    print(
+        "proof dependencies: FastAPI 0.139.x, Starlette >=1.3.1,<1.4, "
+        "and hashed Hatchling 1.31.0 constraints confirmed"
+    )
     print(f"proof compose: exact PostgreSQL reference confirmed ({POSTGRES_IMAGE})")
     print("proof config: Python/Node pins and IPv4-loopback host bindings confirmed")
 
