@@ -1,6 +1,6 @@
 export default function Home() {
   return (
-    <main>
+    <main className="bootstrap-shell">
       <p className="eyebrow">M0 · Local bootstrap</p>
       <h1>Night Voyager</h1>
       <p>

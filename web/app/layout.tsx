@@ -3,7 +3,7 @@ import "./styles.css";
 
 export const metadata: Metadata = {
   title: "Night Voyager",
-  description: "Local bootstrap foundation",
+  description: "Evidence-grounded study-abroad decision workflow prototype",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

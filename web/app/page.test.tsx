@@ -5,8 +5,9 @@ import Home from "./page";
 
 describe("bootstrap page", () => {
   it("labels the current milestone without claiming product behavior", () => {
-    render(<Home />);
+    const { container } = render(<Home />);
     expect(screen.getByRole("heading", { name: "Night Voyager" })).toBeInTheDocument();
     expect(screen.getByText(/Product decision workflows are intentionally not implemented/)).toBeInTheDocument();
+    expect(container.querySelector("main")).toHaveClass("bootstrap-shell");
   });
 });
