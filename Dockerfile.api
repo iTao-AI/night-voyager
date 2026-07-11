@@ -1,4 +1,4 @@
-FROM python:3.12.13-slim AS builder
+FROM python:3.14.6-slim AS builder
 WORKDIR /build
 ENV UV_BUILD_CONSTRAINT=build-constraints.txt \
     UV_REQUIRE_HASHES=1
@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir uv==0.11.7 \
     && pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \
     && uv build --wheel --build-constraints build-constraints.txt --require-hashes --out-dir /wheels
 
-FROM python:3.12.13-slim
+FROM python:3.14.6-slim
 RUN useradd --create-home --uid 10001 app
 COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels

@@ -1,4 +1,4 @@
-FROM python:3.12.13-slim AS proof
+FROM python:3.14.6-slim AS proof
 
 WORKDIR /workspace
 ENV UV_BUILD_CONSTRAINT=build-constraints.txt \
