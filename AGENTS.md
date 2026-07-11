@@ -211,6 +211,8 @@ Report command success only when the command exists and has actually passed in t
 - Stage exact paths; do not use `git add .` or `git add -A`.
 - Keep commits reviewable and aligned with one coherent outcome.
 - Local commits are normal task completion after verification and diff review.
+- Write PR descriptions in Simplified Chinese by default for efficient local review, while keeping section headings, commands, code identifiers, API names, CLI output, file paths, and public product terms in English. Use English throughout only when the PR explicitly targets external collaborators or the user requests it.
+- Structure PR descriptions result-first with `Summary`, `Completion`, and `Verification`, followed when relevant by `Scope`, `Risk / Impact`, and `Documentation impact`.
 - Repository or bootstrap setup is complete only after the applicable GitHub-hosted merge policy, security settings, and `main` ruleset are configured and verified by a live API, CLI, or connector re-query.
 - Required check names must come from successful hosted runs; never infer them from workflow files or memory.
 - Do not push, create or merge a PR, tag, release, publish, or deploy without explicit user authorization.
