@@ -76,6 +76,8 @@ Then read only the surfaces relevant to the change:
 - Frontend or visual system: `DESIGN.md`, product-flow docs, and affected components.
 - Public claim or proof: the generating command, manifest, and evidence artifact.
 
+If an ADR, spec, plan, design, or reference document named by this file does not currently exist, report the missing document explicitly. Use the current code, tests, configuration, and commands as the basis for the task; do not invent the missing document's contents or completion status.
+
 Do not load the entire repository or repeat a full planning workflow for a local, reversible edit.
 
 ## Domain vocabulary
@@ -189,7 +191,7 @@ Do not create empty documentation folders. Update docs with the code whenever AP
 - Cover contracts, invalid transitions, lease expiry/reclaim, idempotency, path validation, and evidence-boundary failures.
 - Avoid speculative dependencies. Add a library only when it removes meaningful risk or complexity, and document why it is needed.
 
-The bootstrap milestone is expected to establish stable commands such as:
+M0 established these stable repository commands:
 
 ```bash
 make doctor MODE=dev
@@ -198,18 +200,25 @@ make demo
 make proof
 ```
 
-Do not claim these commands work until they exist and have actually passed.
+Report command success only when the command exists and has actually passed in the environment being described.
 
 ## Git workflow
 
 - The initial rules-first commit on `main` is the repository seed exception.
+- After that seed exception, every change intended to enter `main` must be merged through a pull request.
 - Subsequent implementation should use a short-lived `codex/` branch, normally in an isolated worktree for substantial work.
 - Inspect status before editing and preserve unrelated user changes.
 - Stage exact paths; do not use `git add .` or `git add -A`.
 - Keep commits reviewable and aligned with one coherent outcome.
 - Local commits are normal task completion after verification and diff review.
+- Repository or bootstrap setup is complete only after the applicable GitHub-hosted merge policy, security settings, and `main` ruleset are configured and verified by a live API, CLI, or connector re-query.
+- Required check names must come from successful hosted runs; never infer them from workflow files or memory.
 - Do not push, create or merge a PR, tag, release, publish, or deploy without explicit user authorization.
 - Do not start a feature that depends on an unmerged prerequisite unless the dependency and stacking strategy are explicit.
+
+## Issues
+
+Use GitHub Issues for deferred work, work spanning multiple PRs, ongoing investigation, or public collaboration. Handle work within the current approved scope directly; do not use an Issue as a routine execution transcript.
 
 ## Security and privacy
 
@@ -234,6 +243,7 @@ Before declaring a task complete:
 2. Run the checks proportional to the change and record actual results.
 3. Update affected documentation and evidence.
 4. Inspect the final diff for unrelated changes, generated noise, secrets, and private paths.
-5. State remaining risks and what was not verified.
+5. Report the branch and pull request, explicitly stating when no pull request exists.
+6. Report the checks actually run, documentation impact, remaining risks, and deferred work.
 
 Optimize for a strong, understandable product and credible engineering evidence. Process exists to protect quality, not to prevent useful work.
