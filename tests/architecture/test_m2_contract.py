@@ -36,3 +36,30 @@ def test_m2_does_not_create_later_milestone_artifacts() -> None:
     assert not list((ROOT / "migrations/versions").glob("000[234]_*.py"))
     for forbidden in ("case", "evidence", "planning", "brief", "decision", "agent_task"):
         assert not list((ROOT / "src/night_voyager").rglob(f"*{forbidden}*.py"))
+
+
+def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+
+    assert "db-check:" in makefile
+    check_target = makefile.split("\ncheck: ##", 1)[1].split("\n\n", 1)[0]
+    assert '-m "not database"' in check_target
+    assert "$(MAKE) db-check" in check_target
+    assert set(("python", "frontend", "compose")) <= {
+        line.strip().removesuffix(":")
+        for line in workflow.splitlines()
+        if line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":")
+    }
+    compose_job = workflow.split("  compose:", 1)[1]
+    assert "make db-check" in compose_job
+    assert "COMPOSE_PROJECT_NAME" in script
+    assert "down --volumes" in script
+
+
+def test_public_docs_preserve_fixture_only_demo_boundary() -> None:
+    for relative in ("README.md", "README_CN.md", "CONTRIBUTING.md", "docs/README.md"):
+        content = (ROOT / relative).read_text(encoding="utf-8")
+        assert "db-check" in content, relative
+        assert "fixture-only" in content, relative

@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 已具备 **M0 bootstrap 基线**与 **M1 fixture-only design contract**。仓库提供可复现的 Python API、Next.js Web、PostgreSQL 与持久 worker 本地工程基线；`/demo` 使用合成 fixture 演示已批准的 advisor-to-family 产品流程，但不连接 domain backend，也不实现 mutation、生产租户能力或真实 provider 集成。
+Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract** 与 **M2 backend identity/session/RLS security foundation**。仓库提供可复现的 Python API、Next.js Web、PostgreSQL 与持久 worker 本地工程基线；`/demo` 使用合成 fixture 演示已批准的 advisor-to-family 产品流程，但不连接 domain backend，也不实现 mutation、生产租户能力或真实 provider 集成。
 
 ## Evaluator 路径
 
@@ -27,13 +27,16 @@ Contributor 还需要由 [uv](https://docs.astral.sh/uv/) 管理的 Python 3.12.
 ```bash
 make doctor MODE=dev
 make check
+make db-check
 ```
 
 更多信息见 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 与 [docs/README.md](docs/README.md)。
 
+`make db-check` 使用 disposable PostgreSQL 18 volume 验证 migration、合成 identity seed 幂等性、非 owner runtime roles、受限 auth functions、forced RLS、session lifecycle 与 pool cleanup，并始终删除测试 volume。
+
 ## 当前边界
 
-- 没有领域状态机、证据工作流 backend、顾问/家庭 mutation 或 tenant/RLS migration；`/demo` 只渲染合成 fixture states。
+- M2 backend security foundation 尚未连接 fixture-only `/demo`；没有领域状态机、证据工作流 backend 或顾问/家庭 mutation。
 - 没有真实 DRA、MKE、OpenClaw、模型或消息适配器。
 - 不代表生产部署、真实用户或录取结果。
 

@@ -47,6 +47,9 @@ services:
     environment:
       NIGHT_VOYAGER_ENVIRONMENT: development
       NIGHT_VOYAGER_SECRET_KEY: change-me-before-production
+      NIGHT_VOYAGER_DEMO_MODE: "true"
+      NIGHT_VOYAGER_DEMO_ALLOW_INSECURE_COOKIE: "true"
+      NIGHT_VOYAGER_ALLOWED_ORIGINS: '["http://127.0.0.1:3000"]'
       NIGHT_VOYAGER_DATABASE_URL: postgresql+asyncpg://night_voyager_api:${NIGHT_VOYAGER_API_PASSWORD:-api-local-only}@postgres:5432/night_voyager
     ports:
       - "127.0.0.1:${API_PORT:-8000}:8000"
@@ -73,6 +76,24 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+
+  db-test:
+    profiles: [db-test]
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      target: db-test
+    command: ["sh", "scripts/run_db_tests.sh", "inside"]
+    environment:
+      NIGHT_VOYAGER_ENVIRONMENT: test
+      NIGHT_VOYAGER_DEMO_MODE: "true"
+      NIGHT_VOYAGER_MIGRATION_DATABASE_URL: postgresql+asyncpg://night_voyager_migrator:${NIGHT_VOYAGER_MIGRATOR_PASSWORD:-migrator-local-only}@postgres:5432/night_voyager
+      NIGHT_VOYAGER_API_DATABASE_URL: postgresql+asyncpg://night_voyager_api:${NIGHT_VOYAGER_API_PASSWORD:-api-local-only}@postgres:5432/night_voyager
+      NIGHT_VOYAGER_WORKER_DATABASE_URL: postgresql+asyncpg://night_voyager_worker:${NIGHT_VOYAGER_WORKER_PASSWORD:-worker-local-only}@postgres:5432/night_voyager
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: "no"
 
   web:
     build:

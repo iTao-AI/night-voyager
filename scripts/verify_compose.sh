@@ -1,8 +1,11 @@
 #!/bin/sh
 set -eu
 
+COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
+export COMPOSE_PROJECT_NAME
+
 cleanup() {
-    docker compose down --remove-orphans
+    docker compose down --volumes --remove-orphans
 }
 trap cleanup EXIT INT TERM
 
