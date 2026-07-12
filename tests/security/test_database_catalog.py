@@ -52,6 +52,10 @@ def test_initial_migration_defines_forced_rls_and_restricted_auth_functions() ->
         assert f"GRANT EXECUTE ON FUNCTION auth.{function}" in migration
     assert "SET search_path = pg_catalog, pg_temp" in migration
     assert "SECURITY DEFINER" in migration
+    assert "auth.rotate_demo_session(bytea, bytea, text" in migration
+    assert "auth.revoke_demo_session(bytea, bytea)" in migration
+    assert "s.csrf_digest = p_old_csrf_digest" in migration
+    assert "csrf_digest = p_csrf_digest" in migration
 
 
 def test_release_verifier_exposes_database_catalog_gate() -> None:

@@ -101,7 +101,8 @@ LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 $$;
 
 CREATE FUNCTION auth.rotate_demo_session(
-  p_old_digest bytea, p_demo_key text, p_session_id uuid, p_session_digest bytea,
+  p_old_digest bytea, p_old_csrf_digest bytea, p_demo_key text,
+  p_session_id uuid, p_session_digest bytea,
   p_csrf_digest bytea, p_expires_at timestamptz
 ) RETURNS TABLE (organization_id uuid, actor_id uuid, role text, session_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
@@ -109,6 +110,7 @@ DECLARE selected_principal auth.demo_principals%ROWTYPE;
 BEGIN
   PERFORM 1 FROM auth.demo_sessions AS s
   WHERE s.session_digest = p_old_digest AND s.revoked_at IS NULL
+    AND s.csrf_digest = p_old_csrf_digest
     AND s.expires_at > clock_timestamp() FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'inactive session'; END IF;
   SELECT * INTO selected_principal FROM auth.demo_principals AS p WHERE p.demo_key = p_demo_key;
@@ -123,22 +125,25 @@ BEGIN
                       selected_principal.role, p_session_id;
 END; $$;
 
-CREATE FUNCTION auth.revoke_demo_session(p_session_digest bytea) RETURNS boolean
+CREATE FUNCTION auth.revoke_demo_session(
+  p_session_digest bytea, p_csrf_digest bytea
+) RETURNS boolean
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN
   UPDATE auth.demo_sessions SET revoked_at = clock_timestamp()
-  WHERE session_digest = p_session_digest AND revoked_at IS NULL;
+  WHERE session_digest = p_session_digest AND csrf_digest = p_csrf_digest
+    AND revoked_at IS NULL;
   RETURN FOUND;
 END; $$;
 
 REVOKE ALL ON FUNCTION auth.mint_demo_session(text, uuid, bytea, bytea, timestamptz) FROM PUBLIC;
 REVOKE ALL ON FUNCTION auth.resolve_demo_session(bytea) FROM PUBLIC;
-REVOKE ALL ON FUNCTION auth.rotate_demo_session(bytea, text, uuid, bytea, bytea, timestamptz) FROM PUBLIC;
-REVOKE ALL ON FUNCTION auth.revoke_demo_session(bytea) FROM PUBLIC;
+REVOKE ALL ON FUNCTION auth.rotate_demo_session(bytea, bytea, text, uuid, bytea, bytea, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION auth.revoke_demo_session(bytea, bytea) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION auth.mint_demo_session(text, uuid, bytea, bytea, timestamptz) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION auth.resolve_demo_session(bytea) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION auth.rotate_demo_session(bytea, text, uuid, bytea, bytea, timestamptz) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION auth.revoke_demo_session(bytea) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION auth.rotate_demo_session(bytea, bytea, text, uuid, bytea, bytea, timestamptz) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION auth.revoke_demo_session(bytea, bytea) TO night_voyager_api;
 """
 
 
