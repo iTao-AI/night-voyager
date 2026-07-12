@@ -6,9 +6,12 @@ import pytest
 
 from night_voyager.planning.fixtures import (
     EVAL_IDS,
+    build_dra_fallback_scenario,
     evaluate_stable_scenarios,
     validate_planning_fixture,
 )
+from night_voyager.planning.models import EvidenceAuthority
+from night_voyager.planning.policy import evaluate_planning_run
 
 
 def test_synthetic_planning_fixture_validates_offline() -> None:
@@ -29,7 +32,12 @@ def test_synthetic_planning_fixture_validates_offline() -> None:
 
 def test_dra_fallback_candidate_fails_closed_on_authority() -> None:
     fixture = validate_planning_fixture()
-    assert evaluate_stable_scenarios(fixture)["dra_fallback_ready"] == "failed"
+    scenario = build_dra_fallback_scenario(fixture.planning_input)
+    assert scenario.evidence[0].authority is EvidenceAuthority.UNTRUSTED_CANDIDATE
+    result = evaluate_planning_run(scenario)
+    assert result.state.value == "failed"
+    assert result.reason_code == "evidence_authority_invalid"
+    assert evaluate_stable_scenarios(fixture)["dra_fallback_ready"] == result.state.value
 
 
 def test_validate_only_does_not_require_database_url() -> None:

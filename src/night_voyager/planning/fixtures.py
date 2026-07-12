@@ -8,6 +8,7 @@ from typing import Any
 from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.planning.models import (
     Country,
+    EvidenceAuthority,
     PlanningInput,
     PlanningResult,
     SourcePackManifestV1,
@@ -75,14 +76,7 @@ def evaluate_stable_scenarios(fixture: ValidatedPlanningFixture) -> dict[str, st
             )
         }
     )
-    dra_fallback = base.model_copy(
-        update={
-            "evidence": (
-                base.evidence[0].model_copy(update={"authority": "untrusted_candidate"}),
-                *base.evidence[1:],
-            )
-        }
-    )
+    dra_fallback = build_dra_fallback_scenario(base)
     conflict_budget = budget.model_copy(
         update={"preferred_minor": 10000000, "hard_ceiling_minor": 10000000}
     )
@@ -106,6 +100,19 @@ def evaluate_stable_scenarios(fixture: ValidatedPlanningFixture) -> dict[str, st
         "mke_zero_hit": evaluate_planning_run(zero_hit).state.value,
         "family_preference_conflict": evaluate_planning_run(conflict).state.value,
     }
+
+
+def build_dra_fallback_scenario(base: PlanningInput) -> PlanningInput:
+    return base.model_copy(
+        update={
+            "evidence": (
+                base.evidence[0].model_copy(
+                    update={"authority": EvidenceAuthority.UNTRUSTED_CANDIDATE}
+                ),
+                *base.evidence[1:],
+            )
+        }
+    )
 
 
 def validate_planning_fixture(

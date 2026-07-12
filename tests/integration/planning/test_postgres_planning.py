@@ -263,78 +263,112 @@ async def test_review_required_publication_atomically_hands_off_current_case() -
 
 
 @pytest.mark.asyncio
-async def test_direct_handoff_rejects_no_run_noncurrent_and_stale_run() -> None:
-    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
-    cases = (
-        (UUID("40000000-0000-0000-0000-000000000084"), "none"),
-        (UUID("40000000-0000-0000-0000-000000000085"), "noncurrent"),
-        (UUID("40000000-0000-0000-0000-000000000086"), "stale"),
-    )
+async def test_generic_direct_handoff_is_rejected_without_a_run() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000084")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
-            for index, (case_id, mode) in enumerate(cases, start=84):
-                await connection.execute(
-                    text(
-                        "INSERT INTO app.student_cases(organization_id,id,state) VALUES(:org,:case,'planning')"
-                    ),
-                    {"org": DEMO_ORG, "case": case_id},
-                )
-                await connection.execute(
-                    text(
-                        "INSERT INTO app.student_case_revisions VALUES(:org,:case,1,1,'{}'::jsonb,'{}'::jsonb,clock_timestamp())"
-                    ),
-                    {"org": DEMO_ORG, "case": case_id},
-                )
-                await connection.execute(
-                    text(
-                        "UPDATE app.student_cases SET current_revision=1 WHERE organization_id=:org AND id=:case"
-                    ),
-                    {"org": DEMO_ORG, "case": case_id},
-                )
-                if mode != "none":
+            await create_planning_case(connection, case_id)
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError):
+                async with connection.begin():
+                    await set_context(connection, DEMO_ORG)
                     await connection.execute(
-                        text(
-                            "INSERT INTO app.planning_runs(organization_id,id,case_id,case_revision,source_pack_id,source_pack_version,policy_version,evidence_projection_sha256,state,reason_code,output_sha256,is_current) VALUES(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',repeat('a',64),'review_required','test',repeat('b',64),:current)"
-                        ),
-                        {
-                            "org": DEMO_ORG,
-                            "run": UUID(f"70000000-0000-0000-0000-{index:012d}"),
-                            "case": case_id,
-                            "current": mode != "noncurrent",
-                        },
-                    )
-                if mode == "stale":
-                    await connection.execute(
-                        text(
-                            "INSERT INTO app.student_case_revisions VALUES(:org,:case,2,1,'{}'::jsonb,'{}'::jsonb,clock_timestamp())"
-                        ),
-                        {"org": DEMO_ORG, "case": case_id},
-                    )
-                    await connection.execute(
-                        text(
-                            "UPDATE app.student_cases SET current_revision=2 WHERE organization_id=:org AND id=:case"
-                        ),
+                        text("SELECT app.transition_case(:org,:case,'planning','advisor_review')"),
                         {"org": DEMO_ORG, "case": case_id},
                     )
     finally:
         await engine.dispose()
 
-    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+
+@pytest.mark.asyncio
+async def test_noncurrent_review_required_trigger_does_not_advance_case() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000085")
+    run_id = UUID("70000000-0000-0000-0000-000000000085")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
-        for case_id, _ in cases:
-            async with api.connect() as connection:
-                with pytest.raises(DBAPIError):
-                    async with connection.begin():
-                        await set_context(connection, DEMO_ORG)
-                        await connection.execute(
-                            text(
-                                "SELECT app.transition_case(:org,:case,'planning','advisor_review')"
-                            ),
-                            {"org": DEMO_ORG, "case": case_id},
-                        )
+        async with engine.begin() as connection:
+            await set_context(connection, DEMO_ORG)
+            await create_planning_case(connection, case_id)
+            await connection.execute(
+                text(
+                    "INSERT INTO app.planning_runs(organization_id,id,case_id,case_revision,source_pack_id,source_pack_version,policy_version,evidence_projection_sha256,state,is_current) VALUES(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',repeat('a',64),'synthesizing',false)"
+                ),
+                {"org": DEMO_ORG, "run": run_id, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.planning_runs SET state='review_required',reason_code='test',output_sha256=repeat('b',64) WHERE organization_id=:org AND id=:run"
+                ),
+                {"org": DEMO_ORG, "run": run_id},
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT state FROM app.student_cases WHERE id=:case"),
+                    {"case": case_id},
+                )
+                == "planning"
+            )
     finally:
-        await api.dispose()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_stale_current_review_required_trigger_fails_and_rolls_back() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000086")
+    run_id = UUID("70000000-0000-0000-0000-000000000086")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await set_context(connection, DEMO_ORG)
+            await create_planning_case(connection, case_id)
+            await connection.execute(
+                text(
+                    "INSERT INTO app.planning_runs(organization_id,id,case_id,case_revision,source_pack_id,source_pack_version,policy_version,evidence_projection_sha256,state,is_current) VALUES(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',repeat('a',64),'synthesizing',true)"
+                ),
+                {"org": DEMO_ORG, "run": run_id, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.student_case_revisions VALUES(:org,:case,2,1,'{}'::jsonb,'{}'::jsonb,clock_timestamp())"
+                ),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.student_cases SET current_revision=2 WHERE organization_id=:org AND id=:case"
+                ),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as captured:
+                async with connection.begin():
+                    await set_context(connection, DEMO_ORG)
+                    await connection.execute(
+                        text(
+                            "UPDATE app.planning_runs SET state='review_required',reason_code='test',output_sha256=repeat('b',64) WHERE organization_id=:org AND id=:run"
+                        ),
+                        {"org": DEMO_ORG, "run": run_id},
+                    )
+            assert getattr(captured.value.orig, "sqlstate", None) == "NV003"
+        async with engine.begin() as connection:
+            await set_context(connection, DEMO_ORG)
+            assert (
+                await connection.scalar(
+                    text("SELECT state FROM app.planning_runs WHERE id=:run"), {"run": run_id}
+                )
+                == "synthesizing"
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT state FROM app.student_cases WHERE id=:case"),
+                    {"case": case_id},
+                )
+                == "planning"
+            )
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
