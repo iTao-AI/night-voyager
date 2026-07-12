@@ -16,10 +16,12 @@ connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
 downgrade against a retained demo volume.
 
-M3A grants runtime roles read access. The API alone can insert M3A records and
-update only the Case current pointer or PlanningRun terminal columns. The
-worker has no M3A write grant; neither runtime role can delete or broadly
-update immutable rows.
+M3A grants runtime roles read access but no direct table-write privilege. The
+API alone can execute narrow migrator-owned functions for Case revision CAS,
+Case transitions, source/Evidence persistence and atomic PlanningRun result
+persistence. Those functions use the transaction tenant context. Triggers
+enforce allowed run transitions, terminal output immutability, exact source
+hashes and same-pack Evidence links. The worker has no M3A mutation function.
 
 The normal `make demo` path applies migrations, then runs the separate
 `demo-seed` one-shot service before API/worker readiness. The schema migration

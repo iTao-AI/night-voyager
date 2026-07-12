@@ -54,7 +54,9 @@ def test_migration_graph_is_exactly_0001_to_0002_with_eleven_tables() -> None:
 
 def test_pure_planning_modules_do_not_import_framework_or_adapter_packages() -> None:
     forbidden = {"fastapi", "sqlalchemy", "asyncpg", "alembic"}
-    for path in (ROOT / "src/night_voyager/planning").glob("*.py"):
+    pure_modules = ("models.py", "policy.py", "transitions.py", "hashing.py", "ports.py")
+    for module in pure_modules:
+        path = ROOT / "src/night_voyager/planning" / module
         tree = ast.parse(path.read_text(encoding="utf-8"))
         imported = {
             alias.name.split(".", 1)[0]

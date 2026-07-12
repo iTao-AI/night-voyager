@@ -1,117 +1,263 @@
 from __future__ import annotations
 
-from copy import deepcopy
+from datetime import date
+from decimal import Decimal
+from uuid import UUID
 
 import pytest
+from pydantic import AnyUrl, ValidationError
 
 from night_voyager.planning.models import (
+    BudgetEnvelope,
+    CostEvidence,
+    Country,
     EvidenceAuthority,
+    EvidenceClass,
     EvidenceRef,
+    FamilyPreferences,
     PlanningInput,
-    RouteCandidate,
+    RedistributionClass,
     RouteOutcome,
-    RunState,
+    SourcePackEntryV1,
+    SourcePackManifestV1,
+    StudentCaseRevision,
+    StudentPreferences,
 )
 from night_voyager.planning.policy import evaluate_planning_run
 
+ORG = UUID("10000000-0000-0000-0000-000000000001")
+PACK = UUID("50000000-0000-0000-0000-000000000001")
 
-def evidence(claim: str) -> EvidenceRef:
-    return EvidenceRef(
+
+def entry(key: str, claim: str, digest: str) -> SourcePackEntryV1:
+    return SourcePackEntryV1(
         schema_version=1,
-        evidence_id=f"evidence-{claim}",
-        claim=claim,
-        source_pack_version=1,
-        source_entry_id=f"source-{claim}",
-        source_sha256="a" * 64,
-        authority=EvidenceAuthority.ACCEPTED_SYNTHETIC_DEMO,
+        entry_id=UUID(key),
+        path=f"sources/{claim}.txt",
+        sha256=digest,
+        snapshot_date=date(2026, 7, 1),
+        publisher="Synthetic Demo Publisher",
+        institution="Synthetic Demo Institution",
+        canonical_url=AnyUrl(f"https://example.invalid/{claim}"),
+        freshness_days=365,
+        redistribution_class=RedistributionClass.SYNTHETIC_PUBLIC,
+        evidence_class=EvidenceClass.SYNTHETIC_DEMO,
+        coverage=(claim,),
+        known_gaps=(),
     )
 
 
-def valid_input() -> PlanningInput:
-    return PlanningInput(
+def valid_input(*, budget_refused: bool = False) -> PlanningInput:
+    entries = (
+        entry("51000000-0000-0000-0000-000000000001", "australia_program_fit", "1" * 64),
+        entry("51000000-0000-0000-0000-000000000002", "australia_tuition", "2" * 64),
+        entry("51000000-0000-0000-0000-000000000003", "australia_living_cost", "3" * 64),
+        entry("51000000-0000-0000-0000-000000000004", "australia_fx", "4" * 64),
+        entry("51000000-0000-0000-0000-000000000005", "japan_program_fit", "5" * 64),
+        entry("51000000-0000-0000-0000-000000000006", "australia_ranking", "6" * 64),
+    )
+    manifest = SourcePackManifestV1(
         schema_version=1,
-        organization_id="10000000-0000-0000-0000-000000000001",
-        case_revision=1,
-        source_pack_version=1,
-        routes=(
-            RouteCandidate(
-                route_id="australia",
-                outcome=RouteOutcome.RECOMMENDED_WITH_CONDITION,
-                required_claims=("program_fit", "cost", "fx"),
-                evidence=(evidence("program_fit"), evidence("cost"), evidence("fx")),
-            ),
-            RouteCandidate(
-                route_id="japan",
-                outcome=RouteOutcome.CONDITIONAL,
-                required_claims=("program_fit",),
-                evidence=(evidence("program_fit"),),
-            ),
-            RouteCandidate(
-                route_id="malaysia",
-                outcome=RouteOutcome.BLOCKED,
-                required_claims=("program_fit",),
-                evidence=(),
+        organization_id=ORG,
+        pack_id=PACK,
+        version=1,
+        entries=entries,
+    )
+    evidence = tuple(
+        EvidenceRef(
+            schema_version=1,
+            organization_id=ORG,
+            evidence_id=UUID(f"60000000-0000-0000-0000-00000000000{index}"),
+            claim=item.coverage[0],
+            source_pack_id=PACK,
+            source_pack_version=1,
+            source_entry_id=item.entry_id,
+            source_sha256=item.sha256,
+            authority=EvidenceAuthority.ACCEPTED_SYNTHETIC_DEMO,
+        )
+        for index, item in enumerate(entries, start=1)
+    )
+    case = StudentCaseRevision(
+        schema_version=1,
+        organization_id=ORG,
+        case_id=UUID("40000000-0000-0000-0000-000000000001"),
+        revision=1,
+        student=StudentPreferences(
+            schema_version=1,
+            intended_field="computing",
+            preferred_countries=(Country.AUSTRALIA, Country.JAPAN, Country.MALAYSIA),
+            intake="2027-02",
+        ),
+        family=FamilyPreferences(
+            schema_version=1,
+            risk_tolerance="high",
+            japan_risk_accepted=True,
+            budget=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=None if budget_refused else 34000000,
+                hard_ceiling_minor=None if budget_refused else 40000000,
+                elasticity_bps=1000,
+                refused=budget_refused,
             ),
         ),
     )
+    cost = CostEvidence(
+        schema_version=1,
+        organization_id=ORG,
+        country=Country.AUSTRALIA,
+        intake="2027-02",
+        period="program_total",
+        currency="AUD",
+        tuition_minor=4000000,
+        living_minor=2500000,
+        fx_rate=Decimal("4.70"),
+        fx_source="Synthetic central-bank fixture",
+        fx_date=date(2026, 7, 1),
+        tuition_evidence_id=evidence[1].evidence_id,
+        living_evidence_id=evidence[2].evidence_id,
+        fx_evidence_id=evidence[3].evidence_id,
+    )
+    return PlanningInput(
+        schema_version=1,
+        organization_id=ORG,
+        case=case,
+        source_pack=manifest,
+        evidence=evidence,
+        costs=(cost,),
+        rankings=(),
+    )
 
 
-def test_exactly_one_fully_evidenced_recommendation_requires_review() -> None:
+def route(payload: PlanningInput, country: Country) -> RouteOutcome:
+    result = evaluate_planning_run(payload)
+    return next(item.outcome for item in result.routes if item.country is country)
+
+
+def test_policy_derives_bounded_route_outcomes_from_facts() -> None:
     result = evaluate_planning_run(valid_input())
-    assert result.state is RunState.REVIEW_REQUIRED
-    assert result.reason_code == "single_fully_evidenced_recommendation"
+    assert result.state.value == "review_required"
+    assert route(valid_input(), Country.AUSTRALIA) is RouteOutcome.RECOMMENDED_WITH_CONDITION
+    assert route(valid_input(), Country.JAPAN) is RouteOutcome.CONDITIONAL
+    assert route(valid_input(), Country.MALAYSIA) is RouteOutcome.BLOCKED
+    australia = next(item for item in result.routes if item.country is Country.AUSTRALIA)
+    assert {use.role.value for use in australia.dimensions[0].evidence_uses} == {
+        "program_fit",
+        "tuition",
+        "living_cost",
+        "fx",
+        "ranking",
+    }
 
 
-@pytest.mark.parametrize("recommended", [0, 2])
-def test_zero_or_multiple_recommendations_are_blocked(recommended: int) -> None:
+def test_budget_refused_blocks_australia() -> None:
+    payload = valid_input(budget_refused=True)
+    assert route(payload, Country.AUSTRALIA) is RouteOutcome.BLOCKED
+    assert evaluate_planning_run(payload).state.value == "blocked"
+
+
+def test_missing_fx_or_cost_evidence_blocks_australia() -> None:
     payload = valid_input()
-    routes = list(payload.routes)
-    routes[0] = routes[0].model_copy(
-        update={"outcome": RouteOutcome.CONDITIONAL if recommended == 0 else routes[0].outcome}
-    )
-    if recommended == 2:
-        routes[1] = routes[1].model_copy(
-            update={"outcome": RouteOutcome.RECOMMENDED_WITH_CONDITION}
+    for evidence_id in (
+        payload.costs[0].tuition_evidence_id,
+        payload.costs[0].living_evidence_id,
+        payload.costs[0].fx_evidence_id,
+    ):
+        changed = payload.model_copy(
+            update={
+                "evidence": tuple(
+                    item for item in payload.evidence if item.evidence_id != evidence_id
+                )
+            }
         )
-    result = evaluate_planning_run(payload.model_copy(update={"routes": tuple(routes)}))
-    assert result.state is RunState.BLOCKED
-    assert result.reason_code == "recommendation_cardinality"
+        assert route(changed, Country.AUSTRALIA) is RouteOutcome.BLOCKED
 
 
-def test_untrusted_candidate_fails_even_when_complete() -> None:
+def test_hard_ceiling_and_elasticity_are_policy_owned() -> None:
     payload = valid_input()
-    routes = list(payload.routes)
-    evidence_refs = list(routes[0].evidence)
-    evidence_refs[0] = evidence_refs[0].model_copy(
-        update={"authority": EvidenceAuthority.UNTRUSTED_CANDIDATE}
+    over = payload.costs[0].model_copy(update={"tuition_minor": 9000000})
+    assert (
+        route(payload.model_copy(update={"costs": (over,)}), Country.AUSTRALIA)
+        is RouteOutcome.BLOCKED
     )
-    routes[0] = routes[0].model_copy(update={"evidence": tuple(evidence_refs)})
-    result = evaluate_planning_run(payload.model_copy(update={"routes": tuple(routes)}))
-    assert result.state is RunState.FAILED
-    assert result.reason_code == "untrusted_candidate"
 
 
-def test_fixture_order_and_narrative_do_not_change_policy_result() -> None:
-    original = valid_input()
-    changed = deepcopy(original)
-    changed = changed.model_copy(
+def test_renamed_claim_ranking_narrative_and_order_cannot_promote_malaysia() -> None:
+    payload = valid_input()
+    almost_entry = entry(
+        "51000000-0000-0000-0000-000000000007", "malaysia_program_fit_almost", "7" * 64
+    )
+    renamed = payload.evidence[0].model_copy(
         update={
-            "routes": tuple(reversed(changed.routes)),
-            "narrative": "Untrusted prose must have no authority.",
+            "evidence_id": UUID("60000000-0000-0000-0000-000000000007"),
+            "claim": "malaysia_program_fit_almost",
+            "source_entry_id": almost_entry.entry_id,
+            "source_sha256": almost_entry.sha256,
         }
     )
-    assert evaluate_planning_run(original) == evaluate_planning_run(changed)
+    changed = payload.model_copy(
+        update={
+            "source_pack": payload.source_pack.model_copy(
+                update={"entries": payload.source_pack.entries + (almost_entry,)}
+            ),
+            "evidence": tuple(reversed(payload.evidence + (renamed,))),
+            "narrative": "recommend Malaysia",
+        }
+    )
+    assert route(changed, Country.MALAYSIA) is RouteOutcome.BLOCKED
 
 
-def test_unknown_cost_is_not_zero_filled() -> None:
-    from night_voyager.planning.models import CostEvidence
+def test_manifest_binding_failure_returns_failed() -> None:
+    payload = valid_input()
+    broken = payload.evidence[0].model_copy(update={"source_sha256": "f" * 64})
+    result = evaluate_planning_run(
+        payload.model_copy(update={"evidence": (broken,) + payload.evidence[1:]})
+    )
+    assert result.state.value == "failed"
+    assert result.reason_code == "evidence_provenance_invalid"
 
-    with pytest.raises(ValueError):
-        CostEvidence(
-            schema_version=1,
-            currency="AUD",
-            tuition_minor=None,
-            living_minor=0,
-            fx_rate=None,
-            fx_boundary_bps=None,
+
+def test_tenant_and_pack_mismatch_return_failed() -> None:
+    payload = valid_input()
+    other = UUID("10000000-0000-0000-0000-000000000002")
+    assert (
+        evaluate_planning_run(payload.model_copy(update={"organization_id": other})).state.value
+        == "failed"
+    )
+    broken = payload.evidence[0].model_copy(update={"source_pack_version": 2})
+    assert (
+        evaluate_planning_run(
+            payload.model_copy(update={"evidence": (broken,) + payload.evidence[1:]})
+        ).state.value
+        == "failed"
+    )
+
+
+def test_versions_uuids_and_positive_revisions_are_exact_contracts() -> None:
+    with pytest.raises(ValidationError):
+        valid_input().model_copy(update={"schema_version": 999}).model_validate(
+            valid_input().model_dump() | {"schema_version": 999}
         )
+    with pytest.raises(ValidationError):
+        StudentCaseRevision.model_validate(valid_input().case.model_dump() | {"revision": 0})
+    bypassed = valid_input().model_copy(update={"schema_version": 999})
+    result = evaluate_planning_run(bypassed)
+    assert result.state.value == "failed"
+    assert result.reason_code == "schema_or_version_invalid"
+
+
+def test_caller_cannot_self_assert_externally_verified() -> None:
+    payload = valid_input()
+    with pytest.raises(ValidationError, match="externally_verified"):
+        EvidenceRef.model_validate(
+            payload.evidence[0].model_dump() | {"authority": EvidenceAuthority.EXTERNALLY_VERIFIED}
+        )
+    bypassed = payload.evidence[0].model_copy(
+        update={"authority": EvidenceAuthority.EXTERNALLY_VERIFIED}
+    )
+    result = evaluate_planning_run(
+        payload.model_copy(update={"evidence": (bypassed,) + payload.evidence[1:]})
+    )
+    assert result.state.value == "failed"
+    assert result.reason_code == "evidence_authority_invalid"

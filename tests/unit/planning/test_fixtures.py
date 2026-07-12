@@ -2,17 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from night_voyager.planning.fixtures import validate_planning_fixture
+import pytest
+
+from night_voyager.planning.fixtures import (
+    EVAL_IDS,
+    evaluate_stable_scenarios,
+    validate_planning_fixture,
+)
 
 
 def test_synthetic_planning_fixture_validates_offline() -> None:
-    snapshot = validate_planning_fixture()
-    assert snapshot == {
+    fixture = validate_planning_fixture()
+    assert fixture.snapshot() == {
         "australia": "recommended_with_condition",
         "japan": "conditional",
         "malaysia": "blocked",
         "run_state": "review_required",
     }
+    assert set(fixture.eval_assertions) == EVAL_IDS
+    assert len(fixture.manifest_sha256) == 64
+    assert len(fixture.evidence_projection_sha256) == 64
+    assert len(fixture.output_sha256) == 64
+    assert evaluate_stable_scenarios(fixture) == fixture.eval_assertions
 
 
 def test_validate_only_does_not_require_database_url() -> None:
@@ -36,10 +47,17 @@ def test_validate_only_does_not_require_database_url() -> None:
 def test_manifest_rejects_changed_source(tmp_path: Path) -> None:
     from shutil import copytree
 
-    import pytest
-
     root = tmp_path / "m3a"
     copytree(Path("fixtures/m3a"), root)
     (root / "sources/australia.txt").write_text("changed", encoding="utf-8")
     with pytest.raises(ValueError, match="hash mismatch"):
         validate_planning_fixture(root / "manifest.json")
+
+
+def test_database_seed_uses_validated_canonical_fixture() -> None:
+    script = Path("scripts/seed_demo.py").read_text(encoding="utf-8")
+    assert "fixture = validate_planning_fixture()" in script
+    assert "fixture.manifest_sha256" in script
+    assert "fixture.evidence_projection_sha256" in script
+    assert "fixture.output_sha256" in script
+    assert "single_fully_evidenced_recommendation'" not in script

@@ -6,13 +6,17 @@ preferences separate. Versioned source packs bind declared paths and SHA-256
 hashes to claim-level `EvidenceRef` records. Optional cost and ranking evidence
 never represents an unknown value as zero.
 
-Pure versioned schemas feed deterministic policy. Invalid authority or input
-fails closed; recommendation cardinality and evidence completeness determine
-`blocked` versus `review_required`. Narrative and ordering are non-authoritative.
+Pure exact-version schemas feed deterministic policy. Callers provide typed
+Case, budget, source-manifest, Evidence, complete Decimal cost/FX, and optional
+ranking facts; they do not provide route outcomes or required claim sets.
+Invalid authority, tenant, version, pack or hash binding fails closed. Narrative,
+ranking, fixture ordering, and renamed claims cannot grant recommendation authority.
 
 Migration `0002` creates exactly eleven tenant-keyed tables with tenant-
-preserving foreign keys, forced RLS, narrow API inserts/reads and column-level
-pointer/run-state updates. The worker has reads only and no M3A write grant.
+preserving foreign keys, forced RLS, runtime reads, and narrow SECURITY DEFINER
+mutation functions. Runtime roles have no direct M3A table-write grant. Case
+revision publication uses expected-version CAS; database triggers enforce run
+transitions, terminal immutability, exact entry hashes and pinned-pack links.
 The migration contains no seed data. Public-safe stable fixtures are validated
 without a database and explicitly seeded only in development/test demo mode.
 

@@ -1,17 +1,44 @@
 {
   "schema_version": 1,
   "organization_id": "10000000-0000-0000-0000-000000000001",
-  "case_revision": 1,
-  "source_pack_version": 1,
-  "entries": [
-    {"id": "source-australia", "path": "sources/australia.txt", "sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce"},
-    {"id": "source-japan", "path": "sources/japan.txt", "sha256": "02aaaf05433d55389d95ba22a18f5dd1c05b59d318ca10e83f7f2485115ba92a"},
-    {"id": "source-malaysia", "path": "sources/malaysia.txt", "sha256": "6c9c0de61110663cba5af542c571bda26791e029f98267790f1065a9ed707179"}
+  "case": {
+    "schema_version": 1,
+    "organization_id": "10000000-0000-0000-0000-000000000001",
+    "case_id": "40000000-0000-0000-0000-000000000001",
+    "revision": 1,
+    "student": {"schema_version": 1, "intended_field": "computing", "preferred_countries": ["australia", "japan", "malaysia"], "intake": "2027-02"},
+    "family": {"schema_version": 1, "risk_tolerance": "high", "japan_risk_accepted": true, "budget": {"schema_version": 1, "currency": "CNY", "period": "program_total", "preferred_minor": 34000000, "hard_ceiling_minor": 40000000, "elasticity_bps": 1000, "refused": false}}
+  },
+  "source_pack": {
+    "schema_version": 1,
+    "organization_id": "10000000-0000-0000-0000-000000000001",
+    "pack_id": "50000000-0000-0000-0000-000000000001",
+    "version": 1,
+    "entries": [
+      {"schema_version": 1, "entry_id": "51000000-0000-0000-0000-000000000001", "path": "sources/australia.txt", "sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce", "snapshot_date": "2026-07-01", "publisher": "Synthetic Demo Publisher", "institution": "Synthetic Australia Institution", "canonical_url": "https://example.invalid/australia", "freshness_days": 365, "redistribution_class": "synthetic_public", "evidence_class": "synthetic_demo", "coverage": ["australia_program_fit", "australia_tuition", "australia_living_cost", "australia_fx", "australia_ranking"], "known_gaps": []},
+      {"schema_version": 1, "entry_id": "51000000-0000-0000-0000-000000000002", "path": "sources/japan.txt", "sha256": "02aaaf05433d55389d95ba22a18f5dd1c05b59d318ca10e83f7f2485115ba92a", "snapshot_date": "2026-07-01", "publisher": "Synthetic Demo Publisher", "institution": "Synthetic Japan Institution", "canonical_url": "https://example.invalid/japan", "freshness_days": 365, "redistribution_class": "synthetic_public", "evidence_class": "synthetic_demo", "coverage": ["japan_program_fit"], "known_gaps": ["high_risk_alternative"]},
+      {"schema_version": 1, "entry_id": "51000000-0000-0000-0000-000000000003", "path": "sources/malaysia.txt", "sha256": "6c9c0de61110663cba5af542c571bda26791e029f98267790f1065a9ed707179", "snapshot_date": "2026-07-01", "publisher": "Synthetic Demo Publisher", "institution": "Synthetic Malaysia Institution", "canonical_url": "https://example.invalid/malaysia", "freshness_days": 365, "redistribution_class": "synthetic_public", "evidence_class": "synthetic_demo", "coverage": ["malaysia_context"], "known_gaps": ["direct_program_fit"]}
+    ]
+  },
+  "evidence": [
+    {"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "evidence_id": "60000000-0000-0000-0000-000000000001", "claim": "australia_program_fit", "source_pack_id": "50000000-0000-0000-0000-000000000001", "source_pack_version": 1, "source_entry_id": "51000000-0000-0000-0000-000000000001", "source_sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce", "authority": "accepted_synthetic_demo"},
+    {"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "evidence_id": "60000000-0000-0000-0000-000000000002", "claim": "australia_tuition", "source_pack_id": "50000000-0000-0000-0000-000000000001", "source_pack_version": 1, "source_entry_id": "51000000-0000-0000-0000-000000000001", "source_sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce", "authority": "accepted_synthetic_demo"},
+    {"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "evidence_id": "60000000-0000-0000-0000-000000000003", "claim": "australia_living_cost", "source_pack_id": "50000000-0000-0000-0000-000000000001", "source_pack_version": 1, "source_entry_id": "51000000-0000-0000-0000-000000000001", "source_sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce", "authority": "accepted_synthetic_demo"},
+    {"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "evidence_id": "60000000-0000-0000-0000-000000000004", "claim": "australia_fx", "source_pack_id": "50000000-0000-0000-0000-000000000001", "source_pack_version": 1, "source_entry_id": "51000000-0000-0000-0000-000000000001", "source_sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce", "authority": "accepted_synthetic_demo"},
+    {"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "evidence_id": "60000000-0000-0000-0000-000000000005", "claim": "japan_program_fit", "source_pack_id": "50000000-0000-0000-0000-000000000001", "source_pack_version": 1, "source_entry_id": "51000000-0000-0000-0000-000000000002", "source_sha256": "02aaaf05433d55389d95ba22a18f5dd1c05b59d318ca10e83f7f2485115ba92a", "authority": "accepted_synthetic_demo"},
+    {"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "evidence_id": "60000000-0000-0000-0000-000000000006", "claim": "australia_ranking", "source_pack_id": "50000000-0000-0000-0000-000000000001", "source_pack_version": 1, "source_entry_id": "51000000-0000-0000-0000-000000000001", "source_sha256": "ec5c5ae9dd8b7575dac15f8e4fcfb1332be2832a0f773a5c4fcd690638038cce", "authority": "accepted_synthetic_demo"}
   ],
-  "routes": [
-    {"route_id": "australia", "outcome": "recommended_with_condition", "required_claims": ["program_fit", "cost", "fx"], "source_entry_id": "source-australia", "claims": ["program_fit", "cost", "fx"]},
-    {"route_id": "japan", "outcome": "conditional", "required_claims": ["program_fit"], "source_entry_id": "source-japan", "claims": ["program_fit"]},
-    {"route_id": "malaysia", "outcome": "blocked", "required_claims": ["program_fit"], "source_entry_id": "source-malaysia", "claims": []}
-  ],
-  "expected": {"australia": "recommended_with_condition", "japan": "conditional", "malaysia": "blocked", "run_state": "review_required"}
+  "costs": [{"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "country": "australia", "intake": "2027-02", "period": "program_total", "currency": "AUD", "tuition_minor": 4000000, "living_minor": 2500000, "fx_rate": "4.70", "fx_source": "Synthetic central-bank fixture", "fx_date": "2026-07-01", "tuition_evidence_id": "60000000-0000-0000-0000-000000000002", "living_evidence_id": "60000000-0000-0000-0000-000000000003", "fx_evidence_id": "60000000-0000-0000-0000-000000000004"}],
+  "rankings": [{"schema_version": 1, "organization_id": "10000000-0000-0000-0000-000000000001", "country": "australia", "ranking_system": "synthetic_demo_scale", "rank": 10, "publication_year": 2026, "evidence_id": "60000000-0000-0000-0000-000000000006"}],
+  "expected": {"australia": "recommended_with_condition", "japan": "conditional", "malaysia": "blocked", "run_state": "review_required"},
+  "eval": {
+    "golden_australia_conditional": "review_required",
+    "budget_refused": "blocked",
+    "japan_risk_accepted": "conditional",
+    "malaysia_program_fit_gap": "blocked",
+    "stale_cost_ranking": "failed",
+    "dra_fallback_ready": "review_required",
+    "mke_zero_hit": "blocked",
+    "family_preference_conflict": "blocked"
+  }
 }

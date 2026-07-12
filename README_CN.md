@@ -37,7 +37,11 @@ make db-check
 
 更多信息见 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 与 [docs/README.md](docs/README.md)。
 
-`make db-check` 使用 disposable PostgreSQL 18 volume 验证精确 `0001 -> 0002` migration、显式合成 seed 幂等性、非 owner runtime roles、受限 auth functions、forced RLS、隔离、不可变性、downgrade/re-upgrade 与 pool cleanup。`accepted_synthetic_demo` Evidence 只代表本地合成 proof，不等于 externally verified Evidence。
+`make db-check` 使用 disposable PostgreSQL 18 volume 执行精确 `0001 -> 0002`
+migration、canonical synthetic seed 幂等性、双租户 RLS、runtime function
+grants、Case CAS、terminal immutability、provenance mismatch、
+downgrade/re-upgrade 与 size-one pool cleanup。`accepted_synthetic_demo`
+Evidence 只代表本地合成 proof；caller 不能声明 `externally_verified`。
 
 ## 当前边界
 

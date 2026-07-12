@@ -8,18 +8,24 @@ M3A places immutable Case revisions, versioned source packs, claim-level
 FastAPI, SQLAlchemy, Alembic, asyncpg, or Agent SDKs. PostgreSQL adapters may
 depend inward on those contracts; the pure layer never depends outward.
 
-Evidence authority is explicit: `untrusted_candidate` fails a run,
-`accepted_synthetic_demo` is usable only as visibly synthetic local proof, and
-`externally_verified` is reserved for evidence that passed an external
-verification process. Confidence, narrative, fixture order, tool output, and
-model output never grant authority.
+Evidence authority is explicit: `untrusted_candidate` fails a run and
+`accepted_synthetic_demo` is usable only as visibly synthetic local proof.
+`externally_verified` requires a separate trusted authority record and cannot
+be self-asserted through the M3A input contract. Confidence, narrative, fixture
+order, tool output, ranking, and model output never grant authority.
 
-Valid input with exactly one fully evidenced `recommended_with_condition`
-route becomes `review_required`. Zero or multiple such routes become `blocked`.
+Policy—not the caller—derives route outcomes. Australia becomes the sole
+`recommended_with_condition` only with program-fit, tuition, living-cost and FX
+Evidence, complete period/intake cost facts, and total cost within the approved
+elasticity and hard ceiling. Missing/refused/over-ceiling budget blocks it.
+Japan is a conditional high-risk alternative only when its risk is accepted;
+Malaysia remains blocked without exact direct program-fit Evidence.
 Invalid schema, hash, tenant or version input, and accepted untrusted candidate
 material become `failed`. Terminal output is immutable.
 
 Migration `0002` follows `0001` as the single head and owns exactly eleven M3A
 tables. It is seed-free, tenant-keyed, migrator-owned, forced-RLS protected,
-and least-privilege granted. M3A excludes `AdvisorReview`, family briefs and
+and exposed through narrow SECURITY DEFINER functions. Runtime roles receive no
+direct M3A writes; CAS, allowed transitions, terminal immutability and relational
+provenance are database-enforced. M3A excludes `AdvisorReview`, family briefs and
 decisions, background tasks/SSE, frontend integration, and production claims.

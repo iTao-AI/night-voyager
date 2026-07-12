@@ -37,7 +37,11 @@ make db-check
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/README.md](docs/README.md). A Chinese version is available in [README_CN.md](README_CN.md).
 
-`make db-check` uses a disposable PostgreSQL 18 volume to prove the exact `0001 -> 0002` graph, idempotent explicit synthetic seed, non-owner runtime roles, restricted auth functions, forced RLS, isolation, immutability, downgrade/re-upgrade, and pool cleanup. `accepted_synthetic_demo` Evidence is local proof, not externally verified Evidence.
+`make db-check` uses a disposable PostgreSQL 18 volume to exercise the exact
+`0001 -> 0002` graph, idempotent canonical synthetic seed, two-tenant RLS,
+runtime function grants, Case CAS, terminal immutability, provenance mismatch,
+downgrade/re-upgrade, and size-one pool cleanup. `accepted_synthetic_demo`
+Evidence is local proof; callers cannot assert `externally_verified`.
 
 ## Current limits
 
