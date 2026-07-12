@@ -40,6 +40,7 @@ make db-check
 `make db-check` 使用 disposable PostgreSQL 18 volume 执行精确 `0001 -> 0002`
 migration、canonical synthetic seed 幂等性、双租户 RLS、runtime function
 grants、Case CAS、terminal immutability、provenance mismatch、
+revision-pinned `review_required` Case handoff、
 downgrade/re-upgrade 与 size-one pool cleanup。`accepted_synthetic_demo`
 Evidence 只代表本地合成 proof；caller 不能声明 `externally_verified`。
 

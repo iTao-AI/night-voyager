@@ -11,6 +11,9 @@ tenant, pack and version. Checked-in inputs may use only
 `BudgetEnvelope` distinguishes refusal, preferred budget, hard ceiling and a
 bounded elasticity. Complete `CostEvidence` uses Decimal FX, explicit intake and
 period, tuition/living amounts, FX source/date, and three Evidence references.
+The bounded M3A fixture accepts `AUD` as the ISO 4217 source currency and binds
+tuition, living, FX and ranking IDs to their exact claims. Duplicate claims or
+role mismatches are invalid provenance.
 Policy derives the bounded Australia/Japan/Malaysia outcomes; callers cannot
 submit outcome or required-claim authority. Narrative, ranking and ordering
 have no authority.

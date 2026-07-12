@@ -189,7 +189,7 @@ class CostEvidence(FrozenModel):
     country: Country
     intake: str
     period: Literal["program_total"]
-    currency: str
+    currency: Literal["AUD"]
     tuition_minor: PositiveInt
     living_minor: PositiveInt
     fx_rate: Decimal

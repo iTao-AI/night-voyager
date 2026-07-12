@@ -17,6 +17,10 @@ preserving foreign keys, forced RLS, runtime reads, and narrow SECURITY DEFINER
 mutation functions. Runtime roles have no direct M3A table-write grant. Case
 revision publication uses expected-version CAS; database triggers enforce run
 transitions, terminal immutability, exact entry hashes and pinned-pack links.
+The only `planning` to `advisor_review` handoff is an atomic consequence of
+publishing a current `review_required` run pinned to the current Case revision;
+it does not create an AdvisorReview action. Cost/ranking roles bind to exact
+claims, and the stable DRA fallback eval uses an untrusted candidate that fails.
 The migration contains no seed data. Public-safe stable fixtures are validated
 without a database and explicitly seeded only in development/test demo mode.
 

@@ -75,6 +75,14 @@ def evaluate_stable_scenarios(fixture: ValidatedPlanningFixture) -> dict[str, st
             )
         }
     )
+    dra_fallback = base.model_copy(
+        update={
+            "evidence": (
+                base.evidence[0].model_copy(update={"authority": "untrusted_candidate"}),
+                *base.evidence[1:],
+            )
+        }
+    )
     conflict_budget = budget.model_copy(
         update={"preferred_minor": 10000000, "hard_ceiling_minor": 10000000}
     )
@@ -94,7 +102,7 @@ def evaluate_stable_scenarios(fixture: ValidatedPlanningFixture) -> dict[str, st
         "japan_risk_accepted": japan.outcome.value,
         "malaysia_program_fit_gap": malaysia.outcome.value,
         "stale_cost_ranking": evaluate_planning_run(stale_ranking).state.value,
-        "dra_fallback_ready": golden.state.value,
+        "dra_fallback_ready": evaluate_planning_run(dra_fallback).state.value,
         "mke_zero_hit": evaluate_planning_run(zero_hit).state.value,
         "family_preference_conflict": evaluate_planning_run(conflict).state.value,
     }

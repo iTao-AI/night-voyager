@@ -40,6 +40,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/RE
 `make db-check` uses a disposable PostgreSQL 18 volume to exercise the exact
 `0001 -> 0002` graph, idempotent canonical synthetic seed, two-tenant RLS,
 runtime function grants, Case CAS, terminal immutability, provenance mismatch,
+revision-pinned `review_required` Case handoff,
 downgrade/re-upgrade, and size-one pool cleanup. `accepted_synthetic_demo`
 Evidence is local proof; callers cannot assert `externally_verified`.
 

@@ -58,7 +58,7 @@ class PostgresPlanningRepository:
             {"org": organization_id, "case": case_id, "expected": expected, "target": target},
         )
 
-    async def persist_result(
+    async def publish_result(
         self,
         planning_input: PlanningInput,
         result: PlanningResult,
@@ -68,36 +68,43 @@ class PostgresPlanningRepository:
         supersedes_run_id: UUID | None,
     ) -> UUID:
         run_id = uuid4()
-        await self._session.execute(
-            text(
-                "SELECT app.persist_planning_result("
-                ":org,:run,:case,:revision,:pack,:version,:policy,:evidence_hash,"
-                ":state,:reason,:output_hash,:supersedes,CAST(:output AS jsonb))"
-            ),
-            {
-                "org": planning_input.organization_id,
-                "run": run_id,
-                "case": planning_input.case.case_id,
-                "revision": planning_input.case.revision,
-                "pack": planning_input.source_pack.pack_id,
-                "version": planning_input.source_pack.version,
-                "policy": policy_version,
-                "evidence_hash": evidence_projection_sha256,
-                "state": result.state,
-                "reason": result.reason_code,
-                "output_hash": output_sha256,
-                "supersedes": supersedes_run_id,
-                "output": json.dumps(
-                    {
-                        "routes": [item.model_dump(mode="json") for item in result.routes],
-                        "costs": [item.model_dump(mode="json") for item in planning_input.costs],
-                        "rankings": [
-                            item.model_dump(mode="json") for item in planning_input.rankings
-                        ],
-                    }
+        try:
+            await self._session.execute(
+                text(
+                    "SELECT app.persist_planning_result("
+                    ":org,:run,:case,:revision,:pack,:version,:policy,:evidence_hash,"
+                    ":state,:reason,:output_hash,:supersedes,CAST(:output AS jsonb))"
                 ),
-            },
-        )
+                {
+                    "org": planning_input.organization_id,
+                    "run": run_id,
+                    "case": planning_input.case.case_id,
+                    "revision": planning_input.case.revision,
+                    "pack": planning_input.source_pack.pack_id,
+                    "version": planning_input.source_pack.version,
+                    "policy": policy_version,
+                    "evidence_hash": evidence_projection_sha256,
+                    "state": result.state,
+                    "reason": result.reason_code,
+                    "output_hash": output_sha256,
+                    "supersedes": supersedes_run_id,
+                    "output": json.dumps(
+                        {
+                            "routes": [item.model_dump(mode="json") for item in result.routes],
+                            "costs": [
+                                item.model_dump(mode="json") for item in planning_input.costs
+                            ],
+                            "rankings": [
+                                item.model_dump(mode="json") for item in planning_input.rankings
+                            ],
+                        }
+                    ),
+                },
+            )
+        except DBAPIError as error:
+            if getattr(error.orig, "sqlstate", None) == "NV003":
+                raise StaleRevisionError(planning_input.case.revision, None) from error
+            raise
         return run_id
 
     async def persist_source_pack(

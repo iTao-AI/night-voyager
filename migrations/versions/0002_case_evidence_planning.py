@@ -65,6 +65,7 @@ CREATE TABLE app.evidence_refs (
   authority text NOT NULL CHECK (authority IN ('untrusted_candidate','accepted_synthetic_demo')),
   source_sha256 text NOT NULL CHECK (source_sha256 ~ '^[0-9a-f]{64}$'),
   PRIMARY KEY (organization_id, id),
+  UNIQUE (organization_id, source_pack_id, source_pack_version, claim),
   FOREIGN KEY (organization_id, source_pack_id, source_pack_version, source_entry_id)
     REFERENCES app.source_pack_entries(organization_id, source_pack_id, source_pack_version, id)
 );
@@ -107,7 +108,7 @@ CREATE TABLE app.comparison_dimension_evidence_refs (
 CREATE TABLE app.cost_evidence (
   organization_id uuid NOT NULL, planning_run_id uuid NOT NULL, id uuid NOT NULL,
   country text NOT NULL, intake text NOT NULL, period text NOT NULL CHECK (period = 'program_total'),
-  currency text NOT NULL, tuition_minor bigint NOT NULL CHECK (tuition_minor > 0),
+  currency text NOT NULL CHECK (currency = 'AUD'), tuition_minor bigint NOT NULL CHECK (tuition_minor > 0),
   living_minor bigint NOT NULL CHECK (living_minor > 0), fx_rate numeric NOT NULL CHECK (fx_rate > 0),
   fx_source text NOT NULL, fx_date date NOT NULL, tuition_evidence_id uuid NOT NULL,
   living_evidence_id uuid NOT NULL, fx_evidence_id uuid NOT NULL,
@@ -181,6 +182,19 @@ BEGIN
 END; $$;
 CREATE TRIGGER student_cases_current_revision_guard BEFORE INSERT OR UPDATE OF current_revision ON app.student_cases FOR EACH ROW EXECUTE FUNCTION app.guard_case_current_revision();
 
+CREATE FUNCTION app.guard_case_state_transition() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  IF OLD.state=NEW.state THEN RETURN NEW; END IF;
+  IF OLD.state='intake' AND NEW.state='planning' THEN RETURN NEW; END IF;
+  IF OLD.state='planning' AND NEW.state='advisor_review' AND EXISTS (
+    SELECT 1 FROM app.planning_runs r
+    WHERE r.organization_id=NEW.organization_id AND r.case_id=NEW.id
+      AND r.case_revision=NEW.current_revision AND r.is_current AND r.state='review_required'
+  ) THEN RETURN NEW; END IF;
+  RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid case transition';
+END; $$;
+CREATE TRIGGER student_cases_state_guard BEFORE UPDATE OF state ON app.student_cases FOR EACH ROW EXECUTE FUNCTION app.guard_case_state_transition();
+
 CREATE FUNCTION app.guard_run_transition() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
 BEGIN
   IF OLD.state IN ('failed','blocked','review_required') THEN
@@ -196,6 +210,20 @@ BEGIN
   RETURN NEW;
 END; $$;
 CREATE TRIGGER planning_runs_transition_guard BEFORE UPDATE ON app.planning_runs FOR EACH ROW EXECUTE FUNCTION app.guard_run_transition();
+
+CREATE FUNCTION app.advance_case_on_review_required() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  IF NEW.state='review_required' AND NEW.is_current THEN
+    UPDATE app.student_cases SET state='advisor_review'
+    WHERE organization_id=NEW.organization_id AND id=NEW.case_id
+      AND current_revision=NEW.case_revision AND state='planning';
+    IF NOT FOUND THEN
+      RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='case handoff input is stale';
+    END IF;
+  END IF;
+  RETURN NEW;
+END; $$;
+CREATE TRIGGER planning_runs_handoff AFTER UPDATE OF state ON app.planning_runs FOR EACH ROW EXECUTE FUNCTION app.advance_case_on_review_required();
 
 CREATE FUNCTION app.guard_nonterminal_child() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
 DECLARE run_state text;
@@ -258,7 +286,7 @@ END; $$;
 CREATE FUNCTION app.transition_case(p_org uuid,p_case uuid,p_expected text,p_target text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN
  PERFORM app.assert_context(p_org);
- IF NOT ((p_expected='intake' AND p_target='planning') OR (p_expected='planning' AND p_target='advisor_review')) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid case transition'; END IF;
+ IF NOT (p_expected='intake' AND p_target='planning') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid case transition'; END IF;
  UPDATE app.student_cases SET state=p_target WHERE organization_id=p_org AND id=p_case AND state=p_expected;
  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='stale case state'; END IF;
 END; $$;
@@ -284,7 +312,7 @@ DECLARE item jsonb; dimension jsonb; evidence_use jsonb; cost_item jsonb; rankin
 BEGIN
  PERFORM app.assert_context(p_org);
  IF p_state NOT IN ('failed','blocked','review_required') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='result must be terminal'; END IF;
- IF NOT EXISTS (SELECT 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_revision) THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='case revision is not current'; END IF;
+ IF NOT EXISTS (SELECT 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_revision AND state='planning') THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='case revision or state is stale'; END IF;
  IF p_supersedes IS NOT NULL THEN UPDATE app.planning_runs SET is_current=false WHERE organization_id=p_org AND id=p_supersedes AND is_current=true; IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='superseded run is stale'; END IF; END IF;
  INSERT INTO app.planning_runs(organization_id,id,case_id,case_revision,source_pack_id,source_pack_version,policy_version,evidence_projection_sha256,state,reason_code,output_sha256,supersedes_run_id,is_current) VALUES(p_org,p_run,p_case,p_revision,p_pack,p_version,p_policy,p_evidence_hash,'synthesizing',NULL,NULL,p_supersedes,true);
  FOR item IN SELECT * FROM jsonb_array_elements(p_output->'routes') LOOP
@@ -344,9 +372,11 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION IF EXISTS app.guard_cost_provenance()")
     op.execute("DROP FUNCTION IF EXISTS app.guard_ranking_provenance()")
     op.execute("DROP FUNCTION IF EXISTS app.guard_nonterminal_child()")
+    op.execute("DROP FUNCTION IF EXISTS app.advance_case_on_review_required()")
     op.execute("DROP FUNCTION IF EXISTS app.guard_run_transition()")
     op.execute("DROP FUNCTION IF EXISTS app.guard_evidence_provenance()")
     op.execute("DROP FUNCTION IF EXISTS app.guard_case_current_revision()")
+    op.execute("DROP FUNCTION IF EXISTS app.guard_case_state_transition()")
 
 
 def _split_statements(sql: str) -> list[str]:

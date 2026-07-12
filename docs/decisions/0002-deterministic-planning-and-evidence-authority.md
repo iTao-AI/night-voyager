@@ -20,6 +20,8 @@ Evidence, complete period/intake cost facts, and total cost within the approved
 elasticity and hard ceiling. Missing/refused/over-ceiling budget blocks it.
 Japan is a conditional high-risk alternative only when its risk is accepted;
 Malaysia remains blocked without exact direct program-fit Evidence.
+Cost and ranking projections must bind each role to its exact claim; duplicate
+claims and non-`AUD` M3A cost projections fail closed.
 Invalid schema, hash, tenant or version input, and accepted untrusted candidate
 material become `failed`. Terminal output is immutable.
 
@@ -27,5 +29,9 @@ Migration `0002` follows `0001` as the single head and owns exactly eleven M3A
 tables. It is seed-free, tenant-keyed, migrator-owned, forced-RLS protected,
 and exposed through narrow SECURITY DEFINER functions. Runtime roles receive no
 direct M3A writes; CAS, allowed transitions, terminal immutability and relational
-provenance are database-enforced. M3A excludes `AdvisorReview`, family briefs and
+provenance are database-enforced.
+The database atomically advances a current Case from `planning` to
+`advisor_review` only when its current revision publishes a current
+`review_required` run. Generic Case transition authority cannot perform that
+handoff. M3A excludes `AdvisorReview`, family briefs and
 decisions, background tasks/SSE, frontend integration, and production claims.

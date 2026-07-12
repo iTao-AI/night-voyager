@@ -16,6 +16,7 @@ from night_voyager.planning.models import (
     EvidenceRef,
     FamilyPreferences,
     PlanningInput,
+    RankingEvidence,
     RedistributionClass,
     RouteOutcome,
     SourcePackEntryV1,
@@ -171,7 +172,65 @@ def test_missing_fx_or_cost_evidence_blocks_australia() -> None:
                 )
             }
         )
-        assert route(changed, Country.AUSTRALIA) is RouteOutcome.BLOCKED
+        result = evaluate_planning_run(changed)
+        assert result.state.value == "failed"
+        assert result.reason_code == "evidence_provenance_invalid"
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_evidence_index"),
+    (
+        ("tuition_evidence_id", 2),
+        ("living_evidence_id", 3),
+        ("fx_evidence_id", 1),
+    ),
+)
+def test_cost_projection_ids_must_match_exact_claims(field: str, wrong_evidence_index: int) -> None:
+    payload = valid_input()
+    wrong_cost = payload.costs[0].model_copy(
+        update={field: payload.evidence[wrong_evidence_index].evidence_id}
+    )
+    result = evaluate_planning_run(payload.model_copy(update={"costs": (wrong_cost,)}))
+    assert result.state.value == "failed"
+    assert result.reason_code == "evidence_provenance_invalid"
+
+
+def test_ranking_projection_id_must_match_ranking_claim() -> None:
+    payload = valid_input()
+    ranking = RankingEvidence(
+        schema_version=1,
+        organization_id=ORG,
+        country=Country.AUSTRALIA,
+        ranking_system="synthetic_demo_scale",
+        rank=10,
+        publication_year=2026,
+        evidence_id=payload.evidence[0].evidence_id,
+    )
+    result = evaluate_planning_run(payload.model_copy(update={"rankings": (ranking,)}))
+    assert result.state.value == "failed"
+    assert result.reason_code == "evidence_provenance_invalid"
+
+
+def test_duplicate_claims_fail_closed() -> None:
+    payload = valid_input()
+    duplicate = payload.evidence[1].model_copy(
+        update={"evidence_id": UUID("60000000-0000-0000-0000-000000000099")}
+    )
+    result = evaluate_planning_run(
+        payload.model_copy(update={"evidence": payload.evidence + (duplicate,)})
+    )
+    assert result.state.value == "failed"
+    assert result.reason_code == "evidence_provenance_invalid"
+
+
+def test_cost_currency_is_bounded_iso_4217_source_currency() -> None:
+    payload = valid_input()
+    with pytest.raises(ValidationError):
+        CostEvidence.model_validate(payload.costs[0].model_dump() | {"currency": "NOT-ISO-4217"})
+    bypassed = payload.costs[0].model_copy(update={"currency": "NOT-ISO-4217"})
+    result = evaluate_planning_run(payload.model_copy(update={"costs": (bypassed,)}))
+    assert result.state.value == "failed"
+    assert result.reason_code == "cost_currency_invalid"
 
 
 def test_hard_ceiling_and_elasticity_are_policy_owned() -> None:

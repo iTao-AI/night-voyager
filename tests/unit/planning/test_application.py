@@ -12,7 +12,12 @@ from night_voyager.planning.application import (
     SourceEvidenceService,
 )
 from night_voyager.planning.errors import StaleRevisionError
-from night_voyager.planning.models import CaseState, StudentCaseRevision
+from night_voyager.planning.models import (
+    CaseState,
+    PlanningInput,
+    PlanningResult,
+    StudentCaseRevision,
+)
 from night_voyager.planning.ports import (
     CaseRepository,
     PlanningRepository,
@@ -29,6 +34,7 @@ class FakeRepository:
     planning_hashes: tuple[str, str, str] | None = None
     stored_pack: UUID | None = None
     stored_evidence: list[UUID] = field(default_factory=lambda: list[UUID]())
+    published_result_state: str | None = None
 
     async def create_revision(
         self, revision: StudentCaseRevision, expected_current: int | None
@@ -47,10 +53,10 @@ class FakeRepository:
             raise ValueError("unexpected state")
         self.case_state = target
 
-    async def persist_result(
+    async def publish_result(
         self,
-        planning_input: object,
-        result: object,
+        planning_input: PlanningInput,
+        result: PlanningResult,
         policy_version: str,
         evidence_projection_sha256: str,
         output_sha256: str,
@@ -61,6 +67,11 @@ class FakeRepository:
             evidence_projection_sha256,
             output_sha256,
         )
+        self.published_result_state = result.state.value
+        if self.case_state is not CaseState.PLANNING:
+            raise StaleRevisionError(1, self.current_revision)
+        if self.published_result_state == "review_required":
+            self.case_state = CaseState.ADVISOR_REVIEW
         return UUID("70000000-0000-0000-0000-000000000001")
 
     async def persist_source_pack(self, manifest: object, manifest_sha256: str) -> None:
@@ -93,7 +104,7 @@ async def test_case_lifecycle_is_application_owned() -> None:
 
 @pytest.mark.asyncio
 async def test_planning_service_persists_pinned_versions_and_canonical_hashes() -> None:
-    repository = FakeRepository()
+    repository = FakeRepository(current_revision=1, case_state=CaseState.PLANNING)
     run_id = await PlanningService(cast(PlanningRepository, repository)).evaluate_and_persist(
         valid_input(), supersedes_run_id=None
     )
@@ -101,6 +112,8 @@ async def test_planning_service_persists_pinned_versions_and_canonical_hashes() 
     assert repository.planning_hashes is not None
     assert repository.planning_hashes[0] == "m3a-policy-v1"
     assert all(len(value) == 64 for value in repository.planning_hashes[1:])
+    assert repository.published_result_state == "review_required"
+    assert repository.case_state is CaseState.ADVISOR_REVIEW
 
 
 @pytest.mark.asyncio

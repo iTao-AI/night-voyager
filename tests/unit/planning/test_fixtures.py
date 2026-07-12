@@ -24,6 +24,12 @@ def test_synthetic_planning_fixture_validates_offline() -> None:
     assert len(fixture.evidence_projection_sha256) == 64
     assert len(fixture.output_sha256) == 64
     assert evaluate_stable_scenarios(fixture) == fixture.eval_assertions
+    assert fixture.eval_assertions["dra_fallback_ready"] == "failed"
+
+
+def test_dra_fallback_candidate_fails_closed_on_authority() -> None:
+    fixture = validate_planning_fixture()
+    assert evaluate_stable_scenarios(fixture)["dra_fallback_ready"] == "failed"
 
 
 def test_validate_only_does_not_require_database_url() -> None:

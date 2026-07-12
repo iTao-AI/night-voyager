@@ -32,6 +32,7 @@ def test_terminal_planning_output_is_immutable(terminal: RunState) -> None:
 
 def test_student_case_lifecycle_is_exact() -> None:
     assert transition_case(CaseState.INTAKE, CaseState.PLANNING) is CaseState.PLANNING
-    assert transition_case(CaseState.PLANNING, CaseState.ADVISOR_REVIEW) is CaseState.ADVISOR_REVIEW
+    with pytest.raises(InvalidTransition):
+        transition_case(CaseState.PLANNING, CaseState.ADVISOR_REVIEW)
     with pytest.raises(InvalidTransition):
         transition_case(CaseState.ADVISOR_REVIEW, CaseState.PLANNING)

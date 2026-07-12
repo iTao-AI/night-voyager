@@ -94,6 +94,8 @@ def _validate_contract(planning_input: PlanningInput) -> str | None:
         for item in planning_input.evidence
     ):
         return "evidence_authority_invalid"
+    if any(item.currency != "AUD" for item in planning_input.costs):
+        return "cost_currency_invalid"
     return None
 
 
@@ -112,6 +114,12 @@ def _validate_provenance(planning_input: PlanningInput) -> str | None:
     }
     if len(organization_ids) != 1:
         return "tenant_mismatch"
+    evidence_ids = [item.evidence_id for item in planning_input.evidence]
+    evidence_claims = [item.claim for item in planning_input.evidence]
+    if len(set(evidence_ids)) != len(evidence_ids) or len(set(evidence_claims)) != len(
+        evidence_claims
+    ):
+        return "evidence_provenance_invalid"
     entries = {entry.entry_id: entry for entry in planning_input.source_pack.entries}
     for evidence in planning_input.evidence:
         entry = entries.get(evidence.source_entry_id)
@@ -123,6 +131,23 @@ def _validate_provenance(planning_input: PlanningInput) -> str | None:
             or evidence.source_sha256 != entry.sha256
             or evidence.claim not in entry.coverage
         ):
+            return "evidence_provenance_invalid"
+    evidence_by_id = {item.evidence_id: item for item in planning_input.evidence}
+    for cost in planning_input.costs:
+        expected_cost_claims = (
+            (cost.tuition_evidence_id, f"{cost.country.value}_tuition"),
+            (cost.living_evidence_id, f"{cost.country.value}_living_cost"),
+            (cost.fx_evidence_id, f"{cost.country.value}_fx"),
+        )
+        if any(
+            evidence_by_id.get(evidence_id) is None
+            or evidence_by_id[evidence_id].claim != expected_claim
+            for evidence_id, expected_claim in expected_cost_claims
+        ):
+            return "evidence_provenance_invalid"
+    for ranking in planning_input.rankings:
+        evidence = evidence_by_id.get(ranking.evidence_id)
+        if evidence is None or evidence.claim != f"{ranking.country.value}_ranking":
             return "evidence_provenance_invalid"
     return None
 

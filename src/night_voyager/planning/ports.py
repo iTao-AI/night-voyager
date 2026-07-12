@@ -28,7 +28,7 @@ class CaseRepository(Protocol):
 
 
 class PlanningRepository(Protocol):
-    async def persist_result(
+    async def publish_result(
         self,
         planning_input: PlanningInput,
         result: PlanningResult,

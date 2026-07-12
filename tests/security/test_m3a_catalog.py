@@ -46,6 +46,9 @@ def test_terminal_and_provenance_guards_are_database_enforced() -> None:
     assert "CREATE TRIGGER ranking_evidence_terminal_guard" in MIGRATION
     assert "CREATE TRIGGER evidence_refs_provenance_guard" in MIGRATION
     assert "CREATE TRIGGER student_cases_current_revision_guard" in MIGRATION
+    assert "CREATE TRIGGER student_cases_state_guard" in MIGRATION
+    assert "CREATE TRIGGER planning_runs_handoff" in MIGRATION
+    assert "NEW.state='review_required' AND NEW.is_current" in MIGRATION
     assert "CREATE TRIGGER cost_evidence_provenance_guard" in MIGRATION
     assert "CREATE TRIGGER ranking_evidence_provenance_guard" in MIGRATION
     assert "evidence_role" in MIGRATION

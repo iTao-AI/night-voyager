@@ -18,7 +18,7 @@ RUN_TRANSITIONS: dict[RunState, frozenset[RunState]] = {
 
 CASE_TRANSITIONS: dict[CaseState, frozenset[CaseState]] = {
     CaseState.INTAKE: frozenset({CaseState.PLANNING}),
-    CaseState.PLANNING: frozenset({CaseState.ADVISOR_REVIEW}),
+    CaseState.PLANNING: frozenset(),
     CaseState.ADVISOR_REVIEW: frozenset(),
 }
 

@@ -47,7 +47,7 @@ class PlanningService:
             [item.model_dump(mode="json") for item in planning_input.evidence]
         )
         output_hash = canonical_sha256(result.model_dump(mode="json"))
-        return await self._repository.persist_result(
+        return await self._repository.publish_result(
             planning_input,
             result,
             POLICY_VERSION,
