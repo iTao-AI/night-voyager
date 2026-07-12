@@ -34,6 +34,7 @@ packages = ["src/night_voyager"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["database: requires disposable PostgreSQL 18 roles"]
 
 [tool.ruff]
 target-version = "py312"

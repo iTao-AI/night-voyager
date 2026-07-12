@@ -37,6 +37,8 @@ services:
     <<: *python-service
     command: ["alembic", "upgrade", "head"]
     environment:
+      NIGHT_VOYAGER_ENVIRONMENT: development
+      NIGHT_VOYAGER_DEMO_MODE: "true"
       NIGHT_VOYAGER_MIGRATION_DATABASE_URL: postgresql+asyncpg://night_voyager_migrator:${NIGHT_VOYAGER_MIGRATOR_PASSWORD:-migrator-local-only}@postgres:5432/night_voyager
     restart: "no"
 

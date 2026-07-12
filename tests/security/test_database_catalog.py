@@ -30,6 +30,8 @@ def test_api_image_contains_alembic_configuration_and_migrations() -> None:
     assert "COPY alembic.ini ./" in dockerfile
     assert "COPY migrations ./migrations" in dockerfile
     assert "COPY scripts ./scripts" in dockerfile
+    assert "FROM builder AS db-test" in dockerfile
+    assert "uv sync --locked" in dockerfile
 
 
 def test_initial_migration_defines_forced_rls_and_restricted_auth_functions() -> None:
