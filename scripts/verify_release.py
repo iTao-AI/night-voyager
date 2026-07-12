@@ -18,6 +18,11 @@ VERSION = "0.1.0"
 POSTGRES_IMAGE = (
     "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
 )
+M3A_TABLES = {
+    "student_cases", "student_case_revisions", "source_packs", "source_pack_entries",
+    "evidence_refs", "planning_runs", "planning_routes", "comparison_dimensions",
+    "comparison_dimension_evidence_refs", "cost_evidence", "ranking_evidence",
+}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -262,7 +267,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } or any(
+            } | M3A_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -275,8 +280,22 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 3:
+            if policy_count != 14:
                 raise SystemExit("every app tenant table requires one explicit policy")
+
+            worker_writes = (
+                await connection.execute(
+                    text("""
+                    SELECT count(*) FROM information_schema.role_table_grants
+                    WHERE table_schema = 'app' AND table_name = ANY(:tables)
+                      AND grantee = 'night_voyager_worker'
+                      AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
+                    """),
+                    {"tables": sorted(M3A_TABLES)},
+                )
+            ).scalar_one()
+            if worker_writes:
+                raise SystemExit("worker must not have an M3A write grant")
 
             auth_grants = (
                 await connection.execute(

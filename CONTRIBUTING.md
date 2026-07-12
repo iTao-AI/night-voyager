@@ -19,7 +19,8 @@ both force the real PostgreSQL suite through `make db-check`.
 
 ## Guardrails
 
-- Migrations and RLS changes require `make db-check` using runtime-equivalent roles. The M2 backend remains separate from the fixture-only `/demo`.
+- Migrations and RLS changes require `make db-check` using runtime-equivalent roles. The M3A backend remains separate from the fixture-only `/demo`.
+- M3A fixtures must pass offline `scripts/seed_demo.py --validate-only`; `accepted_synthetic_demo` must never be described as externally verified Evidence.
 - Fixtures must be synthetic, provenance-labelled, deterministic, and pass `make fixtures-check`; real student records are prohibited.
 - Public claims must match reproducible repository evidence and must not imply production use, real users, admissions outcomes, or measured business impact.
 - Never commit `.env`, credentials, private paths, personal data, or generated proof noise.

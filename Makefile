@@ -44,9 +44,8 @@ logs: ## Follow local bootstrap service logs
 down: ## Stop the stack and preserve database data
 	docker compose down --remove-orphans
 
-fixtures-check: ## Confirm no domain fixtures beyond the explicit synthetic identity seed
-	@test ! -d fixtures || (echo "M2 must not contain domain fixtures" && exit 1)
-	@echo "fixtures-check: no domain fixtures"
+fixtures-check: ## Validate the public-safe synthetic M3A manifest without database access
+	@uv run python scripts/seed_demo.py --validate-only
 
 reset-demo: ## Delete local demo volumes only with RESET_DEMO=1
 	@test "$(RESET_DEMO)" = "1" || (echo "Refusing destructive reset; rerun with RESET_DEMO=1" && exit 1)

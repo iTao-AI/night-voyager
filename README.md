@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, and an **M2 backend identity/session/RLS security foundation**. The repository provides a reproducible local foundation for a Python API, Next.js web application, PostgreSQL, and durable worker process. The `/demo` route demonstrates the approved advisor-to-family product flow with synthetic fixtures; it is not connected to a domain backend and does not implement mutations, production tenancy, or live provider integrations.
+Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, and an **M3A deterministic planning backend foundation**. M3A persists immutable Case revisions, source packs, claim-level Evidence, and PlanningRun results. The `/demo` route remains fixture-only and disconnected from this backend.
 
 ## Evaluator lane
 
@@ -37,11 +37,11 @@ make db-check
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/README.md](docs/README.md). A Chinese version is available in [README_CN.md](README_CN.md).
 
-`make db-check` uses a disposable PostgreSQL 18 volume to prove migrations, synthetic identity seed idempotency, non-owner runtime roles, restricted auth functions, forced RLS, session lifecycle, and pool cleanup. It always removes the test volume.
+`make db-check` uses a disposable PostgreSQL 18 volume to prove the exact `0001 -> 0002` graph, idempotent explicit synthetic seed, non-owner runtime roles, restricted auth functions, forced RLS, isolation, immutability, downgrade/re-upgrade, and pool cleanup. `accepted_synthetic_demo` Evidence is local proof, not externally verified Evidence.
 
 ## Current limits
 
-- The backend security foundation is not wired to the fixture-only `/demo`; no domain state machine, evidence workflow backend, or advisor/family mutation exists.
+- The M3A backend foundation is not wired to the fixture-only `/demo`; no advisor review, family brief/decision, worker/SSE execution, or domain frontend mutation exists.
 - No real DRA, MKE, OpenClaw, model, or messaging adapter.
 - No production deployment or user/admissions outcome claim.
 

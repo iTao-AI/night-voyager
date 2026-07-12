@@ -22,6 +22,7 @@ WORKDIR /home/app
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY scripts ./scripts
+COPY fixtures ./fixtures
 USER app
 EXPOSE 8000
 CMD ["uvicorn", "night_voyager.api:app", "--host", "0.0.0.0", "--port", "8000"]

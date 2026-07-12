@@ -10,10 +10,16 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume migration, seed, catalog,
-role, RLS, downgrade/upgrade, and connection-pool cleanup proof. The target uses
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002` migration,
+explicit M3A synthetic seed, catalog, role, RLS, `0002 -> 0001 -> 0002`, and
+connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
 downgrade against a retained demo volume.
+
+M3A grants runtime roles read access. The API alone can insert M3A records and
+update only the Case current pointer or PlanningRun terminal columns. The
+worker has no M3A write grant; neither runtime role can delete or broadly
+update immutable rows.
 
 The normal `make demo` path applies migrations, then runs the separate
 `demo-seed` one-shot service before API/worker readiness. The schema migration

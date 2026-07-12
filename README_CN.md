@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract** 与 **M2 backend identity/session/RLS security foundation**。仓库提供可复现的 Python API、Next.js Web、PostgreSQL 与持久 worker 本地工程基线；`/demo` 使用合成 fixture 演示已批准的 advisor-to-family 产品流程，但不连接 domain backend，也不实现 mutation、生产租户能力或真实 provider 集成。
+Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract**、**M2 identity/session/RLS boundary** 与 **M3A deterministic planning backend foundation**。M3A 持久化 immutable Case revision、source pack、claim-level Evidence 与 PlanningRun 结果；`/demo` 仍是未连接该 backend 的 fixture-only 页面。
 
 ## Evaluator 路径
 
@@ -37,11 +37,11 @@ make db-check
 
 更多信息见 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 与 [docs/README.md](docs/README.md)。
 
-`make db-check` 使用 disposable PostgreSQL 18 volume 验证 migration、合成 identity seed 幂等性、非 owner runtime roles、受限 auth functions、forced RLS、session lifecycle 与 pool cleanup，并始终删除测试 volume。
+`make db-check` 使用 disposable PostgreSQL 18 volume 验证精确 `0001 -> 0002` migration、显式合成 seed 幂等性、非 owner runtime roles、受限 auth functions、forced RLS、隔离、不可变性、downgrade/re-upgrade 与 pool cleanup。`accepted_synthetic_demo` Evidence 只代表本地合成 proof，不等于 externally verified Evidence。
 
 ## 当前边界
 
-- M2 backend security foundation 尚未连接 fixture-only `/demo`；没有领域状态机、证据工作流 backend 或顾问/家庭 mutation。
+- M3A backend foundation 尚未连接 fixture-only `/demo`；没有 advisor review、family brief/decision、worker/SSE execution 或 domain frontend mutation。
 - 没有真实 DRA、MKE、OpenClaw、模型或消息适配器。
 - 不代表生产部署、真实用户或录取结果。
 
