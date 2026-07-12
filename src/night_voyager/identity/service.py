@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from night_voyager.identity.auth import digest_token, generate_token, session_expiry
+from night_voyager.identity.errors import AuthenticationFailedError, StaleSessionError
 from night_voyager.identity.models import ActorContext, DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 
@@ -51,9 +52,11 @@ class IdentityService:
         return IssuedSession(raw_session, raw_csrf, context)
 
     async def revoke(self, session_token: str, csrf_token: str) -> None:
+        if await self.resolve(session_token) is None:
+            raise StaleSessionError
         revoked = await self._repository.revoke(
             digest_token(self._secret_key, session_token),
             digest_token(self._secret_key, csrf_token),
         )
         if not revoked:
-            raise ValueError("inactive session")
+            raise AuthenticationFailedError

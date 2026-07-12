@@ -3,10 +3,13 @@ from __future__ import annotations
 import os
 
 import pytest
+from httpx2 import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from night_voyager.api import create_app
+from night_voyager.config import Settings
+from night_voyager.identity.errors import AuthenticationFailedError, StaleSessionError
 from night_voyager.identity.models import ActorRole, DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService
@@ -23,7 +26,7 @@ async def test_postgres_session_mint_rotate_resolve_revoke_is_opaque() -> None:
         async with sessions() as session, session.begin():
             service = IdentityService(IdentityRepository(session), "test-session-secret")
             advisor = await service.mint(DemoActorChoice.ADVISOR)
-        with pytest.raises(DBAPIError):
+        with pytest.raises(AuthenticationFailedError):
             async with sessions() as session, session.begin():
                 await IdentityService(
                     IdentityRepository(session), "test-session-secret"
@@ -77,3 +80,95 @@ async def test_postgres_session_mint_rotate_resolve_revoke_is_opaque() -> None:
     finally:
         await api_engine.dispose()
         await migrator_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgres_http_rotation_normalizes_auth_errors_and_recovers_stale_cookie() -> None:
+    api_url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(api_url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": api_url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": ["http://127.0.0.1:3000"],
+            "secret_key": "test-session-secret",
+        }
+    )
+    app = create_app(settings=settings, session_factory=sessions)
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://127.0.0.1:3000"
+        ) as client:
+            bootstrap = await client.get(
+                "/api/v1/demo/session-bootstrap", headers={"Origin": "http://127.0.0.1:3000"}
+            )
+            minted = await client.post(
+                "/api/v1/demo/sessions",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "X-CSRF-Token": bootstrap.json()["csrf_token"],
+                },
+                json={"demo_actor": "advisor"},
+            )
+            wrong_csrf = await client.post(
+                "/api/v1/demo/sessions",
+                headers={"Origin": "http://127.0.0.1:3000", "X-CSRF-Token": "wrong"},
+                json={"demo_actor": "parent"},
+            )
+            rotated = await client.post(
+                "/api/v1/demo/sessions",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "X-CSRF-Token": minted.json()["csrf_token"],
+                },
+                json={"demo_actor": "parent"},
+            )
+            revoked = await client.delete(
+                "/api/v1/demo/session",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "X-CSRF-Token": rotated.json()["csrf_token"],
+                },
+            )
+            revoked_token = rotated.cookies.get("night_voyager_session")
+            assert revoked_token is not None
+            stale = await client.post(
+                "/api/v1/demo/sessions",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "X-CSRF-Token": rotated.json()["csrf_token"],
+                    "Cookie": f"night_voyager_session={revoked_token}",
+                },
+                json={"demo_actor": "advisor"},
+            )
+            fresh_bootstrap = await client.get(
+                "/api/v1/demo/session-bootstrap", headers={"Origin": "http://127.0.0.1:3000"}
+            )
+            recovered = await client.post(
+                "/api/v1/demo/sessions",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "X-CSRF-Token": fresh_bootstrap.json()["csrf_token"],
+                },
+                json={"demo_actor": "student"},
+            )
+
+        assert wrong_csrf.status_code == 401
+        assert wrong_csrf.json() == {"detail": "authentication failed"}
+        assert "night_voyager_session=" not in wrong_csrf.headers.get("set-cookie", "")
+        assert rotated.status_code == 201
+        assert revoked.status_code == 204
+        assert stale.status_code == 401
+        assert stale.json() == {"detail": "authentication failed"}
+        assert "Max-Age=0" in stale.headers["set-cookie"]
+        assert recovered.status_code == 201
+
+        async with sessions() as session, session.begin():
+            service = IdentityService(IdentityRepository(session), "test-session-secret")
+            with pytest.raises(StaleSessionError):
+                await service.rotate("unknown", "unknown", DemoActorChoice.ADVISOR)
+    finally:
+        await engine.dispose()

@@ -13,6 +13,10 @@ Night Voyager is in bootstrap stage. Keep changes focused, public-neutral, and r
 | Package identity, dependencies, or release proof | Regenerate the affected lockfile, build artifacts, then `make proof` and `make check` |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
+Plain `uv run pytest -q` and the required hosted `python` job run the
+non-database suite. The required hosted `compose` job and local `make check`
+both force the real PostgreSQL suite through `make db-check`.
+
 ## Guardrails
 
 - Migrations and RLS changes require `make db-check` using runtime-equivalent roles. The M2 backend remains separate from the fixture-only `/demo`.

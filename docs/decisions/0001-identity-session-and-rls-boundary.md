@@ -17,6 +17,9 @@ has no authentication-function grant.
 Sessions and CSRF values are 32-byte opaque tokens. Only keyed SHA-256 digests
 are persisted. Identity is transaction-local through `set_config(..., true)`,
 so pooled connections cannot retain tenant authority after commit or rollback.
+Expected stale-session and credential-mismatch SQL states cross a typed
+persistence boundary; unrelated database failures remain server failures.
+Stale HttpOnly cookies are expired without treating bad CSRF as a fresh mint.
 
 This boundary intentionally excludes public accounts, passwords, OAuth,
 frontend integration, domain workflow tables, background tasks, and production

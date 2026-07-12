@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 pytestmark = pytest.mark.database
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 OTHER_ORG = UUID("10000000-0000-0000-0000-000000000002")
+OTHER_ACTOR = UUID("20000000-0000-0000-0000-000000000004")
+OTHER_MEMBERSHIP = UUID("30000000-0000-0000-0000-000000000004")
 
 
 def _url(name: str) -> str:
@@ -33,6 +35,26 @@ async def test_api_and_worker_see_only_transaction_tenant_and_pool_does_not_leak
                 ),
                 {"id": OTHER_ORG},
             )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.actors (id, organization_id, display_name, is_synthetic) "
+                    "VALUES (:id, :organization_id, 'Other tenant actor', true) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {"id": OTHER_ACTOR, "organization_id": OTHER_ORG},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.memberships (id, organization_id, actor_id, role) "
+                    "VALUES (:id, :organization_id, :actor_id, 'advisor') "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "id": OTHER_MEMBERSHIP,
+                    "organization_id": OTHER_ORG,
+                    "actor_id": OTHER_ACTOR,
+                },
+            )
     finally:
         await migrator.dispose()
 
@@ -42,24 +64,26 @@ async def test_api_and_worker_see_only_transaction_tenant_and_pool_does_not_leak
             async with engine.begin() as connection:
                 missing = await connection.scalar(text("SELECT count(*) FROM app.organizations"))
                 assert missing == 0
-                await connection.execute(
-                    text("SELECT set_config('night_voyager.organization_id', :value, true)"),
-                    {"value": str(DEMO_ORG)},
-                )
-                own = await connection.scalar(text("SELECT count(*) FROM app.organizations"))
-                joined = await connection.scalar(
-                    text(
-                        "SELECT count(*) FROM app.actors a JOIN app.memberships m "
-                        "ON (m.organization_id, m.actor_id) = (a.organization_id, a.id)"
+            for organization_id, expected_joined in ((DEMO_ORG, 3), (OTHER_ORG, 1)):
+                async with engine.begin() as connection:
+                    await connection.execute(
+                        text("SELECT set_config('night_voyager.organization_id', :value, true)"),
+                        {"value": str(organization_id)},
                     )
-                )
-                assert own == 1
-                assert joined == 3
-                cross_tenant = await connection.scalar(
-                    text("SELECT count(*) FROM app.organizations WHERE id = :id"),
-                    {"id": OTHER_ORG},
-                )
-                assert cross_tenant == 0
+                    own = await connection.scalar(text("SELECT count(*) FROM app.organizations"))
+                    joined = await connection.scalar(
+                        text(
+                            "SELECT count(*) FROM app.actors a JOIN app.memberships m "
+                            "ON (m.organization_id, m.actor_id) = (a.organization_id, a.id)"
+                        )
+                    )
+                    cross_tenant = await connection.scalar(
+                        text("SELECT count(*) FROM app.organizations WHERE id <> :id"),
+                        {"id": organization_id},
+                    )
+                    assert own == 1
+                    assert joined == expected_joined
+                    assert cross_tenant == 0
             async with engine.begin() as connection:
                 leaked = await connection.scalar(text("SELECT count(*) FROM app.organizations"))
                 assert leaked == 0

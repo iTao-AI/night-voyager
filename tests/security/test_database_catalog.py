@@ -56,7 +56,9 @@ def test_initial_migration_defines_forced_rls_and_restricted_auth_functions() ->
     assert "SECURITY DEFINER" in migration
     assert "auth.rotate_demo_session(bytea, bytea, text" in migration
     assert "auth.revoke_demo_session(bytea, bytea)" in migration
-    assert "s.csrf_digest = p_old_csrf_digest" in migration
+    assert "selected_session.csrf_digest <> p_old_csrf_digest" in migration
+    assert "ERRCODE = 'NV001'" in migration
+    assert "ERRCODE = 'NV002'" in migration
     assert "csrf_digest = p_csrf_digest" in migration
 
 

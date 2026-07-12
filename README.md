@@ -16,7 +16,12 @@ make down
 
 `make doctor` checks the Docker daemon, required Compose capability, disk space, and local ports. `make proof` runs config, public-hygiene, and installed-wheel checks inside Docker; it does not require host Python, uv, Node.js, or npm.
 
-`make demo` starts synthetic bootstrap services only. The API health endpoint is `http://127.0.0.1:8000/health`; the web bootstrap page is `http://127.0.0.1:3000`. Published ports bind to IPv4 loopback only.
+`make demo` migrates the local database, runs the fail-closed and idempotent
+`demo-seed` service, then waits for the synthetic bootstrap stack. The API
+health endpoint is `http://127.0.0.1:8000/health`; the web bootstrap page is
+`http://127.0.0.1:3000`. Published ports bind to IPv4 loopback only. Run
+`make compose-proof` to verify health plus the real bootstrap and session-mint
+API path without connecting the fixture-only UI.
 
 The fixture-only M1 prototype is available at `http://127.0.0.1:3000/demo`. Its visual and product contracts are documented in [DESIGN.md](DESIGN.md) and [docs/design/](docs/design/).
 

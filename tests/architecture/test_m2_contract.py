@@ -39,11 +39,13 @@ def test_m2_does_not_create_later_milestone_artifacts() -> None:
 
 
 def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
 
     assert "db-check:" in makefile
+    assert pyproject["tool"]["pytest"]["ini_options"]["addopts"] == '-m "not database"'
     check_target = makefile.split("\ncheck: ##", 1)[1].split("\n\n", 1)[0]
     assert '-m "not database"' in check_target
     assert "$(MAKE) db-check" in check_target
@@ -54,8 +56,20 @@ def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
     }
     compose_job = workflow.split("  compose:", 1)[1]
     assert "make db-check" in compose_job
+    python_job = workflow.split("  python:", 1)[1].split("  frontend:", 1)[0]
+    assert 'uv run pytest -q -m "not database"' in python_job
     assert "COMPOSE_PROJECT_NAME" in script
     assert "down --volumes" in script
+
+
+def test_local_demo_runs_explicit_seed_and_identity_probe() -> None:
+    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    proof = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "demo-seed:" in compose
+    assert 'command: ["python", "scripts/seed_demo.py"]' in compose
+    assert "demo-seed:\n        condition: service_completed_successfully" in compose
+    assert "verify_demo_identity.py" in proof
 
 
 def test_public_docs_preserve_fixture_only_demo_boundary() -> None:

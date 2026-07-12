@@ -106,13 +106,19 @@ CREATE FUNCTION auth.rotate_demo_session(
   p_csrf_digest bytea, p_expires_at timestamptz
 ) RETURNS TABLE (organization_id uuid, actor_id uuid, role text, session_id uuid)
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE selected_principal auth.demo_principals%ROWTYPE;
+DECLARE
+  selected_principal auth.demo_principals%ROWTYPE;
+  selected_session auth.demo_sessions%ROWTYPE;
 BEGIN
-  PERFORM 1 FROM auth.demo_sessions AS s
+  SELECT * INTO selected_session FROM auth.demo_sessions AS s
   WHERE s.session_digest = p_old_digest AND s.revoked_at IS NULL
-    AND s.csrf_digest = p_old_csrf_digest
     AND s.expires_at > clock_timestamp() FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION 'inactive session'; END IF;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE = 'NV001', MESSAGE = 'inactive session';
+  END IF;
+  IF selected_session.csrf_digest <> p_old_csrf_digest THEN
+    RAISE EXCEPTION USING ERRCODE = 'NV002', MESSAGE = 'credential mismatch';
+  END IF;
   SELECT * INTO selected_principal FROM auth.demo_principals AS p WHERE p.demo_key = p_demo_key;
   IF NOT FOUND THEN RAISE EXCEPTION 'unknown demo principal'; END IF;
   UPDATE auth.demo_sessions SET revoked_at = clock_timestamp()

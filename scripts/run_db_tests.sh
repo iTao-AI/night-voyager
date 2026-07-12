@@ -7,7 +7,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run python scripts/seed_demo.py
     uv run python scripts/seed_demo.py
     uv run python scripts/verify_release.py --check-db-roles
-    uv run pytest -q -m database tests/security tests/integration/identity
+    PYTEST_ADDOPTS= uv run pytest -q -m database tests/security tests/integration/identity
     uv run alembic downgrade base
     uv run alembic upgrade head
     uv run python scripts/verify_release.py --check-db-roles

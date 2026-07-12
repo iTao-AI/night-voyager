@@ -10,7 +10,7 @@ help: ## Show available commands
 doctor: ## Verify evaluator prerequisites; MODE=dev adds contributor tools
 	@scripts/doctor.sh
 
-demo: ## Build and start the local bootstrap stack
+demo: ## Migrate, explicitly seed synthetic identity, and start the local stack
 	docker compose up --build --wait
 
 proof: ## Run config, hygiene, and wheel proof using Docker only

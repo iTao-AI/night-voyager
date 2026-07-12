@@ -42,6 +42,18 @@ services:
       NIGHT_VOYAGER_MIGRATION_DATABASE_URL: postgresql+asyncpg://night_voyager_migrator:${NIGHT_VOYAGER_MIGRATOR_PASSWORD:-migrator-local-only}@postgres:5432/night_voyager
     restart: "no"
 
+  demo-seed:
+    <<: *python-service
+    command: ["python", "scripts/seed_demo.py"]
+    environment:
+      NIGHT_VOYAGER_ENVIRONMENT: development
+      NIGHT_VOYAGER_DEMO_MODE: "true"
+      NIGHT_VOYAGER_MIGRATION_DATABASE_URL: postgresql+asyncpg://night_voyager_migrator:${NIGHT_VOYAGER_MIGRATOR_PASSWORD:-migrator-local-only}@postgres:5432/night_voyager
+    depends_on:
+      migrator:
+        condition: service_completed_successfully
+    restart: "no"
+
   api:
     <<: *python-service
     environment:
@@ -63,6 +75,8 @@ services:
         condition: service_healthy
       migrator:
         condition: service_completed_successfully
+      demo-seed:
+        condition: service_completed_successfully
 
   worker:
     <<: *python-service
@@ -75,6 +89,8 @@ services:
       postgres:
         condition: service_healthy
       migrator:
+        condition: service_completed_successfully
+      demo-seed:
         condition: service_completed_successfully
 
   db-test:

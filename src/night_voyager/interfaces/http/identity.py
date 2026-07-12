@@ -6,9 +6,11 @@ from typing import Protocol
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from starlette.responses import JSONResponse
 
 from night_voyager.config import Settings
 from night_voyager.identity.auth import generate_token, require_csrf, require_origin
+from night_voyager.identity.errors import AuthenticationFailedError, StaleSessionError
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.service import IdentityService, IssuedSession
 
@@ -64,7 +66,7 @@ def create_identity_router(
         )
         return {"csrf_token": token}
 
-    @router.post("/sessions", status_code=status.HTTP_201_CREATED)
+    @router.post("/sessions", status_code=status.HTTP_201_CREATED, response_model=None)
     async def create_session(  # pyright: ignore[reportUnusedFunction]
         payload: DemoSessionRequest,
         request: Request,
@@ -72,7 +74,7 @@ def create_identity_router(
         session_token: str | None = Cookie(default=None, alias=SESSION_COOKIE),
         bootstrap_token: str | None = Cookie(default=None, alias=BOOTSTRAP_COOKIE),
         csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
-    ) -> dict[str, str]:
+    ) -> dict[str, str] | JSONResponse:
         enforce_demo(request)
         if session_token is None:
             try:
@@ -89,7 +91,9 @@ def create_identity_router(
                     else service.rotate(session_token, csrf_token or "", payload.demo_actor)
                 ),
             )
-        except ValueError as error:
+        except StaleSessionError:
+            return _stale_session_response()
+        except AuthenticationFailedError as error:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication failed") from error
         response.set_cookie(
             SESSION_COOKIE,
@@ -107,13 +111,13 @@ def create_identity_router(
             "csrf_token": issued.raw_csrf_token,
         }
 
-    @router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
+    @router.delete("/session", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
     async def delete_session(  # pyright: ignore[reportUnusedFunction]
         request: Request,
         response: Response,
         session_token: str | None = Cookie(default=None, alias=SESSION_COOKIE),
         csrf_token: str | None = Header(default=None, alias="X-CSRF-Token"),
-    ) -> None:
+    ) -> None | JSONResponse:
         enforce_demo(request)
         if session_token is None or csrf_token is None:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication failed")
@@ -123,12 +127,24 @@ def create_identity_router(
                 service_factory,
                 lambda service: service.revoke(session_token, csrf_token),
             )
-        except ValueError as error:
+        except StaleSessionError:
+            return _stale_session_response()
+        except AuthenticationFailedError as error:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication failed") from error
         response.delete_cookie(SESSION_COOKIE, path="/")
         response.delete_cookie(BOOTSTRAP_COOKIE, path="/")
 
     return router
+
+
+def _stale_session_response() -> JSONResponse:
+    response = JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": "authentication failed"},
+    )
+    response.delete_cookie(SESSION_COOKIE, path="/")
+    response.delete_cookie(BOOTSTRAP_COOKIE, path="/")
+    return response
 
 
 async def _with_service[T](

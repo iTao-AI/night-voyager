@@ -4,8 +4,10 @@ from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from night_voyager.identity.errors import AuthenticationFailedError, StaleSessionError
 from night_voyager.identity.models import ActorContext, ActorRole, DemoActorChoice
 
 
@@ -55,19 +57,27 @@ class IdentityRepository:
         csrf_digest: bytes,
         expires_at: datetime,
     ) -> ActorContext:
-        return await self._context_from_function(
-            "SELECT * FROM auth.rotate_demo_session(:old_digest, :old_csrf_digest, :choice, "
-            ":session_id, :session_digest, :csrf_digest, :expires_at)",
-            {
-                "old_digest": old_digest,
-                "old_csrf_digest": old_csrf_digest,
-                "choice": choice.value,
-                "session_id": session_id,
-                "session_digest": session_digest,
-                "csrf_digest": csrf_digest,
-                "expires_at": expires_at,
-            },
-        )
+        try:
+            return await self._context_from_function(
+                "SELECT * FROM auth.rotate_demo_session(:old_digest, :old_csrf_digest, :choice, "
+                ":session_id, :session_digest, :csrf_digest, :expires_at)",
+                {
+                    "old_digest": old_digest,
+                    "old_csrf_digest": old_csrf_digest,
+                    "choice": choice.value,
+                    "session_id": session_id,
+                    "session_digest": session_digest,
+                    "csrf_digest": csrf_digest,
+                    "expires_at": expires_at,
+                },
+            )
+        except DBAPIError as error:
+            sqlstate = getattr(error.orig, "sqlstate", None)
+            if sqlstate == "NV001":
+                raise StaleSessionError from error
+            if sqlstate == "NV002":
+                raise AuthenticationFailedError from error
+            raise
 
     async def revoke(self, session_digest: bytes, csrf_digest: bytes) -> bool:
         result = await self._session.execute(

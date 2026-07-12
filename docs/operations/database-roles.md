@@ -14,3 +14,10 @@ Use `make db-check` for a disposable fresh-volume migration, seed, catalog,
 role, RLS, downgrade/upgrade, and connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
 downgrade against a retained demo volume.
+
+The normal `make demo` path applies migrations, then runs the separate
+`demo-seed` one-shot service before API/worker readiness. The schema migration
+remains seed-free. To re-run only the explicit idempotent seed against a running
+development stack, use `docker compose run --rm demo-seed`; it fails closed
+unless demo mode is enabled outside production. `make compose-proof` uses a
+fresh isolated volume and proves bootstrap plus session mint, not health alone.

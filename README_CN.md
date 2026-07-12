@@ -16,7 +16,12 @@ make down
 
 `make doctor` 检查 Docker daemon、必要的 Compose capability、磁盘空间与本地端口。`make proof` 在 Docker 内运行配置、public-hygiene 与 installed-wheel 检查，不依赖 host Python、uv、Node.js 或 npm。
 
-`make demo` 只启动合成的 bootstrap 服务。API 健康检查为 `http://127.0.0.1:8000/health`，Web bootstrap 页面为 `http://127.0.0.1:3000`。所有 host publish 均只绑定 IPv4 loopback。
+`make demo` 先迁移本地数据库，再运行 fail-closed、幂等的 `demo-seed`
+service，随后等待合成 bootstrap stack ready。API 健康检查为
+`http://127.0.0.1:8000/health`，Web bootstrap 页面为
+`http://127.0.0.1:3000`。所有 host publish 均只绑定 IPv4 loopback。运行
+`make compose-proof` 可验证 health 以及真实 bootstrap/session-mint API 路径，
+但不会连接 fixture-only UI。
 
 M1 fixture-only prototype 位于 `http://127.0.0.1:3000/demo`。视觉与产品合同见 [DESIGN.md](DESIGN.md) 和 [docs/design/](docs/design/)。
 
