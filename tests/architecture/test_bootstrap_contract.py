@@ -56,6 +56,8 @@ def test_ci_compose_lane_runs_health_proof_and_always_tears_down() -> None:
     assert "make down" in workflow
     assert "scripts/verify_release.py --tree-mode release" in workflow
     compose_proof = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
+    assert "COMPOSE_PROJECT_NAME" in compose_proof
+    assert "down --volumes" in compose_proof
     for evidence in (
         "State.Health.Status",
         "State.Status",

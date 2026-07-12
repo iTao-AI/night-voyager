@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import re
@@ -8,6 +9,9 @@ import subprocess
 import tempfile
 import tomllib
 from pathlib import Path
+
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.1.0"
@@ -206,16 +210,146 @@ def verify_wheel() -> None:
     print(f"proof wheel: isolated installed-wheel import and app factory passed ({wheel.name})")
 
 
+async def verify_database_catalog(database_url: str) -> None:
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.connect() as connection:
+            roles = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+            SELECT rolname, rolsuper, rolcreatedb, rolcreaterole, rolinherit, rolbypassrls
+            FROM pg_roles
+            WHERE rolname IN (
+              'night_voyager_migrator', 'night_voyager_api', 'night_voyager_worker'
+            )
+            """
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if len(roles) != 3 or any(
+                row["rolsuper"]
+                or row["rolcreatedb"]
+                or row["rolcreaterole"]
+                or row["rolinherit"]
+                or row["rolbypassrls"]
+                for row in roles
+            ):
+                raise SystemExit("database roles violate least-privilege attributes")
+
+            tenant_tables = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+            SELECT c.relname, c.relrowsecurity, c.relforcerowsecurity, r.rolname AS owner
+            FROM pg_class AS c
+            JOIN pg_namespace AS n ON n.oid = c.relnamespace
+            JOIN pg_roles AS r ON r.oid = c.relowner
+            WHERE n.nspname = 'app' AND c.relkind = 'r'
+            """
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if {row["relname"] for row in tenant_tables} != {
+                "organizations",
+                "actors",
+                "memberships",
+            } or any(
+                not row["relrowsecurity"]
+                or not row["relforcerowsecurity"]
+                or row["owner"] != "night_voyager_migrator"
+                for row in tenant_tables
+            ):
+                raise SystemExit("app tenant tables must be migrator-owned with forced RLS")
+
+            policy_count = (
+                await connection.execute(
+                    text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
+                )
+            ).scalar_one()
+            if policy_count != 3:
+                raise SystemExit("every app tenant table requires one explicit policy")
+
+            auth_grants = (
+                await connection.execute(
+                    text(
+                        """
+            SELECT count(*) FROM information_schema.role_table_grants
+            WHERE table_schema = 'auth'
+              AND grantee IN ('night_voyager_api', 'night_voyager_worker')
+            """
+                    )
+                )
+            ).scalar_one()
+            if auth_grants:
+                raise SystemExit("runtime roles must not have direct auth table grants")
+
+            functions = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+            SELECT p.oid, p.proname, p.prosecdef, p.proconfig,
+                   has_function_privilege('public', p.oid, 'EXECUTE') AS public_execute,
+                   has_function_privilege('night_voyager_api', p.oid, 'EXECUTE') AS api_execute,
+                   has_function_privilege(
+                       'night_voyager_worker', p.oid, 'EXECUTE'
+                   ) AS worker_execute
+            FROM pg_proc AS p
+            JOIN pg_namespace AS n ON n.oid = p.pronamespace
+            WHERE n.nspname = 'auth'
+            """
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            expected = {
+                "mint_demo_session",
+                "resolve_demo_session",
+                "rotate_demo_session",
+                "revoke_demo_session",
+            }
+            if {row["proname"] for row in functions} != expected or any(
+                not row["prosecdef"]
+                or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
+                or row["public_execute"]
+                or not row["api_execute"]
+                or row["worker_execute"]
+                for row in functions
+            ):
+                raise SystemExit("auth functions violate SECURITY DEFINER privilege contract")
+    finally:
+        await engine.dispose()
+    print("proof database: role, forced-RLS, policy, auth grant, and function catalog passed")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--tree-mode", choices=("development", "release", "snapshot"), default="development"
     )
+    parser.add_argument("--check-db-roles", action="store_true")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    if args.check_db_roles:
+        database_url = os.environ.get("NIGHT_VOYAGER_MIGRATION_DATABASE_URL")
+        if not database_url:
+            raise SystemExit("NIGHT_VOYAGER_MIGRATION_DATABASE_URL is required")
+        asyncio.run(verify_database_catalog(database_url))
+        return
     verify_tree_mode(args.tree_mode)
     verify_public_hygiene()
     verify_config()

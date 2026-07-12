@@ -1,8 +1,11 @@
 #!/bin/sh
 set -eu
 
+COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
+export COMPOSE_PROJECT_NAME
+
 cleanup() {
-    docker compose down --remove-orphans
+    docker compose down --volumes --remove-orphans
 }
 trap cleanup EXIT INT TERM
 
@@ -26,8 +29,14 @@ migrator_exit=$(docker inspect --format '{{.State.ExitCode}}' "$migrator")
 [ "$migrator_exit" = "0" ]
 printf 'compose-proof: migrator exit=%s\n' "$migrator_exit"
 
+demo_seed=$(docker compose ps -aq demo-seed)
+demo_seed_exit=$(docker inspect --format '{{.State.ExitCode}}' "$demo_seed")
+[ "$demo_seed_exit" = "0" ]
+printf 'compose-proof: demo-seed exit=%s\n' "$demo_seed_exit"
+
 docker compose exec -T api python -c \
     "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 printf 'compose-proof: API probe passed\n'
+docker compose exec -T api python scripts/verify_demo_identity.py
 docker compose exec -T web wget -q --spider http://127.0.0.1:3000
 printf 'compose-proof: Web probe passed\n'
