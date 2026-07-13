@@ -32,9 +32,11 @@ def test_m2_role_init_and_public_records_exist() -> None:
         assert (ROOT / relative).is_file(), relative
 
 
-def test_current_backend_does_not_create_m4_execution_artifacts() -> None:
-    assert not list((ROOT / "migrations/versions").glob("0004_*.py"))
-    assert not list((ROOT / "src/night_voyager").rglob("*agent_task*.py"))
+def test_current_backend_stops_at_approved_m4a_execution_boundary() -> None:
+    assert [
+        path.name for path in (ROOT / "migrations/versions").glob("0004_*.py")
+    ] == ["0004_agent_tasks_executions_events.py"]
+    assert not list((ROOT / "migrations/versions").glob("0005_*.py"))
 
 
 def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:

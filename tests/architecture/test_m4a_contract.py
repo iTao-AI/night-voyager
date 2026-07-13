@@ -109,6 +109,8 @@ def test_pure_task_contracts_do_not_import_frameworks_or_concrete_adapters() -> 
         "src/night_voyager/tasks/models.py",
         "src/night_voyager/tasks/policy.py",
         "src/night_voyager/tasks/ports.py",
+        "src/night_voyager/tasks/application.py",
+        "src/night_voyager/tasks/errors.py",
         "src/night_voyager/adapters/protocols.py",
     ):
         path = ROOT / relative

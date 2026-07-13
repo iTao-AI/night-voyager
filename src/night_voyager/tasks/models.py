@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, PositiveInt
 
 
 class FrozenModel(BaseModel):
@@ -69,3 +71,17 @@ class TaskRuntimePolicy(FrozenModel):
     max_payload_bytes: int = 1024 * 1024
     max_narrative_bytes: int = 64 * 1024
     max_evidence_refs: int = 20
+
+
+class CreateTaskCommand(FrozenModel):
+    case_id: UUID
+    operation: Literal["generate_planning_run_v1"] = "generate_planning_run_v1"
+    expected_case_revision: PositiveInt
+    source_pack_id: UUID
+    source_pack_version: PositiveInt
+    policy_version: Literal["m3a-policy-v1"] = "m3a-policy-v1"
+
+
+class CancelTaskCommand(FrozenModel):
+    task_id: UUID
+    expected_row_version: PositiveInt

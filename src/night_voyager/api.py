@@ -13,6 +13,7 @@ from night_voyager.interfaces.http.identity import (
     create_identity_router,
     default_service_factory,
 )
+from night_voyager.interfaces.http.tasks import create_task_router
 
 
 def create_app(
@@ -34,7 +35,7 @@ def create_app(
     ):
         if request.url.path.startswith("/api/v1/cases/") or request.url.path.startswith(
             "/api/v1/decision-briefs/"
-        ):
+        ) or request.url.path.startswith("/api/v1/tasks/"):
             code = "authentication_failed" if error.status_code == 401 else "request_rejected"
             return decision_problem(error.status_code, code, str(error.detail))
         from starlette.responses import JSONResponse
@@ -47,7 +48,7 @@ def create_app(
     ):
         if request.url.path.startswith("/api/v1/cases/") or request.url.path.startswith(
             "/api/v1/decision-briefs/"
-        ):
+        ) or request.url.path.startswith("/api/v1/tasks/"):
             return decision_problem(422, "request_validation_failed", "request validation failed")
         from fastapi.exception_handlers import request_validation_exception_handler
 
@@ -60,6 +61,7 @@ def create_app(
     app.include_router(create_identity_router(resolved_settings, session_factory, service_factory))
     if session_factory is not None:
         app.include_router(create_decision_router(resolved_settings, session_factory))
+        app.include_router(create_task_router(resolved_settings, session_factory))
     return app
 
 
