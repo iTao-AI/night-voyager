@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from datetime import date
 from uuid import UUID
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
 
 pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
@@ -17,6 +20,7 @@ ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
 AUSTRALIA = UUID("71000000-0000-0000-0000-000000000001")
 OTHER_ORG = UUID("10000000-0000-0000-0000-000000000002")
+UNLINKED_EVIDENCE = UUID("60000000-0000-0000-0000-000000000097")
 
 
 async def context(connection: AsyncConnection, actor: UUID, role: str) -> None:
@@ -25,6 +29,17 @@ async def context(connection: AsyncConnection, actor: UUID, role: str) -> None:
             text("SELECT set_config(:key,:value,true)"),
             {"key": f"night_voyager.{key}", "value": str(value)},
         )
+
+
+@asynccontextmanager
+async def rollback_connection(engine: AsyncEngine) -> AsyncGenerator[AsyncConnection]:
+    async with engine.connect() as connection:
+        transaction = await connection.begin()
+        try:
+            yield connection
+        finally:
+            if transaction.is_active:
+                await transaction.rollback()
 
 
 def review_sql() -> str:
@@ -36,7 +51,9 @@ def review_sql() -> str:
     )
 
 
-def canonical_projection() -> dict[str, object]:
+def canonical_projection(
+    risks: list[dict[str, str]] | None = None,
+) -> dict[str, object]:
     return {
         "schema_version": 1,
         "eligible_route_ids": [str(AUSTRALIA)],
@@ -61,7 +78,7 @@ def canonical_projection() -> dict[str, object]:
             },
         ],
         "intake": "2027-02",
-        "accepted_evidence_risks": [],
+        "accepted_evidence_risks": risks or [],
         "synthetic_proof": True,
     }
 
@@ -70,7 +87,7 @@ def canonical_projection() -> dict[str, object]:
 async def test_api_role_rejects_projection_and_source_date_mismatch() -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
-        async with engine.connect() as connection, connection.begin():
+        async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
             with pytest.raises(DBAPIError) as raised:
                 await connection.execute(
@@ -96,7 +113,7 @@ async def test_api_role_rejects_projection_and_source_date_mismatch() -> None:
                                 "synthetic_proof": True,
                             }
                         ),
-                        "source_date": "2099-01-01",
+                        "source_date": date(2099, 1, 1),
                         "key_hash": "a" * 64,
                         "request_hash": "b" * 64,
                     },
@@ -110,7 +127,7 @@ async def test_api_role_rejects_projection_and_source_date_mismatch() -> None:
 async def test_api_role_rejects_caller_controlled_timeline() -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
-        async with engine.connect() as connection, connection.begin():
+        async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
             projection = canonical_projection()
             brief = UUID("81000000-0000-0000-0000-000000000102")
@@ -126,7 +143,7 @@ async def test_api_role_rejects_caller_controlled_timeline() -> None:
                     "eligible": json.dumps([str(AUSTRALIA)]),
                     "risks": "[]",
                     "projection": json.dumps(projection),
-                    "source_date": "2026-07-01",
+                    "source_date": date(2026, 7, 1),
                     "key_hash": "c" * 64,
                     "request_hash": "d" * 64,
                 },
@@ -164,9 +181,14 @@ async def test_api_role_rejects_caller_controlled_timeline() -> None:
 async def test_api_role_allows_only_bounded_advisor_recorded_decision() -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
-        async with engine.connect() as connection, connection.begin():
+        async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
             brief = UUID("81000000-0000-0000-0000-000000000103")
+            linked_risk = {
+                "evidence_id": "60000000-0000-0000-0000-000000000005",
+                "kind": "unverified",
+                "reason": "explicit audited Japan alternative risk",
+            }
             await connection.execute(
                 text(review_sql()),
                 {
@@ -177,9 +199,9 @@ async def test_api_role_allows_only_bounded_advisor_recorded_decision() -> None:
                     "review": UUID("80000000-0000-0000-0000-000000000103"),
                     "brief": brief,
                     "eligible": json.dumps([str(AUSTRALIA)]),
-                    "risks": "[]",
-                    "projection": json.dumps(canonical_projection()),
-                    "source_date": "2026-07-01",
+                    "risks": json.dumps([linked_risk]),
+                    "projection": json.dumps(canonical_projection([linked_risk])),
+                    "source_date": date(2026, 7, 1),
                     "key_hash": "a1" * 32,
                     "request_hash": "b1" * 32,
                 },
@@ -232,7 +254,7 @@ async def test_api_role_allows_only_bounded_advisor_recorded_decision() -> None:
 async def test_api_role_records_nonapproval_without_brief(action: str) -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
-        async with engine.connect() as connection, connection.begin():
+        async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
             row = (
                 await connection.execute(
@@ -283,7 +305,7 @@ async def test_api_role_rejects_wrong_role_stale_run_and_cross_run_risk() -> Non
                         "eligible": json.dumps([str(AUSTRALIA)]),
                         "risks": "[]",
                         "projection": "{}",
-                        "source_date": "2026-07-01",
+                        "source_date": date(2026, 7, 1),
                         "key_hash": "4" * 64,
                         "request_hash": "5" * 64,
                     },
@@ -306,7 +328,7 @@ async def test_api_role_rejects_wrong_role_stale_run_and_cross_run_risk() -> Non
                         "eligible": json.dumps([str(AUSTRALIA)]),
                         "risks": "[]",
                         "projection": "{}",
-                        "source_date": "2026-07-01",
+                        "source_date": date(2026, 7, 1),
                         "key_hash": "6" * 64,
                         "request_hash": "7" * 64,
                     },
@@ -337,13 +359,70 @@ async def test_api_role_rejects_wrong_role_stale_run_and_cross_run_risk() -> Non
                             ]
                         ),
                         "projection": "{}",
-                        "source_date": "2026-07-01",
+                        "source_date": date(2026, 7, 1),
                         "key_hash": "8" * 64,
                         "request_hash": "9" * 64,
                     },
                 )
             assert getattr(cross_run_risk.value.orig, "sqlstate", None) == "NV006"
             await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_api_role_rejects_same_pack_evidence_not_linked_to_reviewed_run() -> None:
+    migration_engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.evidence_refs(organization_id,id,source_pack_id,"
+                    "source_pack_version,source_entry_id,claim,authority,source_sha256) "
+                    "SELECT organization_id,:evidence,source_pack_id,source_pack_version,id,"
+                    "'unlinked_optional_probe','accepted_synthetic_demo',sha256 "
+                    "FROM app.source_pack_entries WHERE organization_id=:org AND "
+                    "source_pack_id='50000000-0000-0000-0000-000000000001' AND "
+                    "source_pack_version=1 AND id='51000000-0000-0000-0000-000000000001' "
+                    "ON CONFLICT DO NOTHING"
+                ),
+                {"org": ORG, "evidence": UNLINKED_EVIDENCE},
+            )
+    finally:
+        await migration_engine.dispose()
+
+    risk = {
+        "evidence_id": str(UNLINKED_EVIDENCE),
+        "kind": "optional",
+        "reason": "same-pack evidence is absent from the reviewed projection",
+    }
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with rollback_connection(engine) as connection:
+            await context(connection, ADVISOR, "advisor")
+            with pytest.raises(DBAPIError) as rejected:
+                await connection.execute(
+                    text(review_sql()),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "case": CASE,
+                        "run": RUN,
+                        "review": UUID(int=307),
+                        "brief": UUID(int=308),
+                        "eligible": json.dumps([str(AUSTRALIA)]),
+                        "risks": json.dumps([risk]),
+                        "projection": json.dumps(canonical_projection([risk])),
+                        "source_date": date(2026, 7, 1),
+                        "key_hash": "aa" * 32,
+                        "request_hash": "bb" * 32,
+                    },
+                )
+            assert getattr(rejected.value.orig, "sqlstate", None) == "NV006"
     finally:
         await engine.dispose()
 
@@ -382,6 +461,15 @@ async def test_m3b_rows_are_hidden_across_real_tenants_and_api_cannot_write_tabl
             )
             await connection.execute(
                 text(
+                    "INSERT INTO app.memberships(id,organization_id,actor_id,role) "
+                    "VALUES('30000000-0000-0000-0000-000000000099',:org,"
+                    "'20000000-0000-0000-0000-000000000099','advisor') "
+                    "ON CONFLICT (organization_id,actor_id,role) DO NOTHING"
+                ),
+                {"org": OTHER_ORG},
+            )
+            await connection.execute(
+                text(
                     "INSERT INTO app.student_case_participants "
                     "VALUES(:org,'40000000-0000-0000-0000-000000000002',"
                     "'20000000-0000-0000-0000-000000000099','advisor') ON CONFLICT DO NOTHING"
@@ -395,7 +483,7 @@ async def test_m3b_rows_are_hidden_across_real_tenants_and_api_cannot_write_tabl
         os.environ["NIGHT_VOYAGER_API_DATABASE_URL"], pool_size=1, max_overflow=0
     )
     try:
-        async with engine.begin() as connection:
+        async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
             assert (
                 await connection.scalar(
@@ -416,7 +504,7 @@ async def test_m3b_rows_are_hidden_across_real_tenants_and_api_cannot_write_tabl
                     {"org": ORG, "case": CASE, "actor": ADVISOR},
                 )
             assert getattr(denied.value.orig, "sqlstate", None) == "42501"
-        async with engine.begin() as connection:
+        async with rollback_connection(engine) as connection:
             assert await connection.scalar(text("SELECT count(*) FROM app.audit_events")) == 0
     finally:
         await engine.dispose()
@@ -426,7 +514,7 @@ async def test_m3b_rows_are_hidden_across_real_tenants_and_api_cannot_write_tabl
 async def test_api_role_cannot_update_append_only_review_directly() -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
-        async with engine.connect() as connection, connection.begin():
+        async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
             with pytest.raises(DBAPIError) as denied:
                 await connection.execute(text("UPDATE app.advisor_reviews SET reviewer_notes='x'"))

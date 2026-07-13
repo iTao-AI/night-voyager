@@ -176,7 +176,7 @@ BEGIN
  INSERT INTO app.student_case_participants(organization_id,case_id,actor_id,role) VALUES(p_org,p_case,p_advisor,'advisor'),(p_org,p_case,p_student,'student'),(p_org,p_case,p_parent,'parent') ON CONFLICT DO NOTHING;
 END; $$;
 CREATE FUNCTION app.review_planning_run(p_org uuid,p_actor uuid,p_case uuid,p_run uuid,p_expected_revision integer,p_action text,p_review uuid,p_eligible jsonb,p_risks jsonb,p_notes text,p_brief uuid,p_projection jsonb,p_source_date date,p_key_hash text,p_request_hash text) RETURNS TABLE(review_id uuid,brief_id uuid,case_state text,replayed boolean) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE prior app.idempotency_records%ROWTYPE; selected app.planning_runs%ROWTYPE; version integer; risk jsonb; canonical_projection jsonb; canonical_source_date date; pinned_intake text;
+DECLARE prior app.idempotency_records%ROWTYPE; selected app.planning_runs%ROWTYPE; version integer; risk_item jsonb; canonical_projection jsonb; canonical_source_date date; pinned_intake text;
 BEGIN
  PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
  SELECT * INTO prior FROM app.idempotency_records WHERE organization_id=p_org AND actor_id=p_actor AND operation='advisor_review' AND key_sha256=p_key_hash;
@@ -187,17 +187,17 @@ BEGIN
  IF p_action NOT IN ('approve_for_consultation','reject','request_revision') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid review action'; END IF;
  IF p_action<>'approve_for_consultation' AND (jsonb_array_length(p_eligible)<>0 OR jsonb_array_length(p_risks)<>0 OR p_brief IS NOT NULL) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='non-approval review cannot grant eligibility or accept risk'; END IF;
  IF jsonb_array_length(p_eligible)<>(SELECT count(DISTINCT value) FROM jsonb_array_elements_text(p_eligible)) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='eligible routes must be unique'; END IF;
- IF jsonb_array_length(p_risks)<>(SELECT count(*) FROM (SELECT DISTINCT risk->>'evidence_id',risk->>'kind' FROM jsonb_array_elements(p_risks) risk) unique_risks) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptances must be unique'; END IF;
+ IF jsonb_array_length(p_risks)<>(SELECT count(*) FROM (SELECT DISTINCT risk_value->>'evidence_id',risk_value->>'kind' FROM jsonb_array_elements(p_risks) AS risk_values(risk_value)) unique_risks) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptances must be unique'; END IF;
  SELECT max(e.snapshot_date) INTO canonical_source_date FROM app.source_pack_entries e WHERE e.organization_id=p_org AND e.source_pack_id=selected.source_pack_id AND e.source_pack_version=selected.source_pack_version;
  SELECT r.student_preferences->>'intake' INTO pinned_intake FROM app.student_case_revisions r WHERE r.organization_id=p_org AND r.case_id=p_case AND r.revision=p_expected_revision;
  IF canonical_source_date IS NULL OR pinned_intake IS NULL THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='review target lacks pinned source facts'; END IF;
  SELECT jsonb_build_object('schema_version',1,'routes',COALESCE(jsonb_agg(jsonb_build_object('route_id',r.id,'country',r.country,'outcome',r.outcome,'reason_code',r.reason_code) ORDER BY r.country),'[]'::jsonb),'eligible_route_ids',p_eligible,'accepted_evidence_risks',p_risks,'intake',pinned_intake,'synthetic_proof',true) INTO canonical_projection FROM app.planning_routes r WHERE r.organization_id=p_org AND r.planning_run_id=p_run;
  SELECT COALESCE(max(review_version),0)+1 INTO version FROM app.advisor_reviews WHERE organization_id=p_org AND planning_run_id=p_run;
  INSERT INTO app.advisor_reviews VALUES(p_org,p_review,p_case,p_expected_revision,p_run,version,p_actor,p_action,p_eligible,p_risks,p_notes,clock_timestamp());
- FOR risk IN SELECT * FROM jsonb_array_elements(p_risks) LOOP
-  IF COALESCE(risk->>'kind','') NOT IN ('optional','stale','unverified') OR NULLIF(btrim(risk->>'reason'),'') IS NULL THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptance is not an explicit evidence risk'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM app.evidence_refs e WHERE e.organization_id=p_org AND e.id=(risk->>'evidence_id')::uuid AND e.source_pack_id=selected.source_pack_id AND e.source_pack_version=selected.source_pack_version) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptance does not belong to reviewed run'; END IF;
-  INSERT INTO app.evidence_risk_acceptances VALUES(p_org,gen_random_uuid(),p_review,(risk->>'evidence_id')::uuid,risk->>'kind',risk->>'reason',clock_timestamp());
+ FOR risk_item IN SELECT risk_value FROM jsonb_array_elements(p_risks) AS risk_values(risk_value) LOOP
+  IF COALESCE(risk_item->>'kind','') NOT IN ('optional','stale','unverified') OR NULLIF(btrim(risk_item->>'reason'),'') IS NULL THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptance is not an explicit evidence risk'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM app.evidence_refs e WHERE e.organization_id=p_org AND e.id=(risk_item->>'evidence_id')::uuid AND e.source_pack_id=selected.source_pack_id AND e.source_pack_version=selected.source_pack_version) OR NOT (EXISTS (SELECT 1 FROM app.comparison_dimension_evidence_refs l WHERE l.organization_id=p_org AND l.planning_run_id=p_run AND l.evidence_ref_id=(risk_item->>'evidence_id')::uuid) OR EXISTS (SELECT 1 FROM app.cost_evidence c WHERE c.organization_id=p_org AND c.planning_run_id=p_run AND (risk_item->>'evidence_id')::uuid IN (c.tuition_evidence_id,c.living_evidence_id,c.fx_evidence_id)) OR EXISTS (SELECT 1 FROM app.ranking_evidence r WHERE r.organization_id=p_org AND r.planning_run_id=p_run AND r.evidence_ref_id=(risk_item->>'evidence_id')::uuid)) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptance does not belong to reviewed run projection'; END IF;
+  INSERT INTO app.evidence_risk_acceptances VALUES(p_org,gen_random_uuid(),p_review,(risk_item->>'evidence_id')::uuid,risk_item->>'kind',risk_item->>'reason',clock_timestamp());
  END LOOP;
  IF p_action='approve_for_consultation' THEN
   IF p_source_date IS DISTINCT FROM canonical_source_date OR p_projection IS DISTINCT FROM canonical_projection THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='brief projection or source snapshot mismatch'; END IF;
