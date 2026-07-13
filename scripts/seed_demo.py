@@ -15,6 +15,7 @@ from night_voyager.planning.application import POLICY_VERSION
 from night_voyager.planning.fixtures import ValidatedPlanningFixture, validate_planning_fixture
 
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
+CASE_ID = UUID("40000000-0000-0000-0000-000000000001")
 RUN_ID = UUID("70000000-0000-0000-0000-000000000001")
 ACTORS = (
     ("advisor", "20000000-0000-0000-0000-000000000001", "Demo Advisor"),
@@ -35,6 +36,16 @@ async def seed_demo(database_url: str, *, include_planning: bool = True) -> None
             await _seed_identity(connection)
             if include_planning:
                 await _seed_planning(connection, fixture)
+                await connection.execute(
+                    text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
+                    {
+                        "org": DEMO_ORG,
+                        "case": CASE_ID,
+                        "advisor": ACTORS[0][1],
+                        "student": ACTORS[1][1],
+                        "parent": ACTORS[2][1],
+                    },
+                )
     finally:
         await engine.dispose()
     print("demo seed: canonical synthetic identity and planning snapshot ready")

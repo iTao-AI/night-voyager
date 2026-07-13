@@ -47,6 +47,20 @@ class IdentityRepository:
         await self.set_actor_context(context)
         return context
 
+    async def resolve_with_csrf(
+        self, session_digest: bytes, csrf_digest: bytes
+    ) -> ActorContext | None:
+        result = await self._session.execute(
+            text("SELECT * FROM auth.resolve_demo_session_with_csrf(:session,:csrf)"),
+            {"session": session_digest, "csrf": csrf_digest},
+        )
+        row = result.mappings().one_or_none()
+        if row is None:
+            return None
+        context = self._map_context(row)
+        await self.set_actor_context(context)
+        return context
+
     async def rotate(
         self,
         old_digest: bytes,

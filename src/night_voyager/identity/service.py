@@ -36,6 +36,14 @@ class IdentityService:
     async def resolve(self, raw_session: str) -> ActorContext | None:
         return await self._repository.resolve(digest_token(self._secret_key, raw_session))
 
+    async def resolve_with_csrf(
+        self, raw_session: str, raw_csrf: str
+    ) -> ActorContext | None:
+        return await self._repository.resolve_with_csrf(
+            digest_token(self._secret_key, raw_session),
+            digest_token(self._secret_key, raw_csrf),
+        )
+
     async def rotate(
         self, old_token: str, csrf_token: str, choice: DemoActorChoice
     ) -> IssuedSession:

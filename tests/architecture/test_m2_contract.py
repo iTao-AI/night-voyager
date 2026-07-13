@@ -32,10 +32,9 @@ def test_m2_role_init_and_public_records_exist() -> None:
         assert (ROOT / relative).is_file(), relative
 
 
-def test_m3a_does_not_create_m3b_or_later_milestone_artifacts() -> None:
-    assert not list((ROOT / "migrations/versions").glob("000[34]_*.py"))
-    for forbidden in ("advisor_review", "brief", "family_decision", "agent_task"):
-        assert not list((ROOT / "src/night_voyager").rglob(f"*{forbidden}*.py"))
+def test_current_backend_does_not_create_m4_execution_artifacts() -> None:
+    assert not list((ROOT / "migrations/versions").glob("0004_*.py"))
+    assert not list((ROOT / "src/night_voyager").rglob("*agent_task*.py"))
 
 
 def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
