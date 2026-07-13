@@ -69,6 +69,9 @@ class CaseState(StrEnum):
     INTAKE = "intake"
     PLANNING = "planning"
     ADVISOR_REVIEW = "advisor_review"
+    FAMILY_REVIEW = "family_review"
+    DECIDED = "decided"
+    PLAN_READY = "plan_ready"
 
 
 class BudgetEnvelope(FrozenModel):
