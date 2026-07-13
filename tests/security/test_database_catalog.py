@@ -71,4 +71,5 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "rolbypassrls" in verifier
     assert "prosecdef" in verifier
     assert "M3B_TABLES" in verifier
-    assert "policy_count != 22" in verifier
+    assert "M4A_TABLES" in verifier
+    assert "policy_count != 25" in verifier

@@ -94,7 +94,7 @@ def test_migration_graph_extends_0003_with_exact_m4a_storage() -> None:
     dispatch_columns = {
         line.strip().split()[0].rstrip(",")
         for line in dispatch.splitlines()
-        if line.strip()
+        if line.strip() and not line.lstrip().startswith(("PRIMARY", "FOREIGN"))
     }
     assert dispatch_columns == {
         "task_id",
