@@ -54,7 +54,13 @@ def test_m4a_public_records_freeze_scope_and_claim_boundaries() -> None:
         "local synthetic",
     ):
         assert required in source
-    for private in ("/Users/", "Developer/Career", ".sessions/", "GStack", "gstack"):
+    for private in (
+        "/" + "Users/",
+        "Developer/" + "Career",
+        "." + "sessions/",
+        "G" + "Stack",
+        "g" + "stack",
+    ):
         assert private not in source
 
 

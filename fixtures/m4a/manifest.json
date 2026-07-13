@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "eval_id": "sse_idempotency_retry",
+  "operation": "generate_planning_run_v1",
+  "policy_version": "m3a-policy-v1",
+  "adapter": {"id": "deterministic_planning", "version": "m4a-v1", "network": false},
+  "planning_fixture": {
+    "path": "../m3a/manifest.json",
+    "sha256": "5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25"
+  },
+  "bounds": {
+    "payload_bytes": 1048576,
+    "narrative_bytes": 65536,
+    "evidence_refs": 20,
+    "countries": ["australia", "japan", "malaysia"]
+  },
+  "runtime": {
+    "lease_seconds": 60,
+    "heartbeat_seconds": 15,
+    "poll_seconds": 1,
+    "sse_heartbeat_seconds": 15,
+    "max_attempts": 3,
+    "sse_page_size": 100
+  },
+  "assertions": [
+    "same_key_same_request_replays",
+    "same_key_different_request_conflicts",
+    "lease_generation_fences_writes",
+    "sse_reconnect_has_no_duplicates",
+    "sse_comments_are_not_durable_events"
+  ]
+}
