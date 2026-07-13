@@ -9,6 +9,6 @@
 | `FamilyDecision` | Confirmation requirements | Consequence summary | Disabled fixture action |
 | `DecisionReceipt` | Durable audit result | Persistent receipt identifier | Static `decided` frame |
 | `TimelinePlan` | Approved downstream sequence | Dated next steps | Static fixture dates |
-| `AgentTask` / lease / adapter | Secondary disclosure only | Hidden from main narrative | No worker, lease, SSE, or adapter |
+| `AgentTask` / lease / adapter | Secondary disclosure only | Hidden from main narrative | M4A backend proof exists; no `/demo` wiring |
 
 Country comparison is organized by dimensions: evidence status, annual-cost range, language pathway, visa uncertainty, and next human action. Desktop uses a semantic table. Mobile uses a labelled country switcher and repeats the dimensions for the selected fixture country; it must not mechanically stack desktop rows into three country cards.

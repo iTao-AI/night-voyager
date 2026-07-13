@@ -72,7 +72,7 @@ async def test_api_and_worker_same_tenant_reads_cross_tenant_hidden_and_pool_cle
                 assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 0
             async with engine.begin() as connection:
                 await set_context(connection, DEMO_ORG)
-                assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 1
+                assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 2
                 assert await connection.scalar(text("SELECT count(*) FROM app.planning_runs")) == 1
                 assert (
                     await connection.scalar(

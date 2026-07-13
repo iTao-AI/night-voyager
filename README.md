@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, and an **M3B local synthetic advisor-to-family backend proof**. M3B records advisor review, a family-safe Brief, an explicit decision receipt, and a deterministic timeline. The `/demo` route remains fixture-only and disconnected.
+Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, and an **M4A deterministic durable task/worker/SSE proof**. M4A creates a version-pinned planning task, persists its worker lifecycle in PostgreSQL, and replays authorized events without bypassing advisor review. The `/demo` route remains fixture-only and disconnected.
 
 ## Evaluator lane
 
@@ -20,8 +20,9 @@ make down
 `demo-seed` service, then waits for the synthetic bootstrap stack. The API
 health endpoint is `http://127.0.0.1:8000/health`; the web bootstrap page is
 `http://127.0.0.1:3000`. Published ports bind to IPv4 loopback only. Run
-`make compose-proof` to verify health plus the real bootstrap and session-mint
-API path without connecting the fixture-only UI.
+`make compose-proof` to verify health, real identity and M3B paths, the M4A
+HTTP-to-worker-to-PlanningRun-to-SSE path, and API/worker restart durability
+without connecting the fixture-only UI.
 
 The fixture-only M1 prototype is available at `http://127.0.0.1:3000/demo`. Its visual and product contracts are documented in [DESIGN.md](DESIGN.md) and [docs/design/](docs/design/).
 
@@ -38,15 +39,17 @@ make db-check
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/README.md](docs/README.md). A Chinese version is available in [README_CN.md](README_CN.md).
 
 `make db-check` uses a disposable PostgreSQL 18 volume to exercise the exact
-`0001 -> 0002` graph, idempotent canonical synthetic seed, two-tenant RLS,
-runtime function grants, Case CAS, terminal immutability, provenance mismatch,
-revision-pinned `review_required` Case handoff,
-downgrade/re-upgrade, and size-one pool cleanup. `accepted_synthetic_demo`
+`0001 -> 0002 -> 0003 -> 0004` graph, idempotent canonical synthetic seed,
+two-tenant forced RLS, runtime grants, Case and PlanningRun authority,
+payload-free dispatch, leases, generation fencing, retry/cancel/reclaim races,
+SSE replay, bounded local concurrency, downgrade/re-upgrade, and pool cleanup.
+`accepted_synthetic_demo`
 Evidence is local proof; callers cannot assert `externally_verified`.
 
 ## Current limits
 
-- The M3A backend foundation is not wired to the fixture-only `/demo`; no advisor review, family brief/decision, worker/SSE execution, or domain frontend mutation exists.
+- M3B/M4A backend paths are not wired to the fixture-only `/demo`; no task or decision frontend mutation exists.
+- The worker and SSE proof is local and deterministic, not distributed high availability or a production SLA.
 - No real DRA, MKE, OpenClaw, model, or messaging adapter.
 - No production deployment or user/admissions outcome claim.
 

@@ -16,6 +16,7 @@ from night_voyager.planning.fixtures import ValidatedPlanningFixture, validate_p
 
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 CASE_ID = UUID("40000000-0000-0000-0000-000000000001")
+TASK_CASE_ID = UUID("40000000-0000-0000-0000-000000000002")
 RUN_ID = UUID("70000000-0000-0000-0000-000000000001")
 ACTORS = (
     ("advisor", "20000000-0000-0000-0000-000000000001", "Demo Advisor"),
@@ -46,6 +47,7 @@ async def seed_demo(database_url: str, *, include_planning: bool = True) -> None
                         "parent": ACTORS[2][1],
                     },
                 )
+                await _seed_task_case(connection, fixture)
     finally:
         await engine.dispose()
     print("demo seed: canonical synthetic identity and planning snapshot ready")
@@ -283,6 +285,48 @@ async def _seed_planning(connection: AsyncConnection, fixture: ValidatedPlanning
             "org": planning_input.organization_id,
             "run": RUN_ID,
         },
+    )
+
+
+async def _seed_task_case(
+    connection: AsyncConnection, fixture: ValidatedPlanningFixture
+) -> None:
+    source_case = fixture.planning_input.case
+    await connection.execute(
+        text(
+            "INSERT INTO app.student_cases (organization_id,id,state) "
+            "VALUES (:org,:case,'planning') ON CONFLICT DO NOTHING"
+        ),
+        {"org": DEMO_ORG, "case": TASK_CASE_ID},
+    )
+    await connection.execute(
+        text(
+            "INSERT INTO app.student_case_revisions "
+            "(organization_id,case_id,revision,schema_version,student_preferences,family_preferences) "
+            "VALUES (:org,:case,1,1,CAST(:student AS jsonb),CAST(:family AS jsonb)) "
+            "ON CONFLICT DO NOTHING"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": TASK_CASE_ID,
+            "student": json.dumps(source_case.student.model_dump(mode="json")),
+            "family": json.dumps(source_case.family.model_dump(mode="json")),
+        },
+    )
+    await connection.execute(
+        text(
+            "UPDATE app.student_cases SET current_revision=1 "
+            "WHERE organization_id=:org AND id=:case AND current_revision IS NULL"
+        ),
+        {"org": DEMO_ORG, "case": TASK_CASE_ID},
+    )
+    await connection.execute(
+        text(
+            "INSERT INTO app.student_case_participants "
+            "(organization_id,case_id,actor_id,role) "
+            "VALUES (:org,:case,:advisor,'advisor') ON CONFLICT DO NOTHING"
+        ),
+        {"org": DEMO_ORG, "case": TASK_CASE_ID, "advisor": ACTORS[0][1]},
     )
 
 
