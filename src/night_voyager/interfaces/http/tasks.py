@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, PositiveInt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, StreamingResponse
 
 from night_voyager.config import Settings
 from night_voyager.identity.auth import require_origin
@@ -26,6 +26,12 @@ from night_voyager.tasks.application import (
 )
 from night_voyager.tasks.errors import TaskAuthorizationError, TaskConflictError
 from night_voyager.tasks.postgres import PostgresTaskRepository
+from night_voyager.tasks.streaming import (
+    EventCursorAheadError,
+    PostgresTaskEventReader,
+    parse_last_event_id,
+    stream_task_events,
+)
 
 EVENTS_PATH = "/tasks/{task_id}/events"
 
@@ -163,5 +169,46 @@ def create_task_router(
                 return problem(409, error.code.lower(), "request conflicts with current state")
         response.headers["Cache-Control"] = "no-store"
         return {"schema_version": 1, **result}
+
+    @router.get(EVENTS_PATH, response_model=None)
+    async def stream_agent_task_events(  # pyright: ignore[reportUnusedFunction]
+        task_id: UUID,
+        raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+        last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
+    ) -> StreamingResponse | JSONResponse:
+        try:
+            cursor = parse_last_event_id(last_event_id)
+        except ValueError:
+            return problem(400, "invalid_last_event_id", "Last-Event-ID is invalid")
+        async with session_factory() as session, session.begin():
+            context = await read_context(session, raw_session)
+            try:
+                initial_page = await PostgresTaskEventReader(session).read_page(
+                    context, task_id, cursor
+                )
+            except TaskAuthorizationError:
+                return problem(404, "resource_unavailable", "resource unavailable")
+            except EventCursorAheadError:
+                return problem(
+                    409,
+                    "event_cursor_ahead",
+                    "Last-Event-ID is ahead of the durable event stream",
+                )
+
+        async def load_page(after: int):
+            async with session_factory() as session, session.begin():
+                await IdentityRepository(session).set_actor_context(context)
+                return await PostgresTaskEventReader(session).read_page(
+                    context, task_id, after
+                )
+
+        return StreamingResponse(
+            stream_task_events(load_page, initial_page, after=cursor),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     return router

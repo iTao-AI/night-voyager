@@ -34,3 +34,8 @@ def test_m4a_non_streaming_task_matrix_is_registered() -> None:
     assert "post" in paths["/api/v1/cases/{case_id}/agent-tasks"]
     assert "get" in paths["/api/v1/tasks/{task_id}"]
     assert "post" in paths["/api/v1/tasks/{task_id}/cancel"]
+
+
+def test_m4a_sse_route_is_registered() -> None:
+    paths = create_app().openapi()["paths"]
+    assert "get" in paths["/api/v1/tasks/{task_id}/events"]
