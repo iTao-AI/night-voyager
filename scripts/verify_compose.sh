@@ -38,5 +38,6 @@ docker compose exec -T api python -c \
     "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 printf 'compose-proof: API probe passed\n'
 docker compose exec -T api python scripts/verify_demo_identity.py
+docker compose exec -T api python scripts/verify_m3b_flow.py
 docker compose exec -T web wget -q --spider http://127.0.0.1:3000
 printf 'compose-proof: Web probe passed\n'

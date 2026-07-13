@@ -61,6 +61,11 @@ No remote font or font package is required for M1.
 
 The first screen contains exactly one current lifecycle stage, one required human decision, and one primary action. `family_review` and `decided` are separate before/after frames. Consequential actions expose disabled reasons and confirmation summaries; a decided state retains a visible receipt and timeline. Fixture recovery copy explains that stale state should be refreshed and a reconnect is safe because no mutation occurs in M1.
 
+The M1 visual storyboard remains a disconnected Japan fixture. It is not a
+rendering of the M3B backend proof, whose pinned synthetic data permits only
+Australia for the deterministic family-decision timeline. Reviewers should not
+infer shared state or route selection between `/demo` and the M3B APIs.
+
 Technical task, lease, and adapter material belongs only in secondary disclosure. M1 renders fixture states and does not implement approval, family decision, worker, lease, mutation, or SSE behavior.
 
 ## Accessibility

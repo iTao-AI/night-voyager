@@ -41,3 +41,9 @@ Requests use `schema_version=1` and expected versions. Australia requires
 `budget_elasticity` and a CNY range compatible with pinned M3A facts. Blocked
 Malaysia stays visible but unselectable. M3B adds no share-token or participant
 management API.
+
+After decision, the Brief read includes a family-safe typed receipt containing
+the selected route, accepted budget range and currency, accepted trade-offs,
+decision maker, recorder, and decision source, plus the persistent timeline.
+Source paths, reviewer notes, raw tool/model output, provider errors, secrets,
+and unrelated tenant metadata are never included.

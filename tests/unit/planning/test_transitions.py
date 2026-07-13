@@ -36,3 +36,9 @@ def test_student_case_lifecycle_is_exact() -> None:
         transition_case(CaseState.PLANNING, CaseState.ADVISOR_REVIEW)
     with pytest.raises(InvalidTransition):
         transition_case(CaseState.ADVISOR_REVIEW, CaseState.PLANNING)
+
+
+@pytest.mark.parametrize("state", list(CaseState))
+def test_student_case_transition_table_is_total(state: CaseState) -> None:
+    with pytest.raises(InvalidTransition):
+        transition_case(state, CaseState.INTAKE)

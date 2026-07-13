@@ -54,9 +54,7 @@ class BriefRoute(FrozenModel):
 
 class DecisionBriefProjection(FrozenModel):
     schema_version: Literal[1]
-    brief_id: UUID
-    brief_version: PositiveInt
-    source_snapshot_date: date
+    intake: str
     routes: tuple[BriefRoute, ...]
     eligible_route_ids: tuple[UUID, ...]
     accepted_evidence_risks: tuple[EvidenceRiskAcceptance, ...]
@@ -104,6 +102,20 @@ class TimelinePlan(FrozenModel):
     milestones: tuple[TimelineMilestone, ...]
 
 
+class DecisionReceiptProjection(FrozenModel):
+    schema_version: Literal[1]
+    decision_id: UUID
+    receipt_id: UUID
+    selected_route_id: UUID
+    accepted_budget_min_minor: PositiveInt
+    accepted_budget_max_minor: PositiveInt
+    currency: Literal["CNY"]
+    accepted_trade_offs: tuple[str, ...]
+    decision_made_by_actor_id: UUID
+    recorded_by_actor_id: UUID
+    source: DecisionSource
+
+
 class ReviewCommand(FrozenModel):
     schema_version: Literal[1]
     case_id: UUID
@@ -115,13 +127,11 @@ class ReviewCommand(FrozenModel):
     risk_acceptances: tuple[EvidenceRiskAcceptance, ...]
     reviewer_notes: str | None
     brief_id: UUID | None
-    family_safe_projection: dict[str, object] | None
-    source_snapshot_date: date
 
     @model_validator(mode="after")
     def action_payload(self) -> ReviewCommand:
         approving = self.action is ReviewAction.APPROVE_FOR_CONSULTATION
-        if approving != (self.brief_id is not None and self.family_safe_projection is not None):
+        if approving != (self.brief_id is not None):
             raise ValueError("only approval creates a decision brief")
         if not approving and (self.eligible_route_ids or self.risk_acceptances):
             raise ValueError("non-approval review cannot grant eligibility or accept risks")

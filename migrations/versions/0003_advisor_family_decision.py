@@ -176,7 +176,7 @@ BEGIN
  INSERT INTO app.student_case_participants(organization_id,case_id,actor_id,role) VALUES(p_org,p_case,p_advisor,'advisor'),(p_org,p_case,p_student,'student'),(p_org,p_case,p_parent,'parent') ON CONFLICT DO NOTHING;
 END; $$;
 CREATE FUNCTION app.review_planning_run(p_org uuid,p_actor uuid,p_case uuid,p_run uuid,p_expected_revision integer,p_action text,p_review uuid,p_eligible jsonb,p_risks jsonb,p_notes text,p_brief uuid,p_projection jsonb,p_source_date date,p_key_hash text,p_request_hash text) RETURNS TABLE(review_id uuid,brief_id uuid,case_state text,replayed boolean) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE prior app.idempotency_records%ROWTYPE; selected app.planning_runs%ROWTYPE; version integer; risk jsonb;
+DECLARE prior app.idempotency_records%ROWTYPE; selected app.planning_runs%ROWTYPE; version integer; risk jsonb; canonical_projection jsonb; canonical_source_date date; pinned_intake text;
 BEGIN
  PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
  SELECT * INTO prior FROM app.idempotency_records WHERE organization_id=p_org AND actor_id=p_actor AND operation='advisor_review' AND key_sha256=p_key_hash;
@@ -185,14 +185,24 @@ BEGIN
  SELECT * INTO selected FROM app.planning_runs WHERE organization_id=p_org AND id=p_run AND case_id=p_case AND case_revision=p_expected_revision AND state='review_required' AND is_current FOR SHARE;
  IF NOT FOUND OR NOT EXISTS (SELECT 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_expected_revision AND state='advisor_review') THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='review target is stale'; END IF;
  IF p_action NOT IN ('approve_for_consultation','reject','request_revision') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid review action'; END IF;
+ IF p_action<>'approve_for_consultation' AND (jsonb_array_length(p_eligible)<>0 OR jsonb_array_length(p_risks)<>0 OR p_brief IS NOT NULL) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='non-approval review cannot grant eligibility or accept risk'; END IF;
+ IF jsonb_array_length(p_eligible)<>(SELECT count(DISTINCT value) FROM jsonb_array_elements_text(p_eligible)) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='eligible routes must be unique'; END IF;
+ IF jsonb_array_length(p_risks)<>(SELECT count(*) FROM (SELECT DISTINCT risk->>'evidence_id',risk->>'kind' FROM jsonb_array_elements(p_risks) risk) unique_risks) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptances must be unique'; END IF;
+ SELECT max(e.snapshot_date) INTO canonical_source_date FROM app.source_pack_entries e WHERE e.organization_id=p_org AND e.source_pack_id=selected.source_pack_id AND e.source_pack_version=selected.source_pack_version;
+ SELECT r.student_preferences->>'intake' INTO pinned_intake FROM app.student_case_revisions r WHERE r.organization_id=p_org AND r.case_id=p_case AND r.revision=p_expected_revision;
+ IF canonical_source_date IS NULL OR pinned_intake IS NULL THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='review target lacks pinned source facts'; END IF;
+ SELECT jsonb_build_object('schema_version',1,'routes',COALESCE(jsonb_agg(jsonb_build_object('route_id',r.id,'country',r.country,'outcome',r.outcome,'reason_code',r.reason_code) ORDER BY r.country),'[]'::jsonb),'eligible_route_ids',p_eligible,'accepted_evidence_risks',p_risks,'intake',pinned_intake,'synthetic_proof',true) INTO canonical_projection FROM app.planning_routes r WHERE r.organization_id=p_org AND r.planning_run_id=p_run;
  SELECT COALESCE(max(review_version),0)+1 INTO version FROM app.advisor_reviews WHERE organization_id=p_org AND planning_run_id=p_run;
  INSERT INTO app.advisor_reviews VALUES(p_org,p_review,p_case,p_expected_revision,p_run,version,p_actor,p_action,p_eligible,p_risks,p_notes,clock_timestamp());
  FOR risk IN SELECT * FROM jsonb_array_elements(p_risks) LOOP
+  IF COALESCE(risk->>'kind','') NOT IN ('optional','stale','unverified') OR NULLIF(btrim(risk->>'reason'),'') IS NULL THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptance is not an explicit evidence risk'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM app.evidence_refs e WHERE e.organization_id=p_org AND e.id=(risk->>'evidence_id')::uuid AND e.source_pack_id=selected.source_pack_id AND e.source_pack_version=selected.source_pack_version) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='risk acceptance does not belong to reviewed run'; END IF;
   INSERT INTO app.evidence_risk_acceptances VALUES(p_org,gen_random_uuid(),p_review,(risk->>'evidence_id')::uuid,risk->>'kind',risk->>'reason',clock_timestamp());
  END LOOP;
  IF p_action='approve_for_consultation' THEN
-  IF p_brief IS NULL OR jsonb_array_length(p_eligible)=0 OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(p_eligible) e WHERE NOT EXISTS (SELECT 1 FROM app.planning_routes r WHERE r.organization_id=p_org AND r.planning_run_id=p_run AND r.id=e::uuid AND r.outcome<>'blocked')) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='eligible routes violate reviewed run'; END IF;
-  INSERT INTO app.decision_briefs VALUES(p_org,p_brief,p_case,p_expected_revision,p_run,p_review,1,selected.policy_version,selected.source_pack_id,selected.source_pack_version,selected.evidence_projection_sha256,selected.output_sha256,p_source_date,p_projection,true,clock_timestamp());
+  IF p_source_date IS DISTINCT FROM canonical_source_date OR p_projection IS DISTINCT FROM canonical_projection THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='brief projection or source snapshot mismatch'; END IF;
+  IF p_brief IS NULL OR jsonb_array_length(p_eligible)=0 OR EXISTS (SELECT 1 FROM jsonb_array_elements_text(p_eligible) e WHERE NOT EXISTS (SELECT 1 FROM app.planning_routes r WHERE r.organization_id=p_org AND r.planning_run_id=p_run AND r.id=e::uuid AND r.country='australia' AND r.outcome='recommended_with_condition')) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='eligible routes violate reviewed run or timeline contract'; END IF;
+  INSERT INTO app.decision_briefs VALUES(p_org,p_brief,p_case,p_expected_revision,p_run,p_review,1,selected.policy_version,selected.source_pack_id,selected.source_pack_version,selected.evidence_projection_sha256,selected.output_sha256,canonical_source_date,canonical_projection,true,clock_timestamp());
   UPDATE app.student_cases SET state='family_review' WHERE organization_id=p_org AND id=p_case AND state='advisor_review';
  ELSE
   UPDATE app.student_cases SET state='planning' WHERE organization_id=p_org AND id=p_case AND state='advisor_review';
@@ -202,7 +212,7 @@ BEGIN
  RETURN QUERY SELECT p_review,p_brief,(SELECT state FROM app.student_cases WHERE organization_id=p_org AND id=p_case),false;
 END; $$;
 CREATE FUNCTION app.decide_family_brief(p_org uuid,p_actor uuid,p_role text,p_brief uuid,p_expected_version integer,p_decision uuid,p_receipt uuid,p_route uuid,p_min bigint,p_max bigint,p_currency text,p_tradeoffs jsonb,p_made_by uuid,p_source text,p_timeline uuid,p_milestones jsonb,p_key_hash text,p_request_hash text) RETURNS TABLE(decision_id uuid,receipt_id uuid,timeline_id uuid,replayed boolean) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE prior app.idempotency_records%ROWTYPE; selected app.decision_briefs%ROWTYPE; route_country text; route_outcome text; cost_cny bigint; case_budget jsonb;
+DECLARE prior app.idempotency_records%ROWTYPE; selected app.decision_briefs%ROWTYPE; route_country text; route_outcome text; cost_cny bigint; case_budget jsonb; review_eligible jsonb; pinned_intake text; intake_year integer; canonical_milestones jsonb;
 BEGIN
  PERFORM app.assert_m3b_context(p_org,p_actor,p_role);
  SELECT * INTO prior FROM app.idempotency_records WHERE organization_id=p_org AND actor_id=p_actor AND operation='family_decision' AND key_sha256=p_key_hash;
@@ -213,8 +223,9 @@ BEGIN
  ELSIF p_role='advisor' THEN IF p_source<>'family_consultation' OR NOT EXISTS (SELECT 1 FROM app.student_case_participants WHERE organization_id=p_org AND case_id=selected.case_id AND actor_id=p_made_by AND role IN ('student','parent')) THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='consultation decision maker mismatch'; END IF;
  ELSE RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='role cannot decide'; END IF;
  IF NOT EXISTS (SELECT 1 FROM app.student_case_participants WHERE organization_id=p_org AND case_id=selected.case_id AND actor_id=p_actor AND role=p_role) THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='participant not assigned'; END IF;
+ SELECT a.eligible_route_ids INTO review_eligible FROM app.advisor_reviews a WHERE a.organization_id=p_org AND a.id=selected.advisor_review_id AND a.action='approve_for_consultation';
  SELECT country,outcome INTO route_country,route_outcome FROM app.planning_routes WHERE organization_id=p_org AND planning_run_id=selected.planning_run_id AND id=p_route;
- IF route_outcome IS NULL OR route_outcome='blocked' OR NOT (selected.family_safe_projection->'eligible_route_ids' ? p_route::text) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='route is not eligible'; END IF;
+ IF route_outcome IS NULL OR route_country<>'australia' OR route_outcome<>'recommended_with_condition' OR NOT (review_eligible ? p_route::text) THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='route is not eligible for deterministic timeline'; END IF;
  IF p_currency<>'CNY' OR p_min<=0 OR p_max<p_min THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid budget range'; END IF;
  IF route_country='australia' THEN
   IF NOT (p_tradeoffs ? 'budget_elasticity') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='budget elasticity trade-off required'; END IF;
@@ -222,9 +233,14 @@ BEGIN
   SELECT family_preferences->'budget' INTO case_budget FROM app.student_case_revisions WHERE organization_id=p_org AND case_id=selected.case_id AND revision=selected.case_revision;
   IF cost_cny NOT BETWEEN p_min AND p_max OR p_max>(case_budget->>'hard_ceiling_minor')::bigint THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='budget range conflicts with pinned facts'; END IF;
  END IF;
+ SELECT r.student_preferences->>'intake' INTO pinned_intake FROM app.student_case_revisions r WHERE r.organization_id=p_org AND r.case_id=selected.case_id AND r.revision=selected.case_revision;
+ IF pinned_intake !~ '^[0-9]{4}-02$' THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='unsupported pinned intake timeline'; END IF;
+ intake_year := split_part(pinned_intake,'-',1)::integer;
+ canonical_milestones := jsonb_build_array(jsonb_build_object('key','documents','due_date',make_date(intake_year-1,9,1)),jsonb_build_object('key','application','due_date',make_date(intake_year-1,10,15)),jsonb_build_object('key','visa','due_date',make_date(intake_year-1,12,15)),jsonb_build_object('key','arrival','due_date',make_date(intake_year,1,20)));
+ IF p_milestones IS DISTINCT FROM canonical_milestones THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='timeline does not match deterministic pinned facts'; END IF;
  INSERT INTO app.family_decisions VALUES(p_org,p_decision,p_receipt,selected.case_id,p_brief,p_expected_version,p_route,p_min,p_max,p_currency,p_tradeoffs,p_made_by,p_actor,p_source,clock_timestamp(),selected.planning_run_id);
  UPDATE app.student_cases SET state='decided' WHERE organization_id=p_org AND id=selected.case_id AND state='family_review';
- INSERT INTO app.timeline_plans VALUES(p_org,p_timeline,p_decision,1,route_country,(selected.family_safe_projection->>'intake'),p_milestones,clock_timestamp());
+ INSERT INTO app.timeline_plans VALUES(p_org,p_timeline,p_decision,1,route_country,pinned_intake,canonical_milestones,clock_timestamp());
  UPDATE app.student_cases SET state='plan_ready' WHERE organization_id=p_org AND id=selected.case_id AND state='decided';
  INSERT INTO app.audit_events VALUES(p_org,gen_random_uuid(),selected.case_id,p_actor,'family_decision',p_decision,jsonb_build_object('receipt_id',p_receipt),clock_timestamp());
  INSERT INTO app.audit_events VALUES(p_org,gen_random_uuid(),selected.case_id,p_actor,'timeline_plan',p_timeline,'{}',clock_timestamp());

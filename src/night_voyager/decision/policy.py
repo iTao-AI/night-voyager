@@ -15,7 +15,12 @@ from night_voyager.planning.models import Country, RouteOutcome
 
 
 def eligible_route_ids(routes: tuple[BriefRoute, ...]) -> tuple[UUID, ...]:
-    return tuple(route.route_id for route in routes if route.outcome is not RouteOutcome.BLOCKED)
+    return tuple(
+        route.route_id
+        for route in routes
+        if route.country is Country.AUSTRALIA
+        and route.outcome is RouteOutcome.RECOMMENDED_WITH_CONDITION
+    )
 
 
 def validate_risk_acceptances(acceptances: tuple[EvidenceRiskAcceptance, ...]) -> None:
@@ -27,10 +32,12 @@ def validate_family_decision(
     command: FamilyDecisionCommand,
     brief: DecisionBriefProjection,
     *,
+    brief_id: UUID,
+    brief_version: int,
     pinned_budget_hard_ceiling_minor: int,
     pinned_australia_cost_minor: int,
 ) -> None:
-    if command.brief_id != brief.brief_id or command.expected_brief_version != brief.brief_version:
+    if command.brief_id != brief_id or command.expected_brief_version != brief_version:
         raise ValueError("decision brief is stale")
     if command.selected_route_id not in brief.eligible_route_ids:
         raise ValueError("selected route is not eligible")

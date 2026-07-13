@@ -32,9 +32,7 @@ ACTOR = UUID("20000000-0000-0000-0000-000000000003")
 def projection() -> DecisionBriefProjection:
     return DecisionBriefProjection(
         schema_version=1,
-        brief_id=BRIEF,
-        brief_version=1,
-        source_snapshot_date=date(2026, 7, 1),
+        intake="2027-02",
         routes=(
             BriefRoute(
                 route_id=AUSTRALIA,
@@ -79,7 +77,12 @@ def decision(**changes: object) -> FamilyDecisionCommand:
 
 
 def test_only_nonblocked_reviewed_routes_can_be_eligible() -> None:
-    assert eligible_route_ids(projection().routes) == (AUSTRALIA, JAPAN)
+    assert eligible_route_ids(projection().routes) == (AUSTRALIA,)
+
+
+def test_runtime_family_safe_projection_uses_route_id_schema() -> None:
+    runtime = projection().model_dump(mode="json")
+    assert DecisionBriefProjection.model_validate(runtime) == projection()
 
 
 def test_evidence_risk_acceptance_is_narrow() -> None:
@@ -106,6 +109,8 @@ def test_australia_requires_budget_elasticity_and_pinned_range() -> None:
     validate_family_decision(
         decision(),
         projection(),
+        brief_id=BRIEF,
+        brief_version=1,
         pinned_budget_hard_ceiling_minor=40_000_000,
         pinned_australia_cost_minor=30_550_000,
     )
@@ -113,6 +118,8 @@ def test_australia_requires_budget_elasticity_and_pinned_range() -> None:
         validate_family_decision(
             decision(accepted_trade_offs=()),
             projection(),
+            brief_id=BRIEF,
+            brief_version=1,
             pinned_budget_hard_ceiling_minor=40_000_000,
             pinned_australia_cost_minor=30_550_000,
         )
@@ -120,6 +127,8 @@ def test_australia_requires_budget_elasticity_and_pinned_range() -> None:
         validate_family_decision(
             decision(accepted_budget_max_minor=30_000_000),
             projection(),
+            brief_id=BRIEF,
+            brief_version=1,
             pinned_budget_hard_ceiling_minor=40_000_000,
             pinned_australia_cost_minor=30_550_000,
         )
@@ -130,6 +139,8 @@ def test_blocked_route_cannot_be_selected() -> None:
         validate_family_decision(
             decision(selected_route_id=MALAYSIA),
             projection(),
+            brief_id=BRIEF,
+            brief_version=1,
             pinned_budget_hard_ceiling_minor=40_000_000,
             pinned_australia_cost_minor=30_550_000,
         )

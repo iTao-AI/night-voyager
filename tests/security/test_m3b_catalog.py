@@ -51,6 +51,15 @@ def test_authority_guards_are_append_only_and_typed() -> None:
     assert "CREATE UNIQUE INDEX family_decisions_one_per_brief" in MIGRATION
 
 
+def test_review_and_timeline_authority_are_derived_from_pinned_rows() -> None:
+    assert "SELECT a.eligible_route_ids INTO review_eligible" in MIGRATION
+    assert "risk acceptance does not belong to reviewed run" in MIGRATION
+    assert "risk acceptance is not an explicit evidence risk" in MIGRATION
+    assert "brief projection or source snapshot mismatch" in MIGRATION
+    assert "timeline does not match deterministic pinned facts" in MIGRATION
+    assert "canonical_milestones := jsonb_build_array" in MIGRATION
+
+
 def test_m3b_downgrade_restores_m3a_case_states_and_drops_only_m3b() -> None:
     assert "DROP CONSTRAINT student_cases_state_check" in MIGRATION
     assert "CHECK (state IN ('intake','planning','advisor_review'))" in MIGRATION

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
-from typing import Literal, cast
+from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response, status
@@ -10,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import JSONResponse
 
 from night_voyager.config import Settings
+from night_voyager.decision.application import DecisionService
 from night_voyager.decision.errors import DecisionAuthorizationError, DecisionConflictError
 from night_voyager.decision.models import (
     DecisionSource,
@@ -18,7 +18,6 @@ from night_voyager.decision.models import (
     ReviewAction,
     ReviewCommand,
 )
-from night_voyager.decision.policy import build_timeline_plan
 from night_voyager.decision.postgres import PostgresDecisionRepository
 from night_voyager.identity.auth import require_origin
 from night_voyager.identity.models import ActorContext, ActorRole
@@ -29,7 +28,6 @@ from night_voyager.interfaces.http.dependencies import (
     resolve_mutation_actor_context,
 )
 from night_voyager.interfaces.http.identity import SESSION_COOKIE
-from night_voyager.planning.models import Country
 
 
 class StrictModel(BaseModel):
@@ -124,13 +122,10 @@ def create_decision_router(
                 risk_acceptances=payload.risk_acceptances,
                 reviewer_notes=payload.reviewer_notes,
                 brief_id=brief_id,
-                family_safe_projection={} if brief_id else None,
-                source_snapshot_date=date(1970, 1, 1),
             )
             try:
-                result = await PostgresDecisionRepository(session).review(
-                    context, command, idempotency_key
-                )
+                service = DecisionService(PostgresDecisionRepository(session))
+                result = await service.review(context, command, idempotency_key)
             except DecisionAuthorizationError:
                 return problem(404, "resource_unavailable", "resource unavailable")
             except DecisionConflictError as error:
@@ -146,7 +141,9 @@ def create_decision_router(
     ) -> dict[str, object] | JSONResponse:
         async with session_factory() as session, session.begin():
             context = await read_context(session, raw_session)
-            result = await PostgresDecisionRepository(session).get_brief(context, brief_id)
+            result = await DecisionService(PostgresDecisionRepository(session)).get_brief(
+                context, brief_id
+            )
         if result is None:
             return problem(404, "resource_unavailable", "resource unavailable")
         response.headers["Cache-Control"] = "no-store"
@@ -156,29 +153,12 @@ def create_decision_router(
         brief_id: UUID,
         payload: FamilyDecisionRequest,
         context: ActorContext,
-        session: AsyncSession,
+        service: DecisionService,
         idempotency_key: str,
         *,
         made_by: UUID,
         source: DecisionSource,
     ) -> dict[str, object] | JSONResponse:
-        repository = PostgresDecisionRepository(session)
-        brief = await repository.get_brief(context, brief_id)
-        if brief is None:
-            return problem(404, "resource_unavailable", "resource unavailable")
-        projection = cast(dict[str, object], brief["family_safe_projection"])
-        routes = cast(list[dict[str, object]], projection["routes"])
-        selected = next(
-            (item for item in routes if UUID(str(item["id"])) == payload.selected_route_id),
-            None,
-        )
-        if selected is None:
-            return problem(409, "route_not_eligible", "request conflicts with current state")
-        timeline = build_timeline_plan(
-            Country(selected["country"]),
-            str(projection["intake"]),
-            date.today(),
-        )
         command = FamilyDecisionCommand(
             schema_version=1,
             brief_id=brief_id,
@@ -192,15 +172,15 @@ def create_decision_router(
             source=source,
         )
         try:
-            result = await repository.decide(
-                context,
-                command,
-                decision_id=uuid4(),
-                receipt_id=uuid4(),
-                timeline_id=uuid4(),
-                timeline=timeline,
-                idempotency_key=idempotency_key,
+            result = await (
+                service.decide_direct(context, command, idempotency_key)
+                if source is DecisionSource.DIRECT
+                else service.decide_as_advisor(context, command, idempotency_key)
             )
+        except LookupError:
+            return problem(404, "resource_unavailable", "resource unavailable")
+        except ValueError:
+            return problem(409, "decision_policy_conflict", "request conflicts with current state")
         except DecisionAuthorizationError:
             return problem(404, "resource_unavailable", "resource unavailable")
         except DecisionConflictError as error:
@@ -224,11 +204,12 @@ def create_decision_router(
             context = await mutation_context(session, raw_session, csrf)
             if context.role not in {ActorRole.STUDENT, ActorRole.PARENT}:
                 return problem(404, "resource_unavailable", "resource unavailable")
+            service = DecisionService(PostgresDecisionRepository(session))
             result = await decide(
                 brief_id,
                 payload,
                 context,
-                session,
+                service,
                 idempotency_key,
                 made_by=context.actor_id,
                 source=DecisionSource.DIRECT,
@@ -253,11 +234,12 @@ def create_decision_router(
             context = await mutation_context(session, raw_session, csrf)
             if context.role is not ActorRole.ADVISOR:
                 return problem(404, "resource_unavailable", "resource unavailable")
+            service = DecisionService(PostgresDecisionRepository(session))
             result = await decide(
                 brief_id,
                 payload,
                 context,
-                session,
+                service,
                 idempotency_key,
                 made_by=payload.decision_made_by_actor_id,
                 source=DecisionSource.FAMILY_CONSULTATION,

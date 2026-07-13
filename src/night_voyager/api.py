@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from night_voyager.config import Settings
@@ -39,6 +40,18 @@ def create_app(
         from starlette.responses import JSONResponse
 
         return JSONResponse(status_code=error.status_code, content={"detail": error.detail})
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(  # pyright: ignore[reportUnusedFunction]
+        request: Request, error: RequestValidationError
+    ):
+        if request.url.path.startswith("/api/v1/cases/") or request.url.path.startswith(
+            "/api/v1/decision-briefs/"
+        ):
+            return decision_problem(422, "request_validation_failed", "request validation failed")
+        from fastapi.exception_handlers import request_validation_exception_handler
+
+        return await request_validation_exception_handler(request, error)
 
     def health() -> dict[str, str]:
         return {"service": "night-voyager-api", "status": "ok"}
