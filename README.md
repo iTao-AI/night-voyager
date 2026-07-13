@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, and an **M3A deterministic planning backend foundation**. M3A persists immutable Case revisions, source packs, claim-level Evidence, and PlanningRun results. The `/demo` route remains fixture-only and disconnected from this backend.
+Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, and an **M3B local synthetic advisor-to-family backend proof**. M3B records advisor review, a family-safe Brief, an explicit decision receipt, and a deterministic timeline. The `/demo` route remains fixture-only and disconnected.
 
 ## Evaluator lane
 

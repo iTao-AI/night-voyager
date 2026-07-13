@@ -102,3 +102,27 @@ class TimelinePlan(FrozenModel):
     country: Country
     intake: str
     milestones: tuple[TimelineMilestone, ...]
+
+
+class ReviewCommand(FrozenModel):
+    schema_version: Literal[1]
+    case_id: UUID
+    planning_run_id: UUID
+    expected_case_revision: PositiveInt
+    action: ReviewAction
+    review_id: UUID
+    eligible_route_ids: tuple[UUID, ...]
+    risk_acceptances: tuple[EvidenceRiskAcceptance, ...]
+    reviewer_notes: str | None
+    brief_id: UUID | None
+    family_safe_projection: dict[str, object] | None
+    source_snapshot_date: date
+
+    @model_validator(mode="after")
+    def action_payload(self) -> ReviewCommand:
+        approving = self.action is ReviewAction.APPROVE_FOR_CONSULTATION
+        if approving != (self.brief_id is not None and self.family_safe_projection is not None):
+            raise ValueError("only approval creates a decision brief")
+        if not approving and (self.eligible_route_ids or self.risk_acceptances):
+            raise ValueError("non-approval review cannot grant eligibility or accept risks")
+        return self

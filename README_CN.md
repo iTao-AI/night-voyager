@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract**、**M2 identity/session/RLS boundary** 与 **M3A deterministic planning backend foundation**。M3A 持久化 immutable Case revision、source pack、claim-level Evidence 与 PlanningRun 结果；`/demo` 仍是未连接该 backend 的 fixture-only 页面。
+Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract**、**M2 identity/session/RLS boundary**、**M3A deterministic planning foundation** 与 **M3B local synthetic advisor-to-family backend proof**。M3B 记录顾问审核、family-safe Brief、显式决策回执和确定性时间线；`/demo` 仍是未连接该 backend 的 fixture-only 页面。
 
 ## Evaluator 路径
 
