@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -29,9 +29,24 @@ M3B adds exactly eight migrator-owned forced-RLS tables. The API can execute
 only narrow review/decision functions; the worker has no M3B mutation authority.
 Downgrade removes only M3B structures and restores a valid M3A Case state.
 
+M4A adds exactly three migrator-owned forced-RLS application tables:
+`agent_tasks`, `agent_executions`, and `agent_task_events`. The API can select
+task/event projections and execute only assigned-advisor create/cancel
+functions. The worker can select task pins and execute only claim, start,
+heartbeat, failure/retry, and generation-fenced finalization functions. Neither
+runtime role has direct M4A write privilege.
+
+`internal.agent_task_dispatch` contains only task ID, organization ID, and
+availability time. Runtime roles and `PUBLIC` cannot access its schema or table;
+migrator-owned fixed-search-path functions are the only boundary. Global claim
+returns only task ID, organization ID, and lease generation. Migration `0004`
+is seed-free and downgrade preserves all M3B structures.
+
 The normal `make demo` path applies migrations, then runs the separate
 `demo-seed` one-shot service before API/worker readiness. The schema migration
 remains seed-free. To re-run only the explicit idempotent seed against a running
 development stack, use `docker compose run --rm demo-seed`; it fails closed
 unless demo mode is enabled outside production. `make compose-proof` uses a
-fresh isolated volume and proves bootstrap plus session mint, not health alone.
+fresh isolated volume and proves bootstrap, session mint, the M3B decision flow,
+the M4A HTTP-to-worker-to-PlanningRun-to-SSE flow, and API/worker restart
+durability, not health alone.

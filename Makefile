@@ -16,7 +16,7 @@ demo: ## Migrate, explicitly seed synthetic identity, and start the local stack
 proof: ## Run config, hygiene, and wheel proof using Docker only
 	docker build --file Dockerfile.proof --target proof --tag night-voyager-proof:local .
 
-compose-proof: ## Prove service health, probes, and teardown
+compose-proof: ## Prove M3B/M4A flows, restart durability, health, and teardown
 	@scripts/verify_compose.sh
 
 db-check: ## Prove migrations, roles, sessions, catalog, and forced RLS on a fresh database

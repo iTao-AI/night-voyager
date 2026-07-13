@@ -41,6 +41,7 @@ M3B_TABLES = {
     "audit_events",
     "idempotency_records",
 }
+M4A_TABLES = {"agent_tasks", "agent_executions", "agent_task_events"}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -285,7 +286,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } | M3A_TABLES | M3B_TABLES or any(
+            } | M3A_TABLES | M3B_TABLES | M4A_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -298,7 +299,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 22:
+            if policy_count != 25:
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -309,7 +310,7 @@ async def verify_database_catalog(database_url: str) -> None:
                       AND grantee IN ('night_voyager_api','night_voyager_worker')
                       AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
                     """),
-                    {"tables": sorted(M3A_TABLES | M3B_TABLES)},
+                    {"tables": sorted(M3A_TABLES | M3B_TABLES | M4A_TABLES)},
                 )
             ).scalar_one()
             if runtime_writes:
@@ -320,6 +321,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     await connection.execute(
                         text("""
                         SELECT p.proname,p.prosecdef,p.proconfig,
+                          oidvectortypes(p.proargtypes) AS identity_arguments,
                           has_function_privilege('public',p.oid,'EXECUTE') AS public_execute,
                           has_function_privilege(
                             'night_voyager_api',p.oid,'EXECUTE'
@@ -331,7 +333,9 @@ async def verify_database_catalog(database_url: str) -> None:
                         WHERE n.nspname='app' AND p.proname IN
                           ('publish_case_revision','transition_case','persist_source_pack',
                            'persist_evidence_ref','persist_planning_result','review_planning_run',
-                           'decide_family_brief')
+                           'decide_family_brief','create_agent_task','cancel_agent_task',
+                           'claim_agent_task','start_agent_task','heartbeat_agent_task',
+                           'fail_agent_task','finalize_agent_task_result')
                         """)
                     )
                 )
@@ -346,15 +350,103 @@ async def verify_database_catalog(database_url: str) -> None:
                 "persist_planning_result",
                 "review_planning_run",
                 "decide_family_brief",
+                "create_agent_task",
+                "cancel_agent_task",
+                "claim_agent_task",
+                "start_agent_task",
+                "heartbeat_agent_task",
+                "fail_agent_task",
+                "finalize_agent_task_result",
             } or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
                 or row["public_execute"]
-                or not row["api_execute"]
-                or row["worker_execute"]
                 for row in app_functions
             ):
-                raise SystemExit("M3A functions violate narrow SECURITY DEFINER contract")
+                raise SystemExit("app functions violate narrow SECURITY DEFINER contract")
+            api_functions = {
+                "publish_case_revision",
+                "transition_case",
+                "persist_source_pack",
+                "persist_evidence_ref",
+                "persist_planning_result",
+                "review_planning_run",
+                "decide_family_brief",
+                "create_agent_task",
+                "cancel_agent_task",
+            }
+            worker_functions = {
+                "claim_agent_task",
+                "start_agent_task",
+                "heartbeat_agent_task",
+                "fail_agent_task",
+                "finalize_agent_task_result",
+            }
+            worker_signatures = {
+                row["proname"]: row["identity_arguments"]
+                for row in app_functions
+                if row["proname"] in worker_functions
+            }
+            if worker_signatures["start_agent_task"] != "uuid, uuid, text, bigint, text":
+                raise SystemExit("start_agent_task audit signature drift")
+            if worker_signatures["fail_agent_task"] != (
+                "uuid, uuid, text, bigint, text, boolean, boolean"
+            ):
+                raise SystemExit("fail_agent_task audit signature drift")
+            if any(
+                (row["proname"] in api_functions) != row["api_execute"]
+                or (row["proname"] in worker_functions) != row["worker_execute"]
+                for row in app_functions
+            ):
+                raise SystemExit("app function grants violate API/worker separation")
+
+            internal_columns = (
+                await connection.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_schema='internal' AND table_name='agent_task_dispatch' "
+                        "ORDER BY ordinal_position"
+                    )
+                )
+            ).scalars().all()
+            if internal_columns != ["task_id", "organization_id", "available_at"]:
+                raise SystemExit("internal dispatch column allowlist drift")
+            internal_ownership = (
+                await connection.execute(
+                    text(
+                        "SELECT pg_get_userbyid(c.relowner) AS table_owner, "
+                        "pg_get_userbyid(n.nspowner) AS schema_owner "
+                        "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                        "WHERE n.nspname='internal' AND c.relname='agent_task_dispatch'"
+                    )
+                )
+            ).mappings().one()
+            if dict(internal_ownership) != {
+                "table_owner": "night_voyager_migrator",
+                "schema_owner": "night_voyager_migrator",
+            }:
+                raise SystemExit("internal dispatch ownership drift")
+            internal_grants = (
+                await connection.execute(
+                    text(
+                        "SELECT count(*) FROM information_schema.role_table_grants "
+                        "WHERE table_schema='internal' AND table_name='agent_task_dispatch' "
+                        "AND grantee IN ('PUBLIC','night_voyager_api','night_voyager_worker')"
+                    )
+                )
+            ).scalar_one()
+            if internal_grants:
+                raise SystemExit("runtime roles must not access internal dispatch storage")
+            internal_schema_access = (
+                await connection.execute(
+                    text(
+                        "SELECT has_schema_privilege('night_voyager_api','internal','USAGE') "
+                        "OR has_schema_privilege('night_voyager_worker','internal','USAGE')"
+                    )
+                )
+            ).scalar_one()
+            if internal_schema_access:
+                raise SystemExit("runtime roles must not use the internal schema")
 
             auth_grants = (
                 await connection.execute(

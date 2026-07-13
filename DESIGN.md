@@ -6,7 +6,7 @@ Night Voyager is an evidence-grounded study-abroad decision workflow. The M1 `/d
 
 - **Primary route:** `/demo`
 - **Audience:** advisors first, then students and families
-- **Proof boundary:** synthetic fixtures only; no mutation, SSE, domain backend, or real student data
+- **Page boundary:** synthetic fixtures only; no mutation, SSE, connected domain backend, or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
 
 ## Aesthetic direction
@@ -66,7 +66,7 @@ rendering of the M3B backend proof, whose pinned synthetic data permits only
 Australia for the deterministic family-decision timeline. Reviewers should not
 infer shared state or route selection between `/demo` and the M3B APIs.
 
-Technical task, lease, and adapter material belongs only in secondary disclosure. M1 renders fixture states and does not implement approval, family decision, worker, lease, mutation, or SSE behavior.
+Technical task, lease, and adapter material belongs only in secondary disclosure. M1 renders fixture states and does not call the implemented M3B decision or M4A worker/SSE backend paths; those local synthetic proofs remain disconnected from `/demo`.
 
 ## Accessibility
 

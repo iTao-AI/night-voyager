@@ -25,9 +25,9 @@ def test_m3b_public_records_exist() -> None:
         assert (ROOT / relative).is_file()
 
 
-def test_migration_graph_is_0001_to_0002_to_0003_with_exact_tables() -> None:
+def test_m3b_migration_remains_0003_with_exact_tables() -> None:
     migrations = sorted((ROOT / "migrations/versions").glob("*.py"))
-    assert [path.name for path in migrations] == [
+    assert [path.name for path in migrations[:3]] == [
         "0001_identity_and_rls.py",
         "0002_case_evidence_planning.py",
         "0003_advisor_family_decision.py",

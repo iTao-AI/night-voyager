@@ -47,3 +47,31 @@ the selected route, accepted budget range and currency, accepted trade-offs,
 decision maker, recorder, and decision source, plus the persistent timeline.
 Source paths, reviewer notes, raw tool/model output, provider errors, secrets,
 and unrelated tenant metadata are never included.
+
+## M4A assigned-advisor task endpoints
+
+M4A adds a backend-only durable task surface. All reads and mutations require a
+valid opaque session and assigned-advisor relationship. Mutations also require
+exact configured `Origin`, session CSRF, and `Idempotency-Key`. Responses use
+`Cache-Control: no-store`; authorization remains non-enumerating.
+
+| Method and path | Result |
+| --- | --- |
+| `POST /api/v1/cases/{case_id}/agent-tasks` | `202` idempotent `generate_planning_run_v1` create |
+| `GET /api/v1/tasks/{task_id}` | public task projection |
+| `POST /api/v1/tasks/{task_id}/cancel` | expected-row-version, idempotent cancellation |
+| `GET /api/v1/tasks/{task_id}/events` | authorized SSE replay/reconnect |
+
+Create accepts schema version 1, expected Case revision, source-pack ID/version,
+and `m3a-policy-v1`. It cannot select tenant, actor, adapter, worker, lease,
+retry, or injected failure behavior. Public responses expose status, attempts,
+sanitized code, and an optional PlanningRun ID/currentness; they do not expose
+internal task state, dispatch, leases, tenant/session IDs, raw output, or worker
+errors.
+
+SSE uses task-local integer `event_sequence` as `id`. `Last-Event-ID` must be a
+non-negative integer; a cursor ahead of the durable maximum is a conflict.
+Fifteen-second heartbeat comments are not stored. The stream closes after all
+events for a closing state have been delivered. See
+[AgentTask and event reference](agent-tasks-and-events.md) for exact states and
+bounds.

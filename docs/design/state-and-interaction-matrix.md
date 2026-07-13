@@ -10,6 +10,9 @@
 The Japan rows above describe only the disconnected M1 fixture. The M3B local
 backend proof independently pins Australia as its sole route with a supported
 deterministic timeline; `/demo` does not read or mutate M3B state.
+The M4A backend proof uses a separate task-ready Case, produces a
+`review_required` PlanningRun, and exposes authorized SSE independently of this
+fixture. `/demo` does not create, read, cancel, or stream M4A tasks.
 
 ## Interaction rules
 
