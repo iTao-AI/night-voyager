@@ -321,6 +321,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     await connection.execute(
                         text("""
                         SELECT p.proname,p.prosecdef,p.proconfig,
+                          oidvectortypes(p.proargtypes) AS identity_arguments,
                           has_function_privilege('public',p.oid,'EXECUTE') AS public_execute,
                           has_function_privilege(
                             'night_voyager_api',p.oid,'EXECUTE'
@@ -381,6 +382,17 @@ async def verify_database_catalog(database_url: str) -> None:
                 "fail_agent_task",
                 "finalize_agent_task_result",
             }
+            worker_signatures = {
+                row["proname"]: row["identity_arguments"]
+                for row in app_functions
+                if row["proname"] in worker_functions
+            }
+            if worker_signatures["start_agent_task"] != "uuid, uuid, text, bigint, text":
+                raise SystemExit("start_agent_task audit signature drift")
+            if worker_signatures["fail_agent_task"] != (
+                "uuid, uuid, text, bigint, text, boolean, boolean"
+            ):
+                raise SystemExit("fail_agent_task audit signature drift")
             if any(
                 (row["proname"] in api_functions) != row["api_execute"]
                 or (row["proname"] in worker_functions) != row["worker_execute"]

@@ -163,7 +163,7 @@ BEGIN
   SELECT t.* INTO selected FROM app.agent_tasks t JOIN app.student_case_participants p ON p.organization_id=t.organization_id AND p.case_id=t.case_id AND p.actor_id=p_actor AND p.role='advisor' WHERE t.organization_id=p_org AND t.id=p_task FOR UPDATE OF t;
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='task unavailable'; END IF;
   IF selected.row_version<>p_expected_version OR selected.state NOT IN ('queued','leased','running') THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='task cancel target is stale'; END IF;
-  UPDATE app.agent_executions e SET status='cancelled',retryable=false,public_code='cancelled',finished_at=clock_timestamp() WHERE e.organization_id=p_org AND e.task_id=p_task AND e.lease_generation=selected.lease_generation AND e.status IN ('leased','running');
+  UPDATE app.agent_executions e SET status='cancelled',retryable=false,public_code='cancelled',duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(e.started_at,e.created_at)))*1000)::integer),finished_at=clock_timestamp() WHERE e.organization_id=p_org AND e.task_id=p_task AND e.lease_generation=selected.lease_generation AND e.status IN ('leased','running');
   UPDATE app.agent_tasks t SET state='cancelled',row_version=t.row_version+1,lease_owner=NULL,lease_expires_at=NULL,terminal_code='cancelled',updated_at=clock_timestamp() WHERE t.organization_id=p_org AND t.id=p_task;
   DELETE FROM internal.agent_task_dispatch d WHERE d.organization_id=p_org AND d.task_id=p_task;
   PERFORM app.append_agent_task_event(p_org,p_task,'cancelled','cancelled','cancelled',selected.attempt_count,NULL);
@@ -190,13 +190,14 @@ BEGIN
       RETURN;
     END IF;
     reclaimed := true;
-    UPDATE app.agent_executions e SET status='retry_scheduled',retryable=true,public_code='lease_expired',finished_at=clock_timestamp() WHERE e.organization_id=selected.organization_id AND e.task_id=selected.id AND e.lease_generation=selected.lease_generation AND e.status IN ('leased','running');
     IF selected.attempt_count>=3 THEN
+      UPDATE app.agent_executions e SET status='failed',retryable=false,public_code='lease_expired',duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(e.started_at,e.created_at)))*1000)::integer),finished_at=clock_timestamp() WHERE e.organization_id=selected.organization_id AND e.task_id=selected.id AND e.lease_generation=selected.lease_generation AND e.status IN ('leased','running');
       UPDATE app.agent_tasks t SET state='failed',row_version=t.row_version+1,lease_owner=NULL,lease_expires_at=NULL,terminal_code='lease_expired',updated_at=clock_timestamp() WHERE t.organization_id=selected.organization_id AND t.id=selected.id;
       DELETE FROM internal.agent_task_dispatch d WHERE d.organization_id=selected.organization_id AND d.task_id=selected.id;
       PERFORM app.append_agent_task_event(selected.organization_id,selected.id,'failed','failed','lease_expired',selected.attempt_count,NULL);
       RETURN;
     END IF;
+    UPDATE app.agent_executions e SET status='retry_scheduled',retryable=true,public_code='lease_expired',duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(e.started_at,e.created_at)))*1000)::integer),finished_at=clock_timestamp() WHERE e.organization_id=selected.organization_id AND e.task_id=selected.id AND e.lease_generation=selected.lease_generation AND e.status IN ('leased','running');
   ELSIF selected.state<>'queued' THEN
     RETURN;
   END IF;
@@ -211,14 +212,15 @@ BEGIN
   RETURN QUERY SELECT selected.id,selected.organization_id,next_generation;
 END; $$;
 
-CREATE FUNCTION app.start_agent_task(p_org uuid,p_task uuid,p_worker text,p_generation bigint) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+CREATE FUNCTION app.start_agent_task(p_org uuid,p_task uuid,p_worker text,p_generation bigint,p_input_sha256 text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE selected app.agent_tasks%ROWTYPE;
 BEGIN
   PERFORM app.assert_context(p_org);
+  IF p_input_sha256 !~ '^[0-9a-f]{64}$' THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid execution input hash'; END IF;
   SELECT * INTO selected FROM app.agent_tasks WHERE organization_id=p_org AND id=p_task FOR UPDATE;
   IF NOT FOUND OR selected.state<>'leased' OR selected.lease_owner IS DISTINCT FROM p_worker OR selected.lease_generation<>p_generation OR selected.lease_expires_at<=clock_timestamp() THEN RAISE EXCEPTION USING ERRCODE='NV010', MESSAGE='lease generation lost'; END IF;
   UPDATE app.agent_tasks SET state='running',row_version=row_version+1,updated_at=clock_timestamp() WHERE organization_id=p_org AND id=p_task;
-  UPDATE app.agent_executions SET status='running',started_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
+  UPDATE app.agent_executions SET status='running',input_sha256=p_input_sha256,started_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
   PERFORM app.append_agent_task_event(p_org,p_task,'execution_started','preparing','execution_started',selected.attempt_count,NULL);
 END; $$;
 
@@ -232,14 +234,15 @@ BEGIN
   RETURN new_expiry;
 END; $$;
 
-CREATE FUNCTION app.fail_agent_task(p_org uuid,p_task uuid,p_worker text,p_generation bigint,p_code text,p_retryable boolean) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+CREATE FUNCTION app.fail_agent_task(p_org uuid,p_task uuid,p_worker text,p_generation bigint,p_code text,p_retryable boolean,p_fallback_used boolean) RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE selected app.agent_tasks%ROWTYPE; terminal_state text; event_code text; public_status text;
 BEGIN
   PERFORM app.assert_context(p_org);
+  IF p_fallback_used IS DISTINCT FROM (p_code='fallback_authority') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid fallback audit fact'; END IF;
   SELECT * INTO selected FROM app.agent_tasks WHERE organization_id=p_org AND id=p_task FOR UPDATE;
   IF NOT FOUND OR selected.state NOT IN ('leased','running') OR selected.lease_owner IS DISTINCT FROM p_worker OR selected.lease_generation<>p_generation OR selected.lease_expires_at<=clock_timestamp() THEN RAISE EXCEPTION USING ERRCODE='NV010', MESSAGE='lease generation lost'; END IF;
   IF p_retryable AND selected.attempt_count<3 THEN
-    UPDATE app.agent_executions SET status='retry_scheduled',retryable=true,public_code=p_code,finished_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
+    UPDATE app.agent_executions SET status='retry_scheduled',retryable=true,fallback_used=p_fallback_used,public_code=p_code,duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(started_at,created_at)))*1000)::integer),finished_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
     UPDATE app.agent_tasks SET state='queued',row_version=row_version+1,lease_owner=NULL,lease_expires_at=NULL,terminal_code=NULL,updated_at=clock_timestamp() WHERE organization_id=p_org AND id=p_task;
     UPDATE internal.agent_task_dispatch SET available_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task;
     PERFORM app.append_agent_task_event(p_org,p_task,'retry_scheduled','preparing',p_code,selected.attempt_count,NULL);
@@ -248,7 +251,7 @@ BEGIN
   terminal_state := CASE WHEN p_code='deadline_exceeded' THEN 'timed_out' WHEN p_code='required_evidence_gap' THEN 'blocked' ELSE 'failed' END;
   event_code := terminal_state;
   public_status := CASE WHEN terminal_state='blocked' THEN 'needs_evidence' ELSE terminal_state END;
-  UPDATE app.agent_executions SET status=terminal_state,retryable=false,public_code=p_code,finished_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
+  UPDATE app.agent_executions SET status=terminal_state,retryable=false,fallback_used=p_fallback_used,public_code=p_code,duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(started_at,created_at)))*1000)::integer),finished_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
   UPDATE app.agent_tasks SET state=terminal_state,row_version=row_version+1,lease_owner=NULL,lease_expires_at=NULL,terminal_code=p_code,updated_at=clock_timestamp() WHERE organization_id=p_org AND id=p_task;
   DELETE FROM internal.agent_task_dispatch WHERE organization_id=p_org AND task_id=p_task;
   PERFORM app.append_agent_task_event(p_org,p_task,event_code,public_status,p_code,selected.attempt_count,NULL);
@@ -266,7 +269,7 @@ BEGIN
   target_state := CASE WHEN p_state='review_required' THEN 'waiting_review' ELSE p_state END;
   target_status := CASE WHEN p_state='review_required' THEN 'needs_advisor_review' WHEN p_state='blocked' THEN 'needs_evidence' ELSE 'failed' END;
   target_event := CASE WHEN p_state='review_required' THEN 'waiting_review' ELSE p_state END;
-  UPDATE app.agent_executions SET status=CASE WHEN p_state='review_required' THEN 'succeeded' ELSE p_state END,retryable=false,output_sha256=p_output_hash,result_planning_run_id=p_run,public_code=p_reason,finished_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
+  UPDATE app.agent_executions SET status=CASE WHEN p_state='review_required' THEN 'succeeded' ELSE p_state END,retryable=false,output_sha256=p_output_hash,result_planning_run_id=p_run,public_code=p_reason,duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(started_at,created_at)))*1000)::integer),finished_at=clock_timestamp() WHERE organization_id=p_org AND task_id=p_task AND lease_generation=p_generation;
   UPDATE app.agent_tasks SET state=target_state,row_version=row_version+1,lease_owner=NULL,lease_expires_at=NULL,result_planning_run_id=p_run,terminal_code=CASE WHEN p_state='review_required' THEN NULL ELSE p_reason END,updated_at=clock_timestamp() WHERE organization_id=p_org AND id=p_task;
   DELETE FROM internal.agent_task_dispatch WHERE organization_id=p_org AND task_id=p_task;
   PERFORM app.append_agent_task_event(p_org,p_task,target_event,target_status,p_reason,selected.attempt_count,p_run);
@@ -277,16 +280,16 @@ REVOKE ALL ON FUNCTION app.append_agent_task_event(uuid,uuid,text,text,text,inte
 REVOKE ALL ON FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,integer,uuid,integer,text,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.cancel_agent_task(uuid,uuid,uuid,integer,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.claim_agent_task(text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.start_agent_task(uuid,uuid,text,bigint) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.start_agent_task(uuid,uuid,text,bigint,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.heartbeat_agent_task(uuid,uuid,text,bigint) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.fail_agent_task(uuid,uuid,text,bigint,text,boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.fail_agent_task(uuid,uuid,text,bigint,text,boolean,boolean) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.finalize_agent_task_result(uuid,uuid,text,bigint,uuid,text,text,text,text,jsonb,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,integer,uuid,integer,text,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.cancel_agent_task(uuid,uuid,uuid,integer,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.claim_agent_task(text) TO night_voyager_worker;
-GRANT EXECUTE ON FUNCTION app.start_agent_task(uuid,uuid,text,bigint) TO night_voyager_worker;
+GRANT EXECUTE ON FUNCTION app.start_agent_task(uuid,uuid,text,bigint,text) TO night_voyager_worker;
 GRANT EXECUTE ON FUNCTION app.heartbeat_agent_task(uuid,uuid,text,bigint) TO night_voyager_worker;
-GRANT EXECUTE ON FUNCTION app.fail_agent_task(uuid,uuid,text,bigint,text,boolean) TO night_voyager_worker;
+GRANT EXECUTE ON FUNCTION app.fail_agent_task(uuid,uuid,text,bigint,text,boolean,boolean) TO night_voyager_worker;
 GRANT EXECUTE ON FUNCTION app.finalize_agent_task_result(uuid,uuid,text,bigint,uuid,text,text,text,text,jsonb,uuid) TO night_voyager_worker;
 GRANT SELECT ON app.agent_tasks,app.agent_task_events TO night_voyager_api;
 GRANT SELECT ON app.agent_tasks TO night_voyager_worker;
@@ -300,9 +303,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP FUNCTION IF EXISTS app.finalize_agent_task_result(uuid,uuid,text,bigint,uuid,text,text,text,text,jsonb,uuid)")
-    op.execute("DROP FUNCTION IF EXISTS app.fail_agent_task(uuid,uuid,text,bigint,text,boolean)")
+    op.execute("DROP FUNCTION IF EXISTS app.fail_agent_task(uuid,uuid,text,bigint,text,boolean,boolean)")
     op.execute("DROP FUNCTION IF EXISTS app.heartbeat_agent_task(uuid,uuid,text,bigint)")
-    op.execute("DROP FUNCTION IF EXISTS app.start_agent_task(uuid,uuid,text,bigint)")
+    op.execute("DROP FUNCTION IF EXISTS app.start_agent_task(uuid,uuid,text,bigint,text)")
     op.execute("DROP FUNCTION IF EXISTS app.claim_agent_task(text)")
     op.execute("DROP FUNCTION IF EXISTS app.cancel_agent_task(uuid,uuid,uuid,integer,text,text)")
     op.execute("DROP FUNCTION IF EXISTS app.create_agent_task(uuid,uuid,uuid,uuid,integer,uuid,integer,text,text,text)")

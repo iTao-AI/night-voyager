@@ -14,7 +14,11 @@ advisor review.
   attempt count, lease generation, sanitized terminal code, and an optional
   result `PlanningRun` reference.
 - `app.agent_executions` records normalized attempts and generation-fenced
-  outcomes. It does not store a provider transcript.
+  outcomes. A started attempt stores the SHA-256 of its canonical pinned adapter
+  request; completion stores a non-negative duration, retry/fallback facts,
+  `not_applicable` cost status for the deterministic adapter, and an output hash
+  plus result reference when a result is accepted. It does not store prompts,
+  provider payloads, raw outputs, or stack traces.
 - `app.agent_task_events` is the immutable, task-local replay log. Its
   `event_sequence` is the SSE event ID.
 - `internal.agent_task_dispatch` contains only `task_id`, `organization_id`, and
@@ -49,7 +53,9 @@ owner and generation. Reclaim or cancellation therefore fences late output.
 Only normalized transient adapter unavailability, transport interruption, and
 expired-lease recovery may retry, with at most three total attempts. Unknown,
 schema, pin, policy, authority, Evidence, fallback, and bounds failures fail
-closed.
+closed. If the third lease expires, its existing execution finishes as
+`failed`, non-retryable, with `lease_expired`; no fourth execution or
+`retry_scheduled` event is created.
 
 ## SSE contract
 

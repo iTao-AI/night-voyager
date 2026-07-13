@@ -16,6 +16,7 @@ from night_voyager.adapters.protocols import (
     AdapterOutcome,
     PlanningAdapterRequest,
 )
+from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.tasks.postgres import postgres_worker_repository_factory
 from night_voyager.tasks.worker import TaskWorker
 
@@ -23,6 +24,21 @@ pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PACK = UUID("50000000-0000-0000-0000-000000000001")
+
+
+def expected_input_sha256(case_id: UUID) -> str:
+    return canonical_sha256(
+        PlanningAdapterRequest(
+            schema_version=1,
+            operation="generate_planning_run_v1",
+            organization_id=ORG,
+            case_id=case_id,
+            case_revision=1,
+            source_pack_id=PACK,
+            source_pack_version=1,
+            policy_version="m3a-policy-v1",
+        ).model_dump(mode="json")
+    )
 
 
 class BlockingAdapter:
@@ -171,6 +187,34 @@ async def test_two_workers_accept_one_result_and_clear_lease() -> None:
         assert row["lease_owner"] is None
         assert row["result_planning_run_id"] is not None
         assert row["waiting_events"] == 1
+        inspector = create_async_engine(
+            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+        )
+        try:
+            async with inspector.begin() as connection:
+                await connection.execute(
+                    text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                    {"org": str(ORG)},
+                )
+                execution = (
+                    await connection.execute(
+                        text(
+                            "SELECT status,retryable,fallback_used,input_sha256,output_sha256,"
+                            "duration_ms,cost_status FROM app.agent_executions "
+                            "WHERE organization_id=:org AND task_id=:task"
+                        ),
+                        {"org": ORG, "task": task_id},
+                    )
+                ).mappings().one()
+        finally:
+            await inspector.dispose()
+        assert execution.status == "succeeded"
+        assert execution.retryable is False
+        assert execution.fallback_used is False
+        assert execution.input_sha256 == expected_input_sha256(case_id)
+        assert execution.output_sha256 is not None
+        assert execution.duration_ms is not None and execution.duration_ms >= 0
+        assert execution.cost_status == "not_applicable"
     finally:
         await engine_a.dispose()  # type: ignore[attr-defined]
         await engine_b.dispose()  # type: ignore[attr-defined]
@@ -256,7 +300,9 @@ async def test_restart_reclaims_expired_started_execution() -> None:
             claim = await repository.claim("worker-before-restart")
         assert claim is not None
         async with factory() as repository:
-            await repository.start(claim, "worker-before-restart")
+            await repository.start(
+                claim, "worker-before-restart", expected_input_sha256(case_id)
+            )
         await expire_lease(task_id)
         restarted = TaskWorker(
             factory,
@@ -314,6 +360,17 @@ async def test_transient_adapter_failure_stops_after_three_attempts() -> None:
                         {"org": ORG, "task": task_id},
                     )
                 ).mappings().one()
+                executions = (
+                    await connection.execute(
+                        text(
+                            "SELECT attempt_no,status,retryable,fallback_used,input_sha256,"
+                            "output_sha256,duration_ms,cost_status "
+                            "FROM app.agent_executions WHERE organization_id=:org "
+                            "AND task_id=:task ORDER BY attempt_no"
+                        ),
+                        {"org": ORG, "task": task_id},
+                    )
+                ).mappings().all()
         finally:
             await inspector.dispose()
         assert dict(row) == {
@@ -323,5 +380,67 @@ async def test_transient_adapter_failure_stops_after_three_attempts() -> None:
             "executions": 3,
             "retries": 2,
         }
+        assert [execution.status for execution in executions] == [
+            "retry_scheduled",
+            "retry_scheduled",
+            "failed",
+        ]
+        assert [execution.retryable for execution in executions] == [True, True, False]
+        assert all(execution.fallback_used is False for execution in executions)
+        assert all(
+            execution.input_sha256 == expected_input_sha256(case_id)
+            for execution in executions
+        )
+        assert all(execution.output_sha256 is None for execution in executions)
+        assert all(
+            execution.duration_ms is not None and execution.duration_ms >= 0
+            for execution in executions
+        )
+        assert all(execution.cost_status == "not_applicable" for execution in executions)
+    finally:
+        await engine.dispose()  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_fallback_authority_failure_is_audited_without_raw_payload() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000406")
+    task_id = UUID("80000000-0000-0000-0000-000000000406")
+    await seed_and_create(case_id, task_id, "8")
+    adapter = DeterministicPlanningAdapter(
+        injected_failure=AdapterFailure(code=AdapterFailureCode.FALLBACK_AUTHORITY)
+    )
+    worker, engine = task_worker("worker-fallback", adapter)
+    try:
+        assert await worker.run_once() is True
+        inspector = create_async_engine(
+            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+        )
+        try:
+            async with inspector.begin() as connection:
+                await connection.execute(
+                    text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                    {"org": str(ORG)},
+                )
+                execution = (
+                    await connection.execute(
+                        text(
+                            "SELECT status,retryable,fallback_used,input_sha256,output_sha256,"
+                            "public_code,duration_ms,cost_status "
+                            "FROM app.agent_executions WHERE organization_id=:org "
+                            "AND task_id=:task"
+                        ),
+                        {"org": ORG, "task": task_id},
+                    )
+                ).mappings().one()
+        finally:
+            await inspector.dispose()
+        assert execution.status == "failed"
+        assert execution.retryable is False
+        assert execution.fallback_used is True
+        assert execution.input_sha256 == expected_input_sha256(case_id)
+        assert execution.output_sha256 is None
+        assert execution.public_code == "fallback_authority"
+        assert execution.duration_ms is not None and execution.duration_ms >= 0
+        assert execution.cost_status == "not_applicable"
     finally:
         await engine.dispose()  # type: ignore[attr-defined]

@@ -14,6 +14,10 @@ WORKER_FUNCTIONS = (
     "fail_agent_task",
     "finalize_agent_task_result",
 )
+WORKER_FUNCTION_SIGNATURES = {
+    "start_agent_task": "uuid,uuid,text,bigint,text",
+    "fail_agent_task": "uuid,uuid,text,bigint,text,boolean,boolean",
+}
 
 
 def migration() -> str:
@@ -86,6 +90,8 @@ def test_runtime_authority_is_narrow_function_only() -> None:
             if line.startswith(f"GRANT EXECUTE ON FUNCTION app.{function}")
         )
         assert grant.endswith("TO night_voyager_worker;")
+    for function, signature in WORKER_FUNCTION_SIGNATURES.items():
+        assert f"FUNCTION app.{function}({signature})" in source
     worker_grants = "\n".join(
         line
         for line in source.splitlines()
@@ -105,6 +111,16 @@ def test_m4a_events_and_executions_exclude_raw_payloads() -> None:
     assert "PRIMARY KEY (organization_id, task_id, event_sequence)" in source
     assert "lease_generation" in source
     assert "lease_owner" in source
+    for audit_field in (
+        "fallback_used",
+        "input_sha256",
+        "output_sha256",
+        "duration_ms",
+        "cost_status",
+    ):
+        assert audit_field in source
+    assert "invalid fallback audit fact" in source
+    assert "invalid execution input hash" in source
 
 
 def test_m4a_downgrade_drops_only_m4a_authority() -> None:

@@ -194,12 +194,23 @@ class PostgresWorkerTaskRepository:
             attempt_no=row.attempt_count,
         )
 
-    async def start(self, claim: AgentTaskClaim, worker_id: str) -> None:
-        await self._execute_transition(
-            claim,
-            "SELECT app.start_agent_task(:org,:task,:worker,:generation)",
-            worker_id,
-        )
+    async def start(
+        self, claim: AgentTaskClaim, worker_id: str, input_sha256: str
+    ) -> None:
+        await self._set_organization(claim.organization_id)
+        try:
+            await self._session.execute(
+                text(
+                    "SELECT app.start_agent_task("
+                    ":org,:task,:worker,:generation,:input_sha256)"
+                ),
+                {
+                    **self._transition_parameters(claim, worker_id),
+                    "input_sha256": input_sha256,
+                },
+            )
+        except DBAPIError as error:
+            self._raise_worker_mapped(error)
 
     async def heartbeat(self, claim: AgentTaskClaim, worker_id: str) -> None:
         await self._execute_transition(
@@ -215,18 +226,20 @@ class PostgresWorkerTaskRepository:
         code: str,
         *,
         retryable: bool,
+        fallback_used: bool,
     ) -> str:
         await self._set_organization(claim.organization_id)
         try:
             value = await self._session.scalar(
                 text(
                     "SELECT app.fail_agent_task("
-                    ":org,:task,:worker,:generation,:code,:retryable)"
+                    ":org,:task,:worker,:generation,:code,:retryable,:fallback_used)"
                 ),
                 {
                     **self._transition_parameters(claim, worker_id),
                     "code": code,
                     "retryable": retryable,
+                    "fallback_used": fallback_used,
                 },
             )
         except DBAPIError as error:

@@ -29,7 +29,11 @@ fresh short transaction and the current lease owner plus generation.
 The worker polls once per second when idle. A lease lasts 60 seconds and is
 renewed every 15 seconds. An expired lease can be reclaimed; stale generation
 output is discarded. Allowlisted transient failures retry up to three total
-attempts. Waiting and terminal tasks hold no lease.
+attempts. An exhausted expired lease closes the third execution as failed and
+does not schedule a fourth attempt. Started executions retain only normalized
+audit facts: canonical input/output hashes, fallback and retry facts,
+non-negative duration, result reference, public code, and deterministic
+`not_applicable` cost status. Waiting and terminal tasks hold no lease.
 
 ## Recovery checks
 

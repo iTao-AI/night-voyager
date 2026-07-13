@@ -10,6 +10,7 @@ from uuid import UUID, uuid4
 
 from night_voyager.adapters.protocols import (
     AdapterFailure,
+    AdapterFailureCode,
     PlanningAdapterRequest,
 )
 from night_voyager.planning.hashing import canonical_sha256
@@ -44,7 +45,9 @@ class WorkerTaskRepository(Protocol):
 
     async def load(self, claim: AgentTaskClaim) -> WorkerTaskInput: ...
 
-    async def start(self, claim: AgentTaskClaim, worker_id: str) -> None: ...
+    async def start(
+        self, claim: AgentTaskClaim, worker_id: str, input_sha256: str
+    ) -> None: ...
 
     async def heartbeat(self, claim: AgentTaskClaim, worker_id: str) -> None: ...
 
@@ -55,6 +58,7 @@ class WorkerTaskRepository(Protocol):
         code: str,
         *,
         retryable: bool,
+        fallback_used: bool,
     ) -> str: ...
 
     async def finalize(
@@ -102,7 +106,11 @@ class TaskWorker:
             async with self._repository_factory() as repository:
                 task_input = await repository.load(claim)
             async with self._repository_factory() as repository:
-                await repository.start(claim, self._worker_id)
+                await repository.start(
+                    claim,
+                    self._worker_id,
+                    canonical_sha256(task_input.request.model_dump(mode="json")),
+                )
         except TaskLeaseLostError:
             return True
 
@@ -133,6 +141,9 @@ class TaskWorker:
                         self._worker_id,
                         decision.public_code,
                         retryable=decision.retryable,
+                        fallback_used=(
+                            outcome.code is AdapterFailureCode.FALLBACK_AUTHORITY
+                        ),
                     )
                 return True
             try:
@@ -144,6 +155,7 @@ class TaskWorker:
                         self._worker_id,
                         error.code,
                         retryable=False,
+                        fallback_used=error.code == "fallback_authority",
                     )
                 return True
             result = evaluate_planning_run(planning_input)

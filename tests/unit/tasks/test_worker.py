@@ -12,6 +12,7 @@ from night_voyager.adapters.protocols import (
     AdapterFailureCode,
     PlanningAdapterRequest,
 )
+from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.tasks.errors import TaskLeaseLostError, TaskTransientError
 from night_voyager.tasks.worker import AgentTaskClaim, TaskWorker, WorkerTaskInput
 
@@ -33,6 +34,7 @@ INPUT = WorkerTaskInput(
     ),
     supersedes_run_id=None,
 )
+INPUT_SHA256 = canonical_sha256(INPUT.request.model_dump(mode="json"))
 
 
 class FakeState:
@@ -60,9 +62,12 @@ class FakeRepository:
         self.state.calls.append("load")
         return INPUT
 
-    async def start(self, claim: AgentTaskClaim, worker_id: str) -> None:
+    async def start(
+        self, claim: AgentTaskClaim, worker_id: str, input_sha256: str
+    ) -> None:
         assert claim == CLAIM
-        self.state.calls.append("start")
+        assert input_sha256 == INPUT_SHA256
+        self.state.calls.append(f"start:{input_sha256}")
 
     async def heartbeat(self, claim: AgentTaskClaim, worker_id: str) -> None:
         assert claim == CLAIM
@@ -78,9 +83,10 @@ class FakeRepository:
         code: str,
         *,
         retryable: bool,
+        fallback_used: bool,
     ) -> str:
         assert claim == CLAIM
-        self.state.calls.append(f"fail:{code}:{retryable}")
+        self.state.calls.append(f"fail:{code}:{retryable}:{fallback_used}")
         return "failed"
 
     async def finalize(self, *args: object, **kwargs: object) -> str:
@@ -129,9 +135,9 @@ async def test_run_once_uses_short_sessions_and_runs_adapter_outside_them() -> N
     assert state.calls == [
         "claim:worker-unit",
         "load",
-        "start",
+        f"start:{INPUT_SHA256}",
         "adapter",
-        "fail:unknown:False",
+        "fail:unknown:False:False",
     ]
 
 

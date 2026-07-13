@@ -224,7 +224,7 @@ async def test_claim_heartbeat_generation_fence_cancel_and_contiguous_events() -
                 {"org": str(ORG)},
             )
             await connection.execute(
-                text("SELECT app.start_agent_task(:org,:task,'worker-a',1)"),
+                text("SELECT app.start_agent_task(:org,:task,'worker-a',1,repeat('a',64))"),
                 {"org": ORG, "task": task_id},
             )
             await connection.execute(
@@ -272,7 +272,7 @@ async def test_claim_heartbeat_generation_fence_cancel_and_contiguous_events() -
                     )
                     await connection.execute(
                         text(
-                            "SELECT app.fail_agent_task(:org,:task,'worker-a',1,'unknown',false)"
+                            "SELECT app.fail_agent_task(:org,:task,'worker-a',1,'unknown',false,false)"
                         ),
                         {"org": ORG, "task": task_id},
                     )
@@ -341,7 +341,7 @@ async def test_expired_lease_reclaim_and_three_total_attempts() -> None:
             state = await connection.scalar(
                 text(
                     "SELECT app.fail_agent_task(:org,:task,'worker-b',2,"
-                    "'transient_unavailable',true)"
+                    "'transient_unavailable',true,false)"
                 ),
                 {"org": ORG, "task": task_id},
             )
@@ -358,7 +358,7 @@ async def test_expired_lease_reclaim_and_three_total_attempts() -> None:
             state = await connection.scalar(
                 text(
                     "SELECT app.fail_agent_task(:org,:task,'worker-c',3,"
-                    "'transient_unavailable',true)"
+                    "'transient_unavailable',true,false)"
                 ),
                 {"org": ORG, "task": task_id},
             )
@@ -378,6 +378,125 @@ async def test_expired_lease_reclaim_and_three_total_attempts() -> None:
             assert row.attempt_count == 3
             assert row.lease_owner is None
             assert row.lease_expires_at is None
+    finally:
+        await api.dispose()
+        await worker.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_third_expired_lease_fails_last_execution_without_scheduling_retry() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000207")
+    task_id = UUID("80000000-0000-0000-0000-000000000207")
+    await seed_case(case_id)
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with api.begin() as connection:
+            await create_task(connection, case_id, task_id, "7")
+
+        for attempt, worker_id in enumerate(("lease-a", "lease-b", "lease-c"), start=1):
+            async with worker.begin() as connection:
+                claim = (
+                    await connection.execute(
+                        text("SELECT * FROM app.claim_agent_task(:worker)"),
+                        {"worker": worker_id},
+                    )
+                ).mappings().one()
+                assert claim.task_id == task_id
+                assert claim.lease_generation == attempt
+            async with migrator.begin() as connection:
+                await connection.execute(
+                    text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                    {"org": str(ORG)},
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE app.agent_tasks SET "
+                        "lease_expires_at=clock_timestamp()-interval '1 second' "
+                        "WHERE organization_id=:org AND id=:task"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE internal.agent_task_dispatch SET "
+                        "available_at=clock_timestamp()-interval '1 second' "
+                        "WHERE organization_id=:org AND task_id=:task"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+
+        async with worker.begin() as connection:
+            assert (
+                await connection.execute(
+                    text("SELECT * FROM app.claim_agent_task('lease-exhausted')")
+                )
+            ).mappings().all() == []
+
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            task = (
+                await connection.execute(
+                    text(
+                        "SELECT state,attempt_count,terminal_code,lease_owner,lease_expires_at,"
+                        "(SELECT count(*) FROM internal.agent_task_dispatch d "
+                        "WHERE d.organization_id=t.organization_id AND d.task_id=t.id) dispatches "
+                        "FROM app.agent_tasks t WHERE organization_id=:org AND id=:task"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+            ).mappings().one()
+            assert dict(task) == {
+                "state": "failed",
+                "attempt_count": 3,
+                "terminal_code": "lease_expired",
+                "lease_owner": None,
+                "lease_expires_at": None,
+                "dispatches": 0,
+            }
+            executions = (
+                await connection.execute(
+                    text(
+                        "SELECT attempt_no,status,retryable,public_code,finished_at "
+                        "FROM app.agent_executions WHERE organization_id=:org AND task_id=:task "
+                        "ORDER BY attempt_no"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+            ).mappings().all()
+            assert len(executions) == 3
+            assert executions[-1].attempt_no == 3
+            assert executions[-1].status == "failed"
+            assert executions[-1].retryable is False
+            assert executions[-1].public_code == "lease_expired"
+            assert executions[-1].finished_at is not None
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.agent_task_events "
+                        "WHERE organization_id=:org AND task_id=:task "
+                        "AND event_code='retry_scheduled'"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+                == 0
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.agent_task_events "
+                        "WHERE organization_id=:org AND task_id=:task "
+                        "AND event_code='failed' AND public_code='lease_expired'"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+                == 1
+            )
     finally:
         await api.dispose()
         await worker.dispose()
@@ -504,7 +623,7 @@ async def test_generation_fenced_finalize_is_atomic() -> None:
                 {"org": str(ORG)},
             )
             await connection.execute(
-                text("SELECT app.start_agent_task(:org,:task,'worker-final',1)"),
+                text("SELECT app.start_agent_task(:org,:task,'worker-final',1,repeat('a',64))"),
                 {"org": ORG, "task": task_id},
             )
             state = await connection.scalar(
