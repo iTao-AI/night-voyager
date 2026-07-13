@@ -20,6 +20,9 @@ CASE_TRANSITIONS: dict[CaseState, frozenset[CaseState]] = {
     CaseState.INTAKE: frozenset({CaseState.PLANNING}),
     CaseState.PLANNING: frozenset(),
     CaseState.ADVISOR_REVIEW: frozenset(),
+    CaseState.FAMILY_REVIEW: frozenset(),
+    CaseState.DECIDED: frozenset(),
+    CaseState.PLAN_READY: frozenset(),
 }
 
 

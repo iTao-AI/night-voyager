@@ -7,6 +7,10 @@
 | `decided` | Japan route has a persistent synthetic receipt | Decision is already recorded in this after-frame | No mutation action | Receipt and TimelinePlan persist; stale view copy says refresh and reconnect safely |
 | `malaysia_blocked` | Required evidence is unresolved | Advisor must resolve evidence before route eligibility | `Choose Malaysia` is disabled | Blocking reason is explicit; no override control |
 
+The Japan rows above describe only the disconnected M1 fixture. The M3B local
+backend proof independently pins Australia as its sole route with a supported
+deterministic timeline; `/demo` does not read or mutate M3B state.
+
 ## Interaction rules
 
 - The country switcher changes local client state to project the selected country’s five static fixture dimensions. It does not write domain state, call a backend, or perform a product mutation.

@@ -29,12 +29,10 @@ def test_m3a_public_contract_records_exist() -> None:
         assert (ROOT / relative).is_file(), relative
 
 
-def test_migration_graph_is_exactly_0001_to_0002_with_eleven_tables() -> None:
+def test_m3a_migration_remains_0002_with_eleven_tables() -> None:
     migrations = sorted((ROOT / "migrations/versions").glob("*.py"))
-    assert [path.name for path in migrations] == [
-        "0001_identity_and_rls.py",
-        "0002_case_evidence_planning.py",
-    ]
+    assert migrations[0].name == "0001_identity_and_rls.py"
+    assert migrations[1].name == "0002_case_evidence_planning.py"
     tree = ast.parse(migrations[1].read_text(encoding="utf-8"))
     assignments = {
         node.targets[0].id: ast.literal_eval(node.value)
@@ -71,10 +69,10 @@ def test_pure_planning_modules_do_not_import_framework_or_adapter_packages() -> 
         assert not (imported & forbidden), path
 
 
-def test_m3a_excludes_later_authority_and_execution_artifacts() -> None:
+def test_m3a_planning_package_excludes_later_authority_artifacts() -> None:
     source = "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (ROOT / "src/night_voyager").rglob("*.py")
+        for path in (ROOT / "src/night_voyager/planning").rglob("*.py")
     )
     for forbidden in ("AdvisorReview", "DecisionBrief", "FamilyDecision", "AgentTask"):
         assert forbidden not in source

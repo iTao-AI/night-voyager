@@ -31,6 +31,16 @@ M3A_TABLES = {
     "cost_evidence",
     "ranking_evidence",
 }
+M3B_TABLES = {
+    "student_case_participants",
+    "advisor_reviews",
+    "evidence_risk_acceptances",
+    "decision_briefs",
+    "family_decisions",
+    "timeline_plans",
+    "audit_events",
+    "idempotency_records",
+}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -275,7 +285,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } | M3A_TABLES or any(
+            } | M3A_TABLES | M3B_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -288,7 +298,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 14:
+            if policy_count != 22:
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -299,7 +309,7 @@ async def verify_database_catalog(database_url: str) -> None:
                       AND grantee IN ('night_voyager_api','night_voyager_worker')
                       AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
                     """),
-                    {"tables": sorted(M3A_TABLES)},
+                    {"tables": sorted(M3A_TABLES | M3B_TABLES)},
                 )
             ).scalar_one()
             if runtime_writes:
@@ -320,7 +330,8 @@ async def verify_database_catalog(database_url: str) -> None:
                         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
                         WHERE n.nspname='app' AND p.proname IN
                           ('publish_case_revision','transition_case','persist_source_pack',
-                           'persist_evidence_ref','persist_planning_result')
+                           'persist_evidence_ref','persist_planning_result','review_planning_run',
+                           'decide_family_brief')
                         """)
                     )
                 )
@@ -333,6 +344,8 @@ async def verify_database_catalog(database_url: str) -> None:
                 "persist_source_pack",
                 "persist_evidence_ref",
                 "persist_planning_result",
+                "review_planning_run",
+                "decide_family_brief",
             } or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
@@ -383,6 +396,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "resolve_demo_session",
                 "rotate_demo_session",
                 "revoke_demo_session",
+                "resolve_demo_session_with_csrf",
             }
             if {row["proname"] for row in functions} != expected or any(
                 not row["prosecdef"]
