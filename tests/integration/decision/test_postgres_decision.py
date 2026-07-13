@@ -384,13 +384,41 @@ async def test_api_role_rejects_same_pack_evidence_not_linked_to_reviewed_run() 
                     "INSERT INTO app.evidence_refs(organization_id,id,source_pack_id,"
                     "source_pack_version,source_entry_id,claim,authority,source_sha256) "
                     "SELECT organization_id,:evidence,source_pack_id,source_pack_version,id,"
-                    "'unlinked_optional_probe','accepted_synthetic_demo',sha256 "
+                    "'malaysia_context','accepted_synthetic_demo',sha256 "
                     "FROM app.source_pack_entries WHERE organization_id=:org AND "
                     "source_pack_id='50000000-0000-0000-0000-000000000001' AND "
-                    "source_pack_version=1 AND id='51000000-0000-0000-0000-000000000001' "
+                    "source_pack_version=1 AND id='51000000-0000-0000-0000-000000000003' "
                     "ON CONFLICT DO NOTHING"
                 ),
                 {"org": ORG, "evidence": UNLINKED_EVIDENCE},
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.evidence_refs WHERE organization_id=:org "
+                        "AND id=:evidence AND source_pack_id="
+                        "'50000000-0000-0000-0000-000000000001' "
+                        "AND source_pack_version=1 AND claim='malaysia_context'"
+                    ),
+                    {"org": ORG, "evidence": UNLINKED_EVIDENCE},
+                )
+                == 1
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT (SELECT count(*) FROM app.comparison_dimension_evidence_refs "
+                        "WHERE organization_id=:org AND planning_run_id=:run "
+                        "AND evidence_ref_id=:evidence) + "
+                        "(SELECT count(*) FROM app.cost_evidence WHERE organization_id=:org "
+                        "AND planning_run_id=:run AND :evidence IN "
+                        "(tuition_evidence_id,living_evidence_id,fx_evidence_id)) + "
+                        "(SELECT count(*) FROM app.ranking_evidence WHERE organization_id=:org "
+                        "AND planning_run_id=:run AND evidence_ref_id=:evidence)"
+                    ),
+                    {"org": ORG, "run": RUN, "evidence": UNLINKED_EVIDENCE},
+                )
+                == 0
             )
     finally:
         await migration_engine.dispose()
@@ -404,6 +432,7 @@ async def test_api_role_rejects_same_pack_evidence_not_linked_to_reviewed_run() 
     try:
         async with rollback_connection(engine) as connection:
             await context(connection, ADVISOR, "advisor")
+            savepoint = await connection.begin_nested()
             with pytest.raises(DBAPIError) as rejected:
                 await connection.execute(
                     text(review_sql()),
@@ -423,6 +452,27 @@ async def test_api_role_rejects_same_pack_evidence_not_linked_to_reviewed_run() 
                     },
                 )
             assert getattr(rejected.value.orig, "sqlstate", None) == "NV006"
+            await savepoint.rollback()
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.advisor_reviews WHERE organization_id=:org "
+                        "AND id=:review"
+                    ),
+                    {"org": ORG, "review": UUID(int=307)},
+                )
+                == 0
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.decision_briefs WHERE organization_id=:org "
+                        "AND id=:brief"
+                    ),
+                    {"org": ORG, "brief": UUID(int=308)},
+                )
+                == 0
+            )
     finally:
         await engine.dispose()
 
