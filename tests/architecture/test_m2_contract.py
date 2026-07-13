@@ -14,8 +14,8 @@ def test_m2_dependencies_and_alembic_head_are_declared() -> None:
     assert "asyncpg>=0.31,<0.32" in pyproject["project"]["dependencies"]
     assert "pytest-asyncio>=1.4,<2" in pyproject["dependency-groups"]["dev"]
     assert (ROOT / "alembic.ini").is_file()
-    migrations = list((ROOT / "migrations/versions").glob("*.py"))
-    assert [path.name for path in migrations] == ["0001_identity_and_rls.py"]
+    migrations = sorted((ROOT / "migrations/versions").glob("*.py"))
+    assert migrations[0].name == "0001_identity_and_rls.py"
 
 
 def test_m2_role_init_and_public_records_exist() -> None:
@@ -32,9 +32,9 @@ def test_m2_role_init_and_public_records_exist() -> None:
         assert (ROOT / relative).is_file(), relative
 
 
-def test_m2_does_not_create_later_milestone_artifacts() -> None:
-    assert not list((ROOT / "migrations/versions").glob("000[234]_*.py"))
-    for forbidden in ("case", "evidence", "planning", "brief", "decision", "agent_task"):
+def test_m3a_does_not_create_m3b_or_later_milestone_artifacts() -> None:
+    assert not list((ROOT / "migrations/versions").glob("000[34]_*.py"))
+    for forbidden in ("advisor_review", "brief", "family_decision", "agent_task"):
         assert not list((ROOT / "src/night_voyager").rglob(f"*{forbidden}*.py"))
 
 

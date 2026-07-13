@@ -18,6 +18,19 @@ VERSION = "0.1.0"
 POSTGRES_IMAGE = (
     "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
 )
+M3A_TABLES = {
+    "student_cases",
+    "student_case_revisions",
+    "source_packs",
+    "source_pack_entries",
+    "evidence_refs",
+    "planning_runs",
+    "planning_routes",
+    "comparison_dimensions",
+    "comparison_dimension_evidence_refs",
+    "cost_evidence",
+    "ranking_evidence",
+}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -262,7 +275,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } or any(
+            } | M3A_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -275,8 +288,60 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 3:
+            if policy_count != 14:
                 raise SystemExit("every app tenant table requires one explicit policy")
+
+            runtime_writes = (
+                await connection.execute(
+                    text("""
+                    SELECT count(*) FROM information_schema.role_table_grants
+                    WHERE table_schema = 'app' AND table_name = ANY(:tables)
+                      AND grantee IN ('night_voyager_api','night_voyager_worker')
+                      AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
+                    """),
+                    {"tables": sorted(M3A_TABLES)},
+                )
+            ).scalar_one()
+            if runtime_writes:
+                raise SystemExit("runtime roles must not have direct M3A write grants")
+
+            app_functions = (
+                (
+                    await connection.execute(
+                        text("""
+                        SELECT p.proname,p.prosecdef,p.proconfig,
+                          has_function_privilege('public',p.oid,'EXECUTE') AS public_execute,
+                          has_function_privilege(
+                            'night_voyager_api',p.oid,'EXECUTE'
+                          ) AS api_execute,
+                          has_function_privilege(
+                            'night_voyager_worker',p.oid,'EXECUTE'
+                          ) AS worker_execute
+                        FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+                        WHERE n.nspname='app' AND p.proname IN
+                          ('publish_case_revision','transition_case','persist_source_pack',
+                           'persist_evidence_ref','persist_planning_result')
+                        """)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if {row["proname"] for row in app_functions} != {
+                "publish_case_revision",
+                "transition_case",
+                "persist_source_pack",
+                "persist_evidence_ref",
+                "persist_planning_result",
+            } or any(
+                not row["prosecdef"]
+                or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
+                or row["public_execute"]
+                or not row["api_execute"]
+                or row["worker_execute"]
+                for row in app_functions
+            ):
+                raise SystemExit("M3A functions violate narrow SECURITY DEFINER contract")
 
             auth_grants = (
                 await connection.execute(
