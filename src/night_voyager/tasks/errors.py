@@ -6,3 +6,11 @@ class TaskConflictError(Exception):
 
 class TaskAuthorizationError(Exception):
     pass
+
+
+class TaskLeaseLostError(Exception):
+    pass
+
+
+class TaskTransientError(Exception):
+    pass
