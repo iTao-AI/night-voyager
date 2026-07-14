@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 已具备 **M0 bootstrap 基线**、**M1 historical visual design contract**、**M2 identity/session/RLS boundary**、**M3A deterministic planning foundation**、**M3B local synthetic advisor-to-family backend proof**、**M4A deterministic durable task/worker/SSE proof**、**M4B optional read-only MKE candidate proof**，以及**已实现的 M5 connected advisor-to-family demo**。M5 将 `/demo` 接入本地 synthetic FastAPI、worker、SSE 与 PostgreSQL authority path，但不连接 MKE 或 remote provider。
+Night Voyager 已具备 **M0 bootstrap 基线**、**M1 historical fixture-only visual contract**、**M2 identity/session/RLS boundary**、**M3A deterministic planning foundation**、**M3B local synthetic advisor-to-family backend proof**、**M4A deterministic durable task/worker/SSE proof**、**M4B optional read-only MKE candidate proof**，以及**已实现的 M5 connected advisor-to-family demo**。M4B 的所有投影保持 `UNTRUSTED_CANDIDATE`；M5 将 `/demo` 接入本地 synthetic FastAPI、worker、SSE 与 PostgreSQL authority path，但不连接 MKE 或 remote provider。
 
 ## Evaluator 路径
 

@@ -1,5 +1,8 @@
 # Documentation
 
+The M1 fixture-only documents remain historical visual context. The current
+local synthetic `/demo` behavior is the connected M5 walkthrough.
+
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).
 - Interviewers: start with the README scope and current limits, then use the connected local synthetic `/demo` route and [runbook](operations/connected-demo.md) to review the real advisor-to-family workflow without treating it as production.
 - Contributors: follow the [change-to-test matrix and guardrails](../CONTRIBUTING.md).

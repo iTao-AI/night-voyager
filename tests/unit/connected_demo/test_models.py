@@ -165,12 +165,14 @@ def test_review_required_requires_real_review_inputs() -> None:
 )
 def test_family_requirements_reject_non_exact_trade_off_tuple(value: tuple[str, ...]) -> None:
     with pytest.raises(ValidationError):
-        FamilyDecisionRequirements(
-            eligible_route_id=UUID(ROUTE_ID),
-            currency="CNY",
-            pinned_cost_minor=750,
-            hard_ceiling_minor=900,
-            required_trade_offs=value,
+        FamilyDecisionRequirements.model_validate(
+            {
+                "eligible_route_id": UUID(ROUTE_ID),
+                "currency": "CNY",
+                "pinned_cost_minor": 750,
+                "hard_ceiling_minor": 900,
+                "required_trade_offs": value,
+            }
         )
 
 

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("connected golden flow proves the advisor-to-family database flow", async ({ page }) => {
+test("connected-demo.spec.ts connected golden flow proves the advisor-to-family database flow", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/demo");
   await expect(page.getByRole("heading", { name: "Connected advisor-to-family demo" })).toBeVisible();

@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 historical visual design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, an **M4A deterministic durable task/worker/SSE proof**, an **M4B optional read-only MKE candidate proof**, and an **implemented M5 connected advisor-to-family demo**. M5 connects `/demo` to the local synthetic FastAPI, worker, SSE, and PostgreSQL authority paths without connecting MKE or a remote provider.
+Night Voyager has an **M0 bootstrap foundation**, an **M1 historical fixture-only visual contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, an **M4A deterministic durable task/worker/SSE proof**, an **M4B optional read-only MKE candidate proof**, and an **implemented M5 connected advisor-to-family demo**. M4B keeps every projection `UNTRUSTED_CANDIDATE`; M5 connects `/demo` to the local synthetic FastAPI, worker, SSE, and PostgreSQL authority paths without connecting MKE or a remote provider.
 
 ## Evaluator lane
 
