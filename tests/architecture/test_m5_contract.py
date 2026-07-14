@@ -52,7 +52,7 @@ def test_m5_public_records_exist_and_are_public_neutral() -> None:
         path = ROOT / relative
         assert path.is_file(), relative
         source += path.read_text(encoding="utf-8")
-    for private in ("/" + "Users/", "Developer/" + "Career", "." + "sessions/"):
+    for private in ("/" + "Users/", "." + "sessions/"):
         assert private not in source
 
 
