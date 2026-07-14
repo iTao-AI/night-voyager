@@ -19,8 +19,8 @@ identifiers. A wrong CSRF value remains an authentication failure and does not
 fall back to minting. An unknown, expired, or revoked session returns the same
 public error while expiring both identity cookies, after which the client may
 bootstrap and mint again. Unexpected persistence and connectivity failures are
-not normalized as authentication failures. M2 does not enable CORS or connect
-the fixture-only `/demo` page.
+not normalized as authentication failures. M2 does not enable CORS; M5 connects
+`/demo` through same-origin explicit BFF handlers without changing this identity authority.
 
 ## M3B advisor and family decision endpoints
 
@@ -75,3 +75,39 @@ Fifteen-second heartbeat comments are not stored. The stream closes after all
 events for a closing state have been delivered. See
 [AgentTask and event reference](agent-tasks-and-events.md) for exact states and
 bounds.
+
+## M5 connected demo read endpoints
+
+M5 adds exactly two read-only projections for the connected synthetic demo.
+Both require the existing opaque session, return `schema_version=1`, use
+`Cache-Control: no-store`, and preserve non-enumerating authorization failures.
+
+| Method and path | Assigned actor | Result |
+| --- | --- | --- |
+| `GET /api/v1/cases/{case_id}/advisor-ledger` | advisor | phase-discriminated task, PlanningRun, route, evidence, review, and recovery projection |
+| `GET /api/v1/cases/{case_id}/current-decision-brief` | advisor/student/parent | family-safe Brief plus server-derived decision requirements and, after decision, receipt/timeline |
+
+The Ledger exposes canonical demo task inputs before task creation and persisted
+pins afterward; mismatches fail closed. Decision requirements are projected from
+the pinned run, Australia cost evidence, current Case revision, and M3B policy.
+These endpoints add no write authority, persistence, migration, or client-owned
+tenant, role, policy, route, task, run, Brief, receipt, or timeline selector.
+
+## M5 same-origin BFF
+
+The connected browser uses eleven explicit `/api/demo/*` Route Handlers for
+session bootstrap/create/delete, Ledger read, task create/read/cancel/events,
+advisor review, current Brief read, and family decision. There is no catch-all
+proxy. The BFF validates UUID path segments, bounded bodies and deadlines,
+forwards direct SSE bytes, and maps only a closed set of public problems.
+
+Every identity upstream request, including bootstrap GET, receives the
+server-configured fixed public Origin. Mutations first validate the browser
+Origin; caller Origin is not reflected. Multiple upstream `Set-Cookie` fields
+are appended independently rather than comma-joined. BFF responses are
+`Cache-Control: no-store`.
+
+The current Brief `decision_requirements` contains the eligible Australia route
+identity, `currency=CNY`, pinned cost, hard ceiling, and exact one-element
+`required_trade_offs=["budget_elasticity"]`. These values come from current
+PostgreSQL rows and deterministic policy, not fixture labels or client constants.

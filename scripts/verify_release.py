@@ -52,6 +52,10 @@ IGNORED_DIRECTORIES = {
     "node_modules",
 }
 BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".pdf", ".png", ".webp"}
+M5_SCREENSHOTS = (
+    "docs/assets/m5-advisor-ledger.png",
+    "docs/assets/m5-family-receipt-timeline.png",
+)
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
 os.environ.setdefault("UV_REQUIRE_HASHES", "1")
@@ -132,6 +136,19 @@ def verify_public_hygiene() -> None:
     if "uv.lock" not in scanned or "web/package-lock.json" not in scanned:
         raise SystemExit("public-hygiene must scan both lockfiles")
     print(f"proof hygiene: {len(scanned)} readable source files scanned, including both lockfiles")
+
+
+def verify_m5_public_evidence() -> None:
+    public_entries = {
+        relative: (ROOT / relative).read_text(encoding="utf-8")
+        for relative in ("README.md", "README_CN.md")
+    }
+    for relative in M5_SCREENSHOTS:
+        if not (ROOT / relative).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+            raise SystemExit(f"missing or invalid M5 screenshot: {relative}")
+        if any(source.count(relative) != 1 for source in public_entries.values()):
+            raise SystemExit(f"each README must reference the M5 screenshot once: {relative}")
+    print("proof M5 evidence: connected runbook and two PNG screenshots present")
 
 
 def package_version(packages: list[dict[str, object]], name: str) -> str:
@@ -542,6 +559,7 @@ def main() -> None:
         return
     verify_tree_mode(args.tree_mode)
     verify_public_hygiene()
+    verify_m5_public_evidence()
     verify_config()
     verify_wheel()
 

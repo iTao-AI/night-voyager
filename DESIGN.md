@@ -2,11 +2,11 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The M1 `/demo` route is a fixture-only design contract, not a connected domain application: it shows how an advisor resolves an `Evidence gap`, approves a `DecisionBrief`, and hands a linear brief to a family that can produce a `DecisionReceipt` and `TimelinePlan`.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The M5 `/demo` route is now a connected local synthetic application: it creates a durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. The M1 Japan fixture remains historical design context only.
 
 - **Primary route:** `/demo`
 - **Audience:** advisors first, then students and families
-- **Page boundary:** synthetic fixtures only; no mutation, SSE, connected domain backend, or real student data
+- **Page boundary:** local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
 
 ## Aesthetic direction
@@ -42,7 +42,7 @@ Body text uses `ink` on `canvas` or `surface`. Muted text is reserved for second
 - **Body:** at least `16px`, with a comfortable `1.6` line height.
 - **Data:** UI stack with tabular numerals enabled.
 
-No remote font or font package is required for M1.
+No remote font or font package is required.
 
 ## Spacing and shape
 
@@ -59,14 +59,9 @@ No remote font or font package is required for M1.
 
 ## Lifecycle and interaction contract
 
-The first screen contains exactly one current lifecycle stage, one required human decision, and one primary action. `family_review` and `decided` are separate before/after frames. Consequential actions expose disabled reasons and confirmation summaries; a decided state retains a visible receipt and timeline. Fixture recovery copy explains that stale state should be refreshed and a reconnect is safe because no mutation occurs in M1.
+The first screen contains exactly one current lifecycle stage, one required human decision, and one primary action. The connected lifecycle projects `task-ready`, `active-task`, `review-required`, `family-review`, `plan-ready`, or `terminal-task-failure` from the backend. Consequential actions expose disabled reasons and confirmation summaries; `plan-ready` retains a visible receipt and timeline. Same-tab recovery uses opaque-cookie bootstrap plus session-bound `sessionStorage` metadata and fails closed when that metadata is missing or inconsistent.
 
-The M1 visual storyboard remains a disconnected Japan fixture. It is not a
-rendering of the M3B backend proof, whose pinned synthetic data permits only
-Australia for the deterministic family-decision timeline. Reviewers should not
-infer shared state or route selection between `/demo` and the M3B APIs.
-
-Technical task, lease, and adapter material belongs only in secondary disclosure. M1 renders fixture states and does not call the implemented M3B decision or M4A worker/SSE backend paths; those local synthetic proofs remain disconnected from `/demo`.
+The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
 ## Accessibility
 
@@ -74,7 +69,7 @@ Technical task, lease, and adapter material belongs only in secondary disclosure
 - Use a semantic comparison table and labelled country switcher.
 - Maintain keyboard-visible focus and minimum `44px` targets.
 - Respect `prefers-reduced-motion`.
-- Do not create a drawer or sheet in M1; focus-return behavior is therefore not applicable.
+- Do not create a drawer or sheet; focus-return behavior is therefore not applicable.
 
 ## Prohibited patterns
 
@@ -86,3 +81,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 |---|---|---|
 | 2026-07-12 | Freeze Advisor Ledger × Global Journey for M1 | Keeps evidence and human authority primary while making the family handoff editorial and legible. |
 | 2026-07-12 | Use local/system font fallbacks | Preserves the typography intent without adding dependencies or remote runtime requirements. |
+| 2026-07-14 | Connect the M5 Australia walkthrough | Preserves backend authority while proving the advisor-to-parent flow in real Chromium. |

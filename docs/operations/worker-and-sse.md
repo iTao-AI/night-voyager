@@ -16,8 +16,9 @@ make down
 identity and M3B decision probes, creates the separate task-ready Case task via
 HTTP, observes the worker persist a current `review_required` `PlanningRun`,
 checks ordered SSE replay and `Last-Event-ID` reconnect, restarts API and worker,
-rechecks the same durable task, probes the web service, and removes the isolated
-containers and volumes on exit.
+rechecks the same durable task, then runs the connected advisor-to-parent browser
+flow in real Chromium at 1440, 768, and 390 px before removing isolated containers
+and volumes.
 
 ## Runtime behavior
 
@@ -40,6 +41,8 @@ non-negative duration, result reference, public code, and deterministic
 - Restarting API or worker does not lose tasks, executions, events, or results;
   PostgreSQL remains authoritative.
 - SSE clients reconnect with the last durable `id` in `Last-Event-ID`.
+- The M5 BFF streams upstream SSE bytes directly and maps `after` to
+  `Last-Event-ID` only when that header is absent.
 - A cursor ahead of the task log is a conflict and must not be silently reset.
 - Heartbeats are SSE comments, not `agent_task_events` rows.
 - A client that loses assignment or session authorization receives the same
@@ -61,5 +64,6 @@ intended:
 RESET_DEMO=1 make reset-demo
 ```
 
-M4A does not provide distributed failover, remote provider integration,
-frontend task controls, production monitoring, or an availability SLA.
+M4A/M5 do not provide distributed failover, remote provider integration,
+production monitoring, or an availability SLA. The connected frontend controls
+only the approved local synthetic workflow.

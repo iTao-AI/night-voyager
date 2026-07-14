@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from night_voyager.config import Settings
 from night_voyager.database import create_engine, create_session_factory
+from night_voyager.interfaces.http.connected_demo import create_connected_demo_router
 from night_voyager.interfaces.http.decision import create_decision_router
 from night_voyager.interfaces.http.decision import problem as decision_problem
 from night_voyager.interfaces.http.identity import (
@@ -60,6 +61,7 @@ def create_app(
     app.add_api_route("/health", health, methods=["GET"])
     app.include_router(create_identity_router(resolved_settings, session_factory, service_factory))
     if session_factory is not None:
+        app.include_router(create_connected_demo_router(resolved_settings, session_factory))
         app.include_router(create_decision_router(resolved_settings, session_factory))
         app.include_router(create_task_router(resolved_settings, session_factory))
     return app

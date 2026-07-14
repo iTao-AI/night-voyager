@@ -1,0 +1,39 @@
+import type { AdvisorLedger, CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
+
+export const CASE_ID = "40000000-0000-0000-0000-000000000002";
+export const TASK_ID = "61000000-0000-0000-0000-000000000001";
+export const BRIEF_ID = "81000000-0000-0000-0000-000000000301";
+export const ROUTE_ID = "71000000-0000-0000-0000-000000000001";
+
+const task = (status: TaskStatus) => ({ task_id: TASK_ID, row_version: 1, status, public_code: null, attempt_count: 1, planning_run_id: status === "preparing" ? null : "70000000-0000-0000-0000-000000000001", updated_at: "2026-07-14T00:00:00Z" });
+const route = (country: "australia" | "japan" | "malaysia", outcome: "recommended_with_condition" | "conditional" | "blocked", eligible: boolean) => ({
+  route_id: country === "australia" ? ROUTE_ID : country === "japan" ? "71000000-0000-0000-0000-000000000002" : "71000000-0000-0000-0000-000000000003",
+  country, outcome, reason_code: `${country}_reason`, eligible,
+  dimensions: [{ key: "program_fit", outcome: eligible ? "supported" : "conditional", reason_code: `${country}_dimension` }],
+  cost: country === "australia" ? { source_currency: "AUD" as const, tuition_minor: 1, living_minor: 1, fx_rate: "5", cny_total_minor: 10, fx_source: "synthetic", fx_date: "2026-07-01" } : null,
+  ranking: null, required_claims: [`${country}_program_fit`], known_gaps: country === "australia" ? [] : [`${country}_gap`],
+});
+const evidence = { claim: "australia_program_fit", role: "program_fit", publisher: "Synthetic publisher", institution: "Synthetic institution", snapshot_date: "2026-07-01", authority: "accepted_synthetic_demo" as const, limitation: "Synthetic only", known_gaps: [] };
+
+export function ledger(phase: AdvisorLedger["phase"], status: TaskStatus = "preparing"): AdvisorLedger {
+  const base: AdvisorLedger = { schema_version: 1, proof_mode: "synthetic-demo", phase, case_id: CASE_ID, case_revision: 1, case_state: "planning", canonical_task_inputs: null, task: null, planning_run: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
+  if (phase === "task-ready") base.canonical_task_inputs = { schema_version: 1, operation: "generate_planning_run_v1", case_id: CASE_ID, expected_case_revision: 1, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" };
+  if (phase === "active-task") { base.canonical_task_inputs = { schema_version: 1, operation: "generate_planning_run_v1", case_id: CASE_ID, expected_case_revision: 1, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }; base.task = task("preparing"); }
+  if (phase === "review-required") { base.task = task("needs_advisor_review"); base.planning_run = { planning_run_id: "70000000-0000-0000-0000-000000000001", state: "review_required", source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1", source_snapshot_date: "2026-07-01" }; base.routes = [route("australia", "recommended_with_condition", true), route("japan", "conditional", false), route("malaysia", "blocked", false)]; base.evidence = [evidence]; base.review_inputs = { planning_run_id: base.planning_run.planning_run_id, expected_case_revision: 1, eligible_route_ids: [ROUTE_ID], risk_acceptance_options: [] }; }
+  if (phase === "family-review" || phase === "plan-ready") { base.case_state = phase === "plan-ready" ? "plan_ready" : "family_review"; base.task = task("needs_advisor_review"); base.current_brief_id = BRIEF_ID; }
+  if (phase === "terminal-task-failure") { base.task = task(status); base.recovery = { code: status, retry_allowed: status === "failed" || status === "timed_out", guidance: "Review status." }; }
+  return base;
+}
+
+export function brief(phase: CurrentDecisionBrief["phase"] = "family-review"): CurrentDecisionBrief {
+  const value: CurrentDecisionBrief = {
+    schema_version: 1, proof_mode: "synthetic-demo", phase, case_id: CASE_ID, brief_id: BRIEF_ID, brief_version: 1, source_snapshot_date: "2026-07-01",
+    family_safe_projection: { schema_version: 1, intake: "2027-02", routes: [{ route_id: ROUTE_ID, country: "australia", outcome: "recommended_with_condition", reason_code: "complete" }], eligible_route_ids: [ROUTE_ID], accepted_evidence_risks: [], synthetic_proof: true },
+    decision_requirements: { schema_version: 1, eligible_route_id: ROUTE_ID, currency: "CNY", pinned_cost_minor: 35_000_000, hard_ceiling_minor: 40_000_000, required_trade_offs: ["budget_elasticity"] }, receipt: null, timeline: null,
+  };
+  if (phase === "plan-ready") {
+    value.receipt = { schema_version: 1, decision_id: "82000000-0000-0000-0000-000000000301", receipt_id: "83000000-0000-0000-0000-000000000301", selected_route_id: ROUTE_ID, accepted_budget_min_minor: 35_000_000, accepted_budget_max_minor: 40_000_000, currency: "CNY", accepted_trade_offs: ["budget_elasticity"], decision_made_by_actor_id: "20000000-0000-0000-0000-000000000003", recorded_by_actor_id: "20000000-0000-0000-0000-000000000001", source: "family_consultation" };
+    value.timeline = { schema_version: 1, country: "australia", intake: "2027-02", milestones: [{ key: "documents", due_date: "2026-09-01" }] };
+  }
+  return value;
+}

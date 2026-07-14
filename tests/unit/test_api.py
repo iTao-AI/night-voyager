@@ -39,3 +39,9 @@ def test_m4a_non_streaming_task_matrix_is_registered() -> None:
 def test_m4a_sse_route_is_registered() -> None:
     paths = create_app().openapi()["paths"]
     assert "get" in paths["/api/v1/tasks/{task_id}/events"]
+
+
+def test_m5_read_model_matrix_is_registered() -> None:
+    paths = create_app().openapi()["paths"]
+    assert "get" in paths["/api/v1/cases/{case_id}/advisor-ledger"]
+    assert "get" in paths["/api/v1/cases/{case_id}/current-decision-brief"]

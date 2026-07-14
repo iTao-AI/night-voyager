@@ -56,3 +56,15 @@ printf 'compose-proof: API and worker restart probe passed\n'
 docker compose exec -T api python scripts/verify_m4a_flow.py --verify-existing
 docker compose exec -T web wget -q --spider http://127.0.0.1:3000
 printf 'compose-proof: Web probe passed\n'
+# The M4A proof intentionally leaves the canonical task case at review_required.
+# Recreate the synthetic proof volume so the browser lane proves task creation too.
+docker compose down --volumes --remove-orphans
+docker compose up --build --wait
+printf 'compose-proof: fresh browser stack seeded\n'
+docker compose stop worker
+docker compose --profile browser-proof run --rm --build -e M5_TERMINAL_PROOF=1 browser-proof
+printf 'compose-proof: native reconnect and terminal browser proof passed\n'
+docker compose down --volumes --remove-orphans
+docker compose up --build --wait
+docker compose --profile browser-proof run --rm --build browser-proof
+printf 'compose-proof: connected browser proof passed\n'
