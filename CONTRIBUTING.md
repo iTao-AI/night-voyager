@@ -11,11 +11,14 @@ Night Voyager is in bootstrap stage. Keep changes focused, public-neutral, and r
 | Compose, Dockerfile, ports, or healthcheck | Architecture contract tests, `docker compose config --quiet`, and `make compose-proof` |
 | Identity, migration, database role, or RLS | Focused tests, then the disposable PostgreSQL 18 gate with `make db-check` |
 | Package identity, dependencies, or release proof | Regenerate the affected lockfile, build artifacts, then `make proof` and `make check` |
+| Optional MKE contract or process adapter | `make mke-check`; maintainers additionally run the exact-artifact proof runbook |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
 Plain `uv run pytest -q` and the required hosted `python` job run the
 non-database suite. The required hosted `compose` job and local `make check`
-both force the real PostgreSQL suite through `make db-check`.
+both force the real PostgreSQL suite through `make db-check`. MKE/MCP process tests are
+optional and isolated; required CI runs committed synthetic fake-process coverage without
+an external artifact, while the real candidate proof remains maintainer-operated.
 
 ## Guardrails
 
@@ -24,6 +27,7 @@ both force the real PostgreSQL suite through `make db-check`.
 - Fixtures must be synthetic, provenance-labelled, deterministic, and pass `make fixtures-check`; real student records are prohibited.
 - Public claims must match reproducible repository evidence and must not imply production use, real users, admissions outcomes, or measured business impact.
 - Never commit `.env`, credentials, private paths, personal data, or generated proof noise.
+- Never rebuild or commit an operator-supplied MKE wheel/receipt. Follow [the candidate proof runbook](docs/operations/mke-candidate-proof.md); all projected Evidence remains `UNTRUSTED_CANDIDATE` and cannot enter `PlanningAdapter`.
 - Run `make check` and `git diff --check`, inspect the exact diff, and stage exact paths before committing.
 
 Pull requests should state scope, actual verification, documentation impact, and remaining risk.

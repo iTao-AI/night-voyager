@@ -2,7 +2,7 @@
 
 Status: Accepted
 
-Implementation status: Not started
+Implementation status: Implemented in M4B
 
 M4B establishes these authority decisions:
 

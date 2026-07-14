@@ -1,5 +1,7 @@
 # M4B MKE Read-Only Consumer Implementation Plan
 
+**Implementation status:** Complete
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` to implement this plan task-by-task. Do not use
 > subagents unless the user separately requests them.

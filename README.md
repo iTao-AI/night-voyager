@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, and an **M4A deterministic durable task/worker/SSE proof**. M4A creates a version-pinned planning task, persists its worker lifecycle in PostgreSQL, and replays authorized events without bypassing advisor review. The `/demo` route remains fixture-only and disconnected.
+Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, an **M4A deterministic durable task/worker/SSE proof**, and an **M4B optional read-only MKE candidate proof**. M4B consumes an exact reviewed artifact only in an isolated local lane and keeps every projection `UNTRUSTED_CANDIDATE`. The default product path and fixture-only `/demo` remain disconnected from MKE.
 
 ## Evaluator lane
 
@@ -34,6 +34,7 @@ Contributors additionally need Python 3.12.13 managed by [uv](https://docs.astra
 make doctor MODE=dev
 make check
 make db-check
+make mke-check
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/README.md](docs/README.md). A Chinese version is available in [README_CN.md](README_CN.md).
@@ -46,11 +47,16 @@ SSE replay, bounded local concurrency, downgrade/re-upgrade, and pool cleanup.
 `accepted_synthetic_demo`
 Evidence is local proof; callers cannot assert `externally_verified`.
 
+`make mke-check` runs synthetic fake-process compatibility tests in a disposable optional
+environment. Maintainers with the exact operator-supplied wheel and receipt can follow the
+[MKE candidate proof runbook](docs/operations/mke-candidate-proof.md). Evaluators and
+default `make check` do not need MKE or candidate artifacts.
+
 ## Current limits
 
 - M3B/M4A backend paths are not wired to the fixture-only `/demo`; no task or decision frontend mutation exists.
 - The worker and SSE proof is local and deterministic, not distributed high availability or a production SLA.
-- No real DRA, MKE, OpenClaw, model, or messaging adapter.
+- No DRA, OpenClaw, model, messaging, or product-path MKE `PlanningAdapter`; M4B is a local read-only compatibility adapter only.
 - No production deployment or user/admissions outcome claim.
 
 ## License

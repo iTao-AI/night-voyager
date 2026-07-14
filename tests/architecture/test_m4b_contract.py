@@ -87,3 +87,54 @@ def test_pure_boundary_has_no_optional_sdk_import_and_public_records_exist() -> 
         "fixtures/m4b/manifest.json",
     ):
         assert (ROOT / relative).is_file(), relative
+
+
+def test_m4b_documentation_routes_roles_and_preserves_authority_boundary() -> None:
+    index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    reference = (ROOT / "docs/reference/mke-readonly-consumer.md").read_text(
+        encoding="utf-8"
+    )
+    runbook = (ROOT / "docs/operations/mke-candidate-proof.md").read_text(
+        encoding="utf-8"
+    )
+    for text in (index, reference, runbook):
+        assert "UNTRUSTED_CANDIDATE" in text
+        assert "read-only" in text
+        assert "synthetic" in text
+        assert "PlanningAdapter" in text
+    assert "Evaluators do not need MKE" in index
+    assert "make mke-check" in index
+    assert "make mke-artifact-check" in index
+    assert "make mke-consumer-proof" in index
+
+    quick_path = runbook.split("## Quick path", 1)[1].split("##", 1)[0]
+    assert len([line for line in quick_path.splitlines() if line.startswith("make ")]) == 4
+    assert "MKE_WHEEL=" in quick_path
+    assert "operator_supplied" in runbook
+    assert "Do not rebuild" in runbook
+    assert "stop" in runbook.lower()
+    failure_codes = {
+        line.strip().strip('",')
+        for line in (ROOT / "src/night_voyager/evidence/mke_models.py")
+        .read_text(encoding="utf-8")
+        .splitlines()
+        if line.strip().startswith('"mke_')
+    }
+    assert failure_codes
+    assert all(code in runbook for code in failure_codes)
+
+
+def test_bilingual_readme_m4b_boundary_is_in_parity() -> None:
+    for relative in ("README.md", "README_CN.md"):
+        content = (ROOT / relative).read_text(encoding="utf-8")
+        for token in (
+            "M4B",
+            "MKE",
+            "optional",
+            "read-only",
+            "synthetic",
+            "UNTRUSTED_CANDIDATE",
+            "make mke-check",
+            "docs/operations/mke-candidate-proof.md",
+        ):
+            assert token in content, (relative, token)
