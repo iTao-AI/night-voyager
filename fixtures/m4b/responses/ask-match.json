@@ -1,0 +1,29 @@
+{
+  "schema_version": "mke.ask_library_response.v1",
+  "ok": true,
+  "question": "synthetic australia program fit advisor evidence review",
+  "answer_status": "evidence_found",
+  "summary": "Synthetic Australia program fit requires advisor evidence review.",
+  "observation": {
+    "schema_version": "mke.active_publication_observation.v1",
+    "library_id": "local",
+    "state": "active",
+    "source_count": 1,
+    "active_publication_count": 1,
+    "active_evidence_count": 1
+  },
+  "evidence": [
+    {
+      "schema_version": "mke.evidence_ref.v1",
+      "evidence_id": "ev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_id": "src_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "content_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "publication_id": "pub_cccccccccccccccccccccccccccccccc",
+      "publication_revision": 1,
+      "run_id": "run_dddddddddddddddddddddddddddddddd",
+      "locator": {"kind": "page", "start": 1, "end": 1},
+      "text": "Synthetic Australia program fit requires advisor evidence review."
+    }
+  ],
+  "limitations": ["Synthetic fixture only; advisor review remains required."]
+}

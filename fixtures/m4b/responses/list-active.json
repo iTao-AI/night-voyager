@@ -1,0 +1,12 @@
+{
+  "schema_version": "mke.list_libraries_response.v1",
+  "ok": true,
+  "observation": {
+    "schema_version": "mke.active_publication_observation.v1",
+    "library_id": "local",
+    "state": "active",
+    "source_count": 1,
+    "active_publication_count": 1,
+    "active_evidence_count": 1
+  }
+}
