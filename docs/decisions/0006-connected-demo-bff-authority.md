@@ -38,8 +38,11 @@ proof.
    upstream `Set-Cookie` field separately without comma joining.
 8. Client state is display/recovery state only. Consequential transitions follow backend
    responses, and idempotency/stale recovery remains server-authoritative.
-   New browser sessions start as advisor; retained completion requires a real
-   advisor-to-parent session transition, and `plan-ready` never creates a new task.
+   The connected UI defaults a fresh walkthrough to advisor and offers no client-only role
+   impersonation. Retained completion uses the real advisor-to-parent session transition,
+   and `plan-ready` never creates a new task. This UI sequencing does not change the
+   existing synthetic actor mint capability or advisor/student/parent family-safe read
+   matrix; it adds no transition token or BFF phase authority.
 9. M4B MKE candidates, DRA, OCR, OpenClaw, remote providers, share tokens, production
    accounts, release, and deployment remain outside M5.
 
@@ -60,6 +63,10 @@ Canonical demo inputs remain server-owned without adding Case state. Phase discr
 fixed-Origin forwarding, and separate cookie-field forwarding add implementation and test
 obligations but prevent the BFF or client from inventing authority during partial or
 retained workflows.
+
+The six-beat walkthrough controls presentation order, not backend role authorization. A
+real parent session is required for the connected UI's complete parent presentation, while
+the existing assigned advisor/student/parent current-Brief contract remains unchanged.
 
 ## Rejected alternatives
 

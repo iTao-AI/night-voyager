@@ -133,7 +133,7 @@ or review input with placeholder authority:
 | `active-task` | Case, canonical inputs, and latest non-terminal task; run/routes/review inputs are absent until persisted | follow the durable task/SSE stream | create another task or approve |
 | `review-required` | completed task, current `review_required` PlanningRun, routes, Evidence disclosure, and exact review inputs | submit advisor review | create another task or fabricate review inputs |
 | `family-review` | advisor completion plus current family-safe Brief identity; advisor-only review inputs are absent | perform the real advisor-to-parent session switch | create a task or submit a family decision as advisor |
-| `plan-ready` | completed workflow summary for advisor; full receipt/timeline only for an authorized parent projection | switch through real revoke/bootstrap/mint to parent, or view the plan as parent | create a task or select parent role in client state |
+| `plan-ready` | completed workflow status and `continue as family` action in the Advisor Ledger; the family-safe current Brief/receipt/timeline endpoint retains its assigned advisor/student/parent actor matrix | continue through real revoke/bootstrap/mint in the walkthrough | create a task or impersonate another role in client state |
 | `terminal-task-failure` | terminal task status and public recovery guidance; run/routes/review inputs are explicitly absent | perform the allowed explicit retry or remediation | approve, decide, or synthesize successful state |
 
 It excludes tenant/session/actor identity, database ownership, source paths, raw
@@ -237,13 +237,19 @@ The reducer cannot promote business state. Every consequential transition must f
 validated session, task/SSE, Advisor Ledger, review, current Brief, decision, receipt, or
 timeline response. Client-side button visibility is not authorization.
 
-A new browser session can mint only the advisor role. Reload first resolves the
-server-reported phase: `task-ready` offers task creation; `active-task` resumes task/SSE;
-`review-required` offers review; `family-review` offers the real role switch;
-`terminal-task-failure` offers only its explicit recovery; and `plan-ready` never creates
-a new task. For retained completed data, the advisor sees completion and may initiate the
-real revoke -> bootstrap -> parent mint sequence. The client cannot select parent directly,
-and only a parent session receives the full Receipt/Timeline presentation.
+The connected `/demo` UI defaults a fresh walkthrough to initiating an advisor mint and
+offers no client-only role label or selector that can impersonate a parent. This UI
+sequencing does not narrow the existing synthetic session API: it still accepts its
+explicit synthetic actors, no transition token is added, and the transport-only BFF does
+not decide business phase. Reload first resolves the server-reported phase: `task-ready`
+offers task creation; `active-task` resumes task/SSE; `review-required` offers review;
+`family-review` offers the real role switch; `terminal-task-failure` offers only its
+explicit recovery; and `plan-ready` never creates a new task. For retained completed data,
+the fresh UI begins with the advisor experience, shows the completion summary, and may
+initiate the real revoke -> bootstrap -> parent mint sequence. Assigned advisor, student,
+and parent actors retain the family-safe current Brief/receipt/timeline read contract;
+within the connected six-beat walkthrough, only the real parent session uses the complete
+parent presentation.
 
 `sessionStorage` may contain only the current synthetic role, session-bound CSRF token,
 public synthetic Case ID, opaque task/Brief IDs, canonical-mutation idempotency keys, and
@@ -306,7 +312,9 @@ generic control tower, or automatic approval is added.
 
 Backend tests cover both read models, currentness, two tenants, assigned and unassigned
 actors, wrong roles, missing context, forced RLS, pool cleanup, current task/run/Brief/
-receipt/timeline, and explicit absence of forbidden fields.
+receipt/timeline, the existing advisor/student/parent current-Brief actor matrix, and
+explicit absence of forbidden fields. They do not add a parent-mint prohibition that the
+existing synthetic identity contract does not have.
 
 BFF tests cover every exact route, method, UUID/path validation, request/response header
 allowlists, body bound, exact Origin, CSRF, idempotency, backend RFC 9457 passthrough,
@@ -319,6 +327,8 @@ comma joining.
 Frontend tests cover all legal and illegal reducer transitions, role switch, refresh,
 session expiry, same-request replay, stale conflict, SSE reconnect, task terminal states,
 role-specific content, Evidence disclosure, disabled reasons, and accessibility semantics.
+They prove the fresh walkthrough initiates advisor, cannot flip role through client-only
+state, and does not continue to parent bootstrap/mint when advisor revoke fails.
 
 Playwright runs against the real Compose web, API, PostgreSQL, migrator, demo seed, and
 worker. It proves advisor session -> task -> worker -> SSE -> Ledger -> approval -> parent
@@ -339,9 +349,11 @@ public-safe screenshots captured from the real connected synthetic flow: Advisor
 and Family Decision Receipt/Timeline.
 
 `make demo` exposes the connected route at `http://127.0.0.1:3000/demo`. A retained
-completed demo first resolves the real role and phase; only a parent session renders the
-full receipt/timeline. Replaying from the beginning uses the existing explicit protected
-reset procedure; M5 adds no browser reset or silent data deletion.
+completed demo starts the fresh UI in the advisor experience, then uses real role rotation
+for the full parent presentation. This walkthrough sequence does not change the existing
+family-safe current Brief/receipt/timeline actor matrix. Replaying from the beginning uses
+the existing explicit protected reset procedure; M5 adds no browser reset or silent data
+deletion.
 
 ## Cross-project boundary
 
