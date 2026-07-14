@@ -76,6 +76,14 @@ button:disabled { border-color: var(--border); background: #e4e0d6; color: #626b
 .blocked-path .overline, .blocked-path h2 { color: var(--danger); }
 footer { padding: 2rem clamp(1rem, 4vw, 4rem); border-top: 1px solid var(--border); color: var(--muted); }
 footer p { margin: 0; }
+.evidence-disclosure, .recovery-notice { margin-top: 2rem; padding: 1.5rem; border: 1px solid var(--border); background: var(--surface); }
+.decision-requirements { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 2rem 0; background: var(--border); border: 1px solid var(--border); }
+.decision-requirements div { padding: 1rem; background: var(--surface); }
+.decision-requirements dt { color: var(--muted); font-size: .8rem; font-weight: 800; text-transform: uppercase; }
+.decision-requirements dd { margin: .4rem 0 0; font-variant-numeric: tabular-nums; font-weight: 800; }
+.confirmation-summary { display: flex; gap: .75rem; align-items: flex-start; }
+.confirmation-summary input { width: 24px; height: 24px; flex: 0 0 auto; }
+.receipt-projection { max-width: 100%; overflow-x: auto; padding: 1rem; background: var(--canvas); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 1279px) {
   .current-stage, .ledger-grid, .blocked-path { grid-template-columns: 1fr; }
@@ -104,6 +112,7 @@ footer p { margin: 0; }
   .family-story { padding-top: 3.5rem; }
   .family-frame { padding: 1.5rem 1rem; }
   .brief-columns { grid-template-columns: 1fr; gap: 1rem; }
+  .decision-requirements { grid-template-columns: 1fr; }
   .timeline li { grid-template-columns: 70px 1fr; }
 }
 @media (prefers-reduced-motion: reduce) {
