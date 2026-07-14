@@ -26,6 +26,26 @@ it("stores only same-tab display and mutation recovery metadata", () => {
   expect(localStorage.length).toBe(0);
 });
 
+it("classifies a residual-cookie bootstrap guard as session recovery without minting", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    expect(input).toBe("/api/demo/session-bootstrap");
+    return Response.json(
+      { code: "bff_session_recovery_required" },
+      { status: 409 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await act(async () => { await result.current.connectAdvisor(); });
+
+  expect(result.current.state).toMatchObject({
+    value: "recoverable_error",
+    code: "session_recovery_required",
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
 it("rejects advisor authority paired with forged parent metadata", async () => {
   saveRecoveryMetadata(parentMetadata());
   const fetchMock = vi.fn(async () => Response.json(ledger("plan-ready")));

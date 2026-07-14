@@ -17,8 +17,8 @@ const CASE_ID = "40000000-0000-0000-0000-000000000002";
 
 function failure(error: unknown): RecoveryCode {
   if (error instanceof ConnectedDemoApiError && error.status === 401) return "session_expired";
-  if (error instanceof ConnectedDemoApiError && error.status === 409) return "stale_conflict";
   if (error instanceof ConnectedDemoApiError && error.code === "bff_session_recovery_required") return "session_recovery_required";
+  if (error instanceof ConnectedDemoApiError && error.status === 409) return "stale_conflict";
   return "transport_failure";
 }
 
