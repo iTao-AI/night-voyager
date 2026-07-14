@@ -55,8 +55,8 @@ M5 does not add or change:
 
 The M4A task-ready synthetic Case becomes the only M5 connected golden Case. Its
 explicit demo seed gains assigned student and parent participants while retaining the
-existing advisor, source pack, policy, and deterministic task input. Migrations remain
-seed-free.
+existing advisor and deterministic Case revision. M5 adds no Case binding or migration;
+migrations remain seed-free.
 
 The prior M3B precomputed proof Case remains valid backend regression evidence, but the
 browser does not combine it with the task-ready Case. The M1 Japan visual fixture remains
@@ -65,10 +65,16 @@ historical design evidence and test reference; it no longer represents active co
 decision flow, keeps Japan visible as an audited conditional alternative, and keeps
 Malaysia visible but blocked.
 
-A checked-in web contract may contain the public synthetic connected Case ID only. Case
-revision, source-pack pins, task/run state, review inputs, Brief identity, decision, and
-timeline must come from role-scoped backend reads and mutations. Client constants cannot
-establish authority.
+A checked-in web contract may contain the public synthetic connected Case ID only. A
+server-owned synthetic demo input resolver accepts only the checked-in M3A manifest after
+the existing fixture validator succeeds, the project `POLICY_VERSION`, and the existing
+PostgreSQL source-pack row that exactly matches that validated manifest. Before task
+creation these values are `canonical demo task inputs`, not Case-persisted pins. After
+task creation, source-pack and policy pins come from the latest relevant AgentTask and
+current PlanningRun and must match the canonical inputs or the projection fails closed.
+Case revision, task/run state, review inputs, Brief identity, decision, and timeline must
+come from role-scoped backend reads and mutations. The client may only consume this
+backend projection; client constants cannot supply, derive, or establish pin authority.
 
 ## Architecture
 
@@ -107,7 +113,8 @@ The Advisor Ledger projection includes only:
 
 - public synthetic proof mode;
 - Case ID, current revision, and public lifecycle state;
-- pinned source-pack ID/version and policy version needed for task creation;
+- canonical demo task inputs before task creation, or task/run-persisted source-pack and
+  policy pins after creation, subject to exact consistency checks;
 - the latest relevant public AgentTask projection, when one exists;
 - the current `review_required` PlanningRun identity and source snapshot date;
 - Australia, Japan, and Malaysia route projections with country, outcome, public
@@ -116,6 +123,18 @@ The Advisor Ledger projection includes only:
   date, accepted synthetic authority, limitation, and known gaps;
 - server-produced review inputs: PlanningRun ID, expected Case revision, exact eligible
   route IDs, and any explicit risk-acceptance options.
+
+The Ledger uses a discriminated phase and never fills an absent task, run, route, Brief,
+or review input with placeholder authority:
+
+| Phase | Available projection | Single primary action | Forbidden action |
+| --- | --- | --- | --- |
+| `task-ready` / no task | Case revision and canonical demo task inputs; task, run, routes, and review inputs are explicitly absent | create the first AgentTask | review, decide, or derive pins in the client |
+| `active-task` | Case, canonical inputs, and latest non-terminal task; run/routes/review inputs are absent until persisted | follow the durable task/SSE stream | create another task or approve |
+| `review-required` | completed task, current `review_required` PlanningRun, routes, Evidence disclosure, and exact review inputs | submit advisor review | create another task or fabricate review inputs |
+| `family-review` | advisor completion plus current family-safe Brief identity; advisor-only review inputs are absent | perform the real advisor-to-parent session switch | create a task or submit a family decision as advisor |
+| `plan-ready` | completed workflow summary for advisor; full receipt/timeline only for an authorized parent projection | switch through real revoke/bootstrap/mint to parent, or view the plan as parent | create a task or select parent role in client state |
+| `terminal-task-failure` | terminal task status and public recovery guidance; run/routes/review inputs are explicitly absent | perform the allowed explicit retry or remediation | approve, decide, or synthesize successful state |
 
 It excludes tenant/session/actor identity, database ownership, source paths, raw
 provider/tool/model output, prompts, reviewer notes, internal task state, dispatch,
@@ -159,14 +178,17 @@ host, port, path, credentials, or DNS target.
 
 Request forwarding is limited to the exact relevant subset of `Cookie`, `Content-Type`,
 `Origin`, `X-CSRF-Token`, `Idempotency-Key`, `Last-Event-ID`, and body bytes. Mutation
-Origin must exactly match the configured public application origin; after validation the
-BFF forwards only that fixed origin. JSON bodies are bounded to 32 KiB and require the
-expected media type.
+Origin must exactly match the configured public application origin. The BFF sends that
+server-configured fixed public origin on every upstream `/api/v1/demo/*` identity request,
+including bootstrap `GET`; mutations validate the browser Origin first and then send the
+same fixed value. A caller Origin is never trusted, selected, or reflected. JSON bodies
+are bounded to 32 KiB and require the expected media type.
 
 Response forwarding is limited to status, body, `Set-Cookie`, `Content-Type`,
 `Cache-Control`, and the required SSE buffering header. Hop-by-hop, server, upstream URL,
 debug, trace, and framework headers are not exposed. All handlers are dynamic and
-`no-store`.
+`no-store`. Every upstream `Set-Cookie` field is appended separately to the browser
+response; cookie fields are never comma-joined.
 
 FastAPI problem status/body pass through unchanged. The BFF owns only two redacted RFC
 9457-style failures:
@@ -214,6 +236,14 @@ and stale conflict. `terminal_task_failure` covers `needs_evidence`, `timed_out`
 The reducer cannot promote business state. Every consequential transition must follow a
 validated session, task/SSE, Advisor Ledger, review, current Brief, decision, receipt, or
 timeline response. Client-side button visibility is not authorization.
+
+A new browser session can mint only the advisor role. Reload first resolves the
+server-reported phase: `task-ready` offers task creation; `active-task` resumes task/SSE;
+`review-required` offers review; `family-review` offers the real role switch;
+`terminal-task-failure` offers only its explicit recovery; and `plan-ready` never creates
+a new task. For retained completed data, the advisor sees completion and may initiate the
+real revoke -> bootstrap -> parent mint sequence. The client cannot select parent directly,
+and only a parent session receives the full Receipt/Timeline presentation.
 
 `sessionStorage` may contain only the current synthetic role, session-bound CSRF token,
 public synthetic Case ID, opaque task/Brief IDs, canonical-mutation idempotency keys, and
@@ -279,9 +309,12 @@ actors, wrong roles, missing context, forced RLS, pool cleanup, current task/run
 receipt/timeline, and explicit absence of forbidden fields.
 
 BFF tests cover every exact route, method, UUID/path validation, request/response header
-allowlists, body bound, exact Origin, cookie round trip, CSRF, idempotency, backend RFC
-9457 passthrough, unavailable/timeout redaction, no arbitrary upstream URL, SSE streaming,
-abort propagation, and cursor mapping.
+allowlists, body bound, exact Origin, CSRF, idempotency, backend RFC 9457 passthrough,
+unavailable/timeout redaction, no arbitrary upstream URL, SSE streaming, abort propagation,
+and cursor mapping. They prove bootstrap `GET` without an inbound browser Origin still
+sends the fixed configured Origin upstream, and separately prove multi-field `Set-Cookie`
+round trips for session creation, successful deletion, and stale-session cleanup without
+comma joining.
 
 Frontend tests cover all legal and illegal reducer transitions, role switch, refresh,
 session expiry, same-request replay, stale conflict, SSE reconnect, task terminal states,
@@ -305,9 +338,10 @@ design projection, Compose proof, and affected contributor guidance. README incl
 public-safe screenshots captured from the real connected synthetic flow: Advisor Ledger
 and Family Decision Receipt/Timeline.
 
-`make demo` continues to print `http://localhost:3000/demo`. A retained completed demo
-renders its current receipt/timeline. Replaying from the beginning uses the existing
-explicit protected reset procedure; M5 adds no browser reset or silent data deletion.
+`make demo` exposes the connected route at `http://127.0.0.1:3000/demo`. A retained
+completed demo first resolves the real role and phase; only a parent session renders the
+full receipt/timeline. Replaying from the beginning uses the existing explicit protected
+reset procedure; M5 adds no browser reset or silent data deletion.
 
 ## Cross-project boundary
 
