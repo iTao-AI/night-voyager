@@ -75,7 +75,7 @@ async def test_list_search_ask_and_normal_close(tmp_path: Path) -> None:
     [
         ("missing_tool", "mke_contract_incompatible", {}),
         ("malformed", "mke_response_invalid", {}),
-        ("tool_timeout", "mke_tool_timeout", {"tool_timeout_seconds": 0.05}),
+        ("tool_timeout", "mke_cleanup_failed", {"tool_timeout_seconds": 0.05}),
         ("stderr_overflow", "mke_output_limit_exceeded", {"stderr_bytes": 32}),
         ("startup_timeout", "mke_startup_timeout", {"startup_timeout_seconds": 0.05}),
         ("oversized_response", "mke_output_limit_exceeded", {"parsed_response_bytes": 128}),
@@ -111,3 +111,27 @@ async def test_selected_text_bound_and_sdk_termination_fallback(tmp_path: Path) 
     stubborn = MkeReadOnlyConsumer(config(tmp_path / "stubborn", "ignore_stdin"))
     await stubborn.initialize()
     await stubborn.aclose()
+
+
+@pytest.mark.anyio
+async def test_cleanup_failure_overrides_initialize_contract_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    consumer = MkeReadOnlyConsumer(config(tmp_path, "missing_tool"))
+    real_aclose = consumer.aclose
+    close_calls = 0
+
+    async def close_then_report_failure() -> None:
+        nonlocal close_calls
+        close_calls += 1
+        await real_aclose()
+        if close_calls == 1:
+            raise MkeConsumerError("mke_cleanup_failed")
+
+    monkeypatch.setattr(consumer, "aclose", close_then_report_failure)
+
+    with pytest.raises(MkeConsumerError) as captured:
+        await consumer.initialize()
+
+    assert close_calls == 1
+    assert captured.value.failure.code == "mke_cleanup_failed"

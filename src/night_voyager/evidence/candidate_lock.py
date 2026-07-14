@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import zipfile
 from dataclasses import dataclass
@@ -229,3 +230,38 @@ def verify_candidate_artifact(
         receipt_sha256=receipt.receipt_sha256,
         source_commit=receipt.source_commit,
     )
+
+
+def stage_candidate_artifact(
+    wheel: Path,
+    receipt_path: Path,
+    lock_path: Path,
+    owned_directory: Path,
+) -> VerifiedCandidateArtifact:
+    """Copy candidate bytes into controller-owned storage and verify only that copy."""
+    if not wheel.is_file() or not receipt_path.is_file() or not lock_path.is_file():
+        raise MkeConsumerError("mke_candidate_inputs_missing")
+    lock = _load_lock(lock_path)
+    if wheel.name != lock.wheel_filename:
+        raise MkeConsumerError("mke_candidate_mismatch")
+    destination = owned_directory / lock.wheel_filename
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    try:
+        owned_directory.mkdir(mode=0o700)
+        with wheel.open("rb") as source:
+            descriptor = os.open(destination, flags, 0o400)
+            with os.fdopen(descriptor, "wb") as target:
+                remaining = lock.wheel_bytes + 1
+                while remaining:
+                    chunk = source.read(min(1_048_576, remaining))
+                    if not chunk:
+                        break
+                    target.write(chunk)
+                    remaining -= len(chunk)
+                target.flush()
+                os.fsync(target.fileno())
+    except OSError as error:
+        raise MkeConsumerError("mke_candidate_mismatch") from error
+    return verify_candidate_artifact(destination, receipt_path, lock_path)

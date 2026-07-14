@@ -21,6 +21,7 @@ from typing import Literal, cast
 from night_voyager.evidence.candidate_lock import (
     build_candidate_lock,
     canonical_sha256,
+    stage_candidate_artifact,
     verify_candidate_artifact,
 )
 from night_voyager.evidence.mke_contract import (
@@ -240,12 +241,6 @@ async def _run_reads(
 def run_proof(args: argparse.Namespace) -> dict[str, object]:
     started = time.monotonic()
     stage: ProofStage = "artifact_verify"
-    try:
-        verified = verify_candidate_artifact(
-            args.wheel, args.candidate_receipt, LOCK_PATH
-        )
-    except MkeConsumerError as error:
-        raise ProofFailure(error.failure.code, stage) from error
     manifest = M4BManifestV1.model_validate_json(MANIFEST_PATH.read_text(encoding="utf-8"))
     raw_assertions = json.loads(ASSERTIONS_PATH.read_text(encoding="utf-8"))
     if not isinstance(raw_assertions, dict):
@@ -257,6 +252,15 @@ def run_proof(args: argparse.Namespace) -> dict[str, object]:
     try:
         with tempfile.TemporaryDirectory(prefix="night-voyager-m4b-proof-") as directory:
             root = Path(directory)
+            try:
+                verified = stage_candidate_artifact(
+                    args.wheel,
+                    args.candidate_receipt,
+                    LOCK_PATH,
+                    root / "candidate",
+                )
+            except MkeConsumerError as error:
+                raise ProofFailure(error.failure.code, stage) from error
             environment = root / "mke-env"
             source_root = root / "source"
             source_root.mkdir()

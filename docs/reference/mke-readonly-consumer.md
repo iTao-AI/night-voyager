@@ -39,7 +39,10 @@ is not a real-world negative claim.
 Compose, API, worker, SSE, frontend, `/demo`, and installed-wheel proof do not install or
 import it. The process adapter has fixed startup/tool deadlines, response/text/stderr
 bounds, trusted executable and paths, an allowlisted child environment, and SDK-owned
-stdin-close/terminate/kill cleanup.
+stdin-close/terminate/kill cleanup. The proof copies candidate bytes into a private
+controller-owned directory, fully revalidates that copy, and never installs from the
+operator path. A cleanup failure is the terminal safety result and overrides an earlier
+public failure.
 
 Use the [candidate proof runbook](../operations/mke-candidate-proof.md) for maintainer
 commands. Evaluators do not need MKE or candidate bytes.

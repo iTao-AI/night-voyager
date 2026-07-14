@@ -10,6 +10,99 @@ StrictId = Annotated[str, StringConstraints(pattern=r"^[a-z]+_[0-9a-f]{32}$")]
 Fingerprint = Annotated[str, StringConstraints(pattern=r"^sha256:[0-9a-f]{64}$")]
 PublicText = Annotated[str, StringConstraints(min_length=1, max_length=1_000_000)]
 MachineToken = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_]{0,127}$")]
+PUBLIC_ERROR_CAUSES = frozenset(
+    {
+        "PDF cannot be opened",
+        "PDF has no extractable text",
+        "PDF input exceeds 100 MB limit",
+        "argv must contain exactly one {input} placeholder",
+        "configured embedding model is not cached",
+        "configured embedding model revision is unavailable",
+        "configured embedding model snapshot is incomplete",
+        "configured embedding model snapshot exceeds size limit",
+        "configured language is not supported by the model",
+        "configured transcription model is not cached",
+        "configured transcription model revision is unavailable",
+        "CJK active Evidence scan would exceed configured local budget",
+        "CJK candidate pool exceeded the configured cap",
+        "demo fixture is missing",
+        "demo video fixture is missing",
+        "encrypted PDF is not supported",
+        "embedding adapter failed",
+        "embedding cancelled",
+        "embedding input would be truncated",
+        "embedding model cache is not readable",
+        "embedding model download failed",
+        "embedding optional dependency is not installed",
+        "embedding output contains non-finite values",
+        "embedding output count is invalid",
+        "embedding output dimension is invalid",
+        "embedding output dtype must be float32",
+        "embedding output is not normalized",
+        "embedding tokenizer output is invalid",
+        "file path cannot be resolved",
+        "input file does not exist",
+        "input path must be a file",
+        "input path must be under allowed root",
+        "input path must not be empty",
+        "input video is empty",
+        "input video is missing",
+        "input video must be an MP4 file",
+        "input video could not be read",
+        "limit must be between 1 and 20",
+        "operation failed; details were redacted",
+        "query must not be empty",
+        "question must be 1000 characters or fewer",
+        "question must contain at least one searchable ASCII token",
+        "question must not be empty",
+        "Query does not contain enough eligible CJK terms",
+        "Requested retrieval strategy is not supported by this runtime",
+        "stable timestamp locator generation requires increasing ranges",
+        "stable timestamp locator generation requires sorted ranges",
+        "supported suffixes are .pdf and .mp4",
+        "timestamp locators must be integer milliseconds",
+        "transcript command executable is missing",
+        "transcript command failed",
+        "transcript command is required",
+        "transcript command produced too much stderr",
+        "transcript command produced too much stdout",
+        "transcript command stdout is not valid UTF-8",
+        "transcript command timed out",
+        "transcript schema validation failed",
+        "transcription failed",
+        "transcription device or compute profile is unsupported",
+        "transcription model cache is not readable",
+        "transcription model download failed",
+        "transcription model resolution failed",
+        "transcription optional dependency is not installed",
+        "unsupported codec for local video proof",
+        "unknown run",
+        "vector extension is unavailable or incompatible",
+        "vector projection distance is invalid",
+        "vector projection identity mismatch",
+        "vector projection inventory is incomplete",
+        "vector projection replace failed",
+        "vector projection search inventory is incomplete",
+        "video media exceeds duration limit",
+        "video must contain an audio track",
+        "video transcript exceeds segment limit",
+        "video transcript format is unsupported",
+        "video transcript is not valid JSON",
+        "video transcript missing media",
+        "video transcript must be a JSON object",
+        "video transcript must contain at least one segment",
+        "video transcript segment exceeds media duration",
+        "video transcript segment must be an object",
+        "video transcript sidecar format is unsupported",
+        "video transcript sidecar is missing",
+        "video transcript sidecar is not valid JSON",
+        "video transcript sidecar missing media",
+        "video transcript sidecar must be a JSON object",
+        "video transcript text must not be empty",
+        "video input exceeds 100 MiB limit",
+        "video ingest initialization failed",
+    }
+)
 
 
 class StrictModel(BaseModel):
@@ -96,6 +189,12 @@ class PublicErrorV1(StrictModel):
     cause: Annotated[str, StringConstraints(min_length=1, max_length=512)]
     active_publication_impact: Literal["unchanged"] = "unchanged"
     next_step: MachineToken
+
+    @model_validator(mode="after")
+    def validate_public_cause(self) -> PublicErrorV1:
+        if self.cause not in PUBLIC_ERROR_CAUSES:
+            raise ValueError("error cause is not approved for the public boundary")
+        return self
 
 
 class ListLibrariesSuccessV1(StrictModel):

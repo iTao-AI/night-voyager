@@ -134,6 +134,83 @@ def test_public_error_union_accepts_only_its_exact_shape() -> None:
         SearchLibraryResponseV1.model_validate({**error, "debug": "/private/path"})
 
 
+@pytest.mark.parametrize(
+    ("response_model", "schema_version"),
+    [
+        (ListLibrariesResponseV1, "mke.list_libraries_response.v1"),
+        (SearchLibraryResponseV1, "mke.search_library_response.v1"),
+        (AskLibraryResponseV1, "mke.ask_library_response.v1"),
+    ],
+)
+@pytest.mark.parametrize(
+    "cause",
+    [
+        "Traceback: synthetic failure",
+        "root/private/config.env",
+        "token=synthetic-secret",
+    ],
+)
+def test_public_error_unions_reject_non_approved_sensitive_causes(
+    response_model: type[
+        ListLibrariesResponseV1 | SearchLibraryResponseV1 | AskLibraryResponseV1
+    ],
+    schema_version: str,
+    cause: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        response_model.model_validate(
+            {
+                "schema_version": schema_version,
+                "ok": False,
+                "problem": "operation_failed",
+                "cause": cause,
+                "active_publication_impact": "unchanged",
+                "next_step": "retry_operation",
+            }
+        )
+
+
+@pytest.mark.parametrize(
+    ("response_model", "schema_version", "cause"),
+    [
+        (
+            ListLibrariesResponseV1,
+            "mke.list_libraries_response.v1",
+            "operation failed; details were redacted",
+        ),
+        (
+            SearchLibraryResponseV1,
+            "mke.search_library_response.v1",
+            "query must not be empty",
+        ),
+        (
+            AskLibraryResponseV1,
+            "mke.ask_library_response.v1",
+            "question must not be empty",
+        ),
+    ],
+)
+def test_public_error_unions_accept_selected_producer_public_causes(
+    response_model: type[
+        ListLibrariesResponseV1 | SearchLibraryResponseV1 | AskLibraryResponseV1
+    ],
+    schema_version: str,
+    cause: str,
+) -> None:
+    parsed = response_model.model_validate(
+        {
+            "schema_version": schema_version,
+            "ok": False,
+            "problem": "operation_failed",
+            "cause": cause,
+            "active_publication_impact": "unchanged",
+            "next_step": "retry_operation",
+        }
+    )
+    assert parsed.root.ok is False
+    assert parsed.root.cause == cause
+
+
 def test_manifest_rejects_duplicate_identity_fingerprint_and_locator_kind() -> None:
     payload = load_fixture("manifest.json")
     duplicate = copy.deepcopy(payload["sources"][0])

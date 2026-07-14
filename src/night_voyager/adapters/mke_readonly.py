@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
-from contextlib import AsyncExitStack, suppress
+from contextlib import AsyncExitStack
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -222,8 +222,7 @@ class MkeReadOnlyConsumer:
             raise MkeConsumerError("mke_output_limit_exceeded")
 
     async def _close_after_failure(self) -> None:
-        with suppress(MkeConsumerError):
-            await self.aclose()
+        await self.aclose()
 
     async def aclose(self) -> None:
         stack, self._stack = self._stack, None

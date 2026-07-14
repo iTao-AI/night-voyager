@@ -7,6 +7,8 @@ import sys
 import zipfile
 from datetime import date
 from pathlib import Path
+from types import TracebackType
+from typing import IO, Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -16,6 +18,7 @@ from night_voyager.evidence.candidate_lock import (
     CandidateArtifactReceiptV1,
     canonical_sha256,
     lock_from_receipt,
+    stage_candidate_artifact,
     verify_candidate_artifact,
 )
 from night_voyager.evidence.mke_models import MkeConsumerError
@@ -118,6 +121,93 @@ def test_candidate_mismatch_is_rejected_before_any_install(tmp_path: Path) -> No
             receipt,
             lock,
         )
+    assert captured.value.failure.code == "mke_candidate_mismatch"
+
+
+def test_staged_candidate_is_immune_to_source_symlink_rename_during_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel, receipt, lock = synthetic_candidate(tmp_path)
+    expected_sha256 = hashlib.sha256(wheel.read_bytes()).hexdigest()
+    original = tmp_path / "original-wheel-bytes"
+    wheel.rename(original)
+    replacement = tmp_path / "replacement-wheel-bytes"
+    replacement.write_bytes(b"replacement")
+    wheel.symlink_to(original)
+    real_open = Path.open
+
+    class RenameOnRead:
+        def __init__(self, handle: IO[bytes]) -> None:
+            self.handle = handle
+            self.changed = False
+
+        def __enter__(self) -> RenameOnRead:
+            return self
+
+        def __exit__(
+            self,
+            error_type: type[BaseException] | None,
+            error: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> bool | None:
+            return self.handle.__exit__(error_type, error, traceback)
+
+        def read(self, size: int = -1) -> bytes:
+            if not self.changed:
+                wheel.unlink()
+                wheel.symlink_to(replacement)
+                self.changed = True
+            return self.handle.read(size)
+
+    def racing_open(path: Path, *args: Any, **kwargs: Any) -> Any:
+        handle = cast(IO[bytes], real_open(path, *args, **kwargs))
+        return RenameOnRead(handle) if path == wheel else handle
+
+    monkeypatch.setattr(Path, "open", racing_open)
+    staged = stage_candidate_artifact(wheel, receipt, lock, tmp_path / "owned")
+
+    assert staged.wheel.parent == tmp_path / "owned"
+    assert hashlib.sha256(staged.wheel.read_bytes()).hexdigest() == expected_sha256
+    assert hashlib.sha256(wheel.read_bytes()).hexdigest() != staged.wheel_sha256
+
+
+def test_staged_candidate_rejects_in_place_mutation_during_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel, receipt, lock = synthetic_candidate(tmp_path)
+    real_open = Path.open
+
+    class MutateOnRead:
+        def __init__(self, handle: IO[bytes]) -> None:
+            self.handle = handle
+            self.changed = False
+
+        def __enter__(self) -> MutateOnRead:
+            return self
+
+        def __exit__(
+            self,
+            error_type: type[BaseException] | None,
+            error: BaseException | None,
+            traceback: TracebackType | None,
+        ) -> bool | None:
+            return self.handle.__exit__(error_type, error, traceback)
+
+        def read(self, size: int = -1) -> bytes:
+            if not self.changed:
+                wheel.write_bytes(b"mutated during copy")
+                self.changed = True
+            return self.handle.read(size)
+
+    def racing_open(path: Path, *args: Any, **kwargs: Any) -> Any:
+        handle = cast(IO[bytes], real_open(path, *args, **kwargs))
+        mode = args[0] if args else kwargs.get("mode", "r")
+        return MutateOnRead(handle) if path == wheel and mode == "rb" else handle
+
+    monkeypatch.setattr(Path, "open", racing_open)
+    with pytest.raises(MkeConsumerError) as captured:
+        stage_candidate_artifact(wheel, receipt, lock, tmp_path / "owned")
+
     assert captured.value.failure.code == "mke_candidate_mismatch"
 
 

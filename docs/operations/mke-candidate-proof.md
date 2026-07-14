@@ -20,12 +20,14 @@ and do not copy either artifact into this repository.
 
 ## What the proof does
 
-The controller verifies wheel bytes, SHA-256, receipt self-hash, package metadata, Python
-range, console entry point, source commit, and upstream same-wheel proof before install.
-It then creates one temporary environment and store, installs the exact wheel, ingests only
-the committed one-page synthetic PDF, verifies active counts of one, calls List/Search/Ask
-with `limit=1`, projects and pairs the positive result, proves the scoped absent-token
-result, closes the consumer, and removes all owned state.
+The controller copies candidate bytes into a private owned directory with a bounded,
+exclusive write, then verifies wheel bytes, SHA-256, receipt self-hash, package metadata,
+Python range, console entry point, source commit, and upstream same-wheel proof on that
+copy. It installs only the reverified owned copy, creates one temporary environment and
+store, ingests only the committed one-page synthetic PDF, verifies active counts of one,
+calls List/Search/Ask with `limit=1`, projects and pairs the positive result, proves the
+scoped absent-token result, closes the consumer, and removes all owned state. If cleanup
+fails, `mke_cleanup_failed` overrides any earlier public failure.
 
 The success JSON is `night_voyager.m4b_proof.v1`. It contains stable identities, schema
 names, bounded counts/states, verification booleans, and a canonical receipt SHA only. It
