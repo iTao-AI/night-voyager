@@ -147,11 +147,18 @@ timeline. It must not expose advisor-only Evidence detail, reviewer notes, inter
 that are not required for a subsequent mutation, or unrelated tenant metadata. The
 existing direct Brief-by-ID endpoint remains supported; M5 adds no share token.
 
-These endpoints read existing tables only. M5 introduces no migration, table, generic
-dashboard endpoint, or new state authority. Implementation must prove that the existing
-API read grants and forced-RLS policies are sufficient. If they are not, implementation
-stops and returns to authority design instead of adding an ad hoc function, grant,
-ownership change, or RLS bypass.
+These endpoints introduce no new persistence and write no domain state. Runtime Case,
+task, run, Brief, receipt, and timeline projections read existing forced-RLS PostgreSQL
+rows. Before task creation, the canonical demo input allowlist comes from the checked-in
+M3A fixture contract after the existing fixture validator succeeds and must match the
+identity of an existing PostgreSQL source-pack row and manifest exactly. The fixture is
+not a second business authority or a client constant: it only limits which synthetic demo
+input identity may be submitted. PostgreSQL still determines Case currentness,
+participant and role authority, source-pack row existence, task/run state, and current
+results. M5 introduces no migration, table, generic dashboard endpoint, or new state
+authority. Implementation must prove that the existing API read grants and forced-RLS
+policies are sufficient. If they are not, implementation stops and returns to authority
+design instead of adding an ad hoc function, grant, ownership change, or RLS bypass.
 
 ## Explicit BFF route matrix
 

@@ -64,6 +64,11 @@ fixed-Origin forwarding, and separate cookie-field forwarding add implementation
 obligations but prevent the BFF or client from inventing authority during partial or
 retained workflows.
 
+The checked-in fixture contract limits the pre-task synthetic input identity but does not
+replace database authority. Existing forced-RLS PostgreSQL rows remain authoritative for
+Case currentness, participants and roles, source-pack existence, tasks, runs, and results;
+the read endpoints add no persistence and write no domain state.
+
 The six-beat walkthrough controls presentation order, not backend role authorization. A
 real parent session is required for the connected UI's complete parent presentation, while
 the existing assigned advisor/student/parent current-Brief contract remains unchanged.
