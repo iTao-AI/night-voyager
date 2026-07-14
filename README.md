@@ -1,10 +1,21 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 historical fixture-only visual contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, an **M4A deterministic durable task/worker/SSE proof**, an **M4B optional read-only MKE candidate proof**, and an **implemented M5 connected advisor-to-family demo**. M4B keeps every projection `UNTRUSTED_CANDIDATE`; M5 connects `/demo` to the local synthetic FastAPI, worker, SSE, and PostgreSQL authority paths without connecting MKE or a remote provider.
+Night Voyager turns a synthetic study-abroad comparison into a traceable advisor-to-family decision with durable Agent tasks, explicit human review, and a persisted receipt and timeline.
 
-## Evaluator lane
+![Advisor Ledger at review-required](docs/assets/m5-advisor-ledger.png)
 
-Evaluators need only Docker Desktop, Docker Compose, and GNU Make. The golden sequence is:
+![Family decision receipt and timeline](docs/assets/m5-family-receipt-timeline.png)
+
+## Engineering proof
+
+- **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the exact `0001 -> 0002 -> 0003 -> 0004` migration graph.
+- **Durable task and SSE:** an `AgentTask` survives worker/API restarts, uses bounded leases and generation fencing, and resumes an authorized event stream.
+- **Human gates:** deterministic evidence policy, advisor review, and explicit family confirmation remain separate authorities; model or adapter output cannot promote itself.
+- **Browser to database:** the connected `/demo` drives the real Next.js BFF, FastAPI, worker, SSE, and PostgreSQL synthetic flow in Chromium.
+
+## Evaluate the release
+
+Evaluators need Docker Desktop, Docker Compose, and GNU Make:
 
 ```bash
 make help
@@ -14,27 +25,29 @@ make proof
 make down
 ```
 
-`make doctor` checks the Docker daemon, required Compose capability, disk space, and local ports. `make proof` runs config, public-hygiene, and installed-wheel checks inside Docker; it does not require host Python, uv, Node.js, or npm.
+Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow the [connected demo runbook](docs/operations/connected-demo.md) for the advisor-to-family walkthrough, or use the [v0.1.0 release/source-archive verification guide](docs/how-to/verify-v0.1.0-release.md) after publication.
 
-`make demo` migrates the local database, runs the fail-closed and idempotent
-`demo-seed` service, then waits for the synthetic bootstrap stack. The API
-health endpoint is `http://127.0.0.1:8000/health`; the web bootstrap page is
-`http://127.0.0.1:3000`. Published ports bind to IPv4 loopback only. Run
-`make compose-proof` to verify health, real identity and M3B paths, the M4A
-HTTP-to-worker-to-PlanningRun-to-SSE path, API/worker restart durability, and
-the connected M5 browser-to-database flow in real Chromium.
+`make doctor` checks Docker, Compose capability, disk space, and local ports. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
-The connected local synthetic demo is available at `http://127.0.0.1:3000/demo`.
-Follow the [connected demo runbook](docs/operations/connected-demo.md); M1 remains
-documented as historical visual context in [DESIGN.md](DESIGN.md).
+## Synthetic and local limits
 
-![Advisor Ledger at review-required](docs/assets/m5-advisor-ledger.png)
+- v0.1.0 is a local synthetic portfolio release, not a production deployment or tenancy claim.
+- The repository contains no real student records and makes no admissions outcome, real-user, SLA, availability, or business-impact claim.
+- The worker and SSE evidence is deterministic local proof, not distributed high availability.
+- DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
 
-![Family decision receipt and timeline](docs/assets/m5-family-receipt-timeline.png)
+## Milestones and history
+
+- [v0.1.0 release notes](docs/releases/v0.1.0.md)
+- [Architecture and milestone history](DESIGN.md)
+- [Documentation index](docs/README.md)
+- [Historical M1 fixture-only visual contract](docs/superpowers/specs/2026-07-11-m1-demo-design.md)
+- M5 connected advisor-to-family demo: implemented as the local synthetic walkthrough documented in the [runbook](docs/operations/connected-demo.md).
+- [M4B optional read-only MKE candidate proof](docs/operations/mke-candidate-proof.md); outputs remain `UNTRUSTED_CANDIDATE`.
 
 ## Contributor lane
 
-Contributors additionally need Python 3.12.13 managed by [uv](https://docs.astral.sh/uv/), Node.js 24.18.0, and npm.
+Contributors additionally need Python 3.12.13 managed by [uv](https://docs.astral.sh/uv/), Node.js 24.18.0, and npm:
 
 ```bash
 make doctor MODE=dev
@@ -43,27 +56,7 @@ make db-check
 make mke-check
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and [docs/README.md](docs/README.md). A Chinese version is available in [README_CN.md](README_CN.md).
-
-`make db-check` uses a disposable PostgreSQL 18 volume to exercise the exact
-`0001 -> 0002 -> 0003 -> 0004` graph, idempotent canonical synthetic seed,
-two-tenant forced RLS, runtime grants, Case and PlanningRun authority,
-payload-free dispatch, leases, generation fencing, retry/cancel/reclaim races,
-SSE replay, bounded local concurrency, downgrade/re-upgrade, and pool cleanup.
-`accepted_synthetic_demo`
-Evidence is local proof; callers cannot assert `externally_verified`.
-
-`make mke-check` runs synthetic fake-process compatibility tests in a disposable optional
-environment. Maintainers with the exact operator-supplied wheel and receipt can follow the
-[MKE candidate proof runbook](docs/operations/mke-candidate-proof.md). Evaluators and
-default `make check` do not need MKE or candidate artifacts.
-
-## Current limits
-
-- `/demo` is a local synthetic walkthrough, not a production tenant or live admissions workflow.
-- The worker and SSE proof is local and deterministic, not distributed high availability or a production SLA.
-- No DRA, OpenClaw, model, messaging, or product-path MKE `PlanningAdapter`; M4B is a local read-only compatibility adapter only.
-- No production deployment or user/admissions outcome claim.
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md). A Chinese version is available in [README_CN.md](README_CN.md).
 
 ## License
 

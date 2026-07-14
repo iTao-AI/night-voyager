@@ -1,7 +1,9 @@
 # Documentation
 
-The M1 fixture-only documents remain historical visual context. The current
-local synthetic `/demo` behavior is the connected M5 walkthrough.
+Night Voyager v0.1.0 is the local synthetic portfolio release of the connected
+advisor-to-family workflow. Start with the [release notes](releases/v0.1.0.md)
+and [source-archive verification guide](how-to/verify-v0.1.0-release.md). M1 fixture-only
+documents remain historical visual context; current `/demo` behavior is the M5 walkthrough.
 
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).
 - Interviewers: start with the README scope and current limits, then use the connected local synthetic `/demo` route and [runbook](operations/connected-demo.md) to review the real advisor-to-family workflow without treating it as production.

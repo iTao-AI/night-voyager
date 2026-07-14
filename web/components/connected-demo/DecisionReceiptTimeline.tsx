@@ -1,22 +1,30 @@
 import type { CurrentDecisionBrief } from "../../lib/connected-demo/contracts";
+import { formatCnyRange, presentTradeOff } from "../../lib/connected-demo/presentation";
 
-const amount = new Intl.NumberFormat("en-US");
+const COUNTRY_COPY = new Map<string, string>([
+  ["australia", "Australia"],
+  ["japan", "Japan"],
+  ["malaysia", "Malaysia"],
+]);
 
-function record(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};
-}
+const MILESTONE_COPY = new Map<string, string>([
+  ["documents", "Documents"],
+  ["application", "Application"],
+  ["visa", "Visa"],
+  ["arrival", "Arrival"],
+]);
 
-function label(value: unknown): string {
-  return String(value ?? "").replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase());
+function presentClosed(code: unknown, copy: ReadonlyMap<string, string>): string {
+  if (typeof code !== "string") throw new Error("unsupported_presentation_code");
+  const value = copy.get(code);
+  if (value === undefined) throw new Error("unsupported_presentation_code");
+  return value;
 }
 
 export function DecisionReceiptTimeline({ brief }: { brief: CurrentDecisionBrief }) {
-  const receipt = record(brief.receipt);
-  const timeline = record(brief.timeline);
-  const milestones = Array.isArray(timeline.milestones) ? timeline.milestones.map(record) : [];
-  const budgetMin = Number(receipt.accepted_budget_min_minor);
-  const budgetMax = Number(receipt.accepted_budget_max_minor);
-  const tradeOffs = Array.isArray(receipt.accepted_trade_offs) ? receipt.accepted_trade_offs : [];
+  const receipt = brief.receipt;
+  const timeline = brief.timeline;
+  if (receipt === null || timeline === null) throw new Error("unsupported_presentation_code");
 
   return (
     <article className="family-frame decided-frame" aria-labelledby="receipt-title">
@@ -24,16 +32,16 @@ export function DecisionReceiptTimeline({ brief }: { brief: CurrentDecisionBrief
       <h1 id="receipt-title">Decision Receipt</h1>
       <p>The family confirmed the Australia route from the reviewed, persisted Brief.</p>
       <dl className="decision-requirements">
-        <div><dt>Accepted budget</dt><dd>{amount.format(budgetMin)}–{amount.format(budgetMax)} {String(receipt.currency)}</dd></div>
-        <div><dt>Accepted trade-off</dt><dd>{tradeOffs.map(label).join(", ")}</dd></div>
+        <div><dt>Accepted budget</dt><dd>{formatCnyRange(receipt.accepted_budget_min_minor, receipt.accepted_budget_max_minor, receipt.currency)}</dd></div>
+        <div><dt>Accepted trade-off</dt><dd>{receipt.accepted_trade_offs.map(presentTradeOff).join(", ")}</dd></div>
         <div><dt>Decision source</dt><dd>Direct family confirmation</dd></div>
       </dl>
       <h2>Timeline Plan</h2>
-      <p>{label(timeline.country)} · {String(timeline.intake)} intake</p>
+      <p>{presentClosed(timeline.country, COUNTRY_COPY)} · {timeline.intake} intake</p>
       <ol className="timeline">
-        {milestones.map((milestone) => (
-          <li key={`${String(milestone.key)}-${String(milestone.due_date)}`}>
-            <strong>{label(milestone.key)}</strong><span>{String(milestone.due_date)}</span>
+        {timeline.milestones.map((milestone) => (
+          <li key={`${milestone.key}-${milestone.due_date}`}>
+            <strong>{presentClosed(milestone.key, MILESTONE_COPY)}</strong><span>{milestone.due_date}</span>
           </li>
         ))}
       </ol>

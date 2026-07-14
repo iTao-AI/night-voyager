@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.1.0"
+DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 POSTGRES_IMAGE = (
     "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
 )
@@ -55,6 +56,54 @@ BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".pdf", ".png", ".webp"}
 M5_SCREENSHOTS = (
     "docs/assets/m5-advisor-ledger.png",
     "docs/assets/m5-family-receipt-timeline.png",
+)
+RELEASE_DOCUMENTS = (
+    "docs/releases/v0.1.0.md",
+    "docs/how-to/verify-v0.1.0-release.md",
+)
+RELEASE_HEADINGS = (
+    "## Summary",
+    "## Completion",
+    "## Verification",
+    "## Scope",
+    "## Risk / Impact",
+    "## Documentation impact",
+)
+RELEASE_NOTE_TOKENS = (
+    "local synthetic portfolio release",
+    "GitHub-generated source archive",
+    "UNTRUSTED_CANDIDATE",
+    "production tenancy",
+    "真实学生",
+    "SLA",
+    "业务收益",
+)
+RELEASE_HOW_TO_TOKENS = (
+    "git fetch origin --tags --prune",
+    "git status --short --branch",
+    "git rev-parse HEAD",
+    "git rev-parse origin/main",
+    "git describe --tags --exact-match HEAD",
+    "git cat-file -t v0.1.0",
+    "git rev-parse v0.1.0^{tag}",
+    "git rev-parse v0.1.0^{commit}",
+    'curl --fail --location --output "$archive"',
+    "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.0.tar.gz",
+    'wc -c "$archive"',
+    'shasum -a 256 "$archive"',
+    'tar -xzf "$archive" -C "$tmp_dir"',
+    'cd "$tmp_dir/night-voyager-0.1.0"',
+    "make doctor",
+    "make proof",
+    "make compose-proof",
+    "make down",
+    "docker compose ps --all",
+    "object type `tag`",
+    "Never move the tag after publication",
+    "Use the extracted source archive",
+    "normal pull request",
+    "Do not force-move `v0.1.0`",
+    "bypass the `main` ruleset",
 )
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
@@ -149,6 +198,86 @@ def verify_m5_public_evidence() -> None:
         if any(source.count(relative) != 1 for source in public_entries.values()):
             raise SystemExit(f"each README must reference the M5 screenshot once: {relative}")
     print("proof M5 evidence: connected runbook and two PNG screenshots present")
+
+
+def verify_release_surface() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    if pyproject["project"]["description"] != DESCRIPTION:
+        raise SystemExit("v0.1.0 project description drift")
+
+    readme_contracts = (
+        (
+            "README.md",
+            "Night Voyager turns a synthetic study-abroad comparison",
+            "## Engineering proof",
+            "## Evaluate the release",
+            "## Synthetic and local limits",
+            "## Milestones and history",
+        ),
+        (
+            "README_CN.md",
+            "Night Voyager 将一组三国留学比较",
+            "## 工程证据",
+            "## 验证 release",
+            "## 合成与本地边界",
+            "## Milestone 与历史",
+        ),
+    )
+    for relative, outcome, proof, evaluator, limits, history in readme_contracts:
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        required = (outcome, *M5_SCREENSHOTS, proof, evaluator, limits, history)
+        try:
+            positions = [source.index(value) for value in required]
+        except ValueError as error:
+            raise SystemExit(f"missing v0.1.0 README contract: {relative}") from error
+        if positions != sorted(positions):
+            raise SystemExit(f"v0.1.0 README outcome order drift: {relative}")
+        if any(document not in source for document in RELEASE_DOCUMENTS):
+            raise SystemExit(f"v0.1.0 README release links drift: {relative}")
+
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
+
+    for relative in RELEASE_DOCUMENTS:
+        if not (ROOT / relative).is_file():
+            raise SystemExit(f"missing v0.1.0 release document: {relative}")
+    release = (ROOT / RELEASE_DOCUMENTS[0]).read_text(encoding="utf-8")
+    try:
+        heading_positions = [release.index(heading) for heading in RELEASE_HEADINGS]
+    except ValueError as error:
+        raise SystemExit("release notes contract missing required heading") from error
+    if heading_positions != sorted(heading_positions):
+        raise SystemExit("release notes contract heading order drift")
+    for index, position in enumerate(heading_positions):
+        end = (
+            heading_positions[index + 1]
+            if index + 1 < len(heading_positions)
+            else len(release)
+        )
+        if re.search(r"[\u4e00-\u9fff]", release[position:end]) is None:
+            raise SystemExit("release notes contract requires Simplified Chinese body")
+    if any(token not in release for token in RELEASE_NOTE_TOKENS):
+        raise SystemExit("release notes contract boundary drift")
+
+    how_to = (ROOT / RELEASE_DOCUMENTS[1]).read_text(encoding="utf-8")
+    if any(token not in how_to for token in RELEASE_HOW_TO_TOKENS):
+        raise SystemExit("release how-to contract boundary drift")
+
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    if any(
+        "release/source-archive verification" not in source
+        for source in (readme, readme_cn)
+    ):
+        raise SystemExit("README release/source-archive verification wording drift")
+    if "source-archive verification" not in docs_index:
+        raise SystemExit("documentation index source-archive verification wording drift")
+
+    stale = ("bootstrap stage", "local bootstrap phase", "no released production version")
+    for relative in ("SECURITY.md", "CONTRIBUTING.md", "docs/README.md"):
+        source = (ROOT / relative).read_text(encoding="utf-8").lower()
+        if any(phrase in source for phrase in stale):
+            raise SystemExit(f"stale bootstrap release wording: {relative}")
+    print("proof release surface: v0.1.0 local synthetic portfolio contract confirmed")
 
 
 def package_version(packages: list[dict[str, object]], name: str) -> str:
@@ -560,6 +689,7 @@ def main() -> None:
     verify_tree_mode(args.tree_mode)
     verify_public_hygiene()
     verify_m5_public_evidence()
+    verify_release_surface()
     verify_config()
     verify_wheel()
 
