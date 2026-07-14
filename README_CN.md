@@ -25,7 +25,7 @@ make proof
 make down
 ```
 
-connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connected demo runbook](docs/operations/connected-demo.md)完成 advisor-to-family walkthrough；需要完整 release-candidate 证据时，使用 [v0.1.0 verification guide](docs/how-to/verify-v0.1.0-release.md)。
+connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connected demo runbook](docs/operations/connected-demo.md)完成 advisor-to-family walkthrough；发布后使用 [v0.1.0 release/source-archive verification guide](docs/how-to/verify-v0.1.0-release.md)核对 public artifact。
 
 `make doctor` 检查 Docker、Compose capability、磁盘空间与本地端口。`make demo` 迁移并 seed fresh synthetic stack。`make proof` 验证配置、public hygiene 与隔离 installed wheel，不要求 host Python、uv、Node.js 或 npm。`make compose-proof` 还会在真实 Chromium 中执行 browser-to-database flow。
 

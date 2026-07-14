@@ -69,13 +69,67 @@ def test_release_docs_freeze_local_synthetic_source_archive_boundary() -> None:
     how_to = (ROOT / "docs/how-to/verify-v0.1.0-release.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
 
-    assert "local synthetic portfolio release" in release
-    assert "GitHub-generated source archive" in release
-    assert "No separately built wheel, container image, or binary" in release
-    assert "scripts/verify_release.py --tree-mode release" in how_to
-    assert "docker compose ps --all" in how_to
+    release_headings = (
+        "## Summary",
+        "## Completion",
+        "## Verification",
+        "## Scope",
+        "## Risk / Impact",
+        "## Documentation impact",
+    )
+    release_positions = [release.index(heading) for heading in release_headings]
+    assert release_positions == sorted(release_positions)
+    for token in (
+        "local synthetic portfolio release",
+        "GitHub-generated source archive",
+        "UNTRUSTED_CANDIDATE",
+        "production tenancy",
+        "真实学生",
+        "SLA",
+        "业务收益",
+    ):
+        assert token in release
+
+    for command in (
+        "git fetch origin --tags --prune",
+        "git status --short --branch",
+        "git rev-parse HEAD",
+        "git rev-parse origin/main",
+        "git describe --tags --exact-match HEAD",
+        "git cat-file -t v0.1.0",
+        "git rev-parse v0.1.0^{tag}",
+        "git rev-parse v0.1.0^{commit}",
+        'curl --fail --location --output "$archive"',
+        "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.0.tar.gz",
+        'wc -c "$archive"',
+        'shasum -a 256 "$archive"',
+        'tar -xzf "$archive" -C "$tmp_dir"',
+        'cd "$tmp_dir/night-voyager-0.1.0"',
+        "make doctor",
+        "make proof",
+        "make compose-proof",
+        "make down",
+        "docker compose ps --all",
+    ):
+        assert command in how_to
+    for boundary in (
+        "annotated tag",
+        "Never move the tag after publication",
+        "Use the extracted source archive",
+        "not the development `.venv`, `node_modules`, retained demo volume, or a custom wheel",
+        "Do not force-move `v0.1.0`",
+        "normal pull request",
+    ):
+        assert boundary in how_to
     assert "releases/v0.1.0.md" in docs_index
     assert "how-to/verify-v0.1.0-release.md" in docs_index
+    assert "source-archive verification" in docs_index
+
+
+def test_readmes_name_the_release_and_source_archive_verification_path() -> None:
+    for relative in ("README.md", "README_CN.md"):
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        assert "release/source-archive verification" in source, relative
 
 
 def test_supported_public_docs_do_not_describe_the_project_as_bootstrap() -> None:

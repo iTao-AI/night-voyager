@@ -61,6 +61,50 @@ RELEASE_DOCUMENTS = (
     "docs/releases/v0.1.0.md",
     "docs/how-to/verify-v0.1.0-release.md",
 )
+RELEASE_HEADINGS = (
+    "## Summary",
+    "## Completion",
+    "## Verification",
+    "## Scope",
+    "## Risk / Impact",
+    "## Documentation impact",
+)
+RELEASE_NOTE_TOKENS = (
+    "local synthetic portfolio release",
+    "GitHub-generated source archive",
+    "UNTRUSTED_CANDIDATE",
+    "production tenancy",
+    "真实学生",
+    "SLA",
+    "业务收益",
+)
+RELEASE_HOW_TO_TOKENS = (
+    "git fetch origin --tags --prune",
+    "git status --short --branch",
+    "git rev-parse HEAD",
+    "git rev-parse origin/main",
+    "git describe --tags --exact-match HEAD",
+    "git cat-file -t v0.1.0",
+    "git rev-parse v0.1.0^{tag}",
+    "git rev-parse v0.1.0^{commit}",
+    'curl --fail --location --output "$archive"',
+    "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.0.tar.gz",
+    'wc -c "$archive"',
+    'shasum -a 256 "$archive"',
+    'tar -xzf "$archive" -C "$tmp_dir"',
+    'cd "$tmp_dir/night-voyager-0.1.0"',
+    "make doctor",
+    "make proof",
+    "make compose-proof",
+    "make down",
+    "docker compose ps --all",
+    "object type `tag`",
+    "Never move the tag after publication",
+    "Use the extracted source archive",
+    "normal pull request",
+    "Do not force-move `v0.1.0`",
+    "bypass the `main` ruleset",
+)
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
 os.environ.setdefault("UV_REQUIRE_HASHES", "1")
@@ -191,14 +235,42 @@ def verify_release_surface() -> None:
         if any(document not in source for document in RELEASE_DOCUMENTS):
             raise SystemExit(f"v0.1.0 README release links drift: {relative}")
 
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
+
     for relative in RELEASE_DOCUMENTS:
         if not (ROOT / relative).is_file():
             raise SystemExit(f"missing v0.1.0 release document: {relative}")
     release = (ROOT / RELEASE_DOCUMENTS[0]).read_text(encoding="utf-8")
-    if "local synthetic portfolio release" not in release:
-        raise SystemExit("v0.1.0 release classification drift")
-    if "GitHub-generated source archive" not in release:
-        raise SystemExit("v0.1.0 source-archive boundary drift")
+    try:
+        heading_positions = [release.index(heading) for heading in RELEASE_HEADINGS]
+    except ValueError as error:
+        raise SystemExit("release notes contract missing required heading") from error
+    if heading_positions != sorted(heading_positions):
+        raise SystemExit("release notes contract heading order drift")
+    for index, position in enumerate(heading_positions):
+        end = (
+            heading_positions[index + 1]
+            if index + 1 < len(heading_positions)
+            else len(release)
+        )
+        if re.search(r"[\u4e00-\u9fff]", release[position:end]) is None:
+            raise SystemExit("release notes contract requires Simplified Chinese body")
+    if any(token not in release for token in RELEASE_NOTE_TOKENS):
+        raise SystemExit("release notes contract boundary drift")
+
+    how_to = (ROOT / RELEASE_DOCUMENTS[1]).read_text(encoding="utf-8")
+    if any(token not in how_to for token in RELEASE_HOW_TO_TOKENS):
+        raise SystemExit("release how-to contract boundary drift")
+
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    if any(
+        "release/source-archive verification" not in source
+        for source in (readme, readme_cn)
+    ):
+        raise SystemExit("README release/source-archive verification wording drift")
+    if "source-archive verification" not in docs_index:
+        raise SystemExit("documentation index source-archive verification wording drift")
 
     stale = ("bootstrap stage", "local bootstrap phase", "no released production version")
     for relative in ("SECURITY.md", "CONTRIBUTING.md", "docs/README.md"):
