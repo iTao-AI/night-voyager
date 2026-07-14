@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "night-voyager"
 version = "0.1.0"
-description = "Bootstrap foundation for Night Voyager"
+description = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "MIT"
