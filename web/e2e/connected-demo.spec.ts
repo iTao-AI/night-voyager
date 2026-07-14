@@ -1,6 +1,11 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const terminalProof = process.env.M5_TERMINAL_PROOF === "1";
+const rawPresentation = /recommended_with_condition|synthetic_high_risk_alternative|direct_program_fit_evidence_absent|budget_elasticity|30,550,000|40,000,000/;
+
+async function expectNoRawPresentation(page: Page) {
+  await expect(page.getByRole("main")).not.toContainText(rawPresentation);
+}
 
 test("connected-demo.spec.ts preserves the native SSE cursor and renders a live terminal task", async ({ page }) => {
   test.skip(!terminalProof, "runs in the worker-paused Compose lane");
@@ -78,16 +83,31 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   await page.reload();
   await expect(page.getByRole("status")).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled({ timeout: 60_000 });
-  await expect(page.getByText("direct_program_fit_evidence_absent").first()).toBeAttached();
+  await expect(page.getByText("Recommended with budget condition").first()).toBeVisible();
+  await expect(page.getByText("Cost and FX evidence are within the approved boundary").first()).toBeVisible();
+  await expect(page.getByText("Conditional alternative").first()).toBeVisible();
+  await expect(page.getByText("Higher-risk synthetic alternative").first()).toBeVisible();
+  await expect(page.getByText("Blocked").first()).toBeVisible();
   await expect(page.getByText(/Accepted synthetic evidence and limitations/i)).toBeVisible();
   await expect(page.getByRole("status")).toContainText(/needs_advisor_review/i);
+  await expectNoRawPresentation(page);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await expect(page.getByText("Recommended with budget condition").first()).toBeVisible();
+  await expect(page.getByText("Cost and FX evidence are within the approved boundary").first()).toBeVisible();
+  await expectNoRawPresentation(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const country of ["Australia", "Japan", "Malaysia"]) {
+  for (const [country, outcome, reason] of [
+    ["Australia", "Recommended with budget condition", "Cost and FX evidence are within the approved boundary"],
+    ["Japan", "Conditional alternative", "Higher-risk synthetic alternative"],
+    ["Malaysia", "Blocked", "Program-fit evidence is missing"],
+  ] as const) {
     await page.getByRole("button", { name: country, exact: true }).click();
     await expect(page.getByRole("button", { name: country, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByText(outcome).last()).toBeVisible();
+    await expect(page.getByText(reason).last()).toBeVisible();
   }
   await expect(page.getByText("Not eligible", { exact: true }).last()).toBeVisible();
-  await expect(page.getByText("direct_program_fit_evidence_absent").last()).toBeVisible();
+  await expectNoRawPresentation(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
   if (process.env.UPDATE_M5_SCREENSHOTS === "1") {
@@ -114,7 +134,10 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   expect(reviewKeys).toHaveLength(2);
   expect(reviewKeys[0]).toBe(reviewKeys[1]);
   await page.unroute("**/api/demo/cases/*/advisor-reviews");
-  await expect(page.getByText(/budget_elasticity/i)).toBeVisible();
+  await expect(page.getByText("305,500 CNY")).toBeVisible();
+  await expect(page.getByText("400,000 CNY")).toBeVisible();
+  await expect(page.getByText("Budget flexibility").first()).toBeVisible();
+  await expectNoRawPresentation(page);
   const advisorDenied = await page.request.get(
     "/api/demo/cases/40000000-0000-0000-0000-000000000002/advisor-ledger",
   );
@@ -161,6 +184,9 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
+    await expect(page.getByText("305,500–400,000 CNY")).toBeVisible();
+    await expect(page.getByText("Budget flexibility")).toBeVisible();
+    await expectNoRawPresentation(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
   await expect(page.getByRole("main")).toBeVisible();
