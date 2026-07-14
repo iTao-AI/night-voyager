@@ -143,7 +143,17 @@ unbounded Evidence text.
 
 The current Decision Brief projection discovers the current Brief by authorized Case and
 returns the existing family-safe projection, Brief version, persistent receipt, and
-timeline. It must not expose advisor-only Evidence detail, reviewer notes, internal IDs
+timeline. Its family-safe response also includes `decision_requirements`, projected from
+the pinned Brief and PlanningRun, current Case revision, accepted Australia cost Evidence,
+and existing M3B decision policy. The requirements contain the selected and eligible
+Australia route identity, `currency=CNY`, the server-derived pinned Australia cost, the
+server-derived hard ceiling, and required trade-offs including `budget_elasticity`.
+
+The family may explicitly confirm or enter a CNY range that contains the pinned cost and
+does not exceed the hard ceiling. The browser must not derive these constraints from a
+fixture, country label, Compose script, or client constant. This is a read-model projection
+only: it changes no M3B policy and adds no persistence, table, migration, grant, or function.
+The response must not expose advisor-only Evidence detail, reviewer notes, internal IDs
 that are not required for a subsequent mutation, or unrelated tenant metadata. The
 existing direct Brief-by-ID endpoint remains supported; M5 adds no share token.
 
@@ -264,6 +274,14 @@ last durable event sequence. It must not contain the session cookie/token, datab
 identity, Evidence text, reviewer notes, provider output, raw errors, credentials, or
 private paths. The session token remains an `HttpOnly`, `SameSite=Lax` cookie.
 
+Role and CSRF metadata in `sessionStorage` support reload only within the same browser tab.
+If an opaque `HttpOnly` session cookie remains while required recovery metadata is missing
+or inconsistent, the UI enters an explicit fail-closed recovery state. It does not guess a
+role, issue a mutation, silently rotate or revoke, or treat a family-safe read as proof of
+parent identity. M5 adds no identity endpoint, transition token, BFF role authority,
+`localStorage` persistence, or revoke path without CSRF. Protected reset and natural
+session expiry remain the recovery boundary outside this flow.
+
 ## Session, idempotency, and recovery
 
 Advisor-to-parent switching is an ordered security transition:
@@ -321,7 +339,10 @@ Backend tests cover both read models, currentness, two tenants, assigned and una
 actors, wrong roles, missing context, forced RLS, pool cleanup, current task/run/Brief/
 receipt/timeline, the existing advisor/student/parent current-Brief actor matrix, and
 explicit absence of forbidden fields. They do not add a parent-mint prohibition that the
-existing synthetic identity contract does not have.
+existing synthetic identity contract does not have. PostgreSQL and HTTP tests prove that
+`decision_requirements` comes from pinned rows, accepted Australia cost Evidence, current
+Case revision, and existing policy facts; stale, cross-tenant, mismatched, or incorrect
+projections fail closed.
 
 BFF tests cover every exact route, method, UUID/path validation, request/response header
 allowlists, body bound, exact Origin, CSRF, idempotency, backend RFC 9457 passthrough,
@@ -335,7 +356,10 @@ Frontend tests cover all legal and illegal reducer transitions, role switch, ref
 session expiry, same-request replay, stale conflict, SSE reconnect, task terminal states,
 role-specific content, Evidence disclosure, disabled reasons, and accessibility semantics.
 They prove the fresh walkthrough initiates advisor, cannot flip role through client-only
-state, and does not continue to parent bootstrap/mint when advisor revoke fails.
+state, and does not continue to parent bootstrap/mint when advisor revoke fails. They also
+prove budget and trade-off authority is never hard-coded in frontend data, and that an
+opaque cookie with missing or inconsistent recovery metadata enables neither mutation nor
+the parent presentation.
 
 Playwright runs against the real Compose web, API, PostgreSQL, migrator, demo seed, and
 worker. It proves advisor session -> task -> worker -> SSE -> Ledger -> approval -> parent
@@ -381,6 +405,10 @@ M5 is accepted only when:
   BFF, API, worker, SSE, PostgreSQL, review, decision, receipt, and timeline boundaries;
 - session rotation, role denial, tenant isolation, Evidence disclosure, Malaysia block,
   stale/idempotency recovery, SSE reconnect, and refresh persistence are proven;
+- family decision requirements are projected from pinned PostgreSQL/Evidence/policy facts,
+  and the frontend neither hard-codes nor derives budget or trade-off authority;
+- missing or inconsistent tab-scoped recovery metadata fails closed despite an opaque
+  session cookie and cannot enable mutation or parent presentation;
 - 1440, 768, and 390 px browser checks and accessibility assertions pass;
 - all existing local and hosted `python`, `frontend`, and `compose` gates pass;
 - screenshots and public documentation match actual connected behavior;

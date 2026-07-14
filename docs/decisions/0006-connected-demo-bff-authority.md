@@ -21,7 +21,10 @@ proof.
 2. FastAPI/PostgreSQL remain the only authority for tenant, role, Case, task, Evidence,
    eligibility, review, decision, receipt, timeline, idempotency, and currentness.
 3. Two read-only role-scoped endpoints expose the current Advisor Ledger and current
-   family-safe Brief. They add no table or business state.
+   family-safe Brief. The latter includes server-authoritative `decision_requirements`
+   projected from the pinned Brief/PlanningRun/Case revision, accepted Australia cost
+   Evidence, and existing M3B policy, including route identity, CNY pinned cost, hard
+   ceiling, and required trade-offs. They add no table or business state.
 4. Next.js App Router Route Handlers form an explicit transport-only BFF. There is no
    catch-all proxy or caller-selected upstream.
 5. A server-owned resolver derives canonical demo task inputs only from the validated
@@ -43,7 +46,12 @@ proof.
    and `plan-ready` never creates a new task. This UI sequencing does not change the
    existing synthetic actor mint capability or advisor/student/parent family-safe read
    matrix; it adds no transition token or BFF phase authority.
-9. M4B MKE candidates, DRA, OCR, OpenClaw, remote providers, share tokens, production
+9. `sessionStorage` role and CSRF metadata support same-tab reload only. An opaque cookie
+   with missing or inconsistent recovery metadata enters fail-closed recovery and cannot
+   enable mutation, silent rotation/revocation, inferred role, or parent presentation.
+   M5 adds no identity endpoint, transition token, BFF role authority, `localStorage`, or
+   revoke without CSRF.
+10. M4B MKE candidates, DRA, OCR, OpenClaw, remote providers, share tokens, production
    accounts, release, and deployment remain outside M5.
 
 ## Consequences
@@ -72,6 +80,11 @@ the read endpoints add no persistence and write no domain state.
 The six-beat walkthrough controls presentation order, not backend role authorization. A
 real parent session is required for the connected UI's complete parent presentation, while
 the existing assigned advisor/student/parent current-Brief contract remains unchanged.
+
+Decision input constraints remain server-authoritative rather than becoming fixture,
+Compose, country-label, or client constants. Tab-scoped recovery metadata improves reload
+continuity without turning a surviving opaque cookie or family-safe response into role
+proof; ambiguous recovery fails closed.
 
 ## Rejected alternatives
 
