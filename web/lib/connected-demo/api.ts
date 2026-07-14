@@ -29,6 +29,12 @@ export interface ConnectedDemoApi {
   decide(briefId: string, body: FamilyDecisionBody, csrf: string, key: string): Promise<DecisionResult>;
 }
 
+export class ConnectedDemoApiError extends Error {
+  constructor(public readonly status: number, public readonly code: string) {
+    super(code);
+  }
+}
+
 async function json(
   path: string,
   init?: RequestInit,
@@ -37,7 +43,7 @@ async function json(
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const code = payload && typeof payload === "object" && "code" in payload ? String(payload.code) : "request_failed";
-    throw new Error(code);
+    throw new ConnectedDemoApiError(response.status, code);
   }
   return payload;
 }
@@ -66,7 +72,7 @@ export function createConnectedDemoApi(): ConnectedDemoApi {
         headers: mutation(csrf),
         cache: "no-store",
       });
-      if (!response.ok) throw new Error("session_revoke_failed");
+      if (!response.ok) throw new ConnectedDemoApiError(response.status, "session_revoke_failed");
     },
     async advisorLedger(caseId) {
       return parseLedger(await json(`/api/demo/cases/${caseId}/advisor-ledger`));

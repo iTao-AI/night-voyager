@@ -32,7 +32,7 @@ export function ConnectedDemo() {
         {state.value === "decision_submitting" ? <section className="ledger-hero" aria-live="polite"><h1>Recording family decision</h1></section> : null}
         {state.value === "plan_ready" ? <DecisionReceiptTimeline brief={state.brief} /> : null}
         {state.value === "terminal_task_failure" ? <AdvisorLedger ledger={state.ledger} onPrimaryAction={() => undefined} /> : null}
-        {state.value === "recoverable_error" ? <RecoveryNotice code={state.code} onReconnect={() => void demo.recover()} /> : null}
+        {state.value === "recoverable_error" ? <RecoveryNotice code={state.code} onReconnect={() => void demo.retry()} /> : null}
       </main>
       <footer><p>Night Voyager · local synthetic pilot · evidence before authority</p></footer>
     </>

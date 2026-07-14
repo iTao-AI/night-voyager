@@ -61,5 +61,10 @@ printf 'compose-proof: Web probe passed\n'
 docker compose down --volumes --remove-orphans
 docker compose up --build --wait
 printf 'compose-proof: fresh browser stack seeded\n'
+docker compose stop worker
+docker compose --profile browser-proof run --rm --build -e M5_TERMINAL_PROOF=1 browser-proof
+printf 'compose-proof: native reconnect and terminal browser proof passed\n'
+docker compose down --volumes --remove-orphans
+docker compose up --build --wait
 docker compose --profile browser-proof run --rm --build browser-proof
 printf 'compose-proof: connected browser proof passed\n'

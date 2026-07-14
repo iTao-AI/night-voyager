@@ -1,3 +1,7 @@
+"use client";
+
+import { useState } from "react";
+
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { TaskProgress } from "./TaskProgress";
@@ -18,7 +22,9 @@ export function AdvisorLedger({
   onPrimaryAction: () => void;
   busy?: boolean;
 }) {
-  const routes = ledger.routes ?? [];
+  const routes = ledger.routes;
+  const [selectedCountry, setSelectedCountry] = useState<string>(String(routes[0]?.country ?? ""));
+  const selectedRoute = routes.find((route) => route.country === selectedCountry) ?? routes[0];
   const disabled = busy || ledger.phase === "active-task";
   return (
     <section className="advisor-ledger" aria-labelledby="advisor-ledger-title">
@@ -30,7 +36,7 @@ export function AdvisorLedger({
       {routes.length ? (
         <div className="table-wrap">
           <table aria-label="Route evidence comparison">
-            <thead><tr><th>Route</th><th>Outcome</th><th>Reason</th><th>Action</th></tr></thead>
+            <thead><tr><th>Route</th><th>Outcome</th><th>Reason</th><th>Eligibility</th></tr></thead>
             <tbody>
               {routes.map((route, index) => {
                 const country = String(route.country);
@@ -40,13 +46,31 @@ export function AdvisorLedger({
                     <th scope="row">{country}</th>
                     <td>{String(route.outcome)}</td>
                     <td>{String(route.reason_code)}</td>
-                    <td><button type="button" disabled={blocked}>Choose {country[0]?.toUpperCase()}{country.slice(1)}</button></td>
+                    <td><span className={`status ${blocked ? "danger" : "trust"}`}>{blocked ? "Not eligible" : "Eligible"}</span></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+      ) : null}
+      {routes.length && selectedRoute ? (
+        <fieldset className="country-switcher">
+          <legend>Compare country routes</legend>
+          <div className="switcher-row">
+            {routes.map((route) => {
+              const country = String(route.country);
+              return <button key={country} type="button" aria-pressed={country === selectedRoute.country} onClick={() => setSelectedCountry(country)}>{country[0]?.toUpperCase()}{country.slice(1)}</button>;
+            })}
+          </div>
+          <dl className="mobile-dimensions">
+            <div><dt>Outcome</dt><dd>{selectedRoute.outcome}</dd></div>
+            <div><dt>Eligibility</dt><dd>{selectedRoute.eligible ? "Eligible for review" : "Not eligible"}</dd></div>
+            <div><dt>Reason</dt><dd>{selectedRoute.reason_code}</dd></div>
+            <div><dt>Required claims</dt><dd>{selectedRoute.required_claims.join(", ") || "None projected"}</dd></div>
+            <div><dt>Known gaps</dt><dd>{selectedRoute.known_gaps.join(", ") || "No projected gaps"}</dd></div>
+          </dl>
+        </fieldset>
       ) : null}
       <EvidenceDisclosure evidence={ledger.evidence ?? []} />
       <TaskProgress ledger={ledger} />

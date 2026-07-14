@@ -186,7 +186,16 @@ async def test_review_required_projection_reads_real_worker_result() -> None:
         assert projection.routes
         assert projection.evidence
         australia = next(route for route in projection.routes if route.country.value == "australia")
+        japan = next(route for route in projection.routes if route.country.value == "japan")
+        malaysia = next(route for route in projection.routes if route.country.value == "malaysia")
         assert projection.review_inputs.eligible_route_ids == (australia.route_id,)
+        assert australia.eligible is True
+        assert japan.eligible is False
+        assert malaysia.eligible is False
+        assert australia.required_claims
+        assert japan.required_claims
+        assert malaysia.required_claims
+        assert malaysia.known_gaps
     finally:
         await migrator.dispose()
         await api.dispose()
@@ -293,6 +302,17 @@ async def test_plan_ready_projection_reads_decision_linked_completed_brief() -> 
                         "request_hash": "34" * 32,
                     },
                 )
+                async with AsyncSession(bind=connection) as session:
+                    advisor_ledger = await PostgresConnectedDemoRepository(
+                        session
+                    ).advisor_ledger(
+                        context(), case_id, resolve_canonical_demo_source_contract()
+                    )
+
+                assert advisor_ledger is not None
+                assert advisor_ledger.phase is DemoPhase.PLAN_READY
+                assert advisor_ledger.current_brief_id == brief_id
+                assert advisor_ledger.review_inputs is None
                 for name, value in (
                     ("night_voyager.actor_id", str(PARENT)),
                     ("night_voyager.role", "parent"),

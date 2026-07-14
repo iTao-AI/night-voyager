@@ -196,7 +196,15 @@ class AdvisorLedgerV1(FrozenModel):
             ):
                 raise ValueError("review-required projection is incomplete")
         elif self.phase in {DemoPhase.FAMILY_REVIEW, DemoPhase.PLAN_READY}:
-            if self.current_brief_id is None or self.review_inputs is not None or self.recovery:
+            if (
+                self.canonical_task_inputs is not None
+                or self.planning_run is not None
+                or self.routes
+                or self.evidence
+                or self.current_brief_id is None
+                or self.review_inputs is not None
+                or self.recovery
+            ):
                 raise ValueError(f"{self.phase.value} projection is incomplete")
         elif self.phase is DemoPhase.TERMINAL_TASK_FAILURE:
             terminal = {

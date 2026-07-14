@@ -17,6 +17,7 @@ export function requireCanonicalUuid(value: string): string {
 async function readBoundedBody(
   request: Request,
   maxBytes: number,
+  signal: AbortSignal,
 ): Promise<Uint8Array | Response | undefined> {
   if (request.method === "GET" || request.method === "DELETE") return undefined;
   const contentType = request.headers.get("Content-Type")?.split(";", 1)[0];
@@ -25,30 +26,32 @@ async function readBoundedBody(
   }
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
+  const cancel = () => { void reader.cancel("request aborted"); };
+  signal.addEventListener("abort", cancel, { once: true });
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maxBytes) {
-      await reader.cancel();
-      return demoBffProblem(413, "bff_request_too_large", "request body too large");
-    }
-    chunks.push(value);
-  }
-  const body = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
   try {
-    JSON.parse(new TextDecoder().decode(body));
-  } catch {
-    return demoBffProblem(400, "bff_invalid_request", "invalid request");
+    for (;;) {
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel();
+        return demoBffProblem(413, "bff_request_too_large", "request body too large");
+      }
+      chunks.push(value);
+    }
+    const body = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    try { JSON.parse(new TextDecoder().decode(body)); }
+    catch { return demoBffProblem(400, "bff_invalid_request", "invalid request"); }
+    return body;
+  } finally {
+    signal.removeEventListener("abort", cancel);
   }
-  return body;
 }
 
 function upstreamHeaders(request: Request, config: DemoBffConfig): Headers {
@@ -94,17 +97,17 @@ export async function forwardDemoJson(
     const rejected = validateOrigin(request, config);
     if (rejected) return rejected;
   }
-  const body = await readBoundedBody(request, config.maxJsonBytes);
-  if (body instanceof Response) return body;
   const controller = new AbortController();
   const abort = () => controller.abort();
   request.signal.addEventListener("abort", abort, { once: true });
   const timer = setTimeout(abort, config.jsonTimeoutMs);
   try {
+    const body = await readBoundedBody(request, config.maxJsonBytes, controller.signal);
+    if (body instanceof Response) return body;
     const upstream = await fetch(`${config.apiOrigin}${route.upstreamPath}`, {
       method: route.method,
       headers: upstreamHeaders(request, config),
-      body: body === undefined ? undefined : new TextDecoder().decode(body),
+      body: body ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer : undefined,
       signal: controller.signal,
     });
     return new Response(upstream.body, {

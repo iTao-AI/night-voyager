@@ -18,7 +18,7 @@ export type DemoDisplayState =
   | { value: "family_review"; brief: CurrentDecisionBrief }
   | { value: "decision_submitting"; brief: CurrentDecisionBrief }
   | { value: "plan_ready"; brief: CurrentDecisionBrief }
-  | { value: "recoverable_error"; code: RecoveryCode }
+  | { value: "recoverable_error"; code: RecoveryCode; prior?: DemoDisplayState }
   | { value: "terminal_task_failure"; ledger: AdvisorLedger };
 
 export type DemoEvent =
@@ -37,16 +37,30 @@ export type DemoEvent =
 
 const invalid: DemoDisplayState = { value: "recoverable_error", code: "invalid_transition" };
 
+function advisorState(ledger: AdvisorLedger, after = 0): DemoDisplayState {
+  switch (ledger.phase) {
+    case "task-ready":
+    case "family-review":
+    case "plan-ready":
+      return { value: "advisor_ready", ledger };
+    case "active-task":
+      return ledger.task
+        ? { value: "task_streaming", ledger, taskId: ledger.task.task_id, after }
+        : invalid;
+    case "review-required":
+      return { value: "advisor_review", ledger };
+    case "terminal-task-failure":
+      return { value: "terminal_task_failure", ledger };
+  }
+}
+
 export function demoReducer(state: DemoDisplayState, event: DemoEvent): DemoDisplayState {
-  if (event.type === "RECOVERABLE_FAILURE") return { value: "recoverable_error", code: event.code };
+  if (event.type === "RECOVERABLE_FAILURE") return { value: "recoverable_error", code: event.code, prior: state };
+  if (state.value === "recoverable_error" && state.prior) return demoReducer(state.prior, event);
   if (event.type === "TERMINAL_TASK") return { value: "terminal_task_failure", ledger: event.ledger };
   if (event.type === "AUTHORITATIVE_RELOAD") {
     if (event.brief) return event.brief.phase === "plan-ready" ? { value: "plan_ready", brief: event.brief } : { value: "family_review", brief: event.brief };
-    if (event.ledger) {
-      if (event.ledger.phase === "review-required") return { value: "advisor_review", ledger: event.ledger };
-      if (event.ledger.phase === "terminal-task-failure") return { value: "terminal_task_failure", ledger: event.ledger };
-      return { value: "advisor_ready", ledger: event.ledger };
-    }
+    if (event.ledger) return advisorState(event.ledger);
     return invalid;
   }
   switch (state.value) {
@@ -58,7 +72,10 @@ export function demoReducer(state: DemoDisplayState, event: DemoEvent): DemoDisp
       return event.type === "TASK_ACCEPTED" ? { value: "task_streaming", ledger: state.ledger, taskId: event.taskId, after: 0 } : invalid;
     case "task_streaming":
       if (event.type !== "TASK_REFRESHED") return invalid;
-      return event.ledger.phase === "review-required" ? { value: "advisor_review", ledger: event.ledger } : { value: "task_streaming", ledger: event.ledger, taskId: state.taskId, after: event.after };
+      if (event.ledger.phase === "terminal-task-failure") return { value: "terminal_task_failure", ledger: event.ledger };
+      if (event.ledger.phase === "review-required") return { value: "advisor_review", ledger: event.ledger };
+      if (event.ledger.phase !== "active-task" || event.ledger.task?.task_id !== state.taskId) return invalid;
+      return { value: "task_streaming", ledger: event.ledger, taskId: state.taskId, after: Math.max(state.after, event.after) };
     case "advisor_review":
       if (event.type === "TASK_REFRESHED" && event.ledger.phase === "review-required") {
         return { value: "advisor_review", ledger: event.ledger };

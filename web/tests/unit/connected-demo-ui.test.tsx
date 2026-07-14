@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 
 import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
@@ -6,6 +6,7 @@ import { DecisionReceiptTimeline } from "../../components/connected-demo/Decisio
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
 import type { AdvisorLedger as Ledger, CurrentDecisionBrief } from "../../lib/connected-demo/contracts";
+import { ledger as ledgerFixture } from "./connected-demo-test-data";
 
 afterEach(cleanup);
 
@@ -33,14 +34,22 @@ it("renders task-ready authority with one primary action", () => {
 });
 
 it("keeps Malaysia blocked and discloses evidence", () => {
-  const ledger = {
-    phase: "review-required",
-    routes: [{ country: "malaysia", outcome: "blocked", reason_code: "evidence_gap", eligible: false }],
-    evidence: [{ claim: "australia_tuition", publisher: "Synthetic publisher", limitation: "Synthetic only" }],
-  } as unknown as Ledger;
+  const ledger = ledgerFixture("review-required");
   render(<AdvisorLedger ledger={ledger} onPrimaryAction={() => undefined} />);
-  expect(screen.getByRole("button", { name: /Choose Malaysia/i })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: /Choose (Australia|Japan|Malaysia)/i })).toBeNull();
+  expect(screen.getAllByText("Not eligible").length).toBeGreaterThanOrEqual(2);
+  fireEvent.click(screen.getByRole("button", { name: "Malaysia" }));
+  expect(screen.getByText("malaysia_gap")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Malaysia" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText(/Synthetic publisher/i)).toBeVisible();
+});
+
+it("announces public task status outside the collapsed technical trail", () => {
+  render(<AdvisorLedger ledger={ledgerFixture("active-task")} busy onPrimaryAction={() => undefined} />);
+  const status = screen.getByRole("status");
+  expect(status).toBeVisible();
+  expect(status).toHaveTextContent(/Status: preparing/i);
+  expect(screen.getByText("Task trail").closest("details")).not.toHaveAttribute("open");
 });
 
 it("renders only server-derived family constraints", () => {

@@ -85,6 +85,37 @@ class PostgresConnectedDemoRepository:
             source_pack_version=source.source_pack_version,
             policy_version=source.policy_version,
         )
+        authoritative_brief = await self._authoritative_brief_id(
+            context, case_id, case["state"], revision
+        )
+        if authoritative_brief is not None:
+            return self._ledger(
+                phase=(
+                    DemoPhase.PLAN_READY
+                    if case["state"] == "plan_ready"
+                    else DemoPhase.FAMILY_REVIEW
+                ),
+                case_id=case_id,
+                revision=revision,
+                state=case["state"],
+                task=(
+                    PublicTaskProjection(
+                        task_id=task["id"],
+                        row_version=task["row_version"],
+                        status=project_task_status(
+                            AgentTaskState(task["state"]),
+                            result_is_current=task["result_is_current"],
+                        ),
+                        public_code=task["terminal_code"],
+                        attempt_count=task["attempt_count"],
+                        planning_run_id=task["result_planning_run_id"],
+                        updated_at=task["updated_at"],
+                    )
+                    if task is not None
+                    else None
+                ),
+                current_brief_id=authoritative_brief,
+            )
         if task is None:
             return self._ledger(
                 phase=DemoPhase.TASK_READY,
@@ -147,21 +178,6 @@ class PostgresConnectedDemoRepository:
         run_id = task["result_planning_run_id"]
         if run_id is None:
             raise DemoContractUnavailableError("persisted task result is unavailable")
-        current_brief = await self._current_brief_id(context, case_id)
-        if current_brief is not None:
-            phase = (
-                DemoPhase.PLAN_READY
-                if case["state"] == "plan_ready"
-                else DemoPhase.FAMILY_REVIEW
-            )
-            return self._ledger(
-                phase=phase,
-                case_id=case_id,
-                revision=revision,
-                state=case["state"],
-                task=public_task,
-                current_brief_id=current_brief,
-            )
         run, routes, evidence = await self._review_projection(context, run_id)
         eligible = tuple(
             route.route_id
@@ -286,15 +302,26 @@ class PostgresConnectedDemoRepository:
         if manifest != source.manifest_sha256:
             raise DemoContractUnavailableError("canonical demo source contract unavailable")
 
-    async def _current_brief_id(
-        self, context: ActorContext, case_id: UUID
+    async def _authoritative_brief_id(
+        self, context: ActorContext, case_id: UUID, case_state: str, revision: int
     ) -> UUID | None:
+        if case_state not in {"family_review", "plan_ready"}:
+            return None
         return await self._session.scalar(
             text(
-                "SELECT id FROM app.decision_briefs WHERE organization_id=:org "
-                "AND case_id=:case AND is_current"
+                "SELECT b.id FROM app.decision_briefs b "
+                "LEFT JOIN app.family_decisions d ON d.organization_id=b.organization_id "
+                "AND d.decision_brief_id=b.id WHERE b.organization_id=:org "
+                "AND b.case_id=:case AND b.case_revision=:revision AND "
+                "((:state='family_review' AND b.is_current AND d.id IS NULL) OR "
+                "(:state='plan_ready' AND NOT b.is_current AND d.id IS NOT NULL))"
             ),
-            {"org": context.organization_id, "case": case_id},
+            {
+                "org": context.organization_id,
+                "case": case_id,
+                "revision": revision,
+                "state": case_state,
+            },
         )
 
     async def _review_projection(
@@ -345,7 +372,52 @@ class PostgresConnectedDemoRepository:
         grouped: dict[UUID, list[Mapping[str, Any]]] = {}
         for row in route_rows:
             grouped.setdefault(row["id"], []).append(dict(row))
-        routes = tuple(self._route(rows) for rows in grouped.values())
+        fact_rows = (
+            await self._session.execute(
+                text(
+                    "SELECT dr.route_id,array_agg(DISTINCT er.claim ORDER BY er.claim) "
+                    "AS required_claims,array_agg(DISTINCT gap.value ORDER BY gap.value) "
+                    "FILTER (WHERE gap.value IS NOT NULL) AS known_gaps "
+                    "FROM app.comparison_dimension_evidence_refs dr "
+                    "JOIN app.evidence_refs er ON er.organization_id=dr.organization_id "
+                    "AND er.id=dr.evidence_ref_id JOIN app.source_pack_entries se "
+                    "ON se.organization_id=er.organization_id "
+                    "AND se.source_pack_id=er.source_pack_id "
+                    "AND se.source_pack_version=er.source_pack_version "
+                    "AND se.id=er.source_entry_id LEFT JOIN LATERAL "
+                    "jsonb_array_elements_text(se.known_gaps) gap(value) ON true "
+                    "WHERE dr.organization_id=:org AND dr.planning_run_id=:run "
+                    "GROUP BY dr.route_id"
+                ),
+                {"org": context.organization_id, "run": run_id},
+            )
+        ).mappings().all()
+        facts = {row["route_id"]: dict(row) for row in fact_rows}
+        gap_rows = (
+            await self._session.execute(
+                text(
+                    "SELECT p.id AS route_id,array_agg(DISTINCT gap.value ORDER BY gap.value) "
+                    "FILTER (WHERE gap.value IS NOT NULL) AS known_gaps "
+                    "FROM app.planning_routes p JOIN app.planning_runs r "
+                    "ON r.organization_id=p.organization_id AND r.id=p.planning_run_id "
+                    "JOIN app.source_pack_entries se ON se.organization_id=r.organization_id "
+                    "AND se.source_pack_id=r.source_pack_id "
+                    "AND se.source_pack_version=r.source_pack_version "
+                    "AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(se.coverage) c(value) "
+                    "WHERE left(c.value,length(p.country)+1)=p.country || '_') "
+                    "LEFT JOIN LATERAL jsonb_array_elements_text(se.known_gaps) "
+                    "gap(value) ON true WHERE p.organization_id=:org "
+                    "AND p.planning_run_id=:run GROUP BY p.id"
+                ),
+                {"org": context.organization_id, "run": run_id},
+            )
+        ).mappings().all()
+        for row in gap_rows:
+            facts.setdefault(row["route_id"], {})["known_gaps"] = row["known_gaps"]
+        routes = tuple(
+            self._route(rows, facts.get(route_id))
+            for route_id, rows in grouped.items()
+        )
         evidence_rows = (
             await self._session.execute(
                 text(
@@ -389,7 +461,9 @@ class PostgresConnectedDemoRepository:
         )
 
     @staticmethod
-    def _route(rows: list[Mapping[str, Any]]) -> AdvisorRouteProjection:
+    def _route(
+        rows: list[Mapping[str, Any]], facts: Mapping[str, Any] | None
+    ) -> AdvisorRouteProjection:
         first = rows[0]
         dimensions = tuple(
             ComparisonDimensionProjection(
@@ -421,17 +495,24 @@ class PostgresConnectedDemoRepository:
                 rank=first["rank"],
                 publication_year=first["publication_year"],
             )
+        required_claims: set[str] = set(
+            facts.get("required_claims", ()) if facts else ()
+        )
+        required_claims.add(f"{first['country']}_program_fit")
         return AdvisorRouteProjection(
             route_id=first["id"],
             country=Country(first["country"]),
             outcome=RouteOutcome(first["outcome"]),
             reason_code=first["reason_code"],
-            eligible=first["outcome"] != "blocked",
+            eligible=(
+                first["country"] == "australia"
+                and first["outcome"] == "recommended_with_condition"
+            ),
             dimensions=dimensions,
             cost=cost,
             ranking=ranking,
-            required_claims=(),
-            known_gaps=(),
+            required_claims=tuple(sorted(required_claims)),
+            known_gaps=tuple(facts["known_gaps"] if facts and facts["known_gaps"] else ()),
         )
 
     @staticmethod

@@ -54,6 +54,7 @@ thead th { color: var(--muted); font-size: .8rem; letter-spacing: .08em; text-tr
 .review-note { border-left: 4px solid var(--attention); }
 .fixture-note, .disabled-reason, .recovery-copy { color: var(--muted); font-size: .92rem; }
 .technical-details { margin-top: 1rem; padding: .8rem 1rem; border: 1px solid var(--border); background: rgba(255,253,248,.55); color: var(--muted); }
+.task-progress > [role="status"] { margin-top: 1rem; padding: .8rem 1rem; border-left: 3px solid var(--trust); background: var(--surface); }
 .technical-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
 .editorial-heading h2, .family-frame h3 { font-family: var(--editorial); }
 .family-story { border-top: 1px solid var(--border); padding-top: 5rem; }
