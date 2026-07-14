@@ -41,7 +41,9 @@ Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow 
 - [v0.1.0 release notes](docs/releases/v0.1.0.md)
 - [Architecture and milestone history](DESIGN.md)
 - [Documentation index](docs/README.md)
-- [Historical M1 visual contract](docs/superpowers/specs/2026-07-11-m1-demo-design.md)
+- [Historical M1 fixture-only visual contract](docs/superpowers/specs/2026-07-11-m1-demo-design.md)
+- M5 connected advisor-to-family demo: implemented as the local synthetic walkthrough documented in the [runbook](docs/operations/connected-demo.md).
+- [M4B optional read-only MKE candidate proof](docs/operations/mke-candidate-proof.md); outputs remain `UNTRUSTED_CANDIDATE`.
 
 ## Contributor lane
 
