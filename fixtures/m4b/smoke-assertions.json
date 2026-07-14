@@ -1,0 +1,11 @@
+{
+  "schema_version": "night_voyager.m4b_smoke_assertions.v1",
+  "positive": {
+    "query": "synthetic australia program fit advisor evidence review",
+    "expected_status": "manifest_mapped"
+  },
+  "no_match": {
+    "query": "absent-token-7f91c2",
+    "expected_status": "proof_pack_no_match"
+  }
+}

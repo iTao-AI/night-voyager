@@ -1,0 +1,24 @@
+{
+  "schema_version": "night_voyager.m4b_manifest.v1",
+  "organization_id": "11111111-1111-4111-8111-111111111111",
+  "source_pack_id": "22222222-2222-4222-8222-222222222222",
+  "source_pack_version": 1,
+  "sources": [
+    {
+      "schema_version": "night_voyager.m4b_source_entry.v1",
+      "entry_id": "33333333-3333-4333-8333-333333333333",
+      "path": "sources/australia-program-fit.pdf",
+      "sha256": "7523eb2d9be50405ec50623e3fc182d7632c22535c6bac390e2200b68f716dd5",
+      "media_type": "application/pdf",
+      "claim": "Synthetic Australia program fit requires advisor evidence review.",
+      "evidence_role": "program_fit",
+      "allowed_locators": [
+        {
+          "kind": "page",
+          "start": 1,
+          "end": 1
+        }
+      ]
+    }
+  ]
+}

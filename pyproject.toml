@@ -19,6 +19,9 @@ dependencies = [
   "uvicorn[standard]>=0.35,<1",
 ]
 
+[project.optional-dependencies]
+mke = ["mcp>=1.28.1,<2"]
+
 [dependency-groups]
 dev = [
   "build>=1.3,<2",
@@ -34,8 +37,11 @@ packages = ["src/night_voyager"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["database: requires disposable PostgreSQL 18 roles"]
-addopts = '-m "not database"'
+markers = [
+  "database: requires disposable PostgreSQL 18 roles",
+  "mke: requires the optional MKE/MCP process extra",
+]
+addopts = '-m "not database and not mke"'
 
 [tool.ruff]
 target-version = "py312"
@@ -48,3 +54,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 include = ["src", "tests", "scripts"]
+exclude = [
+  "src/night_voyager/adapters/mke_readonly.py",
+  "tests/fixtures/m4b/fake_mke_server.py",
+  "tests/integration/adapters/test_mke_candidate_wheel.py",
+  "tests/integration/adapters/test_mke_readonly_smoke.py",
+]

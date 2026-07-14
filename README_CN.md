@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract**、**M2 identity/session/RLS boundary**、**M3A deterministic planning foundation**、**M3B local synthetic advisor-to-family backend proof** 与 **M4A deterministic durable task/worker/SSE proof**。M4A 创建版本固定的 planning task，在 PostgreSQL 中持久化 worker lifecycle，并授权重放事件，不绕过顾问审核；`/demo` 仍是未连接 backend 的 fixture-only 页面。
+Night Voyager 已具备 **M0 bootstrap 基线**、**M1 fixture-only design contract**、**M2 identity/session/RLS boundary**、**M3A deterministic planning foundation**、**M3B local synthetic advisor-to-family backend proof**、**M4A deterministic durable task/worker/SSE proof** 与 **M4B optional read-only MKE candidate proof**。M4B 只在隔离的本地 synthetic lane 消费精确审查的 artifact，并让所有投影保持 `UNTRUSTED_CANDIDATE`；默认产品路径和 fixture-only `/demo` 均不连接 MKE。
 
 ## Evaluator 路径
 
@@ -34,6 +34,7 @@ Contributor 还需要由 [uv](https://docs.astral.sh/uv/) 管理的 Python 3.12.
 make doctor MODE=dev
 make check
 make db-check
+make mke-check
 ```
 
 更多信息见 [CONTRIBUTING.md](CONTRIBUTING.md)、[SECURITY.md](SECURITY.md) 与 [docs/README.md](docs/README.md)。
@@ -46,11 +47,16 @@ bounded local concurrency、downgrade/re-upgrade 与 pool cleanup。
 `accepted_synthetic_demo`
 Evidence 只代表本地合成 proof；caller 不能声明 `externally_verified`。
 
+`make mke-check` 在 disposable optional environment 中运行 synthetic fake-process
+兼容性测试。持有精确 operator-supplied wheel 与 receipt 的 maintainer 可按
+[MKE candidate proof runbook](docs/operations/mke-candidate-proof.md)执行真实 read-only
+proof。Evaluator 与默认 `make check` 不需要 MKE 或 candidate artifact。
+
 ## 当前边界
 
 - M3B/M4A backend path 尚未连接 fixture-only `/demo`；没有 task 或 decision frontend mutation。
 - worker/SSE proof 是本地确定性证据，不代表 distributed high availability 或 production SLA。
-- 没有真实 DRA、MKE、OpenClaw、模型或消息适配器。
+- 没有 DRA、OpenClaw、模型、消息或产品路径 MKE `PlanningAdapter`；M4B 只是本地 read-only compatibility adapter。
 - 不代表生产部署、真实用户或录取结果。
 
 ## License
