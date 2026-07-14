@@ -207,15 +207,23 @@ debug, trace, and framework headers are not exposed. All handlers are dynamic an
 `no-store`. Every upstream `Set-Cookie` field is appended separately to the browser
 response; cookie fields are never comma-joined.
 
-FastAPI problem status/body pass through unchanged. The BFF owns only two redacted RFC
-9457-style failures:
+FastAPI problem status/body pass through unchanged. Local BFF rejection uses this closed,
+redacted RFC 9457-style allowlist:
 
+- `400` with code `bff_invalid_request` for an invalid UUID/cursor or malformed JSON;
+- `403` with code `bff_origin_rejected` for a mutation Origin mismatch;
+- `409` with code `bff_session_recovery_required` when bootstrap receives the named
+  `night_voyager_session` cookie;
+- `413` with code `bff_request_too_large`;
+- `415` with code `bff_unsupported_media_type`;
 - `503` with code `bff_upstream_unavailable`;
 - `504` with code `bff_upstream_timeout`.
 
-Neither contains an upstream URL, exception, stack trace, private path, credential, or
-provider output. Non-SSE calls use fixed deadlines. An aborted browser request aborts the
-upstream fetch.
+The bootstrap guard checks only cookie presence before upstream access. It does not read the
+cookie value, resolve a session, infer a role, or expose session validity. No local problem
+contains an upstream URL, exception, stack trace, private path, credential, cookie value,
+actor, role, or provider output. Non-SSE calls use fixed deadlines. An aborted browser
+request aborts the upstream fetch.
 
 ## SSE transport
 
@@ -275,12 +283,15 @@ identity, Evidence text, reviewer notes, provider output, raw errors, credential
 private paths. The session token remains an `HttpOnly`, `SameSite=Lax` cookie.
 
 Role and CSRF metadata in `sessionStorage` support reload only within the same browser tab.
-If an opaque `HttpOnly` session cookie remains while required recovery metadata is missing
-or inconsistent, the UI enters an explicit fail-closed recovery state. It does not guess a
-role, issue a mutation, silently rotate or revoke, or treat a family-safe read as proof of
-parent identity. M5 adds no identity endpoint, transition token, BFF role authority,
-`localStorage` persistence, or revoke path without CSRF. Protected reset and natural
-session expiry remain the recovery boundary outside this flow.
+If recovery metadata is missing or inconsistent, the UI exposes no mutation or parent
+presentation. An explicit bootstrap request is allowed only when the BFF observes that the
+named `night_voyager_session` cookie is absent. If the opaque cookie remains, the bootstrap
+handler returns `409 bff_session_recovery_required` before upstream access; it does not read
+the value or infer session validity or role. The UI does not guess a role, silently rotate
+or revoke, or treat a family-safe read as proof of parent identity. M5 adds no identity
+endpoint, transition token, BFF role authority, `localStorage` persistence, or revoke path
+without CSRF. Protected reset and natural session expiry remain the recovery boundary
+outside this flow.
 
 ## Session, idempotency, and recovery
 
@@ -360,6 +371,8 @@ state, and does not continue to parent bootstrap/mint when advisor revoke fails.
 prove budget and trade-off authority is never hard-coded in frontend data, and that an
 opaque cookie with missing or inconsistent recovery metadata enables neither mutation nor
 the parent presentation.
+They prove a cookie-free bootstrap forwards the fixed Origin, while a bootstrap carrying
+the named session cookie returns the fixed `409` without an upstream request.
 
 Playwright runs against the real Compose web, API, PostgreSQL, migrator, demo seed, and
 worker. It proves advisor session -> task -> worker -> SSE -> Ledger -> approval -> parent

@@ -35,10 +35,12 @@ proof.
    plan-ready, and terminal-task-failure phases. Absent task/run/route/review data remains
    absent rather than becoming placeholder authority.
 7. The BFF forwards only allowlisted request/response fields, validates exact Origin and
-   bounded bodies, streams SSE without interpretation, and emits only redacted upstream
-   unavailable/timeout problems of its own. It sends the server-configured fixed public
-   Origin on every demo identity request, never reflects caller Origin, and appends each
-   upstream `Set-Cookie` field separately without comma joining.
+   bounded bodies, streams SSE without interpretation, and uses a closed local problem
+   allowlist for invalid request, Origin, residual-session recovery, body size, media type,
+   unavailable, and timeout failures. It sends the server-configured fixed public Origin on
+   every demo identity request, never reflects caller Origin, and appends each upstream
+   `Set-Cookie` field separately without comma joining. FastAPI problem responses pass
+   through unchanged.
 8. Client state is display/recovery state only. Consequential transitions follow backend
    responses, and idempotency/stale recovery remains server-authoritative.
    The connected UI defaults a fresh walkthrough to advisor and offers no client-only role
@@ -46,11 +48,13 @@ proof.
    and `plan-ready` never creates a new task. This UI sequencing does not change the
    existing synthetic actor mint capability or advisor/student/parent family-safe read
    matrix; it adds no transition token or BFF phase authority.
-9. `sessionStorage` role and CSRF metadata support same-tab reload only. An opaque cookie
-   with missing or inconsistent recovery metadata enters fail-closed recovery and cannot
-   enable mutation, silent rotation/revocation, inferred role, or parent presentation.
-   M5 adds no identity endpoint, transition token, BFF role authority, `localStorage`, or
-   revoke without CSRF.
+9. `sessionStorage` role and CSRF metadata support same-tab reload only. Missing or
+   inconsistent metadata exposes no mutation or parent presentation. The bootstrap BFF
+   handler checks only whether the named HttpOnly session cookie is present; presence
+   returns redacted `409 bff_session_recovery_required` before upstream access, while
+   absence permits normal bootstrap. It never reads the value, resolves the session, or
+   infers a role. M5 adds no identity endpoint, transition token, BFF role authority,
+   `localStorage`, or revoke without CSRF.
 10. M4B MKE candidates, DRA, OCR, OpenClaw, remote providers, share tokens, production
    accounts, release, and deployment remain outside M5.
 
@@ -85,6 +89,10 @@ Decision input constraints remain server-authoritative rather than becoming fixt
 Compose, country-label, or client constants. Tab-scoped recovery metadata improves reload
 continuity without turning a surviving opaque cookie or family-safe response into role
 proof; ambiguous recovery fails closed.
+
+The cookie-presence bootstrap guard is transport safety rather than identity authority. Its
+closed `409` prevents an empty tab from accidentally reaching the existing session-rotation
+path, while a genuinely cookie-free browser can still begin the synthetic walkthrough.
 
 ## Rejected alternatives
 

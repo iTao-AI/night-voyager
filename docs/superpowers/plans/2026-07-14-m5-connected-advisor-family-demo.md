@@ -51,7 +51,10 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
   deadlines, direct SSE streams, and no catch-all proxy.
 - Same-tab reload may recover role and CSRF from `sessionStorage`. Missing or
   inconsistent recovery metadata with an opaque cookie fails closed: no guessed
-  role, parent presentation, mutation, silent rotate, or silent revoke.
+  role, parent presentation, mutation, silent rotate, or silent revoke. The
+  bootstrap BFF handler checks only whether the named HttpOnly session cookie is
+  present; if it is, bootstrap stops locally with
+  `409 bff_session_recovery_required` before any upstream request.
 - Keep MKE, DRA, OCR, OpenClaw, remote providers, credentials, real student data,
   share tokens, participant-management APIs, production tenancy, release,
   deployment, and production claims outside M5.
@@ -92,6 +95,8 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
   migrations remain, no M5 database DDL/grants exist, the two backend paths and
   eleven BFF paths are frozen, pure `connected_demo` modules import no FastAPI or
   SQLAlchemy, and every phase rejects impossible placeholder authority.
+  `FamilyDecisionRequirements` must reject an empty tuple, duplicates, and any
+  value other than the exact one-element `("budget_elasticity",)` tuple.
 
   ```python
   def test_m5_keeps_the_existing_database_graph() -> None:
@@ -147,7 +152,7 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
       currency: Literal["CNY"]
       pinned_cost_minor: PositiveInt
       hard_ceiling_minor: PositiveInt
-      required_trade_offs: tuple[Literal["budget_elasticity"], ...]
+      required_trade_offs: tuple[Literal["budget_elasticity"]]
 
   class PublicTaskProjection(FrozenModel):
       task_id: UUID
@@ -527,7 +532,8 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
 - Modify: `tests/architecture/test_m5_contract.py`
 
 **Interfaces:**
-- Consumes: Web `Request`/`Response`, Next.js 16 Promise-based dynamic params,
+- Consumes: Web `Request`/`Response`, `NextRequest.cookies`, Next.js 16
+  Promise-based dynamic params,
   Node 24 `Headers.getSetCookie()`, fixed server environment, and existing
   FastAPI routes.
 - Produces: `loadDemoBffConfig()`, `forwardDemoJson()`, `forwardDemoSse()`,
@@ -538,9 +544,15 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
   In a Node Vitest environment, cover exact method/path mapping, Promise params,
   invalid UUID before fetch, no catch-all, 32 KiB stream bound, media type,
   request/response header allowlists, fixed Origin, CSRF/idempotency, no caller
-  upstream, unchanged FastAPI problem status/body, exact
-  `bff_upstream_unavailable`/`bff_upstream_timeout` redaction, abort propagation,
-  SSE byte identity, cursor precedence, and separate cookies.
+  upstream, unchanged FastAPI problem status/body, the exact local problem
+  allowlist (`bff_invalid_request`, `bff_origin_rejected`,
+  `bff_session_recovery_required`, `bff_request_too_large`,
+  `bff_unsupported_media_type`, `bff_upstream_unavailable`, and
+  `bff_upstream_timeout`), abort propagation, SSE byte identity, cursor
+  precedence, and separate cookies. Prove that bootstrap with no session cookie
+  forwards the fixed Origin, while bootstrap with `night_voyager_session`
+  present returns `409 bff_session_recovery_required` without calling fetch or
+  inspecting the cookie value.
 
   ```ts
   it("forwards every Set-Cookie field separately", async () => {
@@ -623,6 +635,16 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
   is `Cache-Control: no-store`. The transport must not forward hop-by-hop,
   `Server`, trace, debug, upstream URL, framework, or unknown headers.
 
+  Local rejection is closed and typed: invalid UUID/cursor or malformed JSON is
+  `400 bff_invalid_request`; Origin mismatch is `403 bff_origin_rejected`; an
+  existing `night_voyager_session` on bootstrap is
+  `409 bff_session_recovery_required`; an oversized body is
+  `413 bff_request_too_large`; unsupported media type is
+  `415 bff_unsupported_media_type`; transport unavailable/timeout remains the
+  approved redacted `503`/`504`. These responses contain no cookie value,
+  upstream URL, exception, stack, path, or role inference. FastAPI problems pass
+  through unchanged.
+
 - [ ] **Step 5: Add all eleven explicit handlers**
 
   Each dynamic handler awaits its Promise params and passes a literal upstream
@@ -643,6 +665,10 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
   ```
 
   No handler may accept an upstream host/path/method from request data.
+  `GET /api/demo/session-bootstrap` alone accepts `NextRequest`, checks
+  `request.cookies.has("night_voyager_session")`, and returns the fixed local
+  recovery problem before fetch when the cookie exists. This is a transport
+  conflict guard, not session or role resolution.
 
 - [ ] **Step 6: Run BFF GREEN and commit**
 
@@ -766,10 +792,13 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
   `Last-Event-ID`. Event handlers only trigger a task/Ledger refresh; they do not
   synthesize business state.
 
-  If recovery metadata is absent/inconsistent while reads indicate an existing
-  session, set `recoverable_error` and expose no mutation. Session expiry clears
-  local metadata and requires an explicit reconnect action. Never automatically
-  replay a mutation after `401` or `409`.
+  If recovery metadata is absent or inconsistent, the client exposes no mutation
+  or parent presentation. Its explicit reconnect may call bootstrap, but a
+  surviving HttpOnly session cookie causes the BFF to return
+  `409 bff_session_recovery_required` before upstream access; only a genuinely
+  cookie-free request can bootstrap a fresh advisor session. Session expiry
+  clears local metadata and requires another explicit reconnect action. Never
+  automatically replay a mutation after `401` or `409`.
 
 - [ ] **Step 5: Run client GREEN and commit**
 
@@ -1162,7 +1191,8 @@ asyncpg, PostgreSQL 18.4, Next.js 16.2.10 App Router, React 19.2.3, TypeScript
 - [x] No migration, table, grant, dependency, UI framework, remote provider, or
   product-path MKE work enters the plan.
 - [x] Pre-task source authority, post-task pin consistency, decision requirements,
-  fixed Origin, separate cookies, role rotation, recovery metadata, SSE, and
-  idempotency each have a real test path.
+  fixed Origin, separate cookies, cookie-presence bootstrap guard, closed local
+  BFF problems, role rotation, recovery metadata, SSE, and idempotency each have
+  a real test path.
 - [x] The final evidence supports only a local synthetic connected demo, not
   production adoption, real users, business outcomes, SLA, or distributed HA.
