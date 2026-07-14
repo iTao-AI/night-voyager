@@ -23,3 +23,11 @@ def test_worker_service_runs_functional_task_worker_with_non_owner_role() -> Non
     assert "night_voyager_migrator" not in worker
     assert "TaskWorker" in entrypoint
     assert "DeterministicPlanningAdapter" in entrypoint
+
+
+def test_web_uses_only_fixed_m5_bff_origins() -> None:
+    compose = Path("compose.yaml").read_text(encoding="utf-8")
+    web = compose.split("  web:", 1)[1].split("volumes:", 1)[0]
+    assert "NIGHT_VOYAGER_API_INTERNAL_URL: http://api:8000" in web
+    assert "NIGHT_VOYAGER_PUBLIC_ORIGIN: http://127.0.0.1:3000" in web
+    assert "API_BASE_URL" not in web

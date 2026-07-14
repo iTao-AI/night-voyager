@@ -86,3 +86,13 @@ def test_m5_adds_no_database_ddl_or_grants() -> None:
     )
     assert "connected_demo" not in migration_source
     assert "advisor_ledger" not in migration_source
+
+
+def test_m5_bff_has_only_explicit_route_handlers() -> None:
+    route_root = ROOT / "web/app/api/demo"
+    routes = sorted(
+        route.relative_to(route_root).as_posix() for route in route_root.rglob("route.ts")
+    )
+    assert len(routes) == 11
+    assert not any("[..." in route for route in routes)
+    assert all('dynamic = "force-dynamic"' in (route_root / route).read_text() for route in routes)
