@@ -17,7 +17,7 @@
       "schema_version": "mke.evidence_ref.v1",
       "evidence_id": "ev_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "source_id": "src_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "content_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "content_fingerprint": "sha256:7523eb2d9be50405ec50623e3fc182d7632c22535c6bac390e2200b68f716dd5",
       "publication_id": "pub_cccccccccccccccccccccccccccccccc",
       "publication_revision": 1,
       "run_id": "run_dddddddddddddddddddddddddddddddd",

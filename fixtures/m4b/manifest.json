@@ -8,7 +8,7 @@
       "schema_version": "night_voyager.m4b_source_entry.v1",
       "entry_id": "33333333-3333-4333-8333-333333333333",
       "path": "sources/australia-program-fit.pdf",
-      "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "sha256": "7523eb2d9be50405ec50623e3fc182d7632c22535c6bac390e2200b68f716dd5",
       "media_type": "application/pdf",
       "claim": "Synthetic Australia program fit requires advisor evidence review.",
       "evidence_role": "program_fit",

@@ -1,0 +1,17 @@
+{
+  "schema_version": "night_voyager.mke_candidate_artifact_lock.v1",
+  "repository": "iTao-AI/multimodal-knowledge-engine",
+  "source_commit": "16fae017ced5fe67da3fae4a01f26e9e9f1084aa",
+  "package_name": "multimodal-knowledge-engine",
+  "package_version": "0.1.1",
+  "wheel_filename": "multimodal_knowledge_engine-0.1.1-py3-none-any.whl",
+  "wheel_bytes": 250284,
+  "wheel_sha256": "616549f172fba2482f82b450452b134de541d172384883282de26f6178e362b2",
+  "requires_python": ">=3.12,<3.14",
+  "consumer_proof_schema": "mke.consumer_source_pack_proof.v1",
+  "consumer_proof_status": "passed",
+  "proof_input_wheel_sha256": "616549f172fba2482f82b450452b134de541d172384883282de26f6178e362b2",
+  "receipt_sha256": "a8f73318c2b14eeaa0bc8e27890c1f15e232b92d50019602f28ec9fbbb659e54",
+  "artifact_locator": "operator_supplied",
+  "reviewed_at": "2026-07-14"
+}
