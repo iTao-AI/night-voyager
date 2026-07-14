@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
+import { presentRouteOutcome, presentRouteReason } from "../../lib/connected-demo/presentation";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { TaskProgress } from "./TaskProgress";
 
@@ -44,8 +45,8 @@ export function AdvisorLedger({
                 return (
                   <tr key={`${country}-${index}`}>
                     <th scope="row">{country}</th>
-                    <td>{String(route.outcome)}</td>
-                    <td>{String(route.reason_code)}</td>
+                    <td>{presentRouteOutcome(route.outcome)}</td>
+                    <td>{presentRouteReason(route.reason_code)}</td>
                     <td><span className={`status ${blocked ? "danger" : "trust"}`}>{blocked ? "Not eligible" : "Eligible"}</span></td>
                   </tr>
                 );
@@ -64,9 +65,9 @@ export function AdvisorLedger({
             })}
           </div>
           <dl className="mobile-dimensions">
-            <div><dt>Outcome</dt><dd>{selectedRoute.outcome}</dd></div>
+            <div><dt>Outcome</dt><dd>{presentRouteOutcome(selectedRoute.outcome)}</dd></div>
             <div><dt>Eligibility</dt><dd>{selectedRoute.eligible ? "Eligible for review" : "Not eligible"}</dd></div>
-            <div><dt>Reason</dt><dd>{selectedRoute.reason_code}</dd></div>
+            <div><dt>Reason</dt><dd>{presentRouteReason(selectedRoute.reason_code)}</dd></div>
             <div><dt>Required claims</dt><dd>{selectedRoute.required_claims.join(", ") || "None projected"}</dd></div>
             <div><dt>Known gaps</dt><dd>{selectedRoute.known_gaps.join(", ") || "No projected gaps"}</dd></div>
           </dl>

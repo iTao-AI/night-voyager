@@ -8,7 +8,14 @@ export const ROUTE_ID = "71000000-0000-0000-0000-000000000001";
 const task = (status: TaskStatus) => ({ task_id: TASK_ID, row_version: 1, status, public_code: null, attempt_count: 1, planning_run_id: status === "preparing" ? null : "70000000-0000-0000-0000-000000000001", updated_at: "2026-07-14T00:00:00Z" });
 const route = (country: "australia" | "japan" | "malaysia", outcome: "recommended_with_condition" | "conditional" | "blocked", eligible: boolean) => ({
   route_id: country === "australia" ? ROUTE_ID : country === "japan" ? "71000000-0000-0000-0000-000000000002" : "71000000-0000-0000-0000-000000000003",
-  country, outcome, reason_code: `${country}_reason`, eligible,
+  country,
+  outcome,
+  reason_code: country === "australia"
+    ? "complete_cost_and_fx_within_boundary"
+    : country === "japan"
+      ? "synthetic_high_risk_alternative"
+      : "direct_program_fit_evidence_absent",
+  eligible,
   dimensions: [{ key: "program_fit", outcome: eligible ? "supported" : "conditional", reason_code: `${country}_dimension` }],
   cost: country === "australia" ? { source_currency: "AUD" as const, tuition_minor: 1, living_minor: 1, fx_rate: "5", cny_total_minor: 10, fx_source: "synthetic", fx_date: "2026-07-01" } : null,
   ranking: null, required_claims: [`${country}_program_fit`], known_gaps: country === "australia" ? [] : [`${country}_gap`],
@@ -29,10 +36,10 @@ export function brief(phase: CurrentDecisionBrief["phase"] = "family-review"): C
   const value: CurrentDecisionBrief = {
     schema_version: 1, proof_mode: "synthetic-demo", phase, case_id: CASE_ID, brief_id: BRIEF_ID, brief_version: 1, source_snapshot_date: "2026-07-01",
     family_safe_projection: { schema_version: 1, intake: "2027-02", routes: [{ route_id: ROUTE_ID, country: "australia", outcome: "recommended_with_condition", reason_code: "complete" }], eligible_route_ids: [ROUTE_ID], accepted_evidence_risks: [], synthetic_proof: true },
-    decision_requirements: { schema_version: 1, eligible_route_id: ROUTE_ID, currency: "CNY", pinned_cost_minor: 35_000_000, hard_ceiling_minor: 40_000_000, required_trade_offs: ["budget_elasticity"] }, receipt: null, timeline: null,
+    decision_requirements: { schema_version: 1, eligible_route_id: ROUTE_ID, currency: "CNY", pinned_cost_minor: 30_550_000, hard_ceiling_minor: 40_000_000, required_trade_offs: ["budget_elasticity"] }, receipt: null, timeline: null,
   };
   if (phase === "plan-ready") {
-    value.receipt = { schema_version: 1, decision_id: "82000000-0000-0000-0000-000000000301", receipt_id: "83000000-0000-0000-0000-000000000301", selected_route_id: ROUTE_ID, accepted_budget_min_minor: 35_000_000, accepted_budget_max_minor: 40_000_000, currency: "CNY", accepted_trade_offs: ["budget_elasticity"], decision_made_by_actor_id: "20000000-0000-0000-0000-000000000003", recorded_by_actor_id: "20000000-0000-0000-0000-000000000001", source: "family_consultation" };
+    value.receipt = { schema_version: 1, decision_id: "82000000-0000-0000-0000-000000000301", receipt_id: "83000000-0000-0000-0000-000000000301", selected_route_id: ROUTE_ID, accepted_budget_min_minor: 30_550_000, accepted_budget_max_minor: 40_000_000, currency: "CNY", accepted_trade_offs: ["budget_elasticity"], decision_made_by_actor_id: "20000000-0000-0000-0000-000000000003", recorded_by_actor_id: "20000000-0000-0000-0000-000000000001", source: "family_consultation" };
     value.timeline = { schema_version: 1, country: "australia", intake: "2027-02", milestones: [{ key: "documents", due_date: "2026-09-01" }] };
   }
   return value;
