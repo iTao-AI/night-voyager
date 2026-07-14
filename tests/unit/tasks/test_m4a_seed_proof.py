@@ -4,7 +4,7 @@ from pathlib import Path
 def test_seed_declares_separate_task_ready_case_without_resetting_golden_case() -> None:
     source = Path("scripts/seed_demo.py").read_text(encoding="utf-8")
 
-    assert 'TASK_CASE_ID = UUID("40000000-0000-0000-0000-000000000002")' in source
+    assert "CONNECTED_DEMO_CASE_ID" in source
     assert "_seed_task_case" in source
     assert "ON CONFLICT DO NOTHING" in source
     assert "UPDATE app.student_cases SET state='planning'" not in source

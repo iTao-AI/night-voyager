@@ -10,13 +10,12 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
-from night_voyager.identity.demo_seed import ensure_seed_allowed
+from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID, ensure_seed_allowed
 from night_voyager.planning.application import POLICY_VERSION
 from night_voyager.planning.fixtures import ValidatedPlanningFixture, validate_planning_fixture
 
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 CASE_ID = UUID("40000000-0000-0000-0000-000000000001")
-TASK_CASE_ID = UUID("40000000-0000-0000-0000-000000000002")
 RUN_ID = UUID("70000000-0000-0000-0000-000000000001")
 ACTORS = (
     ("advisor", "20000000-0000-0000-0000-000000000001", "Demo Advisor"),
@@ -297,7 +296,7 @@ async def _seed_task_case(
             "INSERT INTO app.student_cases (organization_id,id,state) "
             "VALUES (:org,:case,'planning') ON CONFLICT DO NOTHING"
         ),
-        {"org": DEMO_ORG, "case": TASK_CASE_ID},
+        {"org": DEMO_ORG, "case": CONNECTED_DEMO_CASE_ID},
     )
     await connection.execute(
         text(
@@ -308,7 +307,7 @@ async def _seed_task_case(
         ),
         {
             "org": DEMO_ORG,
-            "case": TASK_CASE_ID,
+            "case": CONNECTED_DEMO_CASE_ID,
             "student": json.dumps(source_case.student.model_dump(mode="json")),
             "family": json.dumps(source_case.family.model_dump(mode="json")),
         },
@@ -318,15 +317,17 @@ async def _seed_task_case(
             "UPDATE app.student_cases SET current_revision=1 "
             "WHERE organization_id=:org AND id=:case AND current_revision IS NULL"
         ),
-        {"org": DEMO_ORG, "case": TASK_CASE_ID},
+        {"org": DEMO_ORG, "case": CONNECTED_DEMO_CASE_ID},
     )
     await connection.execute(
-        text(
-            "INSERT INTO app.student_case_participants "
-            "(organization_id,case_id,actor_id,role) "
-            "VALUES (:org,:case,:advisor,'advisor') ON CONFLICT DO NOTHING"
-        ),
-        {"org": DEMO_ORG, "case": TASK_CASE_ID, "advisor": ACTORS[0][1]},
+        text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
+        {
+            "org": DEMO_ORG,
+            "case": CONNECTED_DEMO_CASE_ID,
+            "advisor": ACTORS[0][1],
+            "student": ACTORS[1][1],
+            "parent": ACTORS[2][1],
+        },
     )
 
 
