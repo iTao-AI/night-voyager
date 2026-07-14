@@ -9,7 +9,8 @@ if [ "${1:-}" = "inside" ]; then
     uv run python scripts/verify_release.py --check-db-roles
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/security tests/integration/identity tests/integration/planning \
-        tests/integration/decision/test_postgres_decision.py tests/integration/tasks
+        tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
+        tests/integration/connected_demo/test_postgres_read_models.py
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/integration/decision/test_postgres_decision.py
     PYTEST_ADDOPTS= uv run pytest -q -m database \

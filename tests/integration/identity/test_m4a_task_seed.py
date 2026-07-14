@@ -33,16 +33,16 @@ async def test_explicit_seed_keeps_golden_run_and_adds_separate_task_ready_case(
                 )
             ).mappings().one()
             assert dict(task_case) == {"state": "planning", "current_revision": 1}
-            assert (
-                await connection.scalar(
+            roles = (
+                await connection.execute(
                     text(
-                        "SELECT count(*) FROM app.student_case_participants "
-                        "WHERE organization_id=:org AND case_id=:case AND role='advisor'"
+                        "SELECT role FROM app.student_case_participants "
+                        "WHERE organization_id=:org AND case_id=:case ORDER BY role"
                     ),
                     {"org": DEMO_ORG, "case": TASK_CASE_ID},
                 )
-                == 1
-            )
+            ).scalars().all()
+            assert roles == ["advisor", "parent", "student"]
             assert (
                 await connection.scalar(
                     text(
