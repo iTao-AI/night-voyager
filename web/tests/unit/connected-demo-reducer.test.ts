@@ -29,4 +29,12 @@ describe("connected demo reducer", () => {
     const state = demoReducer({ value: "bootstrapping" }, { type: "PARENT_SESSION_READY", brief });
     expect(state).toEqual({ value: "recoverable_error", code: "invalid_transition" });
   });
+
+  it("keeps review-required monotonic across duplicate SSE refreshes", () => {
+    const state = demoReducer(
+      { value: "advisor_review", ledger: reviewLedger },
+      { type: "TASK_REFRESHED", ledger: reviewLedger, after: 3 },
+    );
+    expect(state).toEqual({ value: "advisor_review", ledger: reviewLedger });
+  });
 });

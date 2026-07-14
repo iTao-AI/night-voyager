@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { createConnectedDemoApi } from "./api";
 import type { FamilyDecisionBody } from "./contracts";
@@ -14,6 +14,7 @@ const initial: DemoDisplayState = { value: "bootstrapping" };
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
+  const recoveryStarted = useRef(false);
 
   const connectAdvisor = useCallback(async () => {
     try {
@@ -46,6 +47,12 @@ export function useConnectedDemo() {
       dispatch({ type: "RECOVERABLE_FAILURE", code: "session_expired" });
     }
   }, []);
+
+  useEffect(() => {
+    if (recoveryStarted.current) return;
+    recoveryStarted.current = true;
+    if (loadRecoveryMetadata()) void recover();
+  }, [recover]);
 
   useEffect(() => {
     if (state.value !== "task_streaming") return;

@@ -96,3 +96,15 @@ def test_m5_bff_has_only_explicit_route_handlers() -> None:
     assert len(routes) == 11
     assert not any("[..." in route for route in routes)
     assert all('dynamic = "force-dynamic"' in (route_root / route).read_text() for route in routes)
+
+
+def test_m5_browser_proof_keeps_locked_runtime_and_dependencies() -> None:
+    dockerfile = (ROOT / "web/Dockerfile.e2e").read_text(encoding="utf-8")
+    package = (ROOT / "web/package.json").read_text(encoding="utf-8")
+    assert "node:24.18.0-bookworm-slim" in dockerfile
+    assert "npm ci" in dockerfile
+    assert "playwright install --with-deps chromium" in dockerfile
+    assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in dockerfile
+    assert "TCP-LISTEN:3000" in dockerfile
+    assert "TCP:web:3000" in dockerfile
+    assert '"@playwright/test": "1.58.2"' in package

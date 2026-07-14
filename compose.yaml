@@ -129,5 +129,19 @@ services:
       timeout: 3s
       retries: 20
 
+  browser-proof:
+    profiles: [browser-proof]
+    build:
+      context: .
+      dockerfile: web/Dockerfile.e2e
+    environment:
+      PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - ./docs/assets:/workspace/docs/assets
+    restart: "no"
+
 volumes:
   postgres-data:

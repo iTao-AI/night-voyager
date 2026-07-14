@@ -60,6 +60,9 @@ export function demoReducer(state: DemoDisplayState, event: DemoEvent): DemoDisp
       if (event.type !== "TASK_REFRESHED") return invalid;
       return event.ledger.phase === "review-required" ? { value: "advisor_review", ledger: event.ledger } : { value: "task_streaming", ledger: event.ledger, taskId: state.taskId, after: event.after };
     case "advisor_review":
+      if (event.type === "TASK_REFRESHED" && event.ledger.phase === "review-required") {
+        return { value: "advisor_review", ledger: event.ledger };
+      }
       return event.type === "REVIEW_SUBMIT" ? { value: "review_submitting", ledger: state.ledger } : invalid;
     case "review_submitting":
       return event.type === "REVIEW_ACCEPTED" ? { value: "role_switching", caseId: event.caseId } : invalid;

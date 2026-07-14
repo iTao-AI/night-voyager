@@ -163,7 +163,12 @@ class PostgresConnectedDemoRepository:
                 current_brief_id=current_brief,
             )
         run, routes, evidence = await self._review_projection(context, run_id)
-        eligible = tuple(route.route_id for route in routes if route.eligible)
+        eligible = tuple(
+            route.route_id
+            for route in routes
+            if route.country is Country.AUSTRALIA
+            and route.outcome is RouteOutcome.RECOMMENDED_WITH_CONDITION
+        )
         return self._ledger(
             phase=DemoPhase.REVIEW_REQUIRED,
             case_id=case_id,
@@ -213,7 +218,9 @@ class PostgresConnectedDemoRepository:
                     "ON d.organization_id=b.organization_id AND d.decision_brief_id=b.id "
                     "LEFT JOIN app.timeline_plans t ON t.organization_id=d.organization_id "
                     "AND t.family_decision_id=d.id WHERE b.organization_id=:org "
-                    "AND b.case_id=:case AND b.is_current"
+                    "AND b.case_id=:case AND b.case_revision=c.current_revision "
+                    "AND ((c.state='family_review' AND b.is_current AND d.id IS NULL) "
+                    "OR (c.state='plan_ready' AND d.id IS NOT NULL))"
                 ),
                 {
                     "org": context.organization_id,
@@ -306,7 +313,8 @@ class PostgresConnectedDemoRepository:
                     "AND e.source_pack_id=r.source_pack_id "
                     "AND e.source_pack_version=r.source_pack_version "
                     "WHERE r.organization_id=:org AND r.id=:run AND r.is_current "
-                    "AND r.state='review_required' GROUP BY r.id"
+                    "AND r.state='review_required' GROUP BY r.id,r.source_pack_id,"
+                    "r.source_pack_version,r.policy_version"
                 ),
                 {"org": context.organization_id, "run": run_id},
             )

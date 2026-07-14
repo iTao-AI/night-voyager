@@ -31,3 +31,13 @@ def test_web_uses_only_fixed_m5_bff_origins() -> None:
     assert "NIGHT_VOYAGER_API_INTERNAL_URL: http://api:8000" in web
     assert "NIGHT_VOYAGER_PUBLIC_ORIGIN: http://127.0.0.1:3000" in web
     assert "API_BASE_URL" not in web
+
+
+def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
+    compose = Path("compose.yaml").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    assert "  browser-proof:" in compose
+    assert "profiles: [browser-proof]" in compose
+    assert "web/Dockerfile.e2e" in compose
+    assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
+    assert "docker compose --profile browser-proof run --rm --build browser-proof" in script
