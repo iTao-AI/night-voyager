@@ -2,7 +2,8 @@
 export UV_BUILD_CONSTRAINT := build-constraints.txt
 export UV_REQUIRE_HASHES := 1
 
-.PHONY: help doctor demo proof compose-proof db-check check logs down fixtures-check reset-demo
+.PHONY: help doctor demo proof compose-proof db-check check mke-doctor \
+	mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
 
 help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -22,9 +23,21 @@ compose-proof: ## Prove M3B/M4A flows, restart durability, health, and teardown
 db-check: ## Prove migrations, roles, sessions, catalog, and forced RLS on a fresh database
 	@scripts/run_db_tests.sh
 
+mke-doctor: ## Verify an operator-supplied MKE candidate without installing it
+	@uv run python scripts/verify_mke_consumer.py doctor --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)"
+
+mke-artifact-check: ## Emit the verified MKE candidate identity
+	@uv run python scripts/verify_mke_consumer.py artifact-check --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)" --json
+
+mke-check: ## Run the isolated optional MKE/MCP process tests
+	@scripts/run_mke_lane.sh test
+
+mke-consumer-proof: ## Run the real exact-candidate read-only proof
+	@scripts/run_mke_lane.sh proof --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)" --json
+
 check: ## Run backend, frontend, Compose, and proof checks
 	uv lock --check
-	uv run pytest -q -m "not database"
+	uv run pytest -q -m "not database and not mke"
 	uv run ruff check .
 	uv run pyright
 	uv build --build-constraints build-constraints.txt --require-hashes

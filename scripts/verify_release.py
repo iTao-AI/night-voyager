@@ -51,7 +51,7 @@ IGNORED_DIRECTORIES = {
     "dist",
     "node_modules",
 }
-BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".png", ".webp"}
+BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".pdf", ".png", ".webp"}
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
 os.environ.setdefault("UV_REQUIRE_HASHES", "1")
@@ -160,6 +160,11 @@ def verify_config() -> None:
     if set(versions.values()) != {VERSION}:
         raise SystemExit(f"identity version mismatch: {versions}")
     runtime_dependencies = pyproject["project"]["dependencies"]
+    optional_dependencies = pyproject["project"].get("optional-dependencies", {})
+    if optional_dependencies.get("mke") != ["mcp>=1.28.1,<2"]:
+        raise SystemExit("MKE must remain an exact optional dependency range")
+    if package_version(uv_lock["package"], "mcp") != "1.28.1":
+        raise SystemExit("MCP optional lock must remain at the reviewed 1.28.1 version")
     if "fastapi>=0.139,<0.140" not in runtime_dependencies:
         raise SystemExit("FastAPI runtime dependency must remain on approved 0.139.x")
     if "starlette>=1.3.1,<1.4" not in runtime_dependencies:
@@ -181,6 +186,20 @@ def verify_config() -> None:
         raise SystemExit("all build backend dependencies must be hash constrained")
     if POSTGRES_IMAGE not in compose:
         raise SystemExit("Compose PostgreSQL image must use the approved exact tag and digest")
+    if re.search(r"(?m)^\s{2}mke:\s*$", compose):
+        raise SystemExit("MKE must not become a Compose service")
+    if list((ROOT / "migrations" / "versions").glob("0005_*.py")):
+        raise SystemExit("M4B must not add a database migration")
+    for required in (
+        ROOT / "fixtures/m4b/candidate-artifact-lock.json",
+        ROOT / "fixtures/m4b/manifest.json",
+    ):
+        if not required.is_file():
+            raise SystemExit(f"missing M4B public contract: {required.name}")
+    for pure_file in (ROOT / "src/night_voyager/evidence").glob("*.py"):
+        pure_content = pure_file.read_text(encoding="utf-8")
+        if "import mcp" in pure_content or "from mcp" in pure_content:
+            raise SystemExit("pure M4B boundary must not import the optional MCP SDK")
     local_bindings = (
         '"127.0.0.1:${POSTGRES_PORT:-55432}:5432"',
         '"127.0.0.1:${API_PORT:-8000}:8000"',

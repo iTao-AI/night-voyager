@@ -46,9 +46,11 @@ def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
     script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
 
     assert "db-check:" in makefile
-    assert pyproject["tool"]["pytest"]["ini_options"]["addopts"] == '-m "not database"'
+    assert pyproject["tool"]["pytest"]["ini_options"]["addopts"] == (
+        '-m "not database and not mke"'
+    )
     check_target = makefile.split("\ncheck: ##", 1)[1].split("\n\n", 1)[0]
-    assert '-m "not database"' in check_target
+    assert '-m "not database and not mke"' in check_target
     assert "$(MAKE) db-check" in check_target
     assert set(("python", "frontend", "compose")) <= {
         line.strip().removesuffix(":")
@@ -58,7 +60,7 @@ def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
     compose_job = workflow.split("  compose:", 1)[1]
     assert "make db-check" in compose_job
     python_job = workflow.split("  python:", 1)[1].split("  frontend:", 1)[0]
-    assert 'uv run pytest -q -m "not database"' in python_job
+    assert 'uv run pytest -q -m "not database and not mke"' in python_job
     assert "COMPOSE_PROJECT_NAME" in script
     assert "down --volumes" in script
 

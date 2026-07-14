@@ -39,9 +39,9 @@ packages = ["src/night_voyager"]
 testpaths = ["tests"]
 markers = [
   "database: requires disposable PostgreSQL 18 roles",
-  "mke: requires the isolated optional MCP SDK lane",
+  "mke: requires the optional MKE/MCP process extra",
 ]
-addopts = '-m "not database"'
+addopts = '-m "not database and not mke"'
 
 [tool.ruff]
 target-version = "py312"
@@ -54,3 +54,9 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 pythonVersion = "3.12"
 typeCheckingMode = "strict"
 include = ["src", "tests", "scripts"]
+exclude = [
+  "src/night_voyager/adapters/mke_readonly.py",
+  "tests/fixtures/m4b/fake_mke_server.py",
+  "tests/integration/adapters/test_mke_candidate_wheel.py",
+  "tests/integration/adapters/test_mke_readonly_smoke.py",
+]
