@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager has an **M0 bootstrap foundation**, an **M1 fixture-only design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, an **M4A deterministic durable task/worker/SSE proof**, and an **M4B optional read-only MKE candidate proof**. M4B consumes an exact reviewed artifact only in an isolated local lane and keeps every projection `UNTRUSTED_CANDIDATE`. The default product path and fixture-only `/demo` remain disconnected from MKE.
+Night Voyager has an **M0 bootstrap foundation**, an **M1 historical visual design contract**, an **M2 identity/session/RLS boundary**, an **M3A deterministic planning foundation**, an **M3B local synthetic advisor-to-family backend proof**, an **M4A deterministic durable task/worker/SSE proof**, an **M4B optional read-only MKE candidate proof**, and an **implemented M5 connected advisor-to-family demo**. M5 connects `/demo` to the local synthetic FastAPI, worker, SSE, and PostgreSQL authority paths without connecting MKE or a remote provider.
 
 ## Evaluator lane
 
@@ -21,10 +21,16 @@ make down
 health endpoint is `http://127.0.0.1:8000/health`; the web bootstrap page is
 `http://127.0.0.1:3000`. Published ports bind to IPv4 loopback only. Run
 `make compose-proof` to verify health, real identity and M3B paths, the M4A
-HTTP-to-worker-to-PlanningRun-to-SSE path, and API/worker restart durability
-without connecting the fixture-only UI.
+HTTP-to-worker-to-PlanningRun-to-SSE path, API/worker restart durability, and
+the connected M5 browser-to-database flow in real Chromium.
 
-The fixture-only M1 prototype is available at `http://127.0.0.1:3000/demo`. Its visual and product contracts are documented in [DESIGN.md](DESIGN.md) and [docs/design/](docs/design/).
+The connected local synthetic demo is available at `http://127.0.0.1:3000/demo`.
+Follow the [connected demo runbook](docs/operations/connected-demo.md); M1 remains
+documented as historical visual context in [DESIGN.md](DESIGN.md).
+
+![Advisor Ledger at review-required](docs/assets/m5-advisor-ledger.png)
+
+![Family decision receipt and timeline](docs/assets/m5-family-receipt-timeline.png)
 
 ## Contributor lane
 
@@ -54,7 +60,7 @@ default `make check` do not need MKE or candidate artifacts.
 
 ## Current limits
 
-- M3B/M4A backend paths are not wired to the fixture-only `/demo`; no task or decision frontend mutation exists.
+- `/demo` is a local synthetic walkthrough, not a production tenant or live admissions workflow.
 - The worker and SSE proof is local and deterministic, not distributed high availability or a production SLA.
 - No DRA, OpenClaw, model, messaging, or product-path MKE `PlanningAdapter`; M4B is a local read-only compatibility adapter only.
 - No production deployment or user/admissions outcome claim.

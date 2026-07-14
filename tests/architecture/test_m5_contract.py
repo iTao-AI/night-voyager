@@ -26,6 +26,10 @@ BFF_PATHS = (
     "/api/demo/cases/{case_id}/current-decision-brief",
     "/api/demo/decision-briefs/{brief_id}/family-decisions",
 )
+M5_SCREENSHOTS = (
+    "docs/assets/m5-advisor-ledger.png",
+    "docs/assets/m5-family-receipt-timeline.png",
+)
 
 
 def _imports(path: Path) -> set[str]:
@@ -108,3 +112,24 @@ def test_m5_browser_proof_keeps_locked_runtime_and_dependencies() -> None:
     assert "TCP-LISTEN:3000" in dockerfile
     assert "TCP:web:3000" in dockerfile
     assert '"@playwright/test": "1.58.2"' in package
+
+
+def test_m5_connected_demo_public_docs_and_screenshots_are_current() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    combined = "\n".join((readme, readme_cn, docs_index))
+
+    assert "docs/operations/connected-demo.md" in readme
+    assert "docs/operations/connected-demo.md" in readme_cn
+    assert "operations/connected-demo.md" in docs_index
+    assert "M5" in readme and "implemented" in readme
+    assert "M5" in readme_cn and "已实现" in readme_cn
+    assert "implementation has not started" not in docs_index
+    assert "fixture-only `/demo`" not in combined
+
+    for relative in M5_SCREENSHOTS:
+        asset = ROOT / relative
+        assert asset.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"), relative
+        assert readme.count(relative) == 1, relative
+        assert readme_cn.count(relative) == 1, relative

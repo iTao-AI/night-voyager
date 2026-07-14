@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("connected-demo.spec.ts proves the advisor-to-family database flow", async ({ page }) => {
+test("connected golden flow proves the advisor-to-family database flow", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/demo");
   await expect(page.getByRole("heading", { name: "Connected advisor-to-family demo" })).toBeVisible();
@@ -19,6 +19,9 @@ test("connected-demo.spec.ts proves the advisor-to-family database flow", async 
   await expect(page.getByRole("button", { name: "Choose Malaysia" })).toBeDisabled();
   await expect(page.getByText(/Accepted synthetic evidence and limitations/i)).toBeVisible();
   await expect(page.locator("[aria-live='polite']")).toBeAttached();
+  if (process.env.UPDATE_M5_SCREENSHOTS === "1") {
+    await page.screenshot({ path: "/workspace/docs/assets/m5-advisor-ledger.png", fullPage: true });
+  }
 
   const sseReplay = await page.evaluate(async () => {
     const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "null") as { taskId?: string } | null;
@@ -48,6 +51,12 @@ test("connected-demo.spec.ts proves the advisor-to-family database flow", async 
   const decisionHeaders = await decisionRequest.allHeaders();
   await expect(page.getByRole("heading", { name: "Decision Receipt" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Timeline Plan" })).toBeVisible();
+  if (process.env.UPDATE_M5_SCREENSHOTS === "1") {
+    await page.screenshot({
+      path: "/workspace/docs/assets/m5-family-receipt-timeline.png",
+      fullPage: true,
+    });
+  }
 
   const decisionPath = new URL(decisionRequest.url()).pathname;
   const replay = await page.request.post(decisionPath, {

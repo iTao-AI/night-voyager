@@ -2,6 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 
 import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
+import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
 import type { AdvisorLedger as Ledger, CurrentDecisionBrief } from "../../lib/connected-demo/contracts";
@@ -51,7 +52,7 @@ it("renders only server-derived family constraints", () => {
       hard_ceiling_minor: 40_000_000,
       required_trade_offs: ["budget_elasticity"],
     },
-  } as CurrentDecisionBrief;
+  } as unknown as CurrentDecisionBrief;
   render(<FamilyDecisionBrief brief={brief} confirmed={false} onConfirm={() => undefined} onSubmit={() => undefined} />);
   expect(screen.getByText(/31,000,000 CNY/i)).toBeVisible();
   expect(screen.getByText(/40,000,000 CNY/i)).toBeVisible();
@@ -62,4 +63,29 @@ it("shows fail-closed recovery without parent presentation", () => {
   render(<RecoveryNotice code="session_recovery_required" onReconnect={() => undefined} />);
   expect(screen.getByRole("heading", { name: /Recovery required/i })).toBeVisible();
   expect(screen.queryByText(/Decision Receipt/i)).toBeNull();
+});
+
+it("presents the parent receipt without internal identifiers or raw debug JSON", () => {
+  const brief = {
+    phase: "plan-ready",
+    receipt: {
+      decision_id: "hidden-decision-id",
+      receipt_id: "hidden-receipt-id",
+      selected_route_id: "hidden-route-id",
+      accepted_budget_min_minor: 30_550_000,
+      accepted_budget_max_minor: 40_000_000,
+      currency: "CNY",
+      accepted_trade_offs: ["budget_elasticity"],
+    },
+    timeline: {
+      country: "australia",
+      intake: "2027-02",
+      milestones: [{ key: "documents", due_date: "2026-09-01" }],
+    },
+  } as unknown as CurrentDecisionBrief;
+  render(<DecisionReceiptTimeline brief={brief} />);
+  expect(screen.getByText(/30,550,000–40,000,000 CNY/i)).toBeVisible();
+  expect(screen.getByText(/Budget elasticity/i)).toBeVisible();
+  expect(screen.getByText(/Documents/i)).toBeVisible();
+  expect(screen.queryByText(/hidden-|decision_id|receipt_id|selected_route_id/i)).toBeNull();
 });
