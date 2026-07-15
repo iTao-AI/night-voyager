@@ -1,9 +1,7 @@
 # DRA Governed Mixed-Evidence Closure Design
 
-**Status:** Approved design source. Night Voyager's existing planning and
-review window owns the public specification, implementation plan, execution,
-and authoritative review. The Decision Research Agent runtime and public
-contract remain unchanged in this stage.
+**Status:** Approved design. Implementation has not started. The Decision
+Research Agent runtime and public contract remain unchanged in this stage.
 
 ## Goal
 
