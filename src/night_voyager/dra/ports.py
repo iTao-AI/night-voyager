@@ -76,11 +76,13 @@ class DraVerificationViewV1(FrozenPortModel):
     promoted_source_pack_version: PositiveInt | None = None
     promoted_source_entry_id: UUID | None = None
     promoted_evidence_id: UUID | None = None
+    replayed: bool = False
 
 
 class DraCandidateViewV1(FrozenPortModel):
     candidate_id: UUID
     verification: DraVerificationViewV1 | None
+    replayed: bool = False
 
 
 class DraCandidateRepository(Protocol):
