@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 from collections.abc import Awaitable, Callable
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from night_voyager.dra.fixtures import build_fixture_candidate_import, load_dra_fixture
@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "fixtures/dra/sources/australia-program-fit.html"
 EXPECTED_SOURCE_SHA256 = "87e314e801dca1aeaf9b751c149c53629a4cf23ee04698939fdc87def5a90a13"
 LIVE_ACK = "separately-authorized-one-attempt"
+ADVISOR_ATTESTATION_ACK = "source-inspected-for-bounded-program-fit"
 MAX_QUERY_BYTES = 65_536
 PUBLIC_ERRORS = {
     "dra_source_snapshot_changed",
@@ -37,6 +38,7 @@ PUBLIC_ERRORS = {
     "dra_poll_deadline_exceeded",
     "dra_live_run_terminal_invalid",
     "dra_live_result_invalid",
+    "dra_live_source_invalid",
 }
 
 
@@ -76,8 +78,31 @@ def verify_fixture() -> dict[str, object]:
     }
 
 
+def validate_live_source() -> None:
+    root_value = os.environ.get("DRA_SOURCE_ROOT")
+    logical_value = os.environ.get("DRA_SOURCE_LOGICAL_PATH")
+    expected_sha256 = os.environ.get("DRA_SOURCE_SHA256")
+    if not root_value or not logical_value or not expected_sha256:
+        raise SystemExit("dra_live_proof_environment_incomplete")
+    logical_path = PurePosixPath(logical_value)
+    if logical_path.is_absolute() or ".." in logical_path.parts:
+        raise SystemExit("dra_live_source_invalid")
+    try:
+        root = Path(root_value).resolve(strict=True)
+        source = (root / logical_path).resolve(strict=True)
+        if not source.is_relative_to(root):
+            raise SystemExit("dra_live_source_invalid")
+        actual_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    except OSError as error:
+        raise SystemExit("dra_live_source_invalid") from error
+    if actual_sha256 != expected_sha256:
+        raise SystemExit("dra_live_source_invalid")
+
+
 def required_environment() -> tuple[str, str, str, Path, int]:
     if os.environ.get("DRA_LIVE_PROOF_ACK") != LIVE_ACK:
+        raise SystemExit("dra_live_proof_not_authorized")
+    if os.environ.get("DRA_ADVISOR_ATTESTATION_ACK") != ADVISOR_ATTESTATION_ACK:
         raise SystemExit("dra_live_proof_not_authorized")
     names = (
         "DECISION_RESEARCH_AGENT_API_KEY",
@@ -102,6 +127,7 @@ def required_environment() -> tuple[str, str, str, Path, int]:
         raise SystemExit("dra_live_proof_environment_invalid") from error
     if not 1 <= deadline <= 3600:
         raise SystemExit("dra_live_proof_environment_invalid")
+    validate_live_source()
     return (
         os.environ["DRA_BASE_URL"],
         os.environ["DRA_IDEMPOTENCY_KEY"],

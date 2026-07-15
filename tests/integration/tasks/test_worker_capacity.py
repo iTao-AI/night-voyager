@@ -67,7 +67,8 @@ async def test_two_workers_process_100_tasks_without_duplicate_accepted_results(
                 case_id = UUID(int=0x44000000000000000000000000000500 + offset)
                 await connection.execute(
                     text(
-                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,:pack,1,"
+                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                        "'generate_planning_run_v1',1,:pack,1,"
                         "'m3a-policy-v1',repeat('a',64),:key_hash)"
                     ),
                     {

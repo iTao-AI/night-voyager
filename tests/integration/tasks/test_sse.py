@@ -93,7 +93,8 @@ async def seed_task(case_id: UUID = CASE, task_id: UUID = TASK) -> None:
                 )
             await connection.execute(
                 text(
-                    "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,:pack,1,"
+                    "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                    "'generate_planning_run_v1',1,:pack,1,"
                     "'m3a-policy-v1',repeat('a',64),:key_hash)"
                 ),
                 {

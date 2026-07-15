@@ -137,7 +137,7 @@ async def test_mixed_task_creation_requires_promoted_pack_and_exact_operation() 
         "pack": PACK,
         "operation": "generate_governed_mixed_planning_run_v1",
         "request_hash": "e" * 64,
-        "key_hash": "f" * 64,
+        "key_hash": "0123456789abcdef" * 4,
     }
     try:
         async with engine.connect() as connection:

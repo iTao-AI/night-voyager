@@ -153,7 +153,8 @@ async def test_review_required_projection_reads_real_worker_result() -> None:
                 )
             await connection.execute(
                     text(
-                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,"
+                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                        "'generate_planning_run_v1',1,"
                         ":pack,:version,:policy,repeat('a',64),:key_hash)"
                 ),
                 {
