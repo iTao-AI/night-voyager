@@ -63,11 +63,16 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0003_advisor_family_decision.py",
         "0004_agent_tasks_executions_events.py",
         "0005_dra_candidate_promotion.py",
+        "0006_governed_mixed_planning.py",
     ]
-    migration = (ROOT / "migrations/versions/0005_dra_candidate_promotion.py").read_text(
-        encoding="utf-8"
-    )
-    assert "connected_demo" not in migration
+    for relative in (
+        "0005_dra_candidate_promotion.py",
+        "0006_governed_mixed_planning.py",
+    ):
+        migration = (ROOT / "migrations/versions" / relative).read_text(
+            encoding="utf-8"
+        )
+        assert "connected_demo" not in migration
 
 
 def test_m5_freezes_exact_backend_and_bff_paths() -> None:

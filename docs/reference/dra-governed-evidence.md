@@ -1,8 +1,9 @@
 # Governed DRA evidence reference
 
-PR 1 is implemented: candidate import and atomic human verification/promotion are implemented.
-The governed mixed PlanningRun is not implemented. The existing
-`generate_planning_run_v1` path remains all-synthetic, and `/demo` is unchanged.
+Candidate import, atomic human verification/promotion, and governed mixed
+PlanningRun generation are implemented as a deterministic local proof. The
+existing `generate_planning_run_v1` path remains all-synthetic, and `/demo` is
+unchanged. Live provider proof was not run and remains separately authorized.
 
 ## Pinned consumer contract
 
@@ -40,6 +41,37 @@ copying the other accepted synthetic facts. Rejection creates no pack or
 Evidence. There is no later promotion command or table.
 Any approve or reject decision makes the whole candidate terminal. A rejected
 source therefore requires a newly imported candidate before another decision.
+
+## Governed mixed-planning surface
+
+Migration `0006` adds no table. It exposes one worker-only
+`app.load_governed_mixed_planning_snapshot(...)` authority and extends the
+existing task functions for the exact operation pair:
+
+- `generate_planning_run_v1` with `deterministic_planning` / `m4a-v1`;
+- `generate_governed_mixed_planning_run_v1` with
+  `governed_mixed_planning` / `dra-mixed-v1`.
+
+The mixed snapshot requires the current Case revision, `m3a-policy-v1`, and an
+approved promoted source-pack revision. It permits exactly this external
+mapping:
+
+```text
+australia_program_fit -> program_fit -> externally_verified
+```
+
+All remaining accepted facts are exact copies of the synthetic baseline. The
+worker validates the complete strict snapshot and materializes a bounded
+`GovernedMixedPlanningInput`; callers cannot select authority, adapter pair,
+baseline pins, or promoted identities. The existing AgentTask queue, leases,
+retry policy, fencing, events, SSE, AdvisorReview, DecisionBrief, family
+decision, receipt, and timeline are reused without a second workflow.
+
+The deterministic offline closure is exercised by `make db-check` and
+`make compose-proof`. It imports the copied fixture, performs the atomic human
+approval, creates the mixed task, reaches `review_required`, and closes through
+the existing advisor and family gates. It does not call DRA or add browser
+integration; the connected `/demo` remains the synthetic M5 walkthrough.
 
 The three assigned-advisor HTTP routes are documented in
 [HTTP API v1](http-api-v1.md). Mutations require exact Origin, session CSRF,

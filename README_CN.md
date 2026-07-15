@@ -8,10 +8,10 @@ Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family
 
 ## 工程证据
 
-- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写，migration graph 固定为 `0001 -> 0002 -> 0003 -> 0004 -> 0005`。
+- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写，migration graph 固定为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006`。
 - **Durable task 与 SSE：** `AgentTask` 可跨 worker/API restart 保持，使用 bounded lease 与 generation fencing，并恢复授权 event stream。
 - **Human gates：** deterministic evidence policy、advisor review 与显式 family confirmation 相互分离；模型或 adapter 输出不能自行获得 promotion authority。
-- **Governed DRA candidate：** optional offline consumer proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate。
+- **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。
 - **Browser to database：** connected `/demo` 在 Chromium 中执行真实 Next.js BFF、FastAPI、worker、SSE 与 PostgreSQL synthetic flow。
 
 ## 验证 release
@@ -35,7 +35,7 @@ connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connec
 - v0.1.0 是 local synthetic portfolio release，不代表 production deployment 或 production tenancy。
 - 仓库不包含真实学生记录，也不宣称录取结果、真实用户、SLA、可用性或业务收益。
 - worker 与 SSE 仅提供 deterministic local proof，不代表 distributed high availability。
-- Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。DRA candidate import 与 atomic promotion 已在本地实现，但 governed mixed PlanningRun 仍在后续阶段。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
+- Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。Deterministic offline DRA candidate import、atomic promotion 与 governed mixed PlanningRun generation 已在本地实现；live provider proof 未运行，仍需单独授权。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
 
 ## Milestone 与历史
 
@@ -45,7 +45,7 @@ connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connec
 - [历史 M1 fixture-only visual contract](docs/superpowers/specs/2026-07-11-m1-demo-design.md)
 - M5 connected advisor-to-family demo 已实现为 [runbook](docs/operations/connected-demo.md)所述的 local synthetic walkthrough。
 - [M4B optional read-only MKE candidate proof](docs/operations/mke-candidate-proof.md)；输出保持 `UNTRUSTED_CANDIDATE`。
-- [Governed DRA candidate proof](docs/operations/dra-consumer-proof.md)；candidate import 与 atomic human promotion 已实现，mixed planning 延后到下一阶段。
+- [Governed DRA mixed-evidence proof](docs/operations/dra-consumer-proof.md)；candidate import、atomic human promotion 与 governed mixed PlanningRun generation 已形成 deterministic local closure，connected synthetic `/demo` 保持不变。
 
 ## Contributor 路径
 

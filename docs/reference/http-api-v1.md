@@ -126,6 +126,11 @@ baseline. Rejection creates neither source-pack nor Evidence. There is no
 separate promotion command. Problems never include Markdown, source bytes,
 credentials, or raw provider responses.
 
+After approval, the assigned advisor may create the existing AgentTask endpoint
+with `generate_governed_mixed_planning_run_v1` and the exact promoted pack pins.
+This is additive backend API behavior; it does not add a DRA browser route or
+change the connected synthetic `/demo`.
+
 ## M5 same-origin BFF
 
 The connected browser uses eleven explicit `/api/demo/*` Route Handlers for

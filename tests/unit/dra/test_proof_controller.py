@@ -91,13 +91,13 @@ def test_make_and_ci_keep_live_proof_out_of_required_gates() -> None:
     assert "dra-consumer-proof" not in workflow
 
 
-def test_public_docs_close_pr1_without_claiming_mixed_planning() -> None:
+def test_public_docs_close_governed_mixed_planning_without_live_claim() -> None:
     reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
     runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
-    assert "candidate import and atomic human verification/promotion are implemented" in reference
-    assert "governed mixed PlanningRun is not implemented" in reference
+    assert "atomic human verification/promotion" in reference
+    assert "governed mixed\nPlanningRun generation are implemented" in reference
     assert "separately-authorized-one-attempt" in runbook
-    assert "live provider proof is not a required CI gate" in runbook
+    assert "Live provider proof was not run" in runbook
 
 
 def test_main_normalizes_unexpected_live_errors_without_private_output(

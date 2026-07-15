@@ -9,6 +9,9 @@ accepted only after the atomic human verification/promotion gate and can use
 external authority only for `australia_program_fit`; every other accepted fact
 must match the synthetic baseline. Both paths end at `review_required` and
 still require the existing human advisor review.
+Neither operation calls a remote provider. The mixed operation is a backend
+authority path only and is not exposed through the connected `/demo` browser
+flow.
 
 ## Durable records
 

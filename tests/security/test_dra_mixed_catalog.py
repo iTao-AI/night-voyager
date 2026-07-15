@@ -45,4 +45,6 @@ def test_db_lane_cycles_through_the_mixed_head() -> None:
     source = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     assert "alembic downgrade 0005" in source
     assert source.count("alembic current | grep '0006'") >= 2
-    assert "tests/integration/dra/test_postgres_mixed_snapshot.py" in source
+    assert "tests/integration/dra \\" in source
+    assert "--ignore=tests/integration/dra/test_governed_closure.py" in source
+    assert "tests/integration/dra/test_governed_closure.py" in source

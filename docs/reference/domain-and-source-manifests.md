@@ -29,3 +29,10 @@ Evidence. An assigned advisor may atomically approve exactly one external
 pack with that one `externally_verified` Evidence and exact synthetic copies of
 all other accepted facts. Public caller DTOs cannot assert that authority.
 See [the governed DRA evidence reference](dra-governed-evidence.md).
+
+Migration `0006` adds no persistence table. Its worker-only snapshot boundary
+loads the exact promoted pack, verifies the single allowlisted external
+`australia_program_fit` claim, and requires every other accepted fact to match
+the canonical synthetic pack. `PlanningInput` remains the public all-synthetic
+contract; the mixed path uses the separate strict
+`GovernedMixedPlanningInput` type.

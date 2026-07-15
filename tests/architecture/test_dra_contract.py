@@ -45,3 +45,22 @@ def test_required_dra_lane_is_fixture_only() -> None:
     assert "verify_dra_consumer.py fixture --json" in makefile
     assert "make dra-check" in workflow
     assert "DRA_LIVE_PROOF_ACK" not in workflow
+
+
+def test_governed_mixed_planning_public_contract_is_closed() -> None:
+    readme = (ROOT / "README.md").read_text()
+    docs_index = (ROOT / "docs/README.md").read_text()
+    reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
+    operations = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
+
+    for required in (
+        "generate_governed_mixed_planning_run_v1",
+        "australia_program_fit -> program_fit -> externally_verified",
+        "exact copies of the synthetic baseline",
+        "generate_planning_run_v1",
+    ):
+        assert required in reference
+    assert "governed mixed PlanningRun generation is implemented" in readme
+    assert "existing v0.1.0 synthetic `/demo` remains unchanged" in docs_index
+    assert "make compose-proof" in operations
+    assert "Live provider proof was not run" in operations
