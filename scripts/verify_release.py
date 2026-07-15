@@ -43,6 +43,7 @@ M3B_TABLES = {
     "idempotency_records",
 }
 M4A_TABLES = {"agent_tasks", "agent_executions", "agent_task_events"}
+DRA_TABLES = {"dra_research_candidates", "external_evidence_verifications"}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -456,7 +457,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } | M3A_TABLES | M3B_TABLES | M4A_TABLES or any(
+            } | M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -469,7 +470,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 25:
+            if policy_count != 27:
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -480,7 +481,7 @@ async def verify_database_catalog(database_url: str) -> None:
                       AND grantee IN ('night_voyager_api','night_voyager_worker')
                       AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
                     """),
-                    {"tables": sorted(M3A_TABLES | M3B_TABLES | M4A_TABLES)},
+                    {"tables": sorted(M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES)},
                 )
             ).scalar_one()
             if runtime_writes:
@@ -500,12 +501,14 @@ async def verify_database_catalog(database_url: str) -> None:
                             'night_voyager_worker',p.oid,'EXECUTE'
                           ) AS worker_execute
                         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                        WHERE n.nspname='app' AND p.proname IN
+                        WHERE n.nspname='app' AND (p.proname IN
                           ('publish_case_revision','transition_case','persist_source_pack',
                            'persist_evidence_ref','persist_planning_result','review_planning_run',
                            'decide_family_brief','create_agent_task','cancel_agent_task',
                            'claim_agent_task','start_agent_task','heartbeat_agent_task',
                            'fail_agent_task','finalize_agent_task_result')
+                           OR p.proname IN
+                          ('import_dra_research_candidate','verify_and_promote_dra_candidate'))
                         """)
                     )
                 )
@@ -527,6 +530,8 @@ async def verify_database_catalog(database_url: str) -> None:
                 "heartbeat_agent_task",
                 "fail_agent_task",
                 "finalize_agent_task_result",
+                "import_dra_research_candidate",
+                "verify_and_promote_dra_candidate",
             } or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
@@ -544,6 +549,8 @@ async def verify_database_catalog(database_url: str) -> None:
                 "decide_family_brief",
                 "create_agent_task",
                 "cancel_agent_task",
+                "import_dra_research_candidate",
+                "verify_and_promote_dra_candidate",
             }
             worker_functions = {
                 "claim_agent_task",

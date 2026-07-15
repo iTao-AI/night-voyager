@@ -10,20 +10,21 @@ if [ "${1:-}" = "inside" ]; then
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/security tests/integration/identity tests/integration/planning \
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
-        tests/integration/connected_demo
+        tests/integration/connected_demo tests/integration/dra
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/integration/decision/test_postgres_decision.py
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/integration/decision/test_http_decision.py
-    uv run alembic downgrade 0003
-    uv run alembic current | grep '0003'
-    uv run alembic upgrade head
+    uv run alembic downgrade 0004
     uv run alembic current | grep '0004'
+    uv run alembic upgrade head
+    uv run alembic current | grep '0005'
     uv run python scripts/verify_release.py --check-db-roles
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
     uv run alembic upgrade head
+    uv run alembic current | grep '0005'
     uv run python scripts/verify_release.py --check-db-roles
     exit 0
 fi
