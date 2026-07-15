@@ -18,9 +18,23 @@ from night_voyager.planning.models import (
     RouteResult,
     RunState,
 )
+from night_voyager.planning.trusted import GovernedMixedPlanningInput, TrustedEvidenceRef
+
+PlanningPolicyInput = PlanningInput | GovernedMixedPlanningInput
+PolicyEvidenceRef = EvidenceRef | TrustedEvidenceRef
+MIXED_BASELINE_CLAIMS = frozenset(
+    {
+        "australia_program_fit",
+        "australia_tuition",
+        "australia_living_cost",
+        "australia_fx",
+        "japan_program_fit",
+        "australia_ranking",
+    }
+)
 
 
-def evaluate_planning_run(planning_input: PlanningInput) -> PlanningResult:
+def evaluate_planning_run(planning_input: PlanningPolicyInput) -> PlanningResult:
     contract_error = _validate_contract(planning_input)
     if contract_error is not None:
         return PlanningResult(state=RunState.FAILED, reason_code=contract_error, routes=())
@@ -67,7 +81,7 @@ def evaluate_planning_run(planning_input: PlanningInput) -> PlanningResult:
     )
 
 
-def _validate_contract(planning_input: PlanningInput) -> str | None:
+def _validate_contract(planning_input: PlanningPolicyInput) -> str | None:
     versioned = (
         planning_input,
         planning_input.case,
@@ -89,7 +103,24 @@ def _validate_contract(planning_input: PlanningInput) -> str | None:
         or any(item.source_pack_version <= 0 for item in planning_input.evidence)
     ):
         return "schema_or_version_invalid"
-    if any(
+    if isinstance(planning_input, GovernedMixedPlanningInput):
+        evidence_by_claim = {item.claim: item for item in planning_input.evidence}
+        if (
+            len(evidence_by_claim) != len(planning_input.evidence)
+            or set(evidence_by_claim) != set(MIXED_BASELINE_CLAIMS)
+        ):
+            return "mixed_evidence_baseline_invalid"
+        if any(
+            item.authority
+            is not (
+                EvidenceAuthority.EXTERNALLY_VERIFIED
+                if item.claim == "australia_program_fit"
+                else EvidenceAuthority.ACCEPTED_SYNTHETIC_DEMO
+            )
+            for item in planning_input.evidence
+        ):
+            return "mixed_evidence_authority_invalid"
+    elif any(
         item.authority is not EvidenceAuthority.ACCEPTED_SYNTHETIC_DEMO
         for item in planning_input.evidence
     ):
@@ -103,7 +134,7 @@ def _is_uuid(value: object) -> bool:
     return isinstance(value, UUID)
 
 
-def _validate_provenance(planning_input: PlanningInput) -> str | None:
+def _validate_provenance(planning_input: PlanningPolicyInput) -> str | None:
     organization_ids = {
         planning_input.organization_id,
         planning_input.case.organization_id,
@@ -153,7 +184,8 @@ def _validate_provenance(planning_input: PlanningInput) -> str | None:
 
 
 def _australia(
-    planning_input: PlanningInput, evidence_by_claim: Mapping[str, EvidenceRef]
+    planning_input: PlanningPolicyInput,
+    evidence_by_claim: Mapping[str, PolicyEvidenceRef],
 ) -> RouteResult:
     budget = planning_input.case.family.budget
     required_claims = {
@@ -208,7 +240,7 @@ def _route_result(
     country: Country,
     outcome: RouteOutcome,
     reason_code: str,
-    evidence_by_claim: Mapping[str, EvidenceRef],
+    evidence_by_claim: Mapping[str, PolicyEvidenceRef],
 ) -> RouteResult:
     claims_by_country: dict[Country, tuple[tuple[str, EvidenceRole], ...]] = {
         Country.AUSTRALIA: (
