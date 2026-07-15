@@ -1,0 +1,54 @@
+{
+  "schema_version": "night-voyager.dra-fixture-manifest.v1",
+  "producer": {
+    "repository": "decision-research-agent",
+    "release": "v0.1.3",
+    "commit": "87b2a8e335385eb865086f7a69fe2b190567cfa2",
+    "fixture_path": "docs/evidence/downstream-consumer-contract-v1.json",
+    "fixture_schema": "dra.downstream-consumer.v1",
+    "fixture_sha256": "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
+  },
+  "accepted_case": "canonical_ready",
+  "dispositions": {
+    "pending": "wait",
+    "running": "wait",
+    "canonical_ready": "accept_draft",
+    "fallback_ready": "block_fallback",
+    "compatibility_fallback": "block_fallback",
+    "review_required": "await_review",
+    "blocked": "block",
+    "failed": "block",
+    "result_unavailable": "block"
+  },
+  "baseline": {
+    "policy_version": "m3a-policy-v1",
+    "source_pack_id": "50000000-0000-0000-0000-000000000001",
+    "source_pack_version": 1,
+    "manifest_path": "../m3a/manifest.json",
+    "manifest_raw_sha256": "5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25",
+    "canonical_manifest_sha256": "84350ea5705d9681d3e6550e1bd06e3340a9fcf0e7e7bbed4478ed3403405f28"
+  },
+  "candidate": {
+    "organization_id": "10000000-0000-0000-0000-000000000001",
+    "case_id": "40000000-0000-0000-0000-000000000003",
+    "expected_case_revision": 1,
+    "request": {
+      "profile_id": "generic",
+      "query": "Compare the bounded Australia program-fit source for the synthetic proof."
+    }
+  },
+  "source_snapshot": {
+    "path": "sources/australia-program-fit.html",
+    "canonical_url": "https://example.com/contract-source-1",
+    "publisher": "Synthetic Public Source Publisher",
+    "institution": "Synthetic Australia Institution",
+    "snapshot_date": "2026-07-11",
+    "freshness_days": 365,
+    "redistribution_class": "link_only",
+    "evidence_class": "institutional",
+    "coverage": ["australia_program_fit"],
+    "known_gaps": ["applicant_eligibility", "intake_availability"],
+    "byte_length": 375,
+    "sha256": "87e314e801dca1aeaf9b751c149c53629a4cf23ee04698939fdc87def5a90a13"
+  }
+}
