@@ -14,6 +14,7 @@ from night_voyager.config import Settings
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
+from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
 
 pytestmark = pytest.mark.database
 ORIGIN = "http://127.0.0.1:3000"
@@ -244,5 +245,75 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
             assert cancel_replay.json()["replayed"] is True
             after_cancel = await client.get(f"/api/v1/tasks/{task_id}")
             assert after_cancel.json()["status"] == "cancelled"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_real_http_mixed_task_requires_approved_exact_pins_and_replays() -> None:
+    case_id, promoted_version = await approved_pack(1220)
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": [ORIGIN],
+            "secret_key": "test-session-secret",
+        }
+    )
+    try:
+        advisor = await mint(sessions, DemoActorChoice.ADVISOR)
+        app = create_app(settings=settings, session_factory=sessions)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=ORIGIN) as client:
+            client.cookies.set("night_voyager_session", advisor.raw_session_token)
+            unapproved = await client.post(
+                f"/api/v1/cases/{case_id}/agent-tasks",
+                headers=mutation_headers(advisor, "mixed-unapproved"),
+                json=create_payload(
+                    operation="generate_governed_mixed_planning_run_v1",
+                    source_pack_version=1,
+                ),
+            )
+            assert unapproved.status_code == 409
+
+            payload = create_payload(
+                operation="generate_governed_mixed_planning_run_v1",
+                source_pack_version=promoted_version,
+            )
+            created = await client.post(
+                f"/api/v1/cases/{case_id}/agent-tasks",
+                headers=mutation_headers(advisor, "mixed-create"),
+                json=payload,
+            )
+            assert created.status_code == 202, created.text
+            assert created.json()["status"] == "preparing"
+            assert created.json()["replayed"] is False
+
+            replayed = await client.post(
+                f"/api/v1/cases/{case_id}/agent-tasks",
+                headers=mutation_headers(advisor, "mixed-create"),
+                json=payload,
+            )
+            assert replayed.status_code == 202
+            assert replayed.json()["task_id"] == created.json()["task_id"]
+            assert replayed.json()["replayed"] is True
+
+            conflict = await client.post(
+                f"/api/v1/cases/{case_id}/agent-tasks",
+                headers=mutation_headers(advisor, "mixed-create"),
+                json={**payload, "source_pack_version": promoted_version + 1},
+            )
+            assert conflict.status_code == 409
+
+            cancelled = await client.post(
+                f"/api/v1/tasks/{created.json()['task_id']}/cancel",
+                headers=mutation_headers(advisor, "mixed-cancel"),
+                json={"schema_version": 1, "expected_row_version": 1},
+            )
+            assert cancelled.status_code == 200
     finally:
         await engine.dispose()

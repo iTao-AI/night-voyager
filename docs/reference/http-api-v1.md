@@ -57,14 +57,18 @@ exact configured `Origin`, session CSRF, and `Idempotency-Key`. Responses use
 
 | Method and path | Result |
 | --- | --- |
-| `POST /api/v1/cases/{case_id}/agent-tasks` | `202` idempotent `generate_planning_run_v1` create |
+| `POST /api/v1/cases/{case_id}/agent-tasks` | `202` idempotent synthetic or governed mixed planning create |
 | `GET /api/v1/tasks/{task_id}` | public task projection |
 | `POST /api/v1/tasks/{task_id}/cancel` | expected-row-version, idempotent cancellation |
 | `GET /api/v1/tasks/{task_id}/events` | authorized SSE replay/reconnect |
 
 Create accepts schema version 1, expected Case revision, source-pack ID/version,
-and `m3a-policy-v1`. It cannot select tenant, actor, adapter, worker, lease,
-retry, or injected failure behavior. Public responses expose status, attempts,
+`m3a-policy-v1`, and either `generate_planning_run_v1` or
+`generate_governed_mixed_planning_run_v1`. The mixed operation requires the
+exact promoted source-pack revision created by the existing atomic human gate;
+the original operation remains all-synthetic. The caller cannot select tenant,
+actor, adapter, worker, lease, retry, authority, or injected failure behavior.
+Public responses expose status, attempts,
 sanitized code, and an optional PlanningRun ID/currentness; they do not expose
 internal task state, dispatch, leases, tenant/session IDs, raw output, or worker
 errors.
