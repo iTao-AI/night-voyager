@@ -538,7 +538,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'claim_agent_task','start_agent_task','heartbeat_agent_task',
                            'fail_agent_task','finalize_agent_task_result')
                            OR p.proname IN
-                          ('import_dra_research_candidate','verify_and_promote_dra_candidate'))
+                          ('import_dra_research_candidate','verify_and_promote_dra_candidate',
+                           'load_governed_mixed_planning_snapshot'))
                         """)
                     )
                 )
@@ -562,6 +563,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "finalize_agent_task_result",
                 "import_dra_research_candidate",
                 "verify_and_promote_dra_candidate",
+                "load_governed_mixed_planning_snapshot",
             } or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
@@ -588,6 +590,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "heartbeat_agent_task",
                 "fail_agent_task",
                 "finalize_agent_task_result",
+                "load_governed_mixed_planning_snapshot",
             }
             worker_signatures = {
                 row["proname"]: row["identity_arguments"]
@@ -600,6 +603,19 @@ async def verify_database_catalog(database_url: str) -> None:
                 "uuid, uuid, text, bigint, text, boolean, boolean"
             ):
                 raise SystemExit("fail_agent_task audit signature drift")
+            if worker_signatures["load_governed_mixed_planning_snapshot"] != (
+                "uuid, uuid, integer, uuid, integer, text"
+            ):
+                raise SystemExit("mixed snapshot authority signature drift")
+            create_signature = next(
+                row["identity_arguments"]
+                for row in app_functions
+                if row["proname"] == "create_agent_task"
+            )
+            if create_signature != (
+                "uuid, uuid, uuid, uuid, text, integer, uuid, integer, text, text, text"
+            ):
+                raise SystemExit("mixed task creation signature drift")
             if any(
                 (row["proname"] in api_functions) != row["api_execute"]
                 or (row["proname"] in worker_functions) != row["worker_execute"]
