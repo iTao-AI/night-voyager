@@ -20,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dra = ["httpx2>=2.5,<2.6"]
 mke = ["mcp>=1.28.1,<2"]
 
 [dependency-groups]

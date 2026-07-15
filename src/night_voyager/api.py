@@ -9,6 +9,7 @@ from night_voyager.database import create_engine, create_session_factory
 from night_voyager.interfaces.http.connected_demo import create_connected_demo_router
 from night_voyager.interfaces.http.decision import create_decision_router
 from night_voyager.interfaces.http.decision import problem as decision_problem
+from night_voyager.interfaces.http.dra import create_dra_router
 from night_voyager.interfaces.http.identity import (
     IdentityServiceProtocol,
     create_identity_router,
@@ -63,6 +64,7 @@ def create_app(
     if session_factory is not None:
         app.include_router(create_connected_demo_router(resolved_settings, session_factory))
         app.include_router(create_decision_router(resolved_settings, session_factory))
+        app.include_router(create_dra_router(resolved_settings, session_factory))
         app.include_router(create_task_router(resolved_settings, session_factory))
     return app
 

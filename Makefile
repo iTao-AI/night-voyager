@@ -2,8 +2,8 @@
 export UV_BUILD_CONSTRAINT := build-constraints.txt
 export UV_REQUIRE_HASHES := 1
 
-.PHONY: help doctor demo proof compose-proof db-check check mke-doctor \
-	mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
+.PHONY: help doctor demo proof compose-proof db-check check dra-check dra-consumer-proof \
+	mke-doctor mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
 
 help: ## Show available commands
 	@awk 'BEGIN {FS = ":.*## "}; /^[a-zA-Z0-9_-]+:.*## / {printf "%-16s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -35,12 +35,22 @@ mke-check: ## Run the isolated optional MKE/MCP process tests
 mke-consumer-proof: ## Run the real exact-candidate read-only proof
 	@scripts/run_mke_lane.sh proof --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)" --json
 
+dra-check: ## Run the deterministic offline DRA consumer contract lane
+	uv run pytest -q tests/contracts/test_dra_v1_contract.py \
+	  tests/contracts/test_dra_reconciliation.py tests/unit/dra \
+	  tests/architecture/test_dra_contract.py
+	uv run python scripts/verify_dra_consumer.py fixture --json
+
+dra-consumer-proof: ## Run one separately authorized live DRA proof attempt
+	@scripts/run_dra_lane.sh live --json
+
 check: ## Run backend, frontend, Compose, and proof checks
 	uv lock --check
 	uv run pytest -q -m "not database and not mke"
 	uv run ruff check .
 	uv run pyright
 	uv build --build-constraints build-constraints.txt --require-hashes
+	$(MAKE) dra-check
 	npm --prefix web ci
 	npm --prefix web run lint
 	npm --prefix web run typecheck

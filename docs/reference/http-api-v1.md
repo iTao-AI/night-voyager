@@ -93,6 +93,35 @@ the pinned run, Australia cost evidence, current Case revision, and M3B policy.
 These endpoints add no write authority, persistence, migration, or client-owned
 tenant, role, policy, route, task, run, Brief, receipt, or timeline selector.
 
+## Governed DRA candidate endpoints
+
+The optional DRA integration adds three assigned-advisor endpoints. Mutations
+require the existing opaque session, exact configured `Origin`, session-bound
+`X-CSRF-Token`, and a 16–200 character `Idempotency-Key`. All responses use
+`Cache-Control: no-store`; authorization failures remain non-enumerating.
+
+| Method and path | Result |
+| --- | --- |
+| `POST /api/v1/cases/{case_id}/dra-candidates` | `201` immutable `UNTRUSTED_CANDIDATE` import |
+| `GET /api/v1/cases/{case_id}/dra-candidates/{candidate_id}` | bounded candidate and terminal-decision status |
+| `POST /api/v1/cases/{case_id}/dra-candidates/{candidate_id}/verification-decisions` | `201` atomic approve/reject decision |
+
+The import body contains the strict pinned producer projection and canonical
+artifact input, but the response and persisted candidate exclude artifact
+content. Tenant, Case, actor, role, authority, promoted identities, baseline
+pins, credentials, and local paths are server-owned or fixed internally and
+cannot be supplied by the caller.
+The imported projection must contain exactly one promotable public Evidence.
+One approve or reject decision makes the candidate terminal; subsequent review
+requires a newly imported candidate.
+
+Approval requires exact source attestation and atomically creates one derived
+source-pack revision with exactly one `australia_program_fit` Evidence using
+`externally_verified`; the remaining accepted facts copy the synthetic
+baseline. Rejection creates neither source-pack nor Evidence. There is no
+separate promotion command. Problems never include Markdown, source bytes,
+credentials, or raw provider responses.
+
 ## M5 same-origin BFF
 
 The connected browser uses eleven explicit `/api/demo/*` Route Handlers for

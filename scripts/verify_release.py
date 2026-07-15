@@ -43,6 +43,7 @@ M3B_TABLES = {
     "idempotency_records",
 }
 M4A_TABLES = {"agent_tasks", "agent_executions", "agent_task_events"}
+DRA_TABLES = {"dra_research_candidates", "external_evidence_verifications"}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -104,6 +105,14 @@ RELEASE_HOW_TO_TOKENS = (
     "normal pull request",
     "Do not force-move `v0.1.0`",
     "bypass the `main` ruleset",
+)
+DRA_SURFACE = (
+    "scripts/verify_dra_consumer.py",
+    "scripts/run_dra_lane.sh",
+    "scripts/seed_dra_proof.py",
+    "docs/decisions/0007-dra-governed-mixed-evidence-boundary.md",
+    "docs/reference/dra-governed-evidence.md",
+    "docs/operations/dra-consumer-proof.md",
 )
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
@@ -198,6 +207,25 @@ def verify_m5_public_evidence() -> None:
         if any(source.count(relative) != 1 for source in public_entries.values()):
             raise SystemExit(f"each README must reference the M5 screenshot once: {relative}")
     print("proof M5 evidence: connected runbook and two PNG screenshots present")
+
+
+def verify_dra_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in DRA_SURFACE):
+        raise SystemExit("governed DRA proof surface incomplete")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text(
+        encoding="utf-8"
+    )
+    if (
+        "dra-check:" not in makefile
+        or "dra-consumer-proof:" not in makefile
+        or "make dra-check" not in workflow
+        or "dra-consumer-proof" in workflow
+        or "governed mixed PlanningRun is not implemented" not in reference
+    ):
+        raise SystemExit("governed DRA command or status contract drift")
+    print("proof DRA surface: offline candidate and atomic promotion lane confirmed")
 
 
 def verify_release_surface() -> None:
@@ -307,6 +335,10 @@ def verify_config() -> None:
         raise SystemExit(f"identity version mismatch: {versions}")
     runtime_dependencies = pyproject["project"]["dependencies"]
     optional_dependencies = pyproject["project"].get("optional-dependencies", {})
+    if optional_dependencies.get("dra") != ["httpx2>=2.5,<2.6"]:
+        raise SystemExit("DRA must remain an exact optional dependency range")
+    if package_version(uv_lock["package"], "httpx2") != "2.5.0":
+        raise SystemExit("httpx2 optional lock must remain at the reviewed 2.5.0 version")
     if optional_dependencies.get("mke") != ["mcp>=1.28.1,<2"]:
         raise SystemExit("MKE must remain an exact optional dependency range")
     if package_version(uv_lock["package"], "mcp") != "1.28.1":
@@ -334,7 +366,10 @@ def verify_config() -> None:
         raise SystemExit("Compose PostgreSQL image must use the approved exact tag and digest")
     if re.search(r"(?m)^\s{2}mke:\s*$", compose):
         raise SystemExit("MKE must not become a Compose service")
-    if list((ROOT / "migrations" / "versions").glob("0005_*.py")):
+    post_m4a = list((ROOT / "migrations" / "versions").glob("0005_*.py"))
+    if [path.name for path in post_m4a] != ["0005_dra_candidate_promotion.py"]:
+        raise SystemExit("post-M4A migration surface must be the governed DRA boundary")
+    if "mke" in post_m4a[0].read_text(encoding="utf-8").lower():
         raise SystemExit("M4B must not add a database migration")
     for required in (
         ROOT / "fixtures/m4b/candidate-artifact-lock.json",
@@ -394,7 +429,8 @@ def verify_wheel() -> None:
         run(
             python,
             "-c",
-            "from night_voyager.api import create_app; assert create_app().version == '0.1.0'",
+            "import sys; from night_voyager.api import create_app; "
+            "assert create_app().version == '0.1.0'; assert \"httpx2\" not in sys.modules",
         )
     print(f"proof wheel: isolated installed-wheel import and app factory passed ({wheel.name})")
 
@@ -451,7 +487,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } | M3A_TABLES | M3B_TABLES | M4A_TABLES or any(
+            } | M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -464,7 +500,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 25:
+            if policy_count != 27:
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -475,7 +511,7 @@ async def verify_database_catalog(database_url: str) -> None:
                       AND grantee IN ('night_voyager_api','night_voyager_worker')
                       AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
                     """),
-                    {"tables": sorted(M3A_TABLES | M3B_TABLES | M4A_TABLES)},
+                    {"tables": sorted(M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES)},
                 )
             ).scalar_one()
             if runtime_writes:
@@ -495,12 +531,14 @@ async def verify_database_catalog(database_url: str) -> None:
                             'night_voyager_worker',p.oid,'EXECUTE'
                           ) AS worker_execute
                         FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-                        WHERE n.nspname='app' AND p.proname IN
+                        WHERE n.nspname='app' AND (p.proname IN
                           ('publish_case_revision','transition_case','persist_source_pack',
                            'persist_evidence_ref','persist_planning_result','review_planning_run',
                            'decide_family_brief','create_agent_task','cancel_agent_task',
                            'claim_agent_task','start_agent_task','heartbeat_agent_task',
                            'fail_agent_task','finalize_agent_task_result')
+                           OR p.proname IN
+                          ('import_dra_research_candidate','verify_and_promote_dra_candidate'))
                         """)
                     )
                 )
@@ -522,6 +560,8 @@ async def verify_database_catalog(database_url: str) -> None:
                 "heartbeat_agent_task",
                 "fail_agent_task",
                 "finalize_agent_task_result",
+                "import_dra_research_candidate",
+                "verify_and_promote_dra_candidate",
             } or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
@@ -539,6 +579,8 @@ async def verify_database_catalog(database_url: str) -> None:
                 "decide_family_brief",
                 "create_agent_task",
                 "cancel_agent_task",
+                "import_dra_research_candidate",
+                "verify_and_promote_dra_candidate",
             }
             worker_functions = {
                 "claim_agent_task",
@@ -689,6 +731,7 @@ def main() -> None:
     verify_tree_mode(args.tree_mode)
     verify_public_hygiene()
     verify_m5_public_evidence()
+    verify_dra_surface()
     verify_release_surface()
     verify_config()
     verify_wheel()

@@ -45,3 +45,15 @@ def test_m5_read_model_matrix_is_registered() -> None:
     paths = create_app().openapi()["paths"]
     assert "get" in paths["/api/v1/cases/{case_id}/advisor-ledger"]
     assert "get" in paths["/api/v1/cases/{case_id}/current-decision-brief"]
+
+
+def test_dra_candidate_http_matrix_is_registered() -> None:
+    paths = create_app().openapi()["paths"]
+    assert "post" in paths["/api/v1/cases/{case_id}/dra-candidates"]
+    assert "get" in paths["/api/v1/cases/{case_id}/dra-candidates/{candidate_id}"]
+    assert (
+        "post"
+        in paths[
+            "/api/v1/cases/{case_id}/dra-candidates/{candidate_id}/verification-decisions"
+        ]
+    )
