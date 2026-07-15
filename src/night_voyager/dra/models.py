@@ -105,6 +105,33 @@ class DraRunProjectionV1(FrozenModel):
         return payload
 
 
+class DraRunStateProjectionV1(FrozenModel):
+    run_id: BoundedId
+    state_version: int
+    execution_status: Literal[
+        "pending", "running", "completed", "completed_with_fallback", "failed"
+    ]
+    review_status: Literal["not_required", "required", "resolved"]
+    delivery_status: Literal["pending", "ready", "review_required", "blocked", "failed"]
+
+    @computed_field
+    @property
+    def disposition(self) -> Literal["in_progress", "canonical_ready", "terminal_invalid"]:
+        state = (
+            self.execution_status,
+            self.review_status,
+            self.delivery_status,
+        )
+        if state in {
+            ("pending", "not_required", "pending"),
+            ("running", "not_required", "pending"),
+        }:
+            return "in_progress"
+        if state == ("completed", "not_required", "ready") and self.state_version > 0:
+            return "canonical_ready"
+        return "terminal_invalid"
+
+
 class DraEvidenceProjectionV1(FrozenModel):
     evidence_id: BoundedId
     source_url: HttpUrl | None
@@ -158,6 +185,13 @@ class DraCanonicalArtifactInputV1(FrozenModel):
         return self
 
 
+class DraCanonicalResultProjectionV1(FrozenModel):
+    run_id: BoundedId
+    execution_status: Literal["completed"]
+    delivery_status: Literal["ready"]
+    artifact: DraCanonicalArtifactInputV1
+
+
 class DraCandidateImportV1(FrozenModel):
     schema_version: Literal["night-voyager.dra-candidate-import.v1"]
     organization_id: UUID
@@ -177,6 +211,8 @@ class DraCandidateImportV1(FrozenModel):
             raise ValueError("dra_evidence_ids_not_unique")
         if self.acceptance.run_id != self.run.run_id:
             raise ValueError("dra_run_identity_mismatch")
+        if sum(item.is_promotable for item in self.evidence) != 1:
+            raise ValueError("dra_promotable_evidence_cardinality")
         return self
 
 
@@ -204,6 +240,8 @@ class DraResearchCandidateV1(FrozenModel):
         identifiers = [item.evidence_id for item in self.evidence]
         if not identifiers or len(identifiers) != len(set(identifiers)):
             raise ValueError("dra_evidence_ids_not_unique")
+        if sum(item.is_promotable for item in self.evidence) != 1:
+            raise ValueError("dra_promotable_evidence_cardinality")
         return self
 
 

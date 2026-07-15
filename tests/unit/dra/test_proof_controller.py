@@ -6,7 +6,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from night_voyager.dra.models import (
+    DraCanonicalResultProjectionV1,
+    DraRunStateProjectionV1,
+)
 from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID, DRA_PROOF_CASE_ID
+from scripts import verify_dra_consumer
 
 ROOT = Path(__file__).parents[3]
 
@@ -65,3 +72,146 @@ def test_public_docs_close_pr1_without_claiming_mixed_planning() -> None:
     assert "governed mixed PlanningRun is not implemented" in reference
     assert "separately-authorized-one-attempt" in runbook
     assert "live provider proof is not a required CI gate" in runbook
+
+
+def test_main_normalizes_unexpected_live_errors_without_private_output(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        verify_dra_consumer,
+        "parse_args",
+        lambda: type("Args", (), {"mode": "live", "json": True})(),
+    )
+
+    def fail_without_awaiting(coroutine: object) -> None:
+        coroutine.close()  # type: ignore[attr-defined]
+        raise RuntimeError("/" + "Users/private raw-provider-value credential-value")
+
+    monkeypatch.setattr(verify_dra_consumer.asyncio, "run", fail_without_awaiting)
+    with pytest.raises(SystemExit):
+        verify_dra_consumer.main()
+    captured = capsys.readouterr()
+    assert captured.err.strip() == "dra_live_proof_failed"
+    assert captured.out == ""
+
+
+class FakeLiveTransport:
+    def __init__(
+        self,
+        runs: list[DraRunStateProjectionV1 | Exception],
+        result: DraCanonicalResultProjectionV1 | Exception,
+    ) -> None:
+        self.runs = runs
+        self.result = result
+        self.result_calls = 0
+
+    async def get_run(self, run_id: str) -> DraRunStateProjectionV1:
+        _ = run_id
+        value = self.runs.pop(0)
+        if isinstance(value, Exception):
+            raise value
+        return value
+
+    async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1:
+        _ = run_id
+        self.result_calls += 1
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def run_state(execution: str, review: str, delivery: str) -> DraRunStateProjectionV1:
+    return DraRunStateProjectionV1.model_validate(
+        {
+            "run_id": "run-1",
+            "state_version": 1,
+            "execution_status": execution,
+            "review_status": review,
+            "delivery_status": delivery,
+        }
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("execution", "review", "delivery"),
+    [
+        ("failed", "not_required", "failed"),
+        ("completed", "not_required", "blocked"),
+        ("completed", "required", "review_required"),
+    ],
+)
+async def test_polling_fails_immediately_for_terminal_invalid_states(
+    execution: str, review: str, delivery: str
+) -> None:
+    transport = FakeLiveTransport([run_state(execution, review, delivery)], RuntimeError())
+    with pytest.raises(SystemExit, match="dra_live_run_terminal_invalid"):
+        await verify_dra_consumer.poll_canonical_result(
+            transport, "run-1", deadline=30, poll_seconds=0
+        )
+    assert transport.result_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_polling_timeout_is_bounded() -> None:
+    transport = FakeLiveTransport(
+        [run_state("running", "not_required", "pending")], RuntimeError()
+    )
+    clock = iter((0.0, 2.0))
+    with pytest.raises(SystemExit, match="dra_poll_deadline_exceeded"):
+        await verify_dra_consumer.poll_canonical_result(
+            transport,
+            "run-1",
+            deadline=1,
+            poll_seconds=0,
+            monotonic=lambda: next(clock),
+            sleep=lambda _seconds: _completed_sleep(),
+        )
+
+
+async def _completed_sleep() -> object:
+    return None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [ValueError("raw payload"), TypeError("bad artifact")])
+async def test_polling_normalizes_malformed_run_or_result(failure: Exception) -> None:
+    ready = run_state("completed", "not_required", "ready")
+    transport = (
+        FakeLiveTransport([failure], RuntimeError())
+        if isinstance(failure, ValueError)
+        else FakeLiveTransport([ready], failure)
+    )
+    expected = (
+        "dra_live_run_terminal_invalid"
+        if isinstance(failure, ValueError)
+        else "dra_live_result_invalid"
+    )
+    with pytest.raises(SystemExit, match=expected):
+        await verify_dra_consumer.poll_canonical_result(
+            transport, "run-1", deadline=30, poll_seconds=0
+        )
+
+
+@pytest.mark.asyncio
+async def test_polling_returns_only_validated_canonical_result() -> None:
+    result = DraCanonicalResultProjectionV1.model_validate(
+        {
+            "run_id": "run-1",
+            "execution_status": "completed",
+            "delivery_status": "ready",
+            "artifact": {
+                "artifact_id": "research-report.md",
+                "kind": "research_report_markdown",
+                "media_type": "text/markdown",
+                "content": "safe",
+                "content_hash": "8b3369944dd2a3fab39e32d1aeb1f763946a458ae3e6368a46432adc8f3a0860",
+            },
+        }
+    )
+    transport = FakeLiveTransport(
+        [run_state("completed", "not_required", "ready")], result
+    )
+    assert await verify_dra_consumer.poll_canonical_result(
+        transport, "run-1", deadline=30, poll_seconds=0
+    ) == result

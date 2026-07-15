@@ -214,3 +214,82 @@ async def test_dra_http_reject_is_terminal_and_conflicts_are_closed() -> None:
             assert conflict.headers["cache-control"] == "no-store"
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_dra_http_approve_is_atomic_replayable_and_strict() -> None:
+    await ensure_case()
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": [ORIGIN],
+            "secret_key": "test-session-secret",
+        }
+    )
+    try:
+        advisor = await mint(sessions, DemoActorChoice.ADVISOR)
+        app = create_app(settings=settings, session_factory=sessions)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url=ORIGIN) as client:
+            client.cookies.set("night_voyager_session", advisor.raw_session_token)
+            imported = await client.post(
+                f"/api/v1/cases/{CASE}/dra-candidates",
+                headers=request_headers(advisor, "dra-http-import-approve-0001"),
+                json=import_payload(),
+            )
+            assert imported.status_code == 201, imported.text
+            candidate_id = imported.json()["candidate_id"]
+            evidence = build_fixture_candidate_import().evidence[0]
+            payload = {
+                "schema_version": 1,
+                "expected_case_revision": 1,
+                "dra_evidence_id": evidence.evidence_id,
+                "decision": "approve",
+                "reason": "Exact bounded source inspected.",
+                "source_attestation": {
+                    "canonical_url": str(evidence.source_url),
+                    "publisher": "Synthetic Public Source Publisher",
+                    "institution": "Synthetic Australia Institution",
+                    "snapshot_date": "2026-07-11",
+                    "freshness_days": 365,
+                    "redistribution_class": "link_only",
+                    "evidence_class": "institutional",
+                    "logical_path": "sources/australia-program-fit.html",
+                    "snapshot_byte_length": 375,
+                    "snapshot_sha256": (
+                        "87e314e801dca1aeaf9b751c149c53629a4cf23ee04698939fdc87def5a90a13"
+                    ),
+                    "known_gaps": ["applicant_eligibility", "intake_availability"],
+                },
+            }
+            invalid = await client.post(
+                f"/api/v1/cases/{CASE}/dra-candidates/{candidate_id}/verification-decisions",
+                headers=request_headers(advisor, "dra-http-approve-invalid-0001"),
+                json={**payload, "source_attestation": None},
+            )
+            assert invalid.status_code == 422
+            approved = await client.post(
+                f"/api/v1/cases/{CASE}/dra-candidates/{candidate_id}/verification-decisions",
+                headers=request_headers(advisor, "dra-http-approve-0001"),
+                json=payload,
+            )
+            assert approved.status_code == 201, approved.text
+            assert approved.json()["decision"] == "approve"
+            assert approved.json()["promoted_evidence_id"] is not None
+            replay = await client.post(
+                f"/api/v1/cases/{CASE}/dra-candidates/{candidate_id}/verification-decisions",
+                headers=request_headers(advisor, "dra-http-approve-0001"),
+                json=payload,
+            )
+            assert replay.status_code == 201
+            assert replay.json()["replayed"] is True
+            read = await client.get(f"/api/v1/cases/{CASE}/dra-candidates/{candidate_id}")
+            assert read.status_code == 200
+            assert read.json()["verification"]["decision"] == "approve"
+    finally:
+        await engine.dispose()

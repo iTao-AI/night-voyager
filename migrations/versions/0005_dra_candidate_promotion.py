@@ -76,7 +76,7 @@ CREATE TABLE app.external_evidence_verifications (
   decision_request_sha256 text NOT NULL CHECK (decision_request_sha256 ~ '^[0-9a-f]{64}$'),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (organization_id,id),
-  UNIQUE (organization_id, candidate_id, dra_evidence_id),
+  UNIQUE (organization_id, candidate_id),
   FOREIGN KEY (organization_id,candidate_id) REFERENCES app.dra_research_candidates(organization_id,id),
   FOREIGN KEY (organization_id,case_id,case_revision) REFERENCES app.student_case_revisions(organization_id,case_id,revision),
   FOREIGN KEY (organization_id,actor_id) REFERENCES app.actors(organization_id,id),
@@ -122,7 +122,7 @@ CREATE FUNCTION app.import_dra_research_candidate(
   p_artifact_id text,p_artifact_kind text,p_artifact_media_type text,p_artifact_byte_length integer,p_artifact_sha256 text,
   p_ordered_evidence jsonb,p_request_sha256 text,p_key_sha256 text
 ) RETURNS TABLE(candidate_id uuid,replayed boolean) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE prior app.idempotency_records%ROWTYPE;
+DECLARE prior app.idempotency_records%ROWTYPE; evidence_item jsonb; evidence_host text; seen_evidence_ids text[] := '{}'; promotable_count integer := 0;
 BEGIN
   PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
   PERFORM pg_advisory_xact_lock(hashtextextended(p_org::text||':'||p_actor::text||':'||'dra_candidate_import'||':'||p_key_sha256,0));
@@ -133,8 +133,47 @@ BEGIN
     RETURN;
   END IF;
   IF p_producer_release<>'v0.1.3' OR p_producer_commit<>'87b2a8e335385eb865086f7a69fe2b190567cfa2' OR p_contract_schema<>'dra.downstream-consumer.v1' OR p_fixture_sha256<>'cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157' OR p_profile_id<>'generic' OR p_artifact_id<>'research-report.md' OR p_artifact_kind<>'research_report_markdown' OR p_artifact_media_type<>'text/markdown' OR p_artifact_byte_length NOT BETWEEN 1 AND 1048576 OR p_request_identity_sha256 !~ '^[0-9a-f]{64}$' OR p_artifact_sha256 !~ '^[0-9a-f]{64}$' OR p_request_sha256 !~ '^[0-9a-f]{64}$' OR p_key_sha256 !~ '^[0-9a-f]{64}$' OR jsonb_typeof(p_ordered_evidence)<>'array' OR jsonb_array_length(p_ordered_evidence)=0 THEN RAISE EXCEPTION USING ERRCODE='NV011', MESSAGE='candidate contract mismatch'; END IF;
+  FOR evidence_item IN SELECT value FROM jsonb_array_elements(p_ordered_evidence) item(value) LOOP
+    IF jsonb_typeof(evidence_item)<>'object'
+      OR NOT evidence_item ?& ARRAY['evidence_id','source_url','source_identity','retrieved_at','citation_status','verification_status']
+      OR (SELECT count(*) FROM jsonb_object_keys(evidence_item))<>6
+      OR jsonb_typeof(evidence_item->'evidence_id')<>'string'
+      OR length(evidence_item->>'evidence_id') NOT BETWEEN 1 AND 200
+      OR evidence_item->>'evidence_id'=ANY(seen_evidence_ids)
+      OR jsonb_typeof(evidence_item->'source_url') NOT IN ('string','null')
+      OR jsonb_typeof(evidence_item->'source_identity')<>'string'
+      OR length(evidence_item->>'source_identity') NOT BETWEEN 1 AND 2048
+      OR jsonb_typeof(evidence_item->'retrieved_at')<>'string'
+      OR NOT pg_input_is_valid(evidence_item->>'retrieved_at','timestamp with time zone')
+      OR evidence_item->>'retrieved_at' !~ '(Z|[+-][0-9]{2}:[0-9]{2})$'
+      OR evidence_item->>'citation_status'<>'cited'
+      OR evidence_item->>'verification_status' NOT IN ('verified','unverified')
+    THEN RAISE EXCEPTION USING ERRCODE='NV011', MESSAGE='candidate evidence contract mismatch'; END IF;
+    seen_evidence_ids := array_append(seen_evidence_ids,evidence_item->>'evidence_id');
+    IF jsonb_typeof(evidence_item->'source_url')='string' THEN
+      promotable_count := promotable_count + 1;
+      evidence_host := lower(substring(evidence_item->>'source_url' from '^https://([^/:?#]+)'));
+      IF evidence_host IS NULL OR position('@' in evidence_item->>'source_url')>0
+        OR evidence_host='localhost' OR evidence_host LIKE '%.localhost' OR evidence_host LIKE '%.local'
+        OR (evidence_host !~ '^[0-9]+(\.[0-9]+){3}$' AND evidence_host NOT LIKE '%.%')
+        OR evidence_host LIKE '[%'
+        OR evidence_item->>'source_identity' IS DISTINCT FROM evidence_item->>'source_url'
+        OR (evidence_host ~ '^[0-9]+(\.[0-9]+){3}$' AND (
+          evidence_host::inet << '0.0.0.0/8'::inet OR evidence_host::inet << '10.0.0.0/8'::inet
+          OR evidence_host::inet << '100.64.0.0/10'::inet OR evidence_host::inet << '127.0.0.0/8'::inet
+          OR evidence_host::inet << '169.254.0.0/16'::inet OR evidence_host::inet << '172.16.0.0/12'::inet
+          OR evidence_host::inet << '192.0.0.0/24'::inet OR evidence_host::inet << '192.0.2.0/24'::inet
+          OR evidence_host::inet << '192.168.0.0/16'::inet OR evidence_host::inet << '198.18.0.0/15'::inet
+          OR evidence_host::inet << '198.51.100.0/24'::inet OR evidence_host::inet << '203.0.113.0/24'::inet
+          OR evidence_host::inet << '224.0.0.0/4'::inet OR evidence_host::inet << '240.0.0.0/4'::inet
+        ))
+      THEN RAISE EXCEPTION USING ERRCODE='NV011', MESSAGE='candidate evidence source mismatch'; END IF;
+    END IF;
+  END LOOP;
+  IF promotable_count<>1 THEN RAISE EXCEPTION USING ERRCODE='NV011', MESSAGE='candidate promotable evidence mismatch'; END IF;
   IF NOT EXISTS (SELECT 1 FROM app.student_case_participants WHERE organization_id=p_org AND case_id=p_case AND actor_id=p_actor AND role='advisor') THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='candidate unavailable'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_revision AND state='planning') THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='candidate case is stale'; END IF;
+  PERFORM 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_revision AND state='planning' FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='candidate case is stale'; END IF;
   INSERT INTO app.dra_research_candidates(organization_id,id,case_id,case_revision,producer_release,producer_commit,contract_schema,fixture_sha256,profile_id,request_identity_sha256,run_id,artifact_id,artifact_kind,artifact_media_type,artifact_byte_length,artifact_sha256,ordered_evidence,import_request_sha256,created_by_actor_id) VALUES(p_org,p_candidate,p_case,p_revision,p_producer_release,p_producer_commit,p_contract_schema,p_fixture_sha256,p_profile_id,p_request_identity_sha256,p_run_id,p_artifact_id,p_artifact_kind,p_artifact_media_type,p_artifact_byte_length,p_artifact_sha256,p_ordered_evidence,p_request_sha256,p_actor);
   INSERT INTO app.idempotency_records VALUES(p_org,p_actor,'dra_candidate_import',p_key_sha256,p_request_sha256,'dra_candidate',p_candidate,clock_timestamp());
   RETURN QUERY SELECT p_candidate,false;
@@ -165,7 +204,7 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='candidate unavailable'; END IF;
   PERFORM 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_revision AND state='planning' FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='candidate case is stale'; END IF;
-  IF EXISTS (SELECT 1 FROM app.external_evidence_verifications WHERE organization_id=p_org AND candidate_id=p_candidate AND dra_evidence_id=p_dra_evidence_id) THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='candidate evidence already terminal'; END IF;
+  IF EXISTS (SELECT 1 FROM app.external_evidence_verifications WHERE organization_id=p_org AND candidate_id=p_candidate) THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='candidate already terminal'; END IF;
   SELECT value INTO selected_evidence FROM jsonb_array_elements(candidate.ordered_evidence) item(value) WHERE value->>'evidence_id'=p_dra_evidence_id;
   IF selected_evidence IS NULL OR selected_evidence->>'citation_status'<>'cited' OR selected_evidence->>'source_url' IS NULL OR selected_evidence->>'source_identity' IS DISTINCT FROM selected_evidence->>'source_url' THEN RAISE EXCEPTION USING ERRCODE='NV011', MESSAGE='candidate evidence contract mismatch'; END IF;
   IF p_decision NOT IN ('approve','reject') OR NULLIF(btrim(p_reason),'') IS NULL OR length(p_reason)>2000 OR p_request_sha256 !~ '^[0-9a-f]{64}$' OR p_key_sha256 !~ '^[0-9a-f]{64}$' OR p_baseline_source_pack_id<>'50000000-0000-0000-0000-000000000001'::uuid OR p_baseline_source_pack_version<>1 OR p_baseline_manifest_sha256<>'84350ea5705d9681d3e6550e1bd06e3340a9fcf0e7e7bbed4478ed3403405f28' OR p_baseline_raw_manifest_sha256<>'5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25' THEN RAISE EXCEPTION USING ERRCODE='NV011', MESSAGE='verification contract mismatch'; END IF;

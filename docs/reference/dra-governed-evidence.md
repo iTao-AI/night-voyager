@@ -20,7 +20,8 @@ The import DTO is strict and frozen. It accepts the exact producer pins,
 bounded request/run identities, canonical `research-report.md`, and ordered
 six-field Evidence projections. Artifact content exists only at the import
 boundary; persistence retains its byte length and SHA-256, never Markdown.
-Candidate authority is fixed to `untrusted_candidate`.
+Exactly one ordered Evidence item must be promotable through a public HTTPS
+source. Candidate authority is fixed to `untrusted_candidate`.
 
 ## Authority surface
 
@@ -37,6 +38,8 @@ atomically creates one derived source-pack revision and exactly one
 `australia_program_fit -> program_fit -> externally_verified` Evidence while
 copying the other accepted synthetic facts. Rejection creates no pack or
 Evidence. There is no later promotion command or table.
+Any approve or reject decision makes the whole candidate terminal. A rejected
+source therefore requires a newly imported candidate before another decision.
 
 The three assigned-advisor HTTP routes are documented in
 [HTTP API v1](http-api-v1.md). Mutations require exact Origin, session CSRF,

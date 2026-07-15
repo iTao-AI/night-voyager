@@ -111,6 +111,9 @@ artifact input, but the response and persisted candidate exclude artifact
 content. Tenant, Case, actor, role, authority, promoted identities, baseline
 pins, credentials, and local paths are server-owned or fixed internally and
 cannot be supplied by the caller.
+The imported projection must contain exactly one promotable public Evidence.
+One approve or reject decision makes the candidate terminal; subsequent review
+requires a newly imported candidate.
 
 Approval requires exact source attestation and atomically creates one derived
 source-pack revision with exactly one `australia_program_fit` Evidence using

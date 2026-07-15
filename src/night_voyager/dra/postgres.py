@@ -66,7 +66,10 @@ class PostgresDraCandidateRepository:
                     "artifact_bytes": command.artifact_byte_length,
                     "artifact_sha": command.artifact_sha256,
                     "evidence": json.dumps(
-                        [item.model_dump(mode="json") for item in command.evidence]
+                        [
+                            item.model_dump(mode="json", exclude_computed_fields=True)
+                            for item in command.evidence
+                        ]
                     ),
                     "request_hash": command.import_request_sha256,
                     "key_hash": self._key_hash(idempotency_key),

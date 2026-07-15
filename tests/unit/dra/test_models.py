@@ -87,3 +87,11 @@ def test_candidate_requires_unique_ordered_evidence_ids() -> None:
     duplicate = candidate.model_copy(update={"evidence": candidate.evidence * 2})
     with pytest.raises(ValidationError, match="dra_evidence_ids_not_unique"):
         type(candidate).model_validate(duplicate.model_dump(exclude_computed_fields=True))
+
+
+def test_candidate_requires_exactly_one_promotable_public_evidence() -> None:
+    candidate = build_fixture_candidate_import()
+    second = candidate.evidence[0].model_copy(update={"evidence_id": "second-public-evidence"})
+    payload = candidate.model_copy(update={"evidence": (*candidate.evidence, second)})
+    with pytest.raises(ValidationError, match="dra_promotable_evidence_cardinality"):
+        type(candidate).model_validate(payload.model_dump(exclude_computed_fields=True))

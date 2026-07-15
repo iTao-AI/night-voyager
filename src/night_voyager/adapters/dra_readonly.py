@@ -12,8 +12,10 @@ import httpx2
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from night_voyager.dra.models import (
+    DraCanonicalResultProjectionV1,
     DraHealthProjectionV1,
     DraRunAcceptanceV1,
+    DraRunStateProjectionV1,
 )
 from night_voyager.dra.reconciliation import (
     DraAmbiguousOutcome,
@@ -153,5 +155,40 @@ class Httpx2DraTransport:
             {
                 field: payload.get(field)
                 for field in ("thread_id", "run_id", "segment_id", "idempotent_replay")
+            }
+        )
+
+    async def get_run(self, run_id: str) -> DraRunStateProjectionV1:
+        payload = await self._request_json("GET", f"/api/runs/{run_id}")
+        return DraRunStateProjectionV1.model_validate(
+            {
+                field: payload.get(field)
+                for field in (
+                    "run_id",
+                    "state_version",
+                    "execution_status",
+                    "review_status",
+                    "delivery_status",
+                )
+            }
+        )
+
+    async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1:
+        payload = await self._request_json("GET", f"/api/runs/{run_id}/result")
+        artifact = payload.get("artifact")
+        selected_artifact = (
+            {
+                field: cast(Mapping[str, object], artifact).get(field)
+                for field in ("artifact_id", "kind", "media_type", "content", "content_hash")
+            }
+            if isinstance(artifact, Mapping)
+            else artifact
+        )
+        return DraCanonicalResultProjectionV1.model_validate(
+            {
+                "run_id": payload.get("run_id"),
+                "execution_status": payload.get("execution_status"),
+                "delivery_status": payload.get("delivery_status"),
+                "artifact": selected_artifact,
             }
         )

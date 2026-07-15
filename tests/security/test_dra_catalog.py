@@ -80,7 +80,8 @@ def test_atomic_authority_fixes_mapping_shapes_and_conflicts() -> None:
         "ERRCODE='NV012'",
     ):
         assert contract in source
-    assert "UNIQUE (organization_id, candidate_id, dra_evidence_id)" in source
+    assert "UNIQUE (organization_id, candidate_id)" in source
+    assert "IF promotable_count<>1" in source
     authority_values = (
         "authority IN "
         "('untrusted_candidate','accepted_synthetic_demo','externally_verified')"

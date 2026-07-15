@@ -134,6 +134,52 @@ async def test_transport_enforces_bounded_stream_read() -> None:
         await transport.health()
 
 
+@pytest.mark.asyncio
+async def test_transport_exposes_bounded_allowlisted_run_and_result_projections() -> None:
+    run_factory = CapturingFactory(
+        {
+            "run_id": "run-1",
+            "state_version": 1,
+            "execution_status": "completed",
+            "review_status": "not_required",
+            "delivery_status": "ready",
+            "private_additive_field": "/" + "Users/private/provider-payload",
+        }
+    )
+    run_transport = Httpx2DraTransport(
+        DraClientConfig(base_url="http://127.0.0.1:8000", poll_seconds=1, deadline_seconds=30),
+        environ={},
+        client_factory=run_factory,
+    )
+    run = await run_transport.get_run("run-1")
+    assert run.disposition == "canonical_ready"
+    assert "private_additive_field" not in run.model_dump()
+
+    result_factory = CapturingFactory(
+        {
+            "run_id": "run-1",
+            "execution_status": "completed",
+            "delivery_status": "ready",
+            "artifact": {
+                "artifact_id": "research-report.md",
+                "kind": "research_report_markdown",
+                "media_type": "text/markdown",
+                "content": "safe",
+                "content_hash": "8b3369944dd2a3fab39e32d1aeb1f763946a458ae3e6368a46432adc8f3a0860",
+            },
+            "raw": "discarded",
+        }
+    )
+    result_transport = Httpx2DraTransport(
+        DraClientConfig(base_url="http://127.0.0.1:8000", poll_seconds=1, deadline_seconds=30),
+        environ={},
+        client_factory=result_factory,
+    )
+    result = await result_transport.get_result("run-1")
+    assert result.artifact.content == "safe"
+    assert "raw" not in result.model_dump()
+
+
 def test_api_key_cannot_be_passed_in_config() -> None:
     with pytest.raises(ValueError):
         DraClientConfig.model_validate(
