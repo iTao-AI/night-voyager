@@ -6,10 +6,12 @@ import hashlib
 import json
 import os
 from datetime import date
+from typing import cast
 from uuid import UUID
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
@@ -538,7 +540,7 @@ async def test_source_attestation_and_baseline_mismatches_fail_without_side_effe
 
 
 @pytest.mark.asyncio
-async def test_same_candidate_concurrent_approvals_yield_one_result_and_one_conflict() -> None:
+async def test_terminal_approval_replays_same_key_and_conflicts_on_new_key() -> None:
     case_id = UUID("40000000-0000-0000-0000-000000000007")
     await ensure_dra_case(case_id)
     candidate = UUID("90000000-0000-0000-0000-000000000118")
@@ -560,7 +562,7 @@ async def test_same_candidate_concurrent_approvals_yield_one_result_and_one_conf
             try:
                 async with engine.begin() as connection:
                     await set_context(connection, ADVISOR, "advisor")
-                    return await connection.execute(
+                    result = await connection.execute(
                         text(VERIFY_SQL),
                         verify_params(
                             candidate,
@@ -571,6 +573,7 @@ async def test_same_candidate_concurrent_approvals_yield_one_result_and_one_conf
                             case_id=case_id,
                         ),
                     )
+                    return result.mappings().one()
             except DBAPIError as error:
                 return str(getattr(error.orig, "sqlstate", ""))
 
@@ -598,6 +601,9 @@ async def test_same_candidate_concurrent_approvals_yield_one_result_and_one_conf
         results = await asyncio.gather(approve(), conflicting_approve())
         conflicts = [result for result in results if result == "NV012"]
         assert len(conflicts) == 1, results
+        successes = [result for result in results if result != "NV012"]
+        assert len(successes) == 1, results
+        assert cast(RowMapping, successes[0])["replayed"] is True
         async with engine.begin() as connection:
             await set_context(connection, ADVISOR, "advisor")
             assert await connection.scalar(
@@ -606,6 +612,135 @@ async def test_same_candidate_concurrent_approvals_yield_one_result_and_one_conf
                     "WHERE candidate_id=:candidate"
                 ),
                 {"candidate": candidate},
+            ) == 1
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_two_first_time_concurrent_approvals_yield_one_atomic_result() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000008")
+    await ensure_dra_case(case_id)
+    candidate = UUID("90000000-0000-0000-0000-000000000119")
+    requests = (
+        verify_params(
+            candidate,
+            UUID("91000000-0000-0000-0000-000000009011"),
+            decision="approve",
+            request_hash=stable_hash("first-concurrent-approval-request-a"),
+            key_hash=stable_hash("first-concurrent-approval-key-a"),
+            case_id=case_id,
+        ),
+        verify_params(
+            candidate,
+            UUID("91000000-0000-0000-0000-000000009012"),
+            decision="approve",
+            request_hash=stable_hash("first-concurrent-approval-request-b"),
+            key_hash=stable_hash("first-concurrent-approval-key-b"),
+            case_id=case_id,
+        ),
+    )
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
+            await connection.execute(
+                text(IMPORT_SQL),
+                import_params(
+                    candidate,
+                    request_hash=stable_hash("first-concurrent-import-request"),
+                    key_hash=stable_hash("first-concurrent-import-key"),
+                    case_id=case_id,
+                ),
+            )
+
+        async def approve(params: dict[str, object]) -> object:
+            try:
+                async with engine.begin() as connection:
+                    await set_context(connection, ADVISOR, "advisor")
+                    result = await connection.execute(text(VERIFY_SQL), params)
+                    return result.mappings().one()
+            except DBAPIError as error:
+                return str(getattr(error.orig, "sqlstate", ""))
+
+        results = await asyncio.gather(*(approve(params) for params in requests))
+        successes = [result for result in results if result != "NV012"]
+        conflicts = [result for result in results if result == "NV012"]
+        assert len(successes) == 1, results
+        assert len(conflicts) == 1, results
+        success = cast(RowMapping, successes[0])
+        assert success["replayed"] is False
+        assert success["verification_id"] in {
+            request["verification"] for request in requests
+        }
+
+        async with engine.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
+            verification = (
+                await connection.execute(
+                    text(
+                        "SELECT id,promoted_source_pack_version,"
+                        "promoted_source_entry_id,promoted_evidence_id "
+                        "FROM app.external_evidence_verifications "
+                        "WHERE candidate_id=:candidate"
+                    ),
+                    {"candidate": candidate},
+                )
+            ).mappings().one()
+            assert verification == {
+                "id": success["verification_id"],
+                "promoted_source_pack_version": success[
+                    "promoted_source_pack_version"
+                ],
+                "promoted_source_entry_id": success["promoted_source_entry_id"],
+                "promoted_evidence_id": success["promoted_evidence_id"],
+            }
+            assert await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.source_packs "
+                    "WHERE organization_id=:org AND id=:pack AND version=:version"
+                ),
+                {
+                    "org": ORG,
+                    "pack": PACK,
+                    "version": success["promoted_source_pack_version"],
+                },
+            ) == 1
+            assert await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.evidence_refs "
+                    "WHERE organization_id=:org AND source_pack_id=:pack "
+                    "AND source_pack_version=:version "
+                    "AND claim='australia_program_fit' "
+                    "AND authority='externally_verified' "
+                    "AND id=:evidence"
+                ),
+                {
+                    "org": ORG,
+                    "pack": PACK,
+                    "version": success["promoted_source_pack_version"],
+                    "evidence": success["promoted_evidence_id"],
+                },
+            ) == 1
+            assert await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.source_pack_entries "
+                    "WHERE id IN (:entry_a,:entry_b)"
+                ),
+                {
+                    "entry_a": requests[0]["external_entry"],
+                    "entry_b": requests[1]["external_entry"],
+                },
+            ) == 1
+            assert await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.evidence_refs "
+                    "WHERE id IN (:evidence_a,:evidence_b)"
+                ),
+                {
+                    "evidence_a": requests[0]["external_evidence"],
+                    "evidence_b": requests[1]["external_evidence"],
+                },
             ) == 1
     finally:
         await engine.dispose()

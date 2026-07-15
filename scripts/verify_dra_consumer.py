@@ -126,6 +126,8 @@ async def poll_canonical_result(
             run = await transport.get_run(run_id)
         except (TypeError, ValueError) as error:
             raise SystemExit("dra_live_run_terminal_invalid") from error
+        if run.run_id != run_id:
+            raise SystemExit("dra_live_run_terminal_invalid")
         if run.disposition == "in_progress":
             await sleep(poll_seconds)
             continue

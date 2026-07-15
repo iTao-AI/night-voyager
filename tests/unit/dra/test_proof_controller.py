@@ -215,3 +215,33 @@ async def test_polling_returns_only_validated_canonical_result() -> None:
     assert await verify_dra_consumer.poll_canonical_result(
         transport, "run-1", deadline=30, poll_seconds=0
     ) == result
+
+
+@pytest.mark.asyncio
+async def test_polling_rejects_canonical_state_from_a_different_run() -> None:
+    result = DraCanonicalResultProjectionV1.model_validate(
+        {
+            "run_id": "expected-run",
+            "execution_status": "completed",
+            "delivery_status": "ready",
+            "artifact": {
+                "artifact_id": "research-report.md",
+                "kind": "research_report_markdown",
+                "media_type": "text/markdown",
+                "content": "safe",
+                "content_hash": (
+                    "8b3369944dd2a3fab39e32d1aeb1f763946a458ae3e6368a46432adc8f3a0860"
+                ),
+            },
+        }
+    )
+    wrong_run = run_state("completed", "not_required", "ready").model_copy(
+        update={"run_id": "wrong-run"}
+    )
+    transport = FakeLiveTransport([wrong_run], result)
+
+    with pytest.raises(SystemExit, match="dra_live_run_terminal_invalid"):
+        await verify_dra_consumer.poll_canonical_result(
+            transport, "expected-run", deadline=30, poll_seconds=0
+        )
+    assert transport.result_calls == 0
