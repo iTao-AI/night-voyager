@@ -32,11 +32,13 @@ def test_m2_role_init_and_public_records_exist() -> None:
         assert (ROOT / relative).is_file(), relative
 
 
-def test_current_backend_stops_at_approved_m4a_execution_boundary() -> None:
+def test_current_backend_has_one_approved_post_m4a_migration() -> None:
     assert [
         path.name for path in (ROOT / "migrations/versions").glob("0004_*.py")
     ] == ["0004_agent_tasks_executions_events.py"]
-    assert not list((ROOT / "migrations/versions").glob("0005_*.py"))
+    assert [
+        path.name for path in (ROOT / "migrations/versions").glob("0005_*.py")
+    ] == ["0005_dra_candidate_promotion.py"]
 
 
 def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:

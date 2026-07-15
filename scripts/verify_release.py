@@ -106,6 +106,14 @@ RELEASE_HOW_TO_TOKENS = (
     "Do not force-move `v0.1.0`",
     "bypass the `main` ruleset",
 )
+DRA_SURFACE = (
+    "scripts/verify_dra_consumer.py",
+    "scripts/run_dra_lane.sh",
+    "scripts/seed_dra_proof.py",
+    "docs/decisions/0007-dra-governed-mixed-evidence-boundary.md",
+    "docs/reference/dra-governed-evidence.md",
+    "docs/operations/dra-consumer-proof.md",
+)
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
 os.environ.setdefault("UV_REQUIRE_HASHES", "1")
@@ -199,6 +207,25 @@ def verify_m5_public_evidence() -> None:
         if any(source.count(relative) != 1 for source in public_entries.values()):
             raise SystemExit(f"each README must reference the M5 screenshot once: {relative}")
     print("proof M5 evidence: connected runbook and two PNG screenshots present")
+
+
+def verify_dra_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in DRA_SURFACE):
+        raise SystemExit("governed DRA proof surface incomplete")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text(
+        encoding="utf-8"
+    )
+    if (
+        "dra-check:" not in makefile
+        or "dra-consumer-proof:" not in makefile
+        or "make dra-check" not in workflow
+        or "dra-consumer-proof" in workflow
+        or "governed mixed PlanningRun is not implemented" not in reference
+    ):
+        raise SystemExit("governed DRA command or status contract drift")
+    print("proof DRA surface: offline candidate and atomic promotion lane confirmed")
 
 
 def verify_release_surface() -> None:
@@ -339,7 +366,10 @@ def verify_config() -> None:
         raise SystemExit("Compose PostgreSQL image must use the approved exact tag and digest")
     if re.search(r"(?m)^\s{2}mke:\s*$", compose):
         raise SystemExit("MKE must not become a Compose service")
-    if list((ROOT / "migrations" / "versions").glob("0005_*.py")):
+    post_m4a = list((ROOT / "migrations" / "versions").glob("0005_*.py"))
+    if [path.name for path in post_m4a] != ["0005_dra_candidate_promotion.py"]:
+        raise SystemExit("post-M4A migration surface must be the governed DRA boundary")
+    if "mke" in post_m4a[0].read_text(encoding="utf-8").lower():
         raise SystemExit("M4B must not add a database migration")
     for required in (
         ROOT / "fixtures/m4b/candidate-artifact-lock.json",
@@ -701,6 +731,7 @@ def main() -> None:
     verify_tree_mode(args.tree_mode)
     verify_public_hygiene()
     verify_m5_public_evidence()
+    verify_dra_surface()
     verify_release_surface()
     verify_config()
     verify_wheel()

@@ -56,13 +56,18 @@ def test_m5_public_records_exist_and_are_public_neutral() -> None:
         assert private not in source
 
 
-def test_m5_keeps_the_existing_database_graph() -> None:
+def test_m5_does_not_own_the_later_dra_migration() -> None:
     assert [path.name for path in sorted((ROOT / "migrations/versions").glob("*.py"))] == [
         "0001_identity_and_rls.py",
         "0002_case_evidence_planning.py",
         "0003_advisor_family_decision.py",
         "0004_agent_tasks_executions_events.py",
+        "0005_dra_candidate_promotion.py",
     ]
+    migration = (ROOT / "migrations/versions/0005_dra_candidate_promotion.py").read_text(
+        encoding="utf-8"
+    )
+    assert "connected_demo" not in migration
 
 
 def test_m5_freezes_exact_backend_and_bff_paths() -> None:

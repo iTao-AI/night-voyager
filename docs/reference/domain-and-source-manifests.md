@@ -20,3 +20,12 @@ have no authority.
 
 The checked-in M3A manifest is public-safe synthetic data. Validate it without
 a database using `scripts/seed_demo.py --validate-only`.
+
+Migration `0005` adds a separate immutable DRA candidate ledger. Import stores
+only bounded identities, ordered Evidence metadata, artifact byte length/hash,
+and fixed `untrusted_candidate` authority; it does not create a source pack or
+Evidence. An assigned advisor may atomically approve exactly one external
+`australia_program_fit` claim or reject it. Approval creates one derived source
+pack with that one `externally_verified` Evidence and exact synthetic copies of
+all other accepted facts. Public caller DTOs cannot assert that authority.
+See [the governed DRA evidence reference](dra-governed-evidence.md).

@@ -29,3 +29,19 @@ def test_dra_consumer_does_not_import_agent_frameworks_or_runtime() -> None:
         "langsmith",
     ):
         assert forbidden not in source.lower()
+
+
+def test_dra_migration_is_seed_free_and_proof_case_is_external() -> None:
+    migration = (ROOT / "migrations/versions/0005_dra_candidate_promotion.py").read_text()
+    proof_seed = (ROOT / "scripts/seed_dra_proof.py").read_text()
+    assert "40000000-0000-0000-0000-000000000003" not in migration
+    assert "DRA_PROOF_CASE_ID" in proof_seed
+    assert "seed_dra_proof.py" not in migration
+
+
+def test_required_dra_lane_is_fixture_only() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    assert "verify_dra_consumer.py fixture --json" in makefile
+    assert "make dra-check" in workflow
+    assert "DRA_LIVE_PROOF_ACK" not in workflow

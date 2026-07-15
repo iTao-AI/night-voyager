@@ -15,6 +15,7 @@ behavior is the connected M5 local synthetic walkthrough.
 | Identity, migration, database role, or RLS | Focused tests, then the disposable PostgreSQL 18 gate with `make db-check` |
 | Package identity, dependencies, or release proof | Regenerate the affected lockfile, build artifacts, then `make proof` and `make check` |
 | Optional MKE contract or process adapter | `make mke-check`; maintainers additionally run the exact-artifact proof runbook |
+| Governed DRA candidate or authority boundary | `make dra-check` and `make db-check`; live provider proof requires separate authorization |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
 Plain `uv run pytest -q` and the required hosted `python` job run the
@@ -32,6 +33,7 @@ an external artifact, while the real candidate proof remains maintainer-operated
 - Public claims must match reproducible repository evidence and must not imply production use, real users, admissions outcomes, or measured business impact.
 - Never commit `.env`, credentials, private paths, personal data, or generated proof noise.
 - Never rebuild or commit an operator-supplied MKE wheel/receipt. Follow [the candidate proof runbook](docs/operations/mke-candidate-proof.md); all projected Evidence remains `UNTRUSTED_CANDIDATE` and cannot enter `PlanningAdapter`.
+- DRA import must remain `UNTRUSTED_CANDIDATE`; verification and promotion stay one atomic database authority. Never put `make dra-consumer-proof` in required CI or run it without the [separate authorization gate](docs/operations/dra-consumer-proof.md).
 - Run `make check` and `git diff --check`, inspect the exact diff, and stage exact paths before committing.
 
 Pull requests should state scope, actual verification, documentation impact, and remaining risk.

@@ -63,7 +63,11 @@ def test_python_ci_has_artifact_free_optional_process_step() -> None:
 def test_m4b_remains_outside_compose_migrations_and_m4a_runtime() -> None:
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8").lower()
     assert "mke" not in compose
-    assert not list((ROOT / "migrations" / "versions").glob("0005_*.py"))
+    migrations = "\n".join(
+        path.read_text(encoding="utf-8").lower()
+        for path in (ROOT / "migrations" / "versions").glob("*.py")
+    )
+    assert "mke" not in migrations
     runtime_paths = [
         ROOT / "src/night_voyager/api.py",
         ROOT / "src/night_voyager/worker.py",

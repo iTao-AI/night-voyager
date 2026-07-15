@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -41,6 +41,14 @@ availability time. Runtime roles and `PUBLIC` cannot access its schema or table;
 migrator-owned fixed-search-path functions are the only boundary. Global claim
 returns only task ID, organization ID, and lease generation. Migration `0004`
 is seed-free and downgrade preserves all M3B structures.
+
+Migration `0005` adds exactly two forced-RLS immutable ledgers for DRA
+candidates and terminal external-evidence verification. It is seed-free. The
+API role can select those ledgers and execute only candidate import and atomic
+verify/promote functions; it has no direct DML. The worker has neither table
+access nor function execution. Downgrade removes only the two ledgers, their
+functions/policies/triggers, and derived promoted revisions while preserving
+the `0004` task and existing synthetic demo structures.
 
 The normal `make demo` path applies migrations, then runs the separate
 `demo-seed` one-shot service before API/worker readiness. The schema migration
