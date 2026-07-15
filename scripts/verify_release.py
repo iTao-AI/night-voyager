@@ -307,6 +307,10 @@ def verify_config() -> None:
         raise SystemExit(f"identity version mismatch: {versions}")
     runtime_dependencies = pyproject["project"]["dependencies"]
     optional_dependencies = pyproject["project"].get("optional-dependencies", {})
+    if optional_dependencies.get("dra") != ["httpx2>=2.5,<2.6"]:
+        raise SystemExit("DRA must remain an exact optional dependency range")
+    if package_version(uv_lock["package"], "httpx2") != "2.5.0":
+        raise SystemExit("httpx2 optional lock must remain at the reviewed 2.5.0 version")
     if optional_dependencies.get("mke") != ["mcp>=1.28.1,<2"]:
         raise SystemExit("MKE must remain an exact optional dependency range")
     if package_version(uv_lock["package"], "mcp") != "1.28.1":
@@ -394,7 +398,8 @@ def verify_wheel() -> None:
         run(
             python,
             "-c",
-            "from night_voyager.api import create_app; assert create_app().version == '0.1.0'",
+            "import sys; from night_voyager.api import create_app; "
+            "assert create_app().version == '0.1.0'; assert \"httpx2\" not in sys.modules",
         )
     print(f"proof wheel: isolated installed-wheel import and app factory passed ({wheel.name})")
 
