@@ -119,13 +119,21 @@ def test_m5_connected_demo_public_docs_and_screenshots_are_current() -> None:
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
     combined = "\n".join((readme, readme_cn, docs_index))
+    connected_demo_entries = [
+        line
+        for line in docs_index.splitlines()
+        if line.startswith("- Connected-demo reviewers:")
+    ]
+    assert len(connected_demo_entries) == 1
+    connected_demo_entry = connected_demo_entries[0]
 
     assert "docs/operations/connected-demo.md" in readme
     assert "docs/operations/connected-demo.md" in readme_cn
     assert "operations/connected-demo.md" in docs_index
     assert "M5" in readme and "implemented" in readme
     assert "M5" in readme_cn and "已实现" in readme_cn
-    assert "implementation has not started" not in docs_index
+    assert "M5 is implemented" in connected_demo_entry
+    assert "implementation has not started" not in connected_demo_entry
     assert "fixture-only `/demo`" not in combined
 
     for relative in M5_SCREENSHOTS:
