@@ -37,6 +37,17 @@ INPUT = WorkerTaskInput(
 INPUT_SHA256 = canonical_sha256(INPUT.request.model_dump(mode="json"))
 
 
+def test_worker_request_contract_accepts_only_the_two_planning_operations() -> None:
+    mixed = INPUT.request.model_copy(
+        update={"operation": "generate_governed_mixed_planning_run_v1"}
+    )
+    assert mixed.operation == "generate_governed_mixed_planning_run_v1"
+    with pytest.raises(ValueError):
+        PlanningAdapterRequest.model_validate(
+            INPUT.request.model_dump() | {"operation": "unapproved_operation"}
+        )
+
+
 class FakeState:
     def __init__(self, *, heartbeat_loses_lease: bool = False) -> None:
         self.active_sessions = 0
