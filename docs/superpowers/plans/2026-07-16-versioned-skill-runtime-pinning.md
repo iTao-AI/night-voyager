@@ -33,6 +33,10 @@ Docker Compose, and the existing fenced AgentTask/worker/opaque-session boundary
   tables, ADR `0009`, five-field task/execution pins, and persisted Case
   materialization. It does not add collaboration UI, a new queue, a new worker,
   provider transport, live proof, dependency, release, or deployment.
+- Every commit stages the explicit file paths named by its Task. Recursive directory
+  staging is forbidden. Before each commit, run `git diff --cached --name-only` and
+  `git diff --cached --check`; the staged set must equal that commit's reviewed
+  allowlist.
 - The closed catalog has exactly six keys:
   `student-profile-intake`, `study-destination-compare`, `evidence-research`,
   `document-evidence-retrieval`, `family-decision-brief`, and
@@ -177,7 +181,9 @@ branch review.
   Test exact six keys, strict semantic-version regex, `extra="forbid"`, lowercase
   SHA-256, sorted unique tools/scopes, catalog-only absence of executable fields,
   planning-runtime complete two-operation map, stable canonical hashes, unknown
-  version rejection, and packaged-resource loading from an installed wheel.
+  version rejection, exact `1.0.0` versus `1.0.1` resolution even when both versions
+  share the same runtime-binding digest, and packaged-resource loading from an
+  installed wheel.
 
   ```python
   @pytest.mark.parametrize("value", ["1", "1.0", "01.0.0", "1.0.0-rc1", " 1.0.0"])
@@ -206,8 +212,12 @@ branch review.
 - [ ] **Step 3: Implement strict models and registry**
 
   Use strict frozen Pydantic models. `SkillRuntimeRegistry.validate_pin()` accepts
-  the persisted five-field pin, task operation, and actual selected leaf, then
-  returns the exact supported manifest entry or raises a typed incompatibility.
+  the persisted five-field pin, trusted worker-resolved `skill_key` and semantic
+  version, task operation, and actual selected leaf, then resolves by the exact
+  key/version pair and returns the supported manifest entry or raises a typed
+  incompatibility. It never selects an entry from a database UUID or
+  `runtime_binding_sha256` alone because compatible versions may share that binding
+  digest.
 
   ```python
   class SkillRuntimePin(FrozenModel):
@@ -252,7 +262,9 @@ branch review.
 
   ```bash
   git add pyproject.toml fixtures/skills/runtime-manifest-v1.json \
-    src/night_voyager/skills tests/unit/skills \
+    src/night_voyager/skills/__init__.py src/night_voyager/skills/models.py \
+    src/night_voyager/skills/registry.py tests/unit/skills/__init__.py \
+    tests/unit/skills/test_models.py tests/unit/skills/test_registry.py \
     tests/contracts/test_skill_runtime_registry.py \
     tests/architecture/test_skills_contract.py
   git commit -m "feat: add versioned Skill runtime registry"
@@ -394,8 +406,13 @@ branch review.
   ```
 
   ```bash
-  git add src/night_voyager/planning src/night_voyager/adapters/deterministic_planning.py \
-    tests/unit/planning \
+  git add src/night_voyager/planning/synthetic.py \
+    src/night_voyager/planning/synthetic_postgres.py \
+    src/night_voyager/planning/models.py src/night_voyager/planning/policy.py \
+    src/night_voyager/planning/mixed.py \
+    src/night_voyager/adapters/deterministic_planning.py \
+    tests/unit/planning/test_synthetic.py tests/unit/planning/test_policy.py \
+    tests/unit/planning/test_mixed.py \
     tests/contracts/test_deterministic_planning_adapter.py
   git commit -m "feat: materialize persisted planning revisions"
 
@@ -479,8 +496,10 @@ branch review.
     `tests/unit/identity/test_seed_demo.py`;
   - `worker`: `tests/integration/skills/test_task_pins.py`,
     `tests/integration/skills/test_persisted_planning_materialization.py`,
+    `tests/integration/connected_demo/test_postgres_read_models.py`,
     `tests/integration/tasks/test_http_tasks.py`,
     `tests/integration/tasks/test_postgres_tasks.py`,
+    `tests/integration/tasks/test_sse.py`,
     `tests/integration/tasks/test_worker.py`,
     `tests/integration/tasks/test_worker_authority.py`,
     `tests/integration/tasks/test_worker_capacity.py`, and
@@ -593,7 +612,10 @@ branch review.
   git add migrations/versions/0008_versioned_skills.py src/night_voyager/tasks/models.py \
     Makefile scripts/run_skill_db_tests.sh tests/security/test_skills_catalog.py \
     src/night_voyager/identity/demo_seed.py scripts/seed_demo.py \
-    tests/unit/identity/test_seed_demo.py tests/integration/skills \
+    tests/unit/identity/test_seed_demo.py tests/integration/skills/__init__.py \
+    tests/integration/skills/test_postgres_skills.py \
+    tests/integration/skills/test_skill_downgrade.py \
+    tests/integration/skills/test_persisted_planning_materialization.py \
     tests/architecture/test_skills_contract.py scripts/run_db_tests.sh \
     scripts/verify_release.py tests/security/test_database_catalog.py \
     tests/security/test_dra_mixed_catalog.py \
@@ -694,8 +716,10 @@ branch review.
   ```
 
   ```bash
-  git add src/night_voyager/skills src/night_voyager/interfaces/http/skills.py \
-    tests/unit/skills
+  git add src/night_voyager/skills/errors.py src/night_voyager/skills/ports.py \
+    src/night_voyager/skills/application.py src/night_voyager/skills/postgres.py \
+    src/night_voyager/interfaces/http/skills.py \
+    tests/unit/skills/test_application.py tests/unit/skills/test_http.py
   git commit -m "feat: expose governed Skill lifecycle"
 
   # Integration owner wires the frozen router only after the lane commit.
@@ -728,10 +752,16 @@ branch review.
 - Modify: `tests/integration/tasks/test_worker_authority.py`
 - Modify: `tests/integration/tasks/test_worker_capacity.py`
 - Modify: `tests/integration/tasks/test_mixed_downgrade.py`
+- Modify: `tests/integration/tasks/test_sse.py`
+- Modify: `tests/integration/connected_demo/test_postgres_read_models.py`
 
 **Interfaces:**
 - Adds `skill_pin: SkillRuntimePin` and `leaf_binding: SkillLeafBindingV1` to worker
-  input, task/response projections, and audit-safe inspector output.
+  input, task/response projections, and audit-safe inspector output. The trusted
+  worker-only database projection additionally joins the pinned definition/version
+  rows and returns the exact `skill_key` and semantic version used to select the
+  packaged manifest entry; these values are not accepted from the browser or task
+  request.
 
 - [ ] **Step 1: Write task/worker RED tests**
 
@@ -743,7 +773,11 @@ branch review.
   persisted-materialization test before wiring the worker: both operations must load
   the exact persisted revision, invoke the resolved adapter, and persist only selected
   route/cost/ranking/Evidence/eligibility rows; canonical all-three output remains
-  stable and unselected product rows remain absent.
+  stable and unselected product rows remain absent. Update the existing connected-demo
+  read-model and SSE database tests so they no longer call the restored pre-`0008`
+  `create_agent_task` signature or construct an adapter-only worker. Both must use the
+  real pinned application/API path and registry-aware worker, and must distinguish
+  exact `1.0.0` from `1.0.1` even when their runtime-binding digests are equal.
 
 - [ ] **Step 2: Run RED**
 
@@ -752,7 +786,9 @@ branch review.
   make skills-db-check SUITE=worker
   ```
 
-  Expected: task/worker projections lack pins and invalid pin can reach the adapter.
+  Expected: task/worker projections lack pins, invalid pin can reach the adapter, and
+  both legacy direct-SQL/adapter-only integration paths fail until converted to the
+  pinned authority path.
 
 - [ ] **Step 3: Implement worker order and input hash**
 
@@ -770,9 +806,10 @@ branch review.
 
   ```text
   claim
-  -> load request + execution pin + claimed execution leaf
+  -> load request + execution pin + trusted joined Skill key/version + claimed execution leaf
   -> resolve router leaf
-  -> SkillRuntimeRegistry.validate_pin(...)
+  -> SkillRuntimeRegistry.validate_pin(pin, skill_key, semantic_version, operation, leaf)
+  -> prove exact key/version manifest tuple and binding digest
   -> prove claimed leaf = resolved leaf = registry leaf
   -> invalid: fenced fail(skill_pin_invalid, retryable=false)
   -> valid: start(input_sha256=sha256({request,five_field_pin}))
@@ -797,12 +834,23 @@ branch review.
   ```
 
   ```bash
-  git add src/night_voyager/tasks src/night_voyager/worker.py \
-    src/night_voyager/interfaces/http/tasks.py tests/unit/tasks tests/integration/tasks \
+  git add src/night_voyager/tasks/models.py src/night_voyager/tasks/ports.py \
+    src/night_voyager/tasks/application.py src/night_voyager/tasks/postgres.py \
+    src/night_voyager/tasks/policy.py src/night_voyager/tasks/worker.py \
+    src/night_voyager/worker.py src/night_voyager/interfaces/http/tasks.py \
+    src/night_voyager/adapters/protocols.py src/night_voyager/adapters/router.py \
+    tests/unit/adapters/test_router.py tests/unit/tasks/test_application.py \
+    tests/unit/tasks/test_policy.py tests/unit/tasks/test_worker.py \
     tests/integration/skills/test_task_pins.py \
     tests/integration/skills/test_persisted_planning_materialization.py \
-    src/night_voyager/adapters \
-    tests/unit/adapters/test_router.py
+    tests/integration/connected_demo/test_postgres_read_models.py \
+    tests/integration/tasks/test_http_tasks.py \
+    tests/integration/tasks/test_postgres_tasks.py \
+    tests/integration/tasks/test_worker.py \
+    tests/integration/tasks/test_worker_authority.py \
+    tests/integration/tasks/test_worker_capacity.py \
+    tests/integration/tasks/test_mixed_downgrade.py \
+    tests/integration/tasks/test_sse.py
   git commit -m "feat: pin planning tasks to active Skill versions"
   ```
 
@@ -886,7 +934,12 @@ branch review.
   ```bash
   git add src/night_voyager/identity/demo_seed.py scripts/seed_demo.py \
     scripts/register_skill_version.py scripts/run_db_tests.sh \
-    tests/integration/skills tests/security/test_skills_catalog.py
+    tests/integration/skills/test_skill_lifecycle.py \
+    tests/integration/skills/test_http_skills.py \
+    tests/integration/skills/test_persisted_planning_materialization.py \
+    tests/integration/skills/test_postgres_skills.py \
+    tests/integration/skills/test_skill_downgrade.py \
+    tests/security/test_skills_catalog.py
   git commit -m "test: prove Skill activation and runtime pin authority"
   ```
 
@@ -968,11 +1021,27 @@ branch review.
   Review full base-to-HEAD diff for exact five tables, pin FKs, grants, migration
   restore signatures, manifest packaging, code/DB hash equality, country projection,
   public claims, secrets/private paths, and unrelated changes. Rerun affected tests
-  after any fix.
+  after any fix. If review requires a code or test correction, stage its exact file
+  allowlist and create a separate focused follow-up commit before this documentation
+  commit; never sweep it into the final docs commit.
 
   ```bash
   git add README.md README_CN.md CONTRIBUTING.md DESIGN.md Makefile \
-    .github/workflows/ci.yml docs scripts src tests migrations fixtures pyproject.toml
+    .github/workflows/ci.yml \
+    docs/decisions/0009-versioned-skill-runtime-pinning.md \
+    docs/reference/versioned-skills-and-runtime-pins.md \
+    docs/operations/skill-governance.md docs/README.md \
+    docs/reference/http-api-v1.md docs/reference/agent-tasks-and-events.md \
+    docs/operations/database-roles.md docs/operations/worker-and-sse.md \
+    docs/superpowers/specs/2026-07-16-governed-collaboration-core-design.md \
+    docs/superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md \
+    scripts/verify_release.py tests/unit/test_release_surface.py \
+    tests/security/test_database_catalog.py tests/security/test_skills_catalog.py \
+    tests/architecture/test_skills_contract.py \
+    tests/architecture/test_collaboration_contract.py \
+    tests/architecture/test_m4a_contract.py tests/architecture/test_m5_contract.py
+  git diff --cached --name-only
+  git diff --cached --check
   git commit -m "docs: complete versioned Skill runtime proof"
   ```
 

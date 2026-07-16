@@ -641,6 +641,17 @@ generate_governed_mixed_planning_run_v1
 The canonical complete map is included in `runtime_binding_sha256`; selecting only
 one leaf or changing either operation binding changes that digest.
 
+The five-field persisted pin remains the minimal relational task identity; it does
+not by itself select a packaged manifest entry because compatible semantic versions
+may intentionally share the same runtime-binding digest. The trusted worker-only
+projection therefore joins the pinned definition/version foreign keys to the
+immutable registry rows and returns the exact Skill key and semantic version beside
+the five-field pin. `SkillRuntimeRegistry` resolves by that exact key/version pair,
+then proves the complete manifest tuple, binding digest, task operation, and selected
+leaf before execution starts. Neither a database UUID nor a binding digest alone is
+accepted as packaged-manifest identity. Runtime tests distinguish the supported
+`1.0.0` and `1.0.1` entries even when their executable binding is otherwise equal.
+
 Candidate creation and evaluation load the checked-in entry and require a
 byte-for-byte canonical match. Activation, task creation, and worker start further
 require `binding_kind=planning_runtime` and the executable operation map. A database
@@ -670,8 +681,9 @@ activated, rolled back, or task-pinned in v1.
 
 Only `study-destination-compare` is runtime-bound in v1. Both planning operations
 resolve its current active version inside the existing task-creation transaction and
-insert the immutable pin before dispatch. The worker materializes and validates that
-pin before starting an execution.
+insert the immutable pin before dispatch. The worker materializes the trusted
+key/version identity joined from that pin and validates the exact packaged entry
+before starting an execution.
 
 The five-field server-resolved pin is part of the effective task identity alongside
 organization, Case, operation, Case revision, source pack, source-pack version, and

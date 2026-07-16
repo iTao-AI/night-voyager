@@ -134,7 +134,9 @@ The integration owner exclusively owns:
 
 - `web/lib/connected-demo/session-storage.ts`
 - any modification to existing `/demo` components/hooks
-- `web/app/globals.css`
+- `web/app/styles.css`
+- `web/lib/demo-bff/transport.ts`
+- `web/tests/unit/demo-bff.test.ts`
 - `scripts/verify_compose.sh`, Playwright Compose orchestration
 - shared docs/index, screenshots, full frontend/Docker/Chromium gates
 
@@ -229,6 +231,8 @@ Both lanes stop before editing shared files.
 - Create: `web/app/api/demo/cases/[caseId]/confirmed-facts/route.ts`
 - Create: `web/app/api/demo/cases/[caseId]/planning-skill-inspector/route.ts`
 - Create: `web/lib/collaboration-demo/api.ts`
+- Modify: `web/lib/demo-bff/transport.ts` (integration owner only)
+- Modify: `web/tests/unit/demo-bff.test.ts` (integration owner only)
 - Modify: `web/tests/unit/demo-bff-handlers.test.ts`
 - Create: `web/tests/unit/collaboration-api.test.ts`
 
@@ -242,9 +246,13 @@ Both lanes stop before editing shared files.
   Test exact upstream paths/methods, query cursor forwarding, no arbitrary headers,
   server-configured Origin, mutation CSRF/idempotency forwarding, independent
   `Set-Cookie`, no-store, body/deadline bounds, upstream problem preservation,
-  malformed success fail-closed, and no catch-all route. Freeze verification JSON as
-  exactly `schema_version`, server-projected `expected_case_revision`, `decision`,
-  and `reason`; extra/missing/retyped fields are rejected by the BFF validator.
+  malformed success fail-closed, and no catch-all route. Prove JSON GET forwards only
+  the server-configured Origin and session cookie; JSON mutation forwards only the
+  server-configured Origin, session cookie, `Content-Type`, `X-CSRF-Token`, and
+  `Idempotency-Key`; and only SSE forwards `Last-Event-ID`. Other browser headers are
+  dropped. Freeze verification JSON as exactly `schema_version`, server-projected
+  `expected_case_revision`, `decision`, and `reason`; extra/missing/retyped fields are
+  rejected by the BFF validator.
 
   The messages GET accepts only `after_sequence` and `limit`. Canonicalize
   `after_sequence` as an integer `>= 0` and `limit` as an integer in `1..100`; reject
@@ -254,28 +262,33 @@ Both lanes stop before editing shared files.
 - [ ] **Step 2: Run RED**
 
   ```bash
-  npm --prefix web run test -- demo-bff-handlers collaboration-api
+  npm --prefix web run test -- demo-bff demo-bff-handlers collaboration-api
   ```
 
   Expected: seven route modules and collaboration API are absent.
 
 - [ ] **Step 3: Implement explicit handlers and client**
 
-  Each route hard-codes one approved upstream path template and method. GET handlers
-  forward only approved pagination parameters. Mutation handlers forward only
-  approved JSON, session cookie, CSRF, Origin, and idempotency headers. Reuse the
-  existing unified deadline and bounded problem response.
+  Each route hard-codes one approved upstream path template and method. Split the
+  existing JSON and SSE header allowlists: JSON GET forwards only the server Origin
+  and session cookie; JSON mutation additionally forwards only `Content-Type`,
+  `X-CSRF-Token`, and `Idempotency-Key`; only SSE may forward `Last-Event-ID`. GET
+  handlers forward only approved pagination parameters. Reuse the existing unified
+  deadline and bounded problem response. The integration owner applies the shared
+  transport and direct transport-test edits after the bounded route lane is
+  integrated; bounded lanes do not edit those shared files.
 
 - [ ] **Step 4: Run GREEN and commit**
 
   ```bash
-  npm --prefix web run test -- demo-bff-handlers collaboration-api
+  npm --prefix web run test -- demo-bff demo-bff-handlers collaboration-api
   npm --prefix web run lint
   npm --prefix web run typecheck
   ```
 
   ```bash
   git add web/app/api/demo web/lib/collaboration-demo/api.ts \
+    web/lib/demo-bff/transport.ts web/tests/unit/demo-bff.test.ts \
     web/tests/unit/demo-bff-handlers.test.ts \
     web/tests/unit/collaboration-api.test.ts
   git commit -m "feat: add collaboration BFF transport"
@@ -463,7 +476,7 @@ Both lanes stop before editing shared files.
 - Create: `web/components/collaboration-demo/ConfirmedFactSummary.tsx`
 - Create: `web/components/collaboration-demo/CollaborationRecoveryNotice.tsx`
 - Create: `web/tests/unit/collaboration-demo.test.tsx`
-- Modify: `web/app/globals.css`
+- Modify: `web/app/styles.css`
 
 **Interfaces:**
 - Renders one shared thread, source-parent proposal, advisor verification, confirmed
@@ -511,7 +524,7 @@ Both lanes stop before editing shared files.
   ```bash
   git add web/app/demo/collaboration web/components/collaboration-demo \
     web/components/demo-session/JourneyConflictNotice.tsx \
-    web/tests/unit/collaboration-demo.test.tsx web/app/globals.css
+    web/tests/unit/collaboration-demo.test.tsx web/app/styles.css
   git commit -m "feat: add governed collaboration walkthrough"
   ```
 
