@@ -14,6 +14,8 @@ from night_voyager.adapters.protocols import (
     PlanningAdapterRequest,
 )
 from night_voyager.adapters.router import PlanningAdapterRouter
+from night_voyager.planning.models import Country, RouteOutcome
+from night_voyager.planning.policy import evaluate_planning_run
 from night_voyager.planning.trusted import (
     GovernedMixedPlanningInput,
     GovernedMixedSnapshotV1,
@@ -89,6 +91,33 @@ async def test_mixed_adapter_materializes_only_the_worker_snapshot() -> None:
     assert isinstance(planning_input, GovernedMixedPlanningInput)
     assert planning_input.operation == "generate_governed_mixed_planning_run_v1"
     assert repository.requests == [request]
+
+
+@pytest.mark.asyncio
+async def test_mixed_adapter_uses_current_case_facts_outside_demo_baseline() -> None:
+    snapshot = governed_snapshot()
+    current_case = snapshot.case.model_copy(
+        update={
+            "student": snapshot.case.student.model_copy(
+                update={"intended_field": "data science"}
+            ),
+            "family": snapshot.case.family.model_copy(
+                update={"japan_risk_accepted": False}
+            ),
+        }
+    )
+    snapshot = snapshot.model_copy(update={"case": current_case})
+
+    outcome = await GovernedMixedPlanningAdapter(
+        FakeSnapshotRepository(snapshot)
+    ).generate(mixed_request())
+    assert isinstance(outcome, AdapterPayload)
+    planning_input = validate_adapter_payload(outcome, mixed_request())
+    result = evaluate_planning_run(planning_input)
+
+    assert planning_input.case == current_case
+    japan = next(route for route in result.routes if route.country is Country.JAPAN)
+    assert japan.outcome is RouteOutcome.BLOCKED
 
 
 @pytest.mark.asyncio

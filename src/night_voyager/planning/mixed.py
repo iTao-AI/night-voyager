@@ -38,9 +38,7 @@ def validate_governed_mixed_payload_baseline(
 ) -> None:
     baseline = _load_exact_baseline()
     if (
-        planning_input.case.student != baseline.case.student
-        or planning_input.case.family != baseline.case.family
-        or str(planning_input.source_pack.pack_id) != BASELINE_SOURCE_PACK_ID
+        str(planning_input.source_pack.pack_id) != BASELINE_SOURCE_PACK_ID
         or planning_input.source_pack.version <= BASELINE_SOURCE_PACK_VERSION
     ):
         raise ValueError("governed mixed payload baseline drift")
