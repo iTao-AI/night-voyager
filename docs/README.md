@@ -1,8 +1,12 @@
 # Documentation
 
-Night Voyager v0.1.0 is the local synthetic portfolio release of the connected
-advisor-to-family workflow. Start with the [release notes](releases/v0.1.0.md)
-and [source-archive verification guide](how-to/verify-v0.1.0-release.md). M1 fixture-only
+Night Voyager v0.1.1 is the local synthetic portfolio release of the connected
+advisor-to-family workflow, adding deterministic offline governed DRA candidate import,
+atomic human verification/promotion, and existing durable-worker mixed PlanningRun
+generation. Start with the [release notes](releases/v0.1.1.md)
+and [source-archive verification guide](how-to/verify-v0.1.1-release.md). The
+[v0.1.0 release notes](releases/v0.1.0.md) and
+[verification guide](how-to/verify-v0.1.0-release.md) remain immutable history. M1 fixture-only
 documents remain historical visual context; current `/demo` behavior is the M5 walkthrough.
 
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).

@@ -28,6 +28,8 @@ def copy_release_surface(destination: Path) -> None:
         "docs/README.md",
         "docs/releases/v0.1.0.md",
         "docs/how-to/verify-v0.1.0-release.md",
+        "docs/releases/v0.1.1.md",
+        "docs/how-to/verify-v0.1.1-release.md",
     ):
         source = ROOT / relative
         target = destination / relative
@@ -35,7 +37,7 @@ def copy_release_surface(destination: Path) -> None:
         shutil.copyfile(source, target)
 
 
-def test_release_verifier_checks_the_public_v0_1_0_surface(
+def test_release_verifier_checks_the_public_v0_1_1_surface(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     verifier = load_verifier()
@@ -43,7 +45,7 @@ def test_release_verifier_checks_the_public_v0_1_0_surface(
     verifier.verify_release_surface()
 
     output = capsys.readouterr().out
-    assert "proof release surface: v0.1.0 local synthetic portfolio contract confirmed" in output
+    assert "proof release surface: v0.1.1 local synthetic portfolio contract confirmed" in output
 
 
 def test_release_verifier_checks_the_governed_mixed_planning_surface(
@@ -64,28 +66,38 @@ def test_release_verifier_checks_the_governed_mixed_planning_surface(
     ("relative", "required", "message"),
     (
         (
-            "docs/how-to/verify-v0.1.0-release.md",
-            "git cat-file -t v0.1.0",
+            "docs/how-to/verify-v0.1.1-release.md",
+            "git cat-file -t v0.1.1",
             "release how-to contract",
         ),
         (
-            "docs/how-to/verify-v0.1.0-release.md",
-            "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.0.tar.gz",
+            "docs/how-to/verify-v0.1.1-release.md",
+            "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.1.tar.gz",
             "release how-to contract",
         ),
         (
-            "docs/how-to/verify-v0.1.0-release.md",
-            "Do not force-move `v0.1.0`",
+            "docs/how-to/verify-v0.1.1-release.md",
+            "Do not force-move `v0.1.1`",
             "release how-to contract",
         ),
         (
-            "docs/releases/v0.1.0.md",
+            "docs/releases/v0.1.1.md",
             "## Risk / Impact",
             "release notes contract",
         ),
         (
-            "docs/releases/v0.1.0.md",
+            "docs/releases/v0.1.1.md",
             "UNTRUSTED_CANDIDATE",
+            "release notes contract",
+        ),
+        (
+            "docs/releases/v0.1.1.md",
+            "australia_program_fit",
+            "release notes contract",
+        ),
+        (
+            "docs/releases/v0.1.1.md",
+            "Live provider proof was not run",
             "release notes contract",
         ),
     ),
@@ -106,4 +118,17 @@ def test_release_verifier_rejects_missing_publication_contract(
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
     with pytest.raises(SystemExit, match=message):
+        verifier.verify_release_surface()
+
+
+def test_release_verifier_rejects_mutated_v0_1_0_history(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verifier = load_verifier()
+    copy_release_surface(tmp_path)
+    target = tmp_path / "docs/releases/v0.1.0.md"
+    target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+
+    with pytest.raises(SystemExit, match="v0.1.0 historical release document drift"):
         verifier.verify_release_surface()

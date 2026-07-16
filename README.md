@@ -26,20 +26,21 @@ make proof
 make down
 ```
 
-Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow the [connected demo runbook](docs/operations/connected-demo.md) for the advisor-to-family walkthrough, or use the [v0.1.0 release/source-archive verification guide](docs/how-to/verify-v0.1.0-release.md) after publication.
+Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow the [connected demo runbook](docs/operations/connected-demo.md) for the advisor-to-family walkthrough, or use the [v0.1.1 release/source-archive verification guide](docs/how-to/verify-v0.1.1-release.md) after publication.
 
 `make doctor` checks Docker, Compose capability, disk space, and local ports. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
 ## Synthetic and local limits
 
-- v0.1.0 is a local synthetic portfolio release, not a production deployment or tenancy claim.
+- v0.1.1 is a local synthetic portfolio release with deterministic offline governed DRA candidate import, atomic human verification/promotion, and mixed PlanningRun generation through the existing durable worker. It is not a production deployment or tenancy claim.
 - The repository contains no real student records and makes no admissions outcome, real-user, SLA, availability, or business-impact claim.
 - The worker and SSE evidence is deterministic local proof, not distributed high availability.
 - Live DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. Deterministic offline DRA candidate import and atomic promotion are implemented locally; governed mixed PlanningRun generation is implemented locally through the existing durable worker. Live provider proof was not run and still requires separate authorization. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
 
 ## Milestones and history
 
-- [v0.1.0 release notes](docs/releases/v0.1.0.md)
+- [v0.1.1 release notes](docs/releases/v0.1.1.md)
+- [v0.1.0 historical release notes](docs/releases/v0.1.0.md)
 - [Architecture and milestone history](DESIGN.md)
 - [Documentation index](docs/README.md)
 - [Historical M1 fixture-only visual contract](docs/superpowers/specs/2026-07-11-m1-demo-design.md)
