@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -55,6 +56,31 @@ def test_live_mode_fails_before_transport_without_exact_authorization() -> None:
     assert "Traceback" not in result.stderr
 
 
+def test_live_source_validation_is_root_bounded_and_hash_pinned(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.html"
+    source.write_text("public fixture", encoding="utf-8")
+    monkeypatch.setenv("DRA_SOURCE_ROOT", str(tmp_path))
+    monkeypatch.setenv("DRA_SOURCE_LOGICAL_PATH", "source.html")
+    monkeypatch.setenv(
+        "DRA_SOURCE_SHA256", hashlib.sha256(source.read_bytes()).hexdigest()
+    )
+    verify_dra_consumer.validate_live_source()
+
+    monkeypatch.setenv("DRA_SOURCE_LOGICAL_PATH", "../source.html")
+    with pytest.raises(SystemExit, match="dra_live_source_invalid"):
+        verify_dra_consumer.validate_live_source()
+
+
+def test_live_authority_requires_separate_advisor_attestation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DRA_LIVE_PROOF_ACK", verify_dra_consumer.LIVE_ACK)
+    with pytest.raises(SystemExit, match="dra_live_proof_not_authorized"):
+        verify_dra_consumer.required_environment()
+
+
 def test_make_and_ci_keep_live_proof_out_of_required_gates() -> None:
     makefile = (ROOT / "Makefile").read_text()
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
@@ -65,13 +91,13 @@ def test_make_and_ci_keep_live_proof_out_of_required_gates() -> None:
     assert "dra-consumer-proof" not in workflow
 
 
-def test_public_docs_close_pr1_without_claiming_mixed_planning() -> None:
+def test_public_docs_close_governed_mixed_planning_without_live_claim() -> None:
     reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
     runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
-    assert "candidate import and atomic human verification/promotion are implemented" in reference
-    assert "governed mixed PlanningRun is not implemented" in reference
+    assert "atomic human verification/promotion" in reference
+    assert "governed mixed\nPlanningRun generation are implemented" in reference
     assert "separately-authorized-one-attempt" in runbook
-    assert "live provider proof is not a required CI gate" in runbook
+    assert "Live provider proof was not run" in runbook
 
 
 def test_main_normalizes_unexpected_live_errors_without_private_output(

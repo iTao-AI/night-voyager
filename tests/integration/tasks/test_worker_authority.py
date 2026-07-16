@@ -73,7 +73,7 @@ async def test_worker_cannot_insert_planning_runs_or_child_results() -> None:
 @pytest.mark.asyncio
 async def test_worker_cannot_execute_api_or_human_authority_functions() -> None:
     statements = (
-        "SELECT app.create_agent_task(NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,1,NULL::uuid,1,'m3a-policy-v1',repeat('a',64),repeat('b',64))",
+        "SELECT app.create_agent_task(NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,'generate_planning_run_v1',1,NULL::uuid,1,'m3a-policy-v1',repeat('a',64),repeat('b',64))",
         "SELECT app.cancel_agent_task(NULL::uuid,NULL::uuid,NULL::uuid,1,repeat('a',64),repeat('b',64))",
         "SELECT app.review_planning_run(NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,1,'reject',NULL::uuid,'[]'::jsonb,'[]'::jsonb,NULL,NULL::uuid,'{}'::jsonb,current_date,repeat('a',64),repeat('b',64))",
         "SELECT app.decide_family_brief(NULL::uuid,NULL::uuid,'parent',NULL::uuid,1,NULL::uuid,NULL::uuid,NULL::uuid,0,0,'CNY','[]'::jsonb,NULL::uuid,'direct',NULL::uuid,'[]'::jsonb,repeat('a',64),repeat('b',64))",

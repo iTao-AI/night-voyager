@@ -152,6 +152,14 @@ def test_policy_derives_bounded_route_outcomes_from_facts() -> None:
     }
 
 
+def test_original_all_synthetic_result_remains_exactly_compatible() -> None:
+    payload = valid_input()
+    result = evaluate_planning_run(payload)
+    assert result.model_dump(mode="json") == evaluate_planning_run(payload).model_dump(mode="json")
+    assert result.state.value == "review_required"
+    assert result.reason_code == "single_fully_evidenced_recommendation"
+
+
 def test_budget_refused_blocks_australia() -> None:
     payload = valid_input(budget_refused=True)
     assert route(payload, Country.AUSTRALIA) is RouteOutcome.BLOCKED

@@ -108,6 +108,7 @@ RELEASE_HOW_TO_TOKENS = (
 )
 DRA_SURFACE = (
     "scripts/verify_dra_consumer.py",
+    "scripts/verify_dra_governed_flow.py",
     "scripts/run_dra_lane.sh",
     "scripts/seed_dra_proof.py",
     "docs/decisions/0007-dra-governed-mixed-evidence-boundary.md",
@@ -217,15 +218,23 @@ def verify_dra_surface() -> None:
     reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text(
         encoding="utf-8"
     )
+    operations = (ROOT / "docs/operations/dra-consumer-proof.md").read_text(
+        encoding="utf-8"
+    )
     if (
         "dra-check:" not in makefile
         or "dra-consumer-proof:" not in makefile
         or "make dra-check" not in workflow
         or "dra-consumer-proof" in workflow
-        or "governed mixed PlanningRun is not implemented" not in reference
+        or "generate_governed_mixed_planning_run_v1" not in reference
+        or "australia_program_fit -> program_fit -> externally_verified"
+        not in reference
+        or "exact copies of the synthetic baseline" not in reference
+        or "Live provider proof was not run" not in operations
+        or "make compose-proof" not in operations
     ):
         raise SystemExit("governed DRA command or status contract drift")
-    print("proof DRA surface: offline candidate and atomic promotion lane confirmed")
+    print("proof DRA surface: offline governed mixed decision closure confirmed")
 
 
 def verify_release_surface() -> None:
@@ -366,11 +375,17 @@ def verify_config() -> None:
         raise SystemExit("Compose PostgreSQL image must use the approved exact tag and digest")
     if re.search(r"(?m)^\s{2}mke:\s*$", compose):
         raise SystemExit("MKE must not become a Compose service")
-    post_m4a = list((ROOT / "migrations" / "versions").glob("0005_*.py"))
-    if [path.name for path in post_m4a] != ["0005_dra_candidate_promotion.py"]:
+    post_m4a = sorted((ROOT / "migrations" / "versions").glob("000[56]_*.py"))
+    if [path.name for path in post_m4a] != [
+        "0005_dra_candidate_promotion.py",
+        "0006_governed_mixed_planning.py",
+    ]:
         raise SystemExit("post-M4A migration surface must be the governed DRA boundary")
     if "mke" in post_m4a[0].read_text(encoding="utf-8").lower():
         raise SystemExit("M4B must not add a database migration")
+    mixed_migration = post_m4a[1].read_text(encoding="utf-8")
+    if "down_revision = \"0005\"" not in mixed_migration or "op.create_table" in mixed_migration:
+        raise SystemExit("mixed planning migration must follow 0005 without adding a table")
     for required in (
         ROOT / "fixtures/m4b/candidate-artifact-lock.json",
         ROOT / "fixtures/m4b/manifest.json",
@@ -538,7 +553,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'claim_agent_task','start_agent_task','heartbeat_agent_task',
                            'fail_agent_task','finalize_agent_task_result')
                            OR p.proname IN
-                          ('import_dra_research_candidate','verify_and_promote_dra_candidate'))
+                          ('import_dra_research_candidate','verify_and_promote_dra_candidate',
+                           'load_governed_mixed_planning_snapshot'))
                         """)
                     )
                 )
@@ -562,6 +578,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "finalize_agent_task_result",
                 "import_dra_research_candidate",
                 "verify_and_promote_dra_candidate",
+                "load_governed_mixed_planning_snapshot",
             } or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
@@ -588,6 +605,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "heartbeat_agent_task",
                 "fail_agent_task",
                 "finalize_agent_task_result",
+                "load_governed_mixed_planning_snapshot",
             }
             worker_signatures = {
                 row["proname"]: row["identity_arguments"]
@@ -600,6 +618,19 @@ async def verify_database_catalog(database_url: str) -> None:
                 "uuid, uuid, text, bigint, text, boolean, boolean"
             ):
                 raise SystemExit("fail_agent_task audit signature drift")
+            if worker_signatures["load_governed_mixed_planning_snapshot"] != (
+                "uuid, uuid, integer, uuid, integer, text"
+            ):
+                raise SystemExit("mixed snapshot authority signature drift")
+            create_signature = next(
+                row["identity_arguments"]
+                for row in app_functions
+                if row["proname"] == "create_agent_task"
+            )
+            if create_signature != (
+                "uuid, uuid, uuid, uuid, text, integer, uuid, integer, text, text, text"
+            ):
+                raise SystemExit("mixed task creation signature drift")
             if any(
                 (row["proname"] in api_functions) != row["api_execute"]
                 or (row["proname"] in worker_functions) != row["worker_execute"]

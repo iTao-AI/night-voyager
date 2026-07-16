@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Literal, Protocol
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, PositiveInt
+from pydantic import BaseModel, ConfigDict, PositiveInt, model_validator
 
 
 class FrozenModel(BaseModel):
@@ -27,7 +27,9 @@ class AdapterFailureCode(StrEnum):
 
 class PlanningAdapterRequest(FrozenModel):
     schema_version: Literal[1]
-    operation: Literal["generate_planning_run_v1"]
+    operation: Literal[
+        "generate_planning_run_v1", "generate_governed_mixed_planning_run_v1"
+    ]
     organization_id: UUID
     case_id: UUID
     case_revision: PositiveInt
@@ -38,8 +40,19 @@ class PlanningAdapterRequest(FrozenModel):
 
 class AdapterPayload(FrozenModel):
     payload: bytes
-    adapter_id: Literal["deterministic_planning"] = "deterministic_planning"
-    adapter_version: Literal["m4a-v1"] = "m4a-v1"
+    adapter_id: Literal["deterministic_planning", "governed_mixed_planning"] = (
+        "deterministic_planning"
+    )
+    adapter_version: Literal["m4a-v1", "dra-mixed-v1"] = "m4a-v1"
+
+    @model_validator(mode="after")
+    def exact_adapter_pair(self) -> AdapterPayload:
+        if (self.adapter_id, self.adapter_version) not in {
+            ("deterministic_planning", "m4a-v1"),
+            ("governed_mixed_planning", "dra-mixed-v1"),
+        }:
+            raise ValueError("adapter identity must be an approved exact pair")
+        return self
 
 
 class AdapterFailure(FrozenModel):

@@ -12,7 +12,9 @@ from night_voyager.adapters.protocols import (
     AdapterPayload,
     PlanningAdapterRequest,
 )
+from night_voyager.planning.mixed import validate_governed_mixed_payload_baseline
 from night_voyager.planning.models import EvidenceAuthority, PlanningInput
+from night_voyager.planning.trusted import GovernedMixedPlanningInput
 from night_voyager.tasks.models import AgentTaskState, TaskRuntimePolicy, TaskViewStatus
 
 APPROVED_COUNTRIES = frozenset({"australia", "japan", "malaysia"})
@@ -76,7 +78,7 @@ def classify_adapter_outcome(failure: AdapterFailure, *, attempt_no: int) -> Ret
 
 def validate_adapter_payload(
     outcome: AdapterPayload, request: PlanningAdapterRequest
-) -> PlanningInput:
+) -> PlanningInput | GovernedMixedPlanningInput:
     policy = TaskRuntimePolicy()
     if len(outcome.payload) > policy.max_payload_bytes:
         raise AdapterPayloadError("oversize")
@@ -103,10 +105,19 @@ def validate_adapter_payload(
     narrative = raw.get("narrative")
     if isinstance(narrative, str) and len(narrative.encode("utf-8")) > policy.max_narrative_bytes:
         raise AdapterPayloadError("narrative_oversize")
-    if any(item.get("authority") != "accepted_synthetic_demo" for item in evidence_items):
-        raise AdapterPayloadError("fallback_authority")
+    expected_pair = (
+        ("deterministic_planning", "m4a-v1")
+        if request.operation == "generate_planning_run_v1"
+        else ("governed_mixed_planning", "dra-mixed-v1")
+    )
+    if (outcome.adapter_id, outcome.adapter_version) != expected_pair:
+        raise AdapterPayloadError("invalid_schema")
     try:
-        planning_input = PlanningInput.model_validate(raw)
+        planning_input = (
+            PlanningInput.model_validate(raw)
+            if request.operation == "generate_planning_run_v1"
+            else GovernedMixedPlanningInput.model_validate_json(outcome.payload)
+        )
     except ValidationError as error:
         raise AdapterPayloadError("invalid_schema") from error
     if (
@@ -125,9 +136,22 @@ def validate_adapter_payload(
     countries = tuple(item.value for item in planning_input.case.student.preferred_countries)
     if len(countries) != 3 or set(countries) != set(APPROVED_COUNTRIES):
         raise AdapterPayloadError("country_scope_invalid")
-    if any(
-        item.authority is not EvidenceAuthority.ACCEPTED_SYNTHETIC_DEMO
-        for item in planning_input.evidence
-    ):
-        raise AdapterPayloadError("fallback_authority")
+    if isinstance(planning_input, PlanningInput):
+        if any(
+            item.authority is not EvidenceAuthority.ACCEPTED_SYNTHETIC_DEMO
+            for item in planning_input.evidence
+        ):
+            raise AdapterPayloadError("fallback_authority")
+    else:
+        external = tuple(
+            item
+            for item in planning_input.evidence
+            if item.authority is EvidenceAuthority.EXTERNALLY_VERIFIED
+        )
+        if len(external) != 1 or external[0].claim != "australia_program_fit":
+            raise AdapterPayloadError("fallback_authority")
+        try:
+            validate_governed_mixed_payload_baseline(planning_input)
+        except ValueError as error:
+            raise AdapterPayloadError("baseline_drift") from error
     return planning_input

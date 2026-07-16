@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from pydantic import ValidationError
 
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.tasks.application import (
@@ -81,6 +82,21 @@ def create_command() -> CreateTaskCommand:
         source_pack_id=PACK,
         source_pack_version=1,
     )
+
+
+def test_create_command_accepts_only_the_two_planning_operations() -> None:
+    mixed = CreateTaskCommand.model_validate(
+        {
+            **create_command().model_dump(),
+            "operation": "generate_governed_mixed_planning_run_v1",
+        }
+    )
+    assert mixed.operation == "generate_governed_mixed_planning_run_v1"
+
+    with pytest.raises(ValidationError):
+        CreateTaskCommand.model_validate(
+            {**create_command().model_dump(), "operation": "unknown_operation"}
+        )
 
 
 @pytest.mark.asyncio

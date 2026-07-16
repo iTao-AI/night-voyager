@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -50,11 +50,25 @@ access nor function execution. Downgrade removes only the two ledgers, their
 functions/policies/triggers, and derived promoted revisions while preserving
 the `0004` task and existing synthetic demo structures.
 
+Migration `0006` adds no table. It extends the existing task operation and
+adapter-pair constraints, adds the worker-only
+`load_governed_mixed_planning_snapshot` function, and keeps API/worker direct
+DML prohibited. The API can create the additive mixed task only through the
+existing assigned-advisor task function. The worker can load only the exact
+current Case/revision, promoted pack, and policy snapshot through the narrow
+function; the API and `PUBLIC` cannot execute it. Downgrade to `0005` preserves
+terminal mixed audit rows, atomically cancels queued, leased, or running mixed
+tasks with the public code `migration_downgrade`, removes their dispatch rows,
+and prevents the restored `0005` claim function from selecting mixed
+operations. The restored constraints prevent new mixed writes. A fresh
+data-free graph proves `0006 -> 0001 -> 0006`.
+
 The normal `make demo` path applies migrations, then runs the separate
 `demo-seed` one-shot service before API/worker readiness. The schema migration
 remains seed-free. To re-run only the explicit idempotent seed against a running
 development stack, use `docker compose run --rm demo-seed`; it fails closed
 unless demo mode is enabled outside production. `make compose-proof` uses a
 fresh isolated volume and proves bootstrap, session mint, the M3B decision flow,
-the M4A HTTP-to-worker-to-PlanningRun-to-SSE flow, and API/worker restart
-durability, not health alone.
+the governed mixed fixture-to-family-decision closure, the M4A
+HTTP-to-worker-to-PlanningRun-to-SSE flow, and API/worker restart durability,
+not health alone.

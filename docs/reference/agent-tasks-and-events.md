@@ -1,12 +1,17 @@
 # AgentTask and event reference
 
-M4A supports one backend-only operation:
-`generate_planning_run_v1`. An assigned advisor creates a task against an exact
-Case revision, source-pack version, and `m3a-policy-v1`. The deterministic local
-adapter produces candidate planning material; existing validation, Evidence,
-policy, and PostgreSQL authority decide whether a `PlanningRun` is persisted.
-The approved synthetic path ends at `review_required` and still requires human
-advisor review.
+The backend supports two operations through the same durable task authority:
+`generate_planning_run_v1` preserves the all-synthetic M4A behavior, while
+`generate_governed_mixed_planning_run_v1` consumes an exact approved promoted
+source pack. An assigned advisor creates either task against an exact Case
+revision, source-pack version, and `m3a-policy-v1`. The mixed operation is
+accepted only after the atomic human verification/promotion gate and can use
+external authority only for `australia_program_fit`; every other accepted fact
+must match the synthetic baseline. Both paths end at `review_required` and
+still require the existing human advisor review.
+Neither operation calls a remote provider. The mixed operation is a backend
+authority path only and is not exposed through the connected `/demo` browser
+flow.
 
 ## Durable records
 
@@ -26,7 +31,7 @@ advisor review.
   or raw payload.
 
 The three application tables are migrator-owned and forced-RLS protected.
-Runtime roles have no direct M4A write authority. Narrow functions perform
+Runtime roles have no direct task write authority. Narrow functions perform
 assigned-advisor creation/cancellation and worker lease transitions.
 
 ## State projection

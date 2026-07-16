@@ -46,6 +46,20 @@ def test_release_verifier_checks_the_public_v0_1_0_surface(
     assert "proof release surface: v0.1.0 local synthetic portfolio contract confirmed" in output
 
 
+def test_release_verifier_checks_the_governed_mixed_planning_surface(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_dra_surface()
+
+    output = capsys.readouterr().out
+    assert (
+        "proof DRA surface: offline governed mixed decision closure confirmed"
+        in output
+    )
+
+
 @pytest.mark.parametrize(
     ("relative", "required", "message"),
     (

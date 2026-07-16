@@ -73,4 +73,5 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "M3B_TABLES" in verifier
     assert "M4A_TABLES" in verifier
     assert "DRA_TABLES" in verifier
+    assert "load_governed_mixed_planning_snapshot" in verifier
     assert "policy_count != 27" in verifier

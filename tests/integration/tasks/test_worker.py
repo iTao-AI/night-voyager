@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 from uuid import UUID
 
@@ -10,15 +11,19 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from night_voyager.adapters.deterministic_planning import DeterministicPlanningAdapter
+from night_voyager.adapters.governed_mixed_planning import GovernedMixedPlanningAdapter
 from night_voyager.adapters.protocols import (
     AdapterFailure,
     AdapterFailureCode,
     AdapterOutcome,
     PlanningAdapterRequest,
 )
+from night_voyager.adapters.router import PlanningAdapterRouter
 from night_voyager.planning.hashing import canonical_sha256
+from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
 from night_voyager.tasks.postgres import postgres_worker_repository_factory
 from night_voyager.tasks.worker import TaskWorker
+from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
 
 pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
@@ -89,7 +94,8 @@ async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
                 )
             await connection.execute(
                 text(
-                    "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,:pack,1,"
+                    "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                    "'generate_planning_run_v1',1,:pack,1,"
                     "'m3a-policy-v1',repeat('a',64),:key_hash)"
                 ),
                 {
@@ -167,6 +173,87 @@ async def expire_lease(task_id: UUID) -> None:
             )
     finally:
         await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_mixed_operation_reuses_the_existing_queue_and_worker_authority() -> None:
+    case_id, version = await approved_pack(902)
+    task_id = UUID("80000000-0000-0000-0000-000000000902")
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker_engine = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+    try:
+        async with api.begin() as connection:
+            for name, value in (
+                ("night_voyager.organization_id", str(ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                    "'generate_governed_mixed_planning_run_v1',1,:pack,:version,"
+                    "'m3a-policy-v1',:request_hash,:key_hash)"
+                ),
+                {
+                    "org": ORG,
+                    "actor": ADVISOR,
+                    "case": case_id,
+                    "task": task_id,
+                    "pack": PACK,
+                    "version": version,
+                    "request_hash": hashlib.sha256(str(task_id).encode()).hexdigest(),
+                    "key_hash": hashlib.sha256(f"key:{task_id}".encode()).hexdigest(),
+                },
+            )
+        worker = TaskWorker(
+            postgres_worker_repository_factory(sessions),
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(sessions)
+                ),
+            ),
+            worker_id="worker-mixed-real",
+        )
+        assert await worker.run_once() is True
+        inspector = create_async_engine(
+            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+        )
+        async with inspector.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT t.state,r.state AS run_state,r.source_pack_version,"
+                        "e.adapter_id,e.adapter_version "
+                        "FROM app.agent_tasks t JOIN app.agent_executions e "
+                        "ON e.organization_id=t.organization_id AND e.task_id=t.id "
+                        "JOIN app.planning_runs r ON r.organization_id=t.organization_id "
+                        "AND r.id=t.result_planning_run_id "
+                        "WHERE t.organization_id=:org AND t.id=:task"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+            ).mappings().one()
+            assert dict(row) == {
+                "state": "waiting_review",
+                "run_state": "review_required",
+                "source_pack_version": version,
+                "adapter_id": "governed_mixed_planning",
+                "adapter_version": "dra-mixed-v1",
+            }
+        await inspector.dispose()
+    finally:
+        await api.dispose()
+        await worker_engine.dispose()
 
 
 @pytest.mark.asyncio

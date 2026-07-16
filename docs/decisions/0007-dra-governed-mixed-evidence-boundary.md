@@ -31,14 +31,21 @@ creates neither. Callers cannot provide authority, promoted identities,
 baseline pins, tenant claims, roles, or credentials.
 
 Delivery is split into two ordered pull requests. PR 1 establishes candidate
-import, verification/promotion authority, API, and proof. PR 2 may add the
-governed mixed PlanningRun only after PR 1 is merged and hosted checks pass.
-The existing all-synthetic planning function and `/demo` remain unchanged.
+import, verification/promotion authority, API, and proof. PR 2 adds
+`generate_governed_mixed_planning_run_v1` only after the merged PR 1 boundary.
+It uses a worker-only PostgreSQL snapshot function and the existing AgentTask
+queue, lease, retry, fencing, event, SSE, AdvisorReview, and family-decision
+authorities. The existing all-synthetic planning function and `/demo` remain
+unchanged.
 
 ## Consequences
 
 - Provider output cannot promote itself or bypass `ActorContext` and forced RLS.
 - The database is the atomic authority boundary for approval and rollback.
 - Live provider proof requires separate authorization and is not a CI gate.
+- Mixed planning admits external authority only for `australia_program_fit`;
+  every other accepted fact must exactly match the synthetic baseline.
+- Migration `0006` adds no table and grants the mixed snapshot function only to
+  the worker role.
 - Generic persisted planning, a separate promotion queue/table, and automatic
   advisor approval are rejected designs.

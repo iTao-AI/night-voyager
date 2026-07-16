@@ -9,6 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
+from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
+
 pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
@@ -103,7 +105,8 @@ async def create_task(connection: AsyncConnection, case_id: UUID, task_id: UUID,
     await context(connection)
     result = await connection.execute(
         text(
-            "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,:pack,1,"
+            "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+            "'generate_planning_run_v1',1,:pack,1,"
             "'m3a-policy-v1',:request_hash,:key_hash)"
         ),
         {
@@ -117,6 +120,80 @@ async def create_task(connection: AsyncConnection, case_id: UUID, task_id: UUID,
         },
     )
     return dict(result.mappings().one())
+
+
+@pytest.mark.asyncio
+async def test_mixed_task_creation_requires_promoted_pack_and_exact_operation() -> None:
+    case_id, promoted_version = await approved_pack(1221)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    statement = text(
+        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,:operation,1,"
+        ":pack,:version,'m3a-policy-v1',:request_hash,:key_hash)"
+    )
+    base = {
+        "org": ORG,
+        "actor": ADVISOR,
+        "case": case_id,
+        "pack": PACK,
+        "operation": "generate_governed_mixed_planning_run_v1",
+        "request_hash": "e" * 64,
+        "key_hash": "0123456789abcdef" * 4,
+    }
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as unapproved:
+                async with connection.begin():
+                    await context(connection)
+                    await connection.execute(
+                        statement,
+                        {**base, "task": UUID(int=12210), "version": 1},
+                    )
+            assert getattr(unapproved.value.orig, "sqlstate", None) == "NV011"
+
+        async with engine.begin() as connection:
+            await context(connection)
+            created = (
+                await connection.execute(
+                    statement,
+                    {
+                        **base,
+                        "task": UUID("80000000-0000-0000-0000-000000001221"),
+                        "version": promoted_version,
+                    },
+                )
+            ).mappings().one()
+            assert created.state == "queued"
+            assert created.replayed is False
+
+        async with engine.begin() as connection:
+            await context(connection)
+            replayed = (
+                await connection.execute(
+                    statement,
+                    {**base, "task": UUID(int=12211), "version": promoted_version},
+                )
+            ).mappings().one()
+            assert replayed.task_id == created.task_id
+            assert replayed.replayed is True
+
+            cancelled = (
+                await connection.execute(
+                    text(
+                        "SELECT * FROM app.cancel_agent_task(:org,:actor,:task,1,"
+                        ":request_hash,:key_hash)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "task": created.task_id,
+                        "request_hash": "1" * 64,
+                        "key_hash": "2" * 64,
+                    },
+                )
+            ).mappings().one()
+            assert cancelled.state == "cancelled"
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -145,7 +222,8 @@ async def test_assigned_advisor_create_replay_conflict_and_direct_dml_denial() -
                     await context(connection)
                     await connection.execute(
                         text(
-                            "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,:pack,1,"
+                            "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                            "'generate_planning_run_v1',1,:pack,1,"
                             "'m3a-policy-v1',:request_hash,:key_hash)"
                         ),
                         {
@@ -527,7 +605,8 @@ async def test_two_tenant_claim_isolation_and_pool_context_cleanup() -> None:
             created = (
                 await connection.execute(
                     text(
-                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,1,:pack,1,"
+                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
+                        "'generate_planning_run_v1',1,:pack,1,"
                         "'m3a-policy-v1',repeat('a',64),repeat('7',64))"
                     ),
                     {

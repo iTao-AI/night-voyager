@@ -25,19 +25,38 @@ NIGHT_VOYAGER_DEMO_MODE=true uv run python scripts/seed_dra_proof.py
 idempotency, concurrency, rollback, reject-without-promotion, and approval with
 exactly one external Evidence plus the synthetic baseline.
 
+The complete deterministic closure is also part of the isolated Compose proof:
+
+```bash
+make compose-proof
+make down
+docker compose ps --all
+```
+
+Before the unchanged M4A/M5 reset lanes, it seeds the dedicated DRA proof Case,
+imports the copied fixture as `UNTRUSTED_CANDIDATE`, performs the atomic advisor
+approval/promotion, creates `generate_governed_mixed_planning_run_v1`, runs the
+existing worker and SSE path, and closes through the existing AdvisorReview and
+family-decision authorities. It uses checked-in synthetic bytes and never calls
+a DRA service.
+
 ## Separately authorized live proof
 
-The live provider proof is not a required CI gate. It is also excluded from
+Live provider proof was not run. It is not a required CI gate and is excluded from
 `make check`, `make proof`, and Compose. Run it only after separate approval for
 one provider attempt and its cost/deadline:
 
 ```bash
 export DRA_LIVE_PROOF_ACK=separately-authorized-one-attempt
+export DRA_ADVISOR_ATTESTATION_ACK=source-inspected-for-bounded-program-fit
 export DECISION_RESEARCH_AGENT_API_KEY
 export DRA_IDEMPOTENCY_KEY
 export DRA_BASE_URL='http://127.0.0.1:<port>'
 export DRA_QUERY_FILE='<approved public-safe UTF-8 file>'
 export DRA_POLL_DEADLINE_SECONDS='<approved integer>'
+export DRA_SOURCE_ROOT='<approved source root>'
+export DRA_SOURCE_LOGICAL_PATH='<approved relative source path>'
+export DRA_SOURCE_SHA256='<approved lowercase SHA-256>'
 make dra-consumer-proof
 ```
 
@@ -52,7 +71,9 @@ to an owned temporary file and is not printed. Output contains bounded
 IDs/hashes/statuses and never the API key, query, raw provider response, source
 bytes, or local path.
 
-This proof does not submit an advisor decision. Any later approval additionally
-requires explicit source inspection, source attestation, and the atomic API
+This command proves only the bounded provider consumer surface. The additional
+advisor acknowledgement records that source inspection has occurred, but it
+does not itself submit a verification decision or grant promotion authority.
+Any later approval still requires source attestation and the atomic API
 authority gate. Failure is terminal for the attempt; there is no automatic
 provider retry.

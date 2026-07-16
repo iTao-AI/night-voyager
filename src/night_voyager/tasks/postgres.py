@@ -39,7 +39,7 @@ class PostgresTaskRepository:
             result = await self._session.execute(
                 text(
                     "SELECT * FROM app.create_agent_task("
-                    ":org,:actor,:case,:task,:revision,:pack,:pack_version,:policy,"
+                    ":org,:actor,:case,:task,:operation,:revision,:pack,:pack_version,:policy,"
                     ":request_hash,:key_hash)"
                 ),
                 {
@@ -47,6 +47,7 @@ class PostgresTaskRepository:
                     "actor": context.actor_id,
                     "case": command.case_id,
                     "task": task_id,
+                    "operation": command.operation,
                     "revision": command.expected_case_revision,
                     "pack": command.source_pack_id,
                     "pack_version": command.source_pack_version,
@@ -127,7 +128,7 @@ class PostgresTaskRepository:
     @staticmethod
     def _raise_mapped(error: DBAPIError) -> NoReturn:
         sqlstate = getattr(error.orig, "sqlstate", None)
-        if sqlstate in {"NV003", "NV006", "NV008", "NV009", "23505"}:
+        if sqlstate in {"NV003", "NV006", "NV008", "NV009", "NV011", "23505"}:
             raise TaskConflictError(str(sqlstate)) from error
         if sqlstate == "NV007":
             raise TaskAuthorizationError from error

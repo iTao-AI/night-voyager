@@ -43,6 +43,7 @@ async def test_deterministic_adapter_returns_untrusted_bytes_not_planning_author
     assert all(
         item.authority.value == "accepted_synthetic_demo" for item in planning_input.evidence
     )
+    assert "generate_governed_mixed_planning_run_v1" not in planning_input.model_dump_json()
 
 
 @pytest.mark.asyncio

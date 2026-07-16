@@ -73,9 +73,15 @@ class TaskRuntimePolicy(FrozenModel):
     max_evidence_refs: int = 20
 
 
+type PlanningOperation = Literal[
+    "generate_planning_run_v1",
+    "generate_governed_mixed_planning_run_v1",
+]
+
+
 class CreateTaskCommand(FrozenModel):
     case_id: UUID
-    operation: Literal["generate_planning_run_v1"] = "generate_planning_run_v1"
+    operation: PlanningOperation = "generate_planning_run_v1"
     expected_case_revision: PositiveInt
     source_pack_id: UUID
     source_pack_version: PositiveInt

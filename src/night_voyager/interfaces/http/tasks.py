@@ -25,6 +25,7 @@ from night_voyager.tasks.application import (
     TaskService,
 )
 from night_voyager.tasks.errors import TaskAuthorizationError, TaskConflictError
+from night_voyager.tasks.models import PlanningOperation
 from night_voyager.tasks.postgres import PostgresTaskRepository
 from night_voyager.tasks.streaming import (
     EventCursorAheadError,
@@ -42,7 +43,7 @@ class StrictModel(BaseModel):
 
 class CreateAgentTaskRequest(StrictModel):
     schema_version: Literal[1]
-    operation: Literal["generate_planning_run_v1"]
+    operation: PlanningOperation
     expected_case_revision: PositiveInt
     source_pack_id: UUID
     source_pack_version: PositiveInt
