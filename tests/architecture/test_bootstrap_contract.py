@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from night_voyager.api import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 POSTGRES_IMAGE = (
     "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
 )

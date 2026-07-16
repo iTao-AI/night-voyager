@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -14,7 +15,12 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.0"
+VERSION = "0.1.1"
+RELEASE_TAG = f"v{VERSION}"
+RELEASE_ARCHIVE_URL = (
+    f"https://github.com/iTao-AI/night-voyager/archive/refs/tags/{RELEASE_TAG}.tar.gz"
+)
+RELEASE_ARCHIVE_ROOT = f"night-voyager-{VERSION}"
 DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 POSTGRES_IMAGE = (
     "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
@@ -59,9 +65,15 @@ M5_SCREENSHOTS = (
     "docs/assets/m5-family-receipt-timeline.png",
 )
 RELEASE_DOCUMENTS = (
-    "docs/releases/v0.1.0.md",
-    "docs/how-to/verify-v0.1.0-release.md",
+    f"docs/releases/v{VERSION}.md",
+    f"docs/how-to/verify-v{VERSION}-release.md",
 )
+HISTORICAL_RELEASE_DOCUMENTS = {
+    "docs/releases/v0.1.0.md": "a3251cdb572b4d982f989917f7e44d111cf887cf7fc8d75629cdd69c393d3a93",
+    "docs/how-to/verify-v0.1.0-release.md": (
+        "b65e18c6dc0e193e2de445ad41930230846bea3abfe43304f58f4cd133275ea3"
+    ),
+}
 RELEASE_HEADINGS = (
     "## Summary",
     "## Completion",
@@ -72,12 +84,17 @@ RELEASE_HEADINGS = (
 )
 RELEASE_NOTE_TOKENS = (
     "local synthetic portfolio release",
+    "deterministic offline governed DRA closure",
     "GitHub-generated source archive",
     "UNTRUSTED_CANDIDATE",
-    "production tenancy",
-    "真实学生",
-    "SLA",
-    "业务收益",
+    "atomic authority gate",
+    "australia_program_fit -> program_fit -> externally_verified",
+    "synthetic baseline",
+    "cost/FX",
+    "ranking",
+    "pinned current Case revision",
+    "Live provider proof was not run",
+    "local synthetic walkthrough",
 )
 RELEASE_HOW_TO_TOKENS = (
     "git fetch origin --tags --prune",
@@ -85,16 +102,19 @@ RELEASE_HOW_TO_TOKENS = (
     "git rev-parse HEAD",
     "git rev-parse origin/main",
     "git describe --tags --exact-match HEAD",
-    "git cat-file -t v0.1.0",
-    "git rev-parse v0.1.0^{tag}",
-    "git rev-parse v0.1.0^{commit}",
+    f"git cat-file -t {RELEASE_TAG}",
+    f"git rev-parse {RELEASE_TAG}^{{tag}}",
+    f"git rev-parse {RELEASE_TAG}^{{commit}}",
     'curl --fail --location --output "$archive"',
-    "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.0.tar.gz",
+    RELEASE_ARCHIVE_URL,
     'wc -c "$archive"',
     'shasum -a 256 "$archive"',
     'tar -xzf "$archive" -C "$tmp_dir"',
-    'cd "$tmp_dir/night-voyager-0.1.0"',
+    f'cd "$tmp_dir/{RELEASE_ARCHIVE_ROOT}"',
     "make doctor",
+    "make dra-check",
+    "make db-check",
+    "make check",
     "make proof",
     "make compose-proof",
     "make down",
@@ -103,7 +123,7 @@ RELEASE_HOW_TO_TOKENS = (
     "Never move the tag after publication",
     "Use the extracted source archive",
     "normal pull request",
-    "Do not force-move `v0.1.0`",
+    f"Do not force-move `{RELEASE_TAG}`",
     "bypass the `main` ruleset",
 )
 DRA_SURFACE = (
@@ -240,7 +260,7 @@ def verify_dra_surface() -> None:
 def verify_release_surface() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     if pyproject["project"]["description"] != DESCRIPTION:
-        raise SystemExit("v0.1.0 project description drift")
+        raise SystemExit("project description drift")
 
     readme_contracts = (
         (
@@ -266,25 +286,32 @@ def verify_release_surface() -> None:
         try:
             positions = [source.index(value) for value in required]
         except ValueError as error:
-            raise SystemExit(f"missing v0.1.0 README contract: {relative}") from error
+            raise SystemExit(f"missing {RELEASE_TAG} README contract: {relative}") from error
         if positions != sorted(positions):
-            raise SystemExit(f"v0.1.0 README outcome order drift: {relative}")
+            raise SystemExit(f"{RELEASE_TAG} README outcome order drift: {relative}")
         if any(document not in source for document in RELEASE_DOCUMENTS):
-            raise SystemExit(f"v0.1.0 README release links drift: {relative}")
+            raise SystemExit(f"{RELEASE_TAG} README release links drift: {relative}")
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
 
     for relative in RELEASE_DOCUMENTS:
         if not (ROOT / relative).is_file():
-            raise SystemExit(f"missing v0.1.0 release document: {relative}")
+            raise SystemExit(f"missing {RELEASE_TAG} release document: {relative}")
+
+    for relative, expected_digest in HISTORICAL_RELEASE_DOCUMENTS.items():
+        actual_digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
+        if actual_digest != expected_digest:
+            raise SystemExit(f"v0.1.0 historical release document drift: {relative}")
     release = (ROOT / RELEASE_DOCUMENTS[0]).read_text(encoding="utf-8")
     try:
         heading_positions = [release.index(heading) for heading in RELEASE_HEADINGS]
     except ValueError as error:
-        raise SystemExit("release notes contract missing required heading") from error
+        raise SystemExit(
+            f"{RELEASE_TAG} release notes contract missing required heading"
+        ) from error
     if heading_positions != sorted(heading_positions):
-        raise SystemExit("release notes contract heading order drift")
+        raise SystemExit(f"{RELEASE_TAG} release notes heading order drift")
     for index, position in enumerate(heading_positions):
         end = (
             heading_positions[index + 1]
@@ -292,13 +319,13 @@ def verify_release_surface() -> None:
             else len(release)
         )
         if re.search(r"[\u4e00-\u9fff]", release[position:end]) is None:
-            raise SystemExit("release notes contract requires Simplified Chinese body")
+            raise SystemExit(f"{RELEASE_TAG} release notes require Simplified Chinese body")
     if any(token not in release for token in RELEASE_NOTE_TOKENS):
-        raise SystemExit("release notes contract boundary drift")
+        raise SystemExit(f"{RELEASE_TAG} release notes contract boundary drift")
 
     how_to = (ROOT / RELEASE_DOCUMENTS[1]).read_text(encoding="utf-8")
     if any(token not in how_to for token in RELEASE_HOW_TO_TOKENS):
-        raise SystemExit("release how-to contract boundary drift")
+        raise SystemExit(f"{RELEASE_TAG} release how-to contract boundary drift")
 
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
     if any(
@@ -314,7 +341,7 @@ def verify_release_surface() -> None:
         source = (ROOT / relative).read_text(encoding="utf-8").lower()
         if any(phrase in source for phrase in stale):
             raise SystemExit(f"stale bootstrap release wording: {relative}")
-    print("proof release surface: v0.1.0 local synthetic portfolio contract confirmed")
+    print(f"proof release surface: {RELEASE_TAG} local synthetic portfolio contract confirmed")
 
 
 def package_version(packages: list[dict[str, object]], name: str) -> str:
@@ -445,7 +472,8 @@ def verify_wheel() -> None:
             python,
             "-c",
             "import sys; from night_voyager.api import create_app; "
-            "assert create_app().version == '0.1.0'; assert \"httpx2\" not in sys.modules",
+            f"assert create_app().version == {VERSION!r}; "
+            "assert \"httpx2\" not in sys.modules",
         )
     print(f"proof wheel: isolated installed-wheel import and app factory passed ({wheel.name})")
 
