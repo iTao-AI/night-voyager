@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from uuid import UUID
 
@@ -133,3 +134,37 @@ def test_cross_operation_payload_fails_closed() -> None:
     synthetic_payload = AdapterPayload(payload=b'{"schema_version":1,"evidence":[]}')
     with pytest.raises(AdapterPayloadError, match="invalid_schema"):
         validate_adapter_payload(synthetic_payload, mixed_request())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mutation", ("synthetic_hash", "cost_fx", "ranking"))
+async def test_mixed_adapter_payload_rejects_checked_in_baseline_drift(
+    mutation: str,
+) -> None:
+    outcome = await GovernedMixedPlanningAdapter(
+        FakeSnapshotRepository(governed_snapshot())
+    ).generate(mixed_request())
+    assert isinstance(outcome, AdapterPayload)
+    payload = json.loads(outcome.payload)
+    if mutation == "synthetic_hash":
+        synthetic_entry = next(
+            entry
+            for entry in payload["source_pack"]["entries"]
+            if "australia_tuition" in entry["coverage"]
+        )
+        synthetic_entry["sha256"] = "f" * 64
+        for evidence in payload["evidence"]:
+            if evidence["source_entry_id"] == synthetic_entry["entry_id"]:
+                evidence["source_sha256"] = "f" * 64
+    elif mutation == "cost_fx":
+        payload["costs"][0].update(
+            {"tuition_minor": 1, "living_minor": 1, "fx_rate": "0.000001"}
+        )
+    else:
+        payload["rankings"][0]["rank"] = 1
+
+    with pytest.raises(AdapterPayloadError, match="baseline_drift"):
+        validate_adapter_payload(
+            outcome.model_copy(update={"payload": json.dumps(payload).encode()}),
+            mixed_request(),
+        )

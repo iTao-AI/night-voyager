@@ -57,7 +57,10 @@ DML prohibited. The API can create the additive mixed task only through the
 existing assigned-advisor task function. The worker can load only the exact
 current Case/revision, promoted pack, and policy snapshot through the narrow
 function; the API and `PUBLIC` cannot execute it. Downgrade to `0005` preserves
-historical mixed audit rows while preventing new mixed writes, and a fresh
+terminal mixed audit rows, atomically cancels queued, leased, or running mixed
+tasks with the public code `migration_downgrade`, removes their dispatch rows,
+and prevents the restored `0005` claim function from selecting mixed
+operations. The restored constraints prevent new mixed writes. A fresh
 data-free graph proves `0006 -> 0001 -> 0006`.
 
 The normal `make demo` path applies migrations, then runs the separate

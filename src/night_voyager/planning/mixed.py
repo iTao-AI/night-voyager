@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 
 from night_voyager.planning.fixtures import DEFAULT_MANIFEST, validate_planning_fixture
-from night_voyager.planning.models import EvidenceAuthority
+from night_voyager.planning.models import EvidenceAuthority, PlanningInput
 from night_voyager.planning.trusted import (
     GovernedMixedPlanningInput,
     GovernedMixedSnapshotV1,
@@ -19,22 +19,129 @@ BASELINE_RAW_MANIFEST_SHA256 = (
 EXTERNAL_CLAIM = "australia_program_fit"
 
 
+def _load_exact_baseline(*, manifest_path: Path = DEFAULT_MANIFEST) -> PlanningInput:
+    raw_manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    if raw_manifest_sha256 != BASELINE_RAW_MANIFEST_SHA256:
+        raise ValueError("governed mixed baseline raw manifest mismatch")
+    baseline = validate_planning_fixture(manifest_path)
+    if (
+        str(baseline.planning_input.source_pack.pack_id) != BASELINE_SOURCE_PACK_ID
+        or baseline.planning_input.source_pack.version != BASELINE_SOURCE_PACK_VERSION
+        or baseline.manifest_sha256 != BASELINE_MANIFEST_SHA256
+    ):
+        raise ValueError("governed mixed baseline identity mismatch")
+    return baseline.planning_input
+
+
+def validate_governed_mixed_payload_baseline(
+    planning_input: GovernedMixedPlanningInput,
+) -> None:
+    baseline = _load_exact_baseline()
+    if (
+        planning_input.case.student != baseline.case.student
+        or planning_input.case.family != baseline.case.family
+        or str(planning_input.source_pack.pack_id) != BASELINE_SOURCE_PACK_ID
+        or planning_input.source_pack.version <= BASELINE_SOURCE_PACK_VERSION
+    ):
+        raise ValueError("governed mixed payload baseline drift")
+
+    entries = {entry.entry_id: entry for entry in planning_input.source_pack.entries}
+    evidence_by_claim = {item.claim: item for item in planning_input.evidence}
+    if (
+        len(entries) != len(planning_input.source_pack.entries)
+        or len(evidence_by_claim) != len(planning_input.evidence)
+        or set(evidence_by_claim) != {item.claim for item in baseline.evidence}
+    ):
+        raise ValueError("governed mixed payload baseline drift")
+
+    for baseline_entry in baseline.source_pack.entries:
+        expected = baseline_entry.model_copy(
+            update={
+                "coverage": tuple(
+                    claim
+                    for claim in baseline_entry.coverage
+                    if claim != EXTERNAL_CLAIM
+                )
+            }
+        )
+        if entries.get(baseline_entry.entry_id) != expected:
+            raise ValueError("governed mixed payload baseline drift")
+
+    external = evidence_by_claim[EXTERNAL_CLAIM]
+    external_entry = entries.get(external.source_entry_id)
+    evidence_ids = {item.evidence_id for item in planning_input.evidence}
+    if (
+        set(entries) != {
+            *(entry.entry_id for entry in baseline.source_pack.entries),
+            external.source_entry_id,
+        }
+        or len(evidence_ids) != len(planning_input.evidence)
+        or external.authority is not EvidenceAuthority.EXTERNALLY_VERIFIED
+        or external_entry is None
+        or external_entry.coverage != (EXTERNAL_CLAIM,)
+        or external_entry.sha256 != external.source_sha256
+        or external_entry.redistribution_class.value != "link_only"
+    ):
+        raise ValueError("governed mixed payload baseline drift")
+
+    baseline_by_claim = {item.claim: item for item in baseline.evidence}
+    for claim, evidence in evidence_by_claim.items():
+        entry = entries.get(evidence.source_entry_id)
+        if (
+            evidence.organization_id != planning_input.organization_id
+            or evidence.source_pack_id != planning_input.source_pack.pack_id
+            or evidence.source_pack_version != planning_input.source_pack.version
+            or entry is None
+            or evidence.source_sha256 != entry.sha256
+            or claim not in entry.coverage
+        ):
+            raise ValueError("governed mixed payload baseline drift")
+        if claim == EXTERNAL_CLAIM:
+            continue
+        expected = baseline_by_claim[claim].model_dump(
+            exclude={"organization_id", "evidence_id", "source_pack_version"}
+        )
+        actual = evidence.model_dump(
+            exclude={"organization_id", "evidence_id", "source_pack_version"}
+        )
+        if actual != expected:
+            raise ValueError("governed mixed payload baseline drift")
+
+    evidence_id_by_claim = {
+        claim: evidence.evidence_id for claim, evidence in evidence_by_claim.items()
+    }
+    expected_costs = tuple(
+        item.model_copy(
+            update={
+                "organization_id": planning_input.organization_id,
+                "tuition_evidence_id": evidence_id_by_claim[f"{item.country.value}_tuition"],
+                "living_evidence_id": evidence_id_by_claim[
+                    f"{item.country.value}_living_cost"
+                ],
+                "fx_evidence_id": evidence_id_by_claim[f"{item.country.value}_fx"],
+            }
+        )
+        for item in baseline.costs
+    )
+    expected_rankings = tuple(
+        item.model_copy(
+            update={
+                "organization_id": planning_input.organization_id,
+                "evidence_id": evidence_id_by_claim[f"{item.country.value}_ranking"],
+            }
+        )
+        for item in baseline.rankings
+    )
+    if planning_input.costs != expected_costs or planning_input.rankings != expected_rankings:
+        raise ValueError("governed mixed payload baseline drift")
+
+
 def materialize_governed_mixed_input(
     snapshot: GovernedMixedSnapshotV1,
     *,
     manifest_path: Path = DEFAULT_MANIFEST,
 ) -> GovernedMixedPlanningInput:
-    raw_manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    if raw_manifest_sha256 != BASELINE_RAW_MANIFEST_SHA256:
-        raise ValueError("governed mixed baseline raw manifest mismatch")
-    baseline = validate_planning_fixture(manifest_path)
-    baseline_input = baseline.planning_input
-    if (
-        str(baseline_input.source_pack.pack_id) != BASELINE_SOURCE_PACK_ID
-        or baseline_input.source_pack.version != BASELINE_SOURCE_PACK_VERSION
-        or baseline.manifest_sha256 != BASELINE_MANIFEST_SHA256
-    ):
-        raise ValueError("governed mixed baseline identity mismatch")
+    baseline_input = _load_exact_baseline(manifest_path=manifest_path)
     if (
         str(snapshot.baseline_source_pack_id) != BASELINE_SOURCE_PACK_ID
         or snapshot.baseline_source_pack_version != BASELINE_SOURCE_PACK_VERSION

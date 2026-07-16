@@ -134,7 +134,48 @@ OLD_CLAIM_TASK_SQL = CLAIM_TASK_SQL.replace(
 ).replace(
     "selected_adapter,selected_adapter_version,'leased'",
     "'deterministic_planning','m4a-v1','leased'",
+).replace(
+    "IF NOT FOUND OR selected.state IN ('waiting_review'",
+    "IF NOT FOUND OR selected.operation<>'generate_planning_run_v1' OR selected.state IN ('waiting_review'",
 )
+
+FREEZE_NONTERMINAL_MIXED_TASKS_SQL = r"""
+DO $$
+DECLARE candidate record; selected record;
+BEGIN
+  FOR candidate IN
+    SELECT d.organization_id,d.task_id
+    FROM internal.agent_task_dispatch d
+    ORDER BY d.organization_id,d.task_id
+    FOR UPDATE
+  LOOP
+    PERFORM set_config('night_voyager.organization_id',candidate.organization_id::text,true);
+    SELECT t.organization_id,t.id,t.attempt_count,t.lease_generation INTO selected
+    FROM app.agent_tasks t
+    WHERE t.organization_id=candidate.organization_id AND t.id=candidate.task_id
+      AND t.operation='generate_governed_mixed_planning_run_v1'
+      AND t.state IN ('queued','leased','running')
+    FOR UPDATE;
+    CONTINUE WHEN NOT FOUND;
+    UPDATE app.agent_executions e
+    SET status='cancelled',retryable=false,public_code='migration_downgrade',
+        duration_ms=GREATEST(0,floor(extract(epoch FROM (clock_timestamp()-COALESCE(e.started_at,e.created_at)))*1000)::integer),
+        finished_at=clock_timestamp()
+    WHERE e.organization_id=selected.organization_id AND e.task_id=selected.id
+      AND e.lease_generation=selected.lease_generation AND e.status IN ('leased','running');
+    UPDATE app.agent_tasks t
+    SET state='cancelled',row_version=t.row_version+1,lease_owner=NULL,
+        lease_expires_at=NULL,terminal_code='migration_downgrade',updated_at=clock_timestamp()
+    WHERE t.organization_id=selected.organization_id AND t.id=selected.id;
+    DELETE FROM internal.agent_task_dispatch d
+    WHERE d.organization_id=selected.organization_id AND d.task_id=selected.id;
+    PERFORM app.append_agent_task_event(
+      selected.organization_id,selected.id,'cancelled','cancelled',
+      'migration_downgrade',selected.attempt_count,NULL
+    );
+  END LOOP;
+END; $$;
+"""
 
 
 def _execute(sql: str) -> None:
@@ -164,6 +205,7 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION app.load_governed_mixed_planning_snapshot(uuid,uuid,integer,uuid,integer,text)")
     op.execute("DROP FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,text,text)")
     op.execute("DROP FUNCTION app.claim_agent_task(text)")
+    _execute(FREEZE_NONTERMINAL_MIXED_TASKS_SQL)
     op.execute("ALTER TABLE app.agent_tasks DROP CONSTRAINT agent_tasks_operation_check")
     op.execute("ALTER TABLE app.agent_tasks ADD CONSTRAINT agent_tasks_operation_check CHECK (operation = 'generate_planning_run_v1') NOT VALID")
     op.execute("ALTER TABLE app.agent_executions DROP CONSTRAINT agent_executions_adapter_pair_check")

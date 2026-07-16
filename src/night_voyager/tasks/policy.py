@@ -12,6 +12,7 @@ from night_voyager.adapters.protocols import (
     AdapterPayload,
     PlanningAdapterRequest,
 )
+from night_voyager.planning.mixed import validate_governed_mixed_payload_baseline
 from night_voyager.planning.models import EvidenceAuthority, PlanningInput
 from night_voyager.planning.trusted import GovernedMixedPlanningInput
 from night_voyager.tasks.models import AgentTaskState, TaskRuntimePolicy, TaskViewStatus
@@ -149,4 +150,8 @@ def validate_adapter_payload(
         )
         if len(external) != 1 or external[0].claim != "australia_program_fit":
             raise AdapterPayloadError("fallback_authority")
+        try:
+            validate_governed_mixed_payload_baseline(planning_input)
+        except ValueError as error:
+            raise AdapterPayloadError("baseline_drift") from error
     return planning_input

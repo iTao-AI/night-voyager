@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
@@ -10,11 +11,13 @@ import pytest
 from night_voyager.adapters.protocols import (
     AdapterFailure,
     AdapterFailureCode,
+    AdapterPayload,
     PlanningAdapterRequest,
 )
 from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.tasks.errors import TaskLeaseLostError, TaskTransientError
 from night_voyager.tasks.worker import AgentTaskClaim, TaskWorker, WorkerTaskInput
+from tests.unit.planning.test_mixed import governed_mixed_input
 
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 TASK = UUID("80000000-0000-0000-0000-000000000401")
@@ -49,12 +52,18 @@ def test_worker_request_contract_accepts_only_the_two_planning_operations() -> N
 
 
 class FakeState:
-    def __init__(self, *, heartbeat_loses_lease: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        heartbeat_loses_lease: bool = False,
+        task_input: WorkerTaskInput = INPUT,
+    ) -> None:
         self.active_sessions = 0
         self.calls: list[str] = []
         self.claimed = False
         self.heartbeat_loses_lease = heartbeat_loses_lease
         self.heartbeat_seen = asyncio.Event()
+        self.task_input = task_input
 
 
 class FakeRepository:
@@ -71,13 +80,15 @@ class FakeRepository:
     async def load(self, claim: AgentTaskClaim) -> WorkerTaskInput:
         assert claim == CLAIM
         self.state.calls.append("load")
-        return INPUT
+        return self.state.task_input
 
     async def start(
         self, claim: AgentTaskClaim, worker_id: str, input_sha256: str
     ) -> None:
         assert claim == CLAIM
-        assert input_sha256 == INPUT_SHA256
+        assert input_sha256 == canonical_sha256(
+            self.state.task_input.request.model_dump(mode="json")
+        )
         self.state.calls.append(f"start:{input_sha256}")
 
     async def heartbeat(self, claim: AgentTaskClaim, worker_id: str) -> None:
@@ -111,12 +122,20 @@ class FailureAdapter:
         self.wait_for_heartbeat = wait_for_heartbeat
 
     async def generate(self, request: PlanningAdapterRequest) -> AdapterFailure:
-        assert request == INPUT.request
+        assert request == self.state.task_input.request
         assert self.state.active_sessions == 0
         self.state.calls.append("adapter")
         if self.wait_for_heartbeat:
             await self.state.heartbeat_seen.wait()
         return AdapterFailure(code=AdapterFailureCode.UNKNOWN)
+
+
+class PayloadAdapter:
+    def __init__(self, payload: AdapterPayload) -> None:
+        self.payload = payload
+
+    async def generate(self, request: PlanningAdapterRequest) -> AdapterPayload:
+        return self.payload
 
 
 def repository_factory(state: FakeState):
@@ -150,6 +169,42 @@ async def test_run_once_uses_short_sessions_and_runs_adapter_outside_them() -> N
         "adapter",
         "fail:unknown:False:False",
     ]
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_mixed_payload_baseline_drift_before_policy() -> None:
+    planning_input = governed_mixed_input()
+    payload = planning_input.model_dump(mode="json")
+    payload["costs"][0]["fx_rate"] = "0.000001"  # type: ignore[index]
+    task_input = WorkerTaskInput(
+        request=PlanningAdapterRequest(
+            schema_version=1,
+            operation="generate_governed_mixed_planning_run_v1",
+            organization_id=planning_input.organization_id,
+            case_id=planning_input.case.case_id,
+            case_revision=planning_input.case.revision,
+            source_pack_id=planning_input.source_pack.pack_id,
+            source_pack_version=planning_input.source_pack.version,
+            policy_version="m3a-policy-v1",
+        ),
+        supersedes_run_id=None,
+    )
+    state = FakeState(task_input=task_input)
+    worker = TaskWorker(
+        repository_factory(state),
+        PayloadAdapter(
+            AdapterPayload(
+                payload=json.dumps(payload).encode(),
+                adapter_id="governed_mixed_planning",
+                adapter_version="dra-mixed-v1",
+            )
+        ),
+        worker_id="worker-mixed-drift",
+    )
+
+    assert await worker.run_once() is True
+    assert "fail:baseline_drift:False:False" in state.calls
+    assert "finalize" not in state.calls
 
 
 @pytest.mark.asyncio
