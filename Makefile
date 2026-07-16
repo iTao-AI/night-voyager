@@ -2,7 +2,7 @@
 export UV_BUILD_CONSTRAINT := build-constraints.txt
 export UV_REQUIRE_HASHES := 1
 
-.PHONY: help doctor demo proof compose-proof db-check check dra-check dra-consumer-proof \
+.PHONY: help doctor demo proof compose-proof db-check collaboration-db-check check dra-check dra-consumer-proof \
 	mke-doctor mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
 
 help: ## Show available commands
@@ -22,6 +22,9 @@ compose-proof: ## Prove M3B/M4A flows, restart durability, health, and teardown
 
 db-check: ## Prove migrations, roles, sessions, catalog, and forced RLS on a fresh database
 	@scripts/run_db_tests.sh
+
+collaboration-db-check: ## Run one disposable governed-collaboration database suite
+	@SUITE="$(SUITE)" scripts/run_collaboration_db_tests.sh
 
 mke-doctor: ## Verify an operator-supplied MKE candidate without installing it
 	@uv run python scripts/verify_mke_consumer.py doctor --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)"

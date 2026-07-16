@@ -8,7 +8,6 @@ from night_voyager.planning.models import (
     EvidenceRef,
     PlanningInput,
     SourcePackManifestV1,
-    StudentCaseRevision,
 )
 from night_voyager.planning.policy import evaluate_planning_run
 from night_voyager.planning.ports import (
@@ -23,11 +22,6 @@ POLICY_VERSION = "m3a-policy-v1"
 class CaseService:
     def __init__(self, repository: CaseRepository) -> None:
         self._repository = repository
-
-    async def publish_revision(
-        self, revision: StudentCaseRevision, *, expected_current: int | None
-    ) -> None:
-        await self._repository.create_revision(revision, expected_current)
 
     async def start_planning(self, organization_id: UUID, case_id: UUID) -> None:
         await self._repository.transition_case(
