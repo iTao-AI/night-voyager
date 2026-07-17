@@ -75,8 +75,10 @@ closed bounded vocabulary. Advisors receive provenance and history; students and
 parents receive current facts and only their own proposal status without internal
 IDs, source digests, verification reasons, or supersession history.
 All current fact heads are returned independently of the advisor history bound.
-Advisor-only superseded history uses a stable snapshot/keyset cursor; participant
-responses expose neither history nor cursor metadata.
+Advisor-only superseded history uses a keyset cursor bound to the Case revision
+visible on the first page. Successor verification revisions at or below that immutable
+high-water mark define the cursor chain, so later commits cannot enter its history;
+participant responses expose neither history nor cursor metadata.
 
 The message thread remains capped at 1000 events. Same-key replay is resolved before
 the cap; a different-key append after capacity returns the typed `409

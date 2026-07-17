@@ -57,7 +57,7 @@ _SECRET_PATTERN = re.compile(
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
 _URL_PATTERN = re.compile(r"(?i)\b(?:https?|file|ftp|ssh)://\S+")
-_FILE_URL_PATTERN = re.compile(r"(?i)\bfile://\S+")
+_FILE_URL_PATTERN = re.compile(r"file://", re.IGNORECASE)
 _URL_CREDENTIAL_PATTERN = re.compile(
     r"(?i)\b(?:https?|ftp|ssh)://[^\s/:@]+:[^\s/@]+@[^\s/]+"
 )
@@ -319,16 +319,9 @@ class ConfirmedFactAdvisorV1(ConfirmedFactParticipantV1):
 
 class ConfirmedFactHistoryCursorV1(_StrictModel):
     schema_version: Literal[1]
-    snapshot: datetime
+    snapshot_revision: PositiveInt
     fact_key: FactKey
     fact_version: PositiveInt
-
-    @field_validator("snapshot")
-    @classmethod
-    def require_timezone(cls, value: datetime) -> datetime:
-        if value.tzinfo is None:
-            raise ValueError("confirmed fact cursor snapshot requires a timezone")
-        return value
 
     def encode(self) -> str:
         payload = json.dumps(

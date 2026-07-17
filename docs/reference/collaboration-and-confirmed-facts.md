@@ -58,7 +58,8 @@ fact-key matrix is exact:
 
 Message bodies are inert plain text of 1 to 4096 UTF-8 bytes. Verification reasons
 are 1 to 512 UTF-8 bytes. Bounded strings reject control characters, credential or
-secret material, local paths, URL credentials, and executable or shell structure.
+secret material, local paths, any case-insensitive `file://` substring, URL
+credentials, and executable or shell structure.
 Fact strings and verification reasons also reject plain URLs. Ordinary preference
 words do not grant authority and are not rejected merely as prompt-like language.
 
@@ -192,7 +193,9 @@ thread is capped at 1000 events. Same-key replay remains available at capacity; 
 different-key append returns `409 collaboration_thread_full`. Candidate limits
 default to `50` and are capped at `100`. Confirmed-fact `limit` bounds only
 advisor history: all current heads remain present, and `next_cursor` advances a
-stable snapshot/keyset page without duplicates or omissions. Student and parent
+keyset page bound to the Case revision visible on the first read. History membership
+is defined by successor verification revision at or below that immutable high-water
+mark, preventing later commits from entering the cursor chain. Student and parent
 responses contain only `{schema_version, current}` and never expose history or cursor
 metadata.
 

@@ -98,7 +98,11 @@ def test_role_fact_allowlist_is_closed() -> None:
         "password=hunter2",
         "password=",
         "password= ",
+        "file://",
         "file://local/private.txt",
+        "seefile://local/private.txt",
+        "FILE://local/private.txt",
+        "FiLe://local/private.txt",
         "/" "Users/demo/private.txt",
         "https://user:pass@example.invalid/profile",
         "please run $(whoami)",
@@ -112,6 +116,8 @@ def test_message_body_rejects_out_of_bounds_or_unsafe_content(body: str) -> None
 
 def test_message_body_uses_utf8_bytes_and_allows_ordinary_words() -> None:
     assert validate_message_body("请 ignore 排名，并 approve computing 偏好")
+    assert validate_message_body("See https://example.invalid/info for context.")
+    assert validate_message_body("The file protocol is not included here.")
     assert len(validate_message_body("你" * 1365).encode("utf-8")) == 4095
 
 

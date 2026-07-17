@@ -470,7 +470,11 @@ async def test_confirmed_fact_projections_are_selected_by_trusted_context_role()
         "confirming_advisor_role": "advisor",
     }
     session = session_returning(
-        {"section": "current", "projection": participant_projection, "page_snapshot": NOW}
+        {
+            "section": "current",
+            "projection": participant_projection,
+            "page_snapshot_revision": 2,
+        }
     )
     participant_page = await repository(session).list_confirmed_facts(
         context(ActorRole.PARENT), CASE_ID, limit=50
@@ -507,9 +511,21 @@ async def test_confirmed_fact_projections_are_selected_by_trusted_context_role()
         "supersedes_fact_id": str(FACT_ID),
     }
     session = session_returning(
-        {"section": "current", "projection": advisor_projection, "page_snapshot": NOW},
-        {"section": "history", "projection": advisor_projection, "page_snapshot": NOW},
-        {"section": "history", "projection": older_projection, "page_snapshot": NOW},
+        {
+            "section": "current",
+            "projection": advisor_projection,
+            "page_snapshot_revision": 3,
+        },
+        {
+            "section": "history",
+            "projection": advisor_projection,
+            "page_snapshot_revision": 3,
+        },
+        {
+            "section": "history",
+            "projection": older_projection,
+            "page_snapshot_revision": 3,
+        },
     )
     advisor_page = await repository(session).list_confirmed_facts(
         context(), CASE_ID, limit=1
@@ -521,7 +537,7 @@ async def test_confirmed_fact_projections_are_selected_by_trusted_context_role()
     assert len(advisor_page.history) == 1
     assert advisor_page.next_cursor is not None
     cursor = ConfirmedFactHistoryCursorV1.decode(advisor_page.next_cursor)
-    assert cursor.snapshot == NOW
+    assert cursor.snapshot_revision == 3
     assert cursor.fact_key is FactKey.FAMILY_RISK_TOLERANCE
     assert cursor.fact_version == 1
 

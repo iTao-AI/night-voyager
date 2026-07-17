@@ -275,7 +275,7 @@ BEGIN
      OR p_body ~* '(api[_-]?key|password|passwd|secret|access[_-]?token|bearer)[[:space:]]*[:=]'
      OR p_body ~ '-----BEGIN [A-Z ]*PRIVATE KEY-----'
      OR p_body ~ '(^|[[:space:]])(/(Users|home|etc|private|var|tmp)/[^[:space:]]+|[A-Za-z]:\\[^[:space:]]+)'
-     OR p_body ~ 'file://'
+     OR strpos(lower(p_body),'file://')>0
      OR p_body ~* '[a-z][a-z0-9+.-]*://[^[:space:]/]+:[^[:space:]@]+@'
      OR p_body ~ E'(&&|\\|\\||\\$\\(|`)'
      OR p_body ~* '(^|[[:space:]])(sudo|rm|bash|sh|zsh|curl|wget|python)[[:space:]]+' THEN
@@ -955,13 +955,13 @@ BEGIN
   END IF;
 END; $$;
 
-CREATE FUNCTION app.read_confirmed_facts(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_snapshot timestamptz,p_after_fact_key text,p_after_fact_version integer,p_limit integer) RETURNS TABLE(section text,projection jsonb,page_snapshot timestamptz) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE selected_snapshot timestamptz;
+CREATE FUNCTION app.read_confirmed_facts(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_snapshot_revision integer,p_after_fact_key text,p_after_fact_version integer,p_limit integer) RETURNS TABLE(section text,projection jsonb,page_snapshot_revision integer) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE selected_snapshot_revision integer; live_case_revision integer;
 BEGIN
   IF p_org IS NULL OR p_actor IS NULL OR p_role IS NULL OR p_case IS NULL
      OR p_limit IS NULL OR NOT (
-       (p_snapshot IS NULL AND p_after_fact_key IS NULL AND p_after_fact_version IS NULL)
-       OR (p_snapshot IS NOT NULL
+       (p_snapshot_revision IS NULL AND p_after_fact_key IS NULL AND p_after_fact_version IS NULL)
+       OR (p_snapshot_revision IS NOT NULL AND p_snapshot_revision>0
            AND p_after_fact_key IN (
              'student.intended_field','student.preferred_countries','student.intake',
              'family.risk_tolerance','family.japan_risk_accepted','family.budget'
@@ -981,7 +981,16 @@ BEGIN
     END IF;
     RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable';
   END IF;
-  selected_snapshot := COALESCE(p_snapshot,clock_timestamp());
+  SELECT student_case.current_revision INTO live_case_revision
+    FROM app.student_cases student_case
+   WHERE student_case.organization_id=p_org AND student_case.id=p_case;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable';
+  END IF;
+  selected_snapshot_revision := COALESCE(p_snapshot_revision,live_case_revision);
+  IF selected_snapshot_revision>live_case_revision THEN
+    RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid confirmed fact page';
+  END IF;
   IF p_role='advisor' THEN
     RETURN QUERY
     SELECT 'current'::text,jsonb_build_object(
@@ -1001,7 +1010,7 @@ BEGIN
       'confirming_advisor_actor_id',fact.confirming_advisor_actor_id,
       'reason',verification.reason,
       'supersedes_fact_id',fact.supersedes_fact_id
-    ),selected_snapshot
+    ),selected_snapshot_revision
       FROM app.confirmed_facts fact
       JOIN app.memory_candidate_verifications verification
         ON verification.organization_id=fact.organization_id
@@ -1037,14 +1046,17 @@ BEGIN
       'confirming_advisor_actor_id',fact.confirming_advisor_actor_id,
       'reason',verification.reason,
       'supersedes_fact_id',fact.supersedes_fact_id
-    ),selected_snapshot
+    ),selected_snapshot_revision
       FROM app.confirmed_facts fact
       JOIN app.confirmed_facts successor
         ON successor.organization_id=fact.organization_id
        AND successor.case_id=fact.case_id
        AND successor.fact_key=fact.fact_key
        AND successor.supersedes_fact_id=fact.id
-       AND successor.confirmed_at<=selected_snapshot
+      JOIN app.memory_candidate_verifications successor_verification
+        ON successor_verification.organization_id=successor.organization_id
+       AND successor_verification.result_fact_id=successor.id
+       AND successor_verification.result_revision<=selected_snapshot_revision
       JOIN app.memory_candidate_verifications verification
         ON verification.organization_id=fact.organization_id
        AND verification.result_fact_id=fact.id
@@ -1069,7 +1081,7 @@ BEGIN
       'confirmed_at',fact.confirmed_at,
       'subject_role',fact.subject_role,
       'confirming_advisor_role',fact.confirming_advisor_role
-    ),selected_snapshot
+    ),selected_snapshot_revision
       FROM app.confirmed_facts fact
      WHERE fact.organization_id=p_org AND fact.case_id=p_case
        AND NOT EXISTS (
@@ -1309,9 +1321,9 @@ REVOKE ALL ON FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigin
 REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) FROM night_voyager_api;
 REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) FROM night_voyager_worker;
-REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) FROM night_voyager_api;
-REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) FROM night_voyager_worker;
+REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer,text,integer,integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer,text,integer,integer) FROM night_voyager_api;
+REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer,text,integer,integer) FROM night_voyager_worker;
 REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_api;
 REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_worker;
@@ -1323,7 +1335,7 @@ GRANT EXECUTE ON FUNCTION app.verify_memory_candidate(uuid,uuid,uuid,integer,tex
 GRANT EXECUTE ON FUNCTION app.read_collaboration_thread(uuid,uuid,text,uuid) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigint,integer) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer,text,integer,integer) TO night_voyager_api;
 
 REVOKE EXECUTE ON FUNCTION app.publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb) FROM night_voyager_api;
 """
@@ -1472,7 +1484,7 @@ def downgrade() -> None:
         "DROP FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)"
     )
     op.execute(
-        "DROP FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer)"
+        "DROP FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer,text,integer,integer)"
     )
     op.execute("DROP FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer)")
     op.execute("DROP FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigint,integer)")

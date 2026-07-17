@@ -766,7 +766,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "read_collaboration_messages": ("uuid, uuid, text, uuid, bigint, integer"),
                 "read_memory_candidates": "uuid, uuid, text, uuid, integer",
                 "read_confirmed_facts": (
-                    "uuid, uuid, text, uuid, timestamp with time zone, text, integer, integer"
+                    "uuid, uuid, text, uuid, integer, text, integer, integer"
                 ),
                 "seed_demo_collaboration": ("uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, text"),
             }:

@@ -96,8 +96,9 @@ pytest 9, Docker Compose, and the existing opaque-session/CSRF/idempotency bound
   `invalid_collaboration_message`, `unsupported_fact_key`, or `unsafe_fact_value`
   before the database call; database `NV006` is the typed unsafe-contract fallback.
 - Message body is inert UTF-8 plain text of 1..4096 bytes, rejects control characters,
-  credential/secret material, local paths, URL credentials, and executable/shell
-  structure, but does not use a broad lexical prompt-injection keyword filter.
+  credential/secret material, local paths, any case-insensitive `file://` substring,
+  URL credentials, and executable/shell structure, but does not use a broad lexical
+  prompt-injection keyword filter.
 - New bounded string fact values are 1..160 UTF-8 bytes. Verification reasons are
   1..512 UTF-8 bytes. Candidate expiry is exactly seven days by PostgreSQL clock;
   application or browser time cannot revive or expire a candidate.
@@ -621,6 +622,9 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
 
   Lock the read matrix: every page keeps all current fact heads reachable; advisor
   history uses stable bounded cursor pagination without duplicate or omitted rows.
+  The cursor carries the Case revision visible on the first read; successor
+  verification revisions at or below that immutable high-water mark freeze history
+  membership across later commits.
   Advisor sees current and historical facts, candidate and
   verification identities, source message metadata, confirming advisor, reason, and
   supersession; student/parent see current values, fact version, confirmed-at,

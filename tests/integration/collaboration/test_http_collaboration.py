@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -365,7 +366,7 @@ class RecordingRepository:
         )
         next_cursor = ConfirmedFactHistoryCursorV1(
             schema_version=1,
-            snapshot=NOW,
+            snapshot_revision=2,
             fact_key=FactKey.FAMILY_RISK_TOLERANCE,
             fact_version=1,
         ).encode()
@@ -557,6 +558,35 @@ async def runtime_connection_snapshot(
     return cast(tuple[int, str | None, str | None, str | None], tuple(row))
 
 
+async def collaboration_side_effect_counts(thread_id: UUID) -> tuple[int, int]:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG_ID)},
+            )
+            messages = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.message_events "
+                    "WHERE organization_id=:org AND thread_id=:thread"
+                ),
+                {"org": ORG_ID, "thread": thread_id},
+            )
+            append_ledger = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.idempotency_records "
+                    "WHERE organization_id=:org "
+                    "AND operation='collaboration_message_append'"
+                ),
+                {"org": ORG_ID},
+            )
+            assert messages is not None and append_ledger is not None
+            return int(messages), int(append_ledger)
+    finally:
+        await engine.dispose()
+
+
 def test_router_registers_exact_closed_http_surface(http_harness: HttpHarness) -> None:
     paths = cast(dict[str, dict[str, object]], http_harness.app.openapi()["paths"])
     actual = {
@@ -689,10 +719,16 @@ def test_strict_body_validation_uses_closed_problem_codes(
         headers=mutation_headers(ActorRole.PARENT, "empty-credential-message"),
         json={"schema_version": 1, "body": "password= "},
     )
-    file_url_message = http_harness.client.post(
-        MESSAGES_PATH,
-        headers=mutation_headers(ActorRole.PARENT, "file-url-message"),
-        json={"schema_version": 1, "body": "file://local/private.txt"},
+    file_url_messages = tuple(
+        http_harness.client.post(
+            MESSAGES_PATH,
+            headers=mutation_headers(ActorRole.PARENT, f"file-url-message-{index}"),
+            json={"schema_version": 1, "body": body},
+        )
+        for index, body in enumerate(
+            ("file://", "seefile://local/private.txt", "FILE://local/private.txt", "FiLe://x"),
+            start=1,
+        )
     )
     oversized_message = http_harness.client.post(
         MESSAGES_PATH,
@@ -736,7 +772,9 @@ def test_strict_body_validation_uses_closed_problem_codes(
     assert extra.json()["code"] == "request_validation_failed"
     assert unsafe_message.json()["code"] == "invalid_collaboration_message"
     assert empty_credential_message.json()["code"] == "invalid_collaboration_message"
-    assert file_url_message.json()["code"] == "invalid_collaboration_message"
+    assert {response.json()["code"] for response in file_url_messages} == {
+        "invalid_collaboration_message"
+    }
     assert oversized_message.json()["code"] == "invalid_collaboration_message"
     assert unsupported_fact.json()["code"] == "unsupported_fact_key"
     assert unsafe_fact.json()["code"] == "unsafe_fact_value"
@@ -745,7 +783,7 @@ def test_strict_body_validation_uses_closed_problem_codes(
         extra,
         unsafe_message,
         empty_credential_message,
-        file_url_message,
+        *file_url_messages,
         oversized_message,
         unsupported_fact,
         unsafe_fact,
@@ -799,6 +837,32 @@ def test_confirmed_fact_http_page_keeps_current_heads_and_history_role_safe(
         "subject_role",
         "confirming_advisor_role",
     }
+
+
+def test_confirmed_fact_cursor_rejects_wall_clock_shape_before_repository_call(
+    http_harness: HttpHarness,
+) -> None:
+    set_session(http_harness.client, ActorRole.ADVISOR)
+    old_payload = base64.urlsafe_b64encode(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "snapshot": NOW.isoformat(),
+                "fact_key": "family.risk_tolerance",
+                "fact_version": 1,
+            },
+            separators=(",", ":"),
+        ).encode()
+    ).decode().rstrip("=")
+
+    response = http_harness.client.get(FACTS_PATH, params={"cursor": old_payload})
+
+    assert (response.status_code, response.json()["code"]) == (
+        422,
+        "request_validation_failed",
+    )
+    assert http_harness.repository.calls == []
+    assert http_harness.transactions == []
 
 
 def test_happy_path_exposes_shared_messages_and_role_safe_projections(
@@ -997,6 +1061,30 @@ async def test_real_http_surface_uses_identity_postgres_rls_and_closed_sqlstates
 
             set_real_session(client, parent)
             messages_path = f"/api/v1/collaboration-threads/{thread_id}/messages"
+            side_effects_before = await collaboration_side_effect_counts(thread_id)
+            invalid_file_responses = tuple(
+                [
+                    await client.post(
+                        messages_path,
+                        headers=real_mutation_headers(parent, f"real-invalid-file-{index}"),
+                        json={"schema_version": 1, "body": body},
+                    )
+                    for index, body in enumerate(
+                        (
+                            "file://",
+                            "seefile://local/private.txt",
+                            "FILE://local/private.txt",
+                            "FiLe://x",
+                        ),
+                        start=1,
+                    )
+                ]
+            )
+            assert {
+                (response.status_code, response.json()["code"])
+                for response in invalid_file_responses
+            } == {(422, "invalid_collaboration_message")}
+            assert await collaboration_side_effect_counts(thread_id) == side_effects_before
             append_headers = real_mutation_headers(parent, "real-append-message")
             append_payload = {
                 "schema_version": 1,

@@ -305,6 +305,19 @@ def id_factory(*values: UUID) -> Callable[[], UUID]:
     return lambda: next(iterator)
 
 
+@pytest.mark.parametrize(
+    "body",
+    ("file://", "seefile://local/private.txt", "FILE://local/private.txt", "FiLe://x"),
+)
+def test_invalid_file_message_never_reaches_the_application_repository(body: str) -> None:
+    repository = RecordingRepository()
+
+    with pytest.raises(ValidationError):
+        AppendMessageCommand(thread_id=THREAD, body=body)
+
+    assert repository.calls == []
+
+
 @pytest.mark.asyncio
 async def test_thread_creation_and_verification_are_advisor_only() -> None:
     repository = RecordingRepository()

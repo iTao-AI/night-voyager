@@ -484,8 +484,10 @@ Authorization failures remain non-enumerating.
 
 Message pagination uses a stable sequence cursor. Confirmed-fact reads always return
 all current heads outside the history bound. Advisor-only superseded history uses a
-stable snapshot/keyset cursor with no duplicate or omitted rows; participant pages
-contain only the current projection and expose neither history nor cursor metadata.
+keyset cursor carrying the Case revision visible on the first read. Successor
+verification revisions at or below that immutable high-water mark freeze membership
+with no duplicate or omitted rows; participant pages contain only the current
+projection and expose neither history nor cursor metadata.
 There is no websocket, message SSE, typing indicator, unread counter, free-text
 search, or external webhook.
 
@@ -522,9 +524,10 @@ local paths, URLs, and executable or shell-like content. A normal preference tha
 happens to contain words such as “approve” or “ignore” is not rejected merely by
 keyword.
 
-The message itself is bounded inert plain text after control-character and
-secret-pattern checks. It is never interpreted as a prompt or command, and storing
-it never grants its contents authority.
+The message itself is bounded inert plain text after control-character,
+secret-pattern, and case-insensitive `file://` substring checks. It is never
+interpreted as a prompt or command, and storing it never grants its contents
+authority.
 
 ## PR B detailed design
 

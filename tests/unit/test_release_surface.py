@@ -158,7 +158,7 @@ def test_release_verifier_registers_collaboration_authority_without_version_chan
     source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
     assert '"read_confirmed_facts": (' in source
     assert (
-        '"uuid, uuid, text, uuid, timestamp with time zone, text, integer, integer"'
+        '"uuid, uuid, text, uuid, integer, text, integer, integer"'
         in source
     )
 

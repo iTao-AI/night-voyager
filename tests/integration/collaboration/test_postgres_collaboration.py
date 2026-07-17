@@ -145,6 +145,8 @@ PAGINATED_FACT_CASE_ID = UUID("40000000-0000-0000-0000-000000000315")
 PAGINATED_FACT_THREAD_ID = UUID("90000000-0000-0000-0000-000000000315")
 BOUNDED_THREAD_CASE_ID = UUID("40000000-0000-0000-0000-000000000316")
 BOUNDED_THREAD_ID = UUID("90000000-0000-0000-0000-000000000316")
+SNAPSHOT_FACT_CASE_ID = UUID("40000000-0000-0000-0000-000000000317")
+SNAPSHOT_FACT_THREAD_ID = UUID("90000000-0000-0000-0000-000000000317")
 BOUNDED_MESSAGE_ID = UUID("91000000-0000-0000-0000-000000001000")
 OVERFLOW_MESSAGE_ID = UUID("91000000-0000-0000-0000-000000001001")
 
@@ -171,7 +173,7 @@ COLLABORATION_API_FUNCTIONS = {
     "read_collaboration_messages": "uuid, uuid, text, uuid, bigint, integer",
     "read_memory_candidates": "uuid, uuid, text, uuid, integer",
     "read_confirmed_facts": (
-        "uuid, uuid, text, uuid, timestamp with time zone, text, integer, integer"
+        "uuid, uuid, text, uuid, integer, text, integer, integer"
     ),
 }
 COLLABORATION_INTERNAL_FUNCTIONS = {
@@ -2487,6 +2489,214 @@ async def test_confirmed_fact_pages_keep_all_current_heads_and_page_history_stab
 
 
 @pytest.mark.asyncio
+async def test_confirmed_fact_history_cursor_excludes_commit_after_first_page_snapshot() -> None:
+    await ensure_additional_intake_case(SNAPSHOT_FACT_CASE_ID)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    advisor = actor_context(ActorRole.ADVISOR)
+    parent = actor_context(ActorRole.PARENT)
+    initial_proposals = (
+        BudgetProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_BUDGET,
+            value=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=34_000_001,
+                hard_ceiling_minor=40_000_001,
+                elasticity_bps=1_000,
+            ),
+        ),
+        BudgetProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_BUDGET,
+            value=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=34_000_002,
+                hard_ceiling_minor=40_000_002,
+                elasticity_bps=1_000,
+            ),
+        ),
+        BudgetProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_BUDGET,
+            value=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=34_000_003,
+                hard_ceiling_minor=40_000_003,
+                elasticity_bps=1_000,
+            ),
+        ),
+        RiskToleranceProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
+            value="high",
+        ),
+    )
+
+    async def append_propose_and_confirm(
+        session: AsyncSession,
+        *,
+        index: int,
+        case_revision: int,
+        proposal: BudgetProposal | RiskToleranceProposal,
+    ) -> None:
+        adapter = PostgresCollaborationRepository(session)
+        message_id = UUID(f"91000000-0000-0000-0000-{610 + index:012d}")
+        candidate_id = UUID(f"92000000-0000-0000-0000-{610 + index:012d}")
+        verification_id = UUID(f"93000000-0000-0000-0000-{610 + index:012d}")
+        fact_id = UUID(f"94000000-0000-0000-0000-{610 + index:012d}")
+        body = f"Snapshot fact message {index}."
+        await set_actor_context(session, parent)
+        await adapter.append_message(
+            parent,
+            AppendMessageCommand(thread_id=SNAPSHOT_FACT_THREAD_ID, body=body),
+            message_id,
+            sha256(body),
+            sha256(f"snapshot-message-request-{index}"),
+            f"snapshot-message-{index}",
+        )
+        value = proposal.model_dump(mode="json")["value"]
+        await adapter.propose_candidate(
+            parent,
+            ProposeMemoryCandidateCommand(
+                message_event_id=message_id,
+                case_revision=case_revision,
+                proposal=proposal,
+            ),
+            candidate_id,
+            canonical_sha256(value),
+            sha256(f"snapshot-candidate-request-{index}"),
+            f"snapshot-candidate-{index}",
+        )
+        await set_actor_context(session, advisor)
+        await adapter.verify_candidate(
+            advisor,
+            VerifyMemoryCandidateCommand(
+                candidate_id=candidate_id,
+                expected_case_revision=case_revision,
+                decision=VerificationDecision.CONFIRM,
+                reason="The participant explicitly confirmed this bounded fact.",
+            ),
+            verification_id,
+            fact_id,
+            sha256(f"snapshot-verification-request-{index}"),
+            f"snapshot-verification-{index}",
+        )
+
+    writer: AsyncSession | None = None
+    reader: AsyncSession | None = None
+    try:
+        async with sessions() as setup, setup.begin():
+            adapter = PostgresCollaborationRepository(setup)
+            await set_actor_context(setup, advisor)
+            await adapter.create_thread(
+                advisor,
+                SNAPSHOT_FACT_CASE_ID,
+                SNAPSHOT_FACT_THREAD_ID,
+                sha256("snapshot-thread-request"),
+                "snapshot-thread",
+            )
+            for index, proposal in enumerate(initial_proposals, start=1):
+                await append_propose_and_confirm(
+                    setup,
+                    index=index,
+                    case_revision=index,
+                    proposal=proposal,
+                )
+
+        writer = sessions()
+        await writer.begin()
+        await append_propose_and_confirm(
+            writer,
+            index=5,
+            case_revision=5,
+            proposal=RiskToleranceProposal(
+                schema_version=1,
+                fact_key=FactKey.FAMILY_RISK_TOLERANCE,
+                value="low",
+            ),
+        )
+
+        reader = sessions()
+        await reader.begin()
+        reader_adapter = PostgresCollaborationRepository(reader)
+        await set_actor_context(reader, advisor)
+        first_page = await reader_adapter.list_confirmed_facts(
+            advisor, SNAPSHOT_FACT_CASE_ID, 1
+        )
+        assert isinstance(first_page, ConfirmedFactAdvisorPageV1)
+        assert [fact.fact_version for fact in first_page.history] == [2]
+        assert first_page.next_cursor is not None
+
+        await writer.commit()
+        continuation = await reader_adapter.list_confirmed_facts(
+            advisor,
+            SNAPSHOT_FACT_CASE_ID,
+            100,
+            ConfirmedFactHistoryCursorV1.decode(first_page.next_cursor),
+        )
+        assert isinstance(continuation, ConfirmedFactAdvisorPageV1)
+        assert [
+            (fact.fact_key, fact.fact_version) for fact in continuation.history
+        ] == [(FactKey.FAMILY_BUDGET, 1)]
+        assert continuation.next_cursor is None
+    finally:
+        if writer is not None:
+            await writer.close()
+        if reader is not None:
+            await reader.close()
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_confirmed_fact_history_cursor_database_validation_fails_closed() -> None:
+    await ensure_additional_intake_case(SNAPSHOT_FACT_CASE_ID)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    advisor = actor_context(ActorRole.ADVISOR)
+    invalid_pages = (
+        (None, FactKey.FAMILY_BUDGET.value, 1),
+        (0, FactKey.FAMILY_BUDGET.value, 1),
+        (999, FactKey.FAMILY_BUDGET.value, 1),
+    )
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            transaction = await session.begin()
+            try:
+                await set_actor_context(session, advisor)
+                for snapshot_revision, after_fact_key, after_fact_version in invalid_pages:
+                    with pytest.raises(DBAPIError) as rejected:
+                        async with session.begin_nested():
+                            await session.execute(
+                                text(
+                                    "SELECT * FROM app.read_confirmed_facts("
+                                    ":org,:actor,:role,:case,:snapshot_revision,"
+                                    ":after_fact_key,:after_fact_version,50)"
+                                ),
+                                {
+                                    "org": ORG_ID,
+                                    "actor": ADVISOR_ID,
+                                    "role": ActorRole.ADVISOR.value,
+                                    "case": SNAPSHOT_FACT_CASE_ID,
+                                    "snapshot_revision": snapshot_revision,
+                                    "after_fact_key": after_fact_key,
+                                    "after_fact_version": after_fact_version,
+                                },
+                            )
+                    assert getattr(rejected.value.orig, "sqlstate", None) == "NV006"
+            finally:
+                if transaction.is_active:
+                    await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_message_event_limit_allows_1000_replay_and_rejects_1001_atomically() -> None:
     await ensure_additional_intake_case(BOUNDED_THREAD_CASE_ID)
     api_engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
@@ -3292,7 +3502,15 @@ async def test_database_message_validator_matches_the_python_safety_contract() -
                     )
                 },
             )
-            for body in ("password=", "password= ", "file://local/private.txt"):
+            for body in (
+                "password=",
+                "password= ",
+                "file://",
+                "file://local/private.txt",
+                "seefile://local/private.txt",
+                "FILE://local/private.txt",
+                "FiLe://x",
+            ):
                 with pytest.raises(DBAPIError) as rejected:
                     async with connection.begin_nested():
                         await connection.execute(

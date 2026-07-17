@@ -254,13 +254,14 @@ class PostgresCollaborationRepository:
         cursor: ConfirmedFactHistoryCursorV1 | None = None,
     ) -> ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1:
         result = await self._execute(
-            "SELECT section,projection,page_snapshot FROM app.read_confirmed_facts("
+            "SELECT section,projection,page_snapshot_revision "
+            "FROM app.read_confirmed_facts("
             ":org,:actor,:role,:case,:snapshot,:after_fact_key,"
             ":after_fact_version,:limit)",
             {
                 **self._context_parameters(context),
                 "case": case_id,
-                "snapshot": cursor.snapshot if cursor is not None else None,
+                "snapshot": cursor.snapshot_revision if cursor is not None else None,
                 "after_fact_key": cursor.fact_key.value if cursor is not None else None,
                 "after_fact_version": cursor.fact_version if cursor is not None else None,
                 "limit": limit,
@@ -268,7 +269,10 @@ class PostgresCollaborationRepository:
         )
         try:
             rows = self._all(result)
-            if any(set(row) != {"section", "projection", "page_snapshot"} for row in rows):
+            if any(
+                set(row) != {"section", "projection", "page_snapshot_revision"}
+                for row in rows
+            ):
                 raise ValueError("unexpected confirmed fact page row")
             if context.role is not ActorRole.ADVISOR:
                 if any(row["section"] != "current" for row in rows):
@@ -295,13 +299,13 @@ class PostgresCollaborationRepository:
             if has_more:
                 if not history or not returned_history_rows:
                     raise ValueError("invalid confirmed fact history continuation")
-                snapshot = returned_history_rows[-1]["page_snapshot"]
-                if not isinstance(snapshot, datetime) or snapshot.tzinfo is None:
+                snapshot_revision = returned_history_rows[-1]["page_snapshot_revision"]
+                if not isinstance(snapshot_revision, int) or snapshot_revision <= 0:
                     raise ValueError("invalid confirmed fact history snapshot")
                 last = history[-1]
                 next_cursor = ConfirmedFactHistoryCursorV1(
                     schema_version=1,
-                    snapshot=snapshot,
+                    snapshot_revision=snapshot_revision,
                     fact_key=last.fact_key,
                     fact_version=last.fact_version,
                 ).encode()
