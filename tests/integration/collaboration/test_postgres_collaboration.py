@@ -2663,6 +2663,9 @@ async def test_confirmed_fact_history_cursor_database_validation_fails_closed() 
         (None, FactKey.FAMILY_BUDGET.value, 1),
         (0, FactKey.FAMILY_BUDGET.value, 1),
         (999, FactKey.FAMILY_BUDGET.value, 1),
+        (1, None, 1),
+        (1, FactKey.FAMILY_BUDGET.value, None),
+        (1, None, None),
     )
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:

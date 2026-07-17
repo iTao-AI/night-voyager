@@ -962,11 +962,12 @@ BEGIN
      OR p_limit IS NULL OR NOT (
        (p_snapshot_revision IS NULL AND p_after_fact_key IS NULL AND p_after_fact_version IS NULL)
        OR (p_snapshot_revision IS NOT NULL AND p_snapshot_revision>0
+           AND p_after_fact_key IS NOT NULL
            AND p_after_fact_key IN (
              'student.intended_field','student.preferred_countries','student.intake',
              'family.risk_tolerance','family.japan_risk_accepted','family.budget'
            )
-           AND p_after_fact_version>0)
+           AND p_after_fact_version IS NOT NULL AND p_after_fact_version>0)
      ) THEN
     RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid confirmed fact page';
   END IF;
