@@ -165,6 +165,42 @@ ALTER TABLE app.memory_candidate_verifications
   REFERENCES app.student_case_revisions(organization_id,case_id,revision)
   DEFERRABLE INITIALLY DEFERRED;
 
+CREATE OR REPLACE FUNCTION app.guard_run_transition() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  IF OLD.is_current AND NOT NEW.is_current
+     AND (to_jsonb(NEW)-'is_current')=(to_jsonb(OLD)-'is_current')
+     AND EXISTS (
+       SELECT 1
+         FROM app.student_cases selected_case
+         JOIN app.memory_candidate_verifications verification
+           ON verification.organization_id=selected_case.organization_id
+          AND verification.case_id=selected_case.id
+          AND verification.decision='confirm'
+          AND verification.result_revision=selected_case.current_revision
+         JOIN app.case_revision_confirmed_fact_refs fact_ref
+           ON fact_ref.organization_id=verification.organization_id
+          AND fact_ref.case_id=verification.case_id
+          AND fact_ref.case_revision=verification.result_revision
+          AND fact_ref.confirmed_fact_id=verification.result_fact_id
+        WHERE selected_case.organization_id=OLD.organization_id
+          AND selected_case.id=OLD.case_id
+          AND selected_case.current_revision=OLD.case_revision+1
+     ) THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.state IN ('failed','blocked','review_required') THEN
+    IF OLD.is_current AND NOT NEW.is_current AND NEW.state=OLD.state AND NEW.reason_code IS NOT DISTINCT FROM OLD.reason_code AND NEW.output_sha256 IS NOT DISTINCT FROM OLD.output_sha256 AND NEW.organization_id=OLD.organization_id AND NEW.id=OLD.id AND NEW.case_id=OLD.case_id AND NEW.case_revision=OLD.case_revision AND NEW.source_pack_id=OLD.source_pack_id AND NEW.source_pack_version=OLD.source_pack_version AND NEW.policy_version=OLD.policy_version AND NEW.evidence_projection_sha256=OLD.evidence_projection_sha256 THEN RETURN NEW; END IF;
+    RAISE EXCEPTION USING ERRCODE='NV005', MESSAGE='terminal planning run is immutable';
+  END IF;
+  IF NOT ((OLD.state='draft' AND NEW.state IN ('collecting_evidence','failed')) OR (OLD.state='collecting_evidence' AND NEW.state IN ('synthesizing','failed')) OR (OLD.state='synthesizing' AND NEW.state IN ('failed','blocked','review_required'))) THEN
+    RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid planning run transition';
+  END IF;
+  IF NEW.organization_id<>OLD.organization_id OR NEW.id<>OLD.id OR NEW.case_id<>OLD.case_id OR NEW.case_revision<>OLD.case_revision OR NEW.source_pack_id<>OLD.source_pack_id OR NEW.source_pack_version<>OLD.source_pack_version OR NEW.policy_version<>OLD.policy_version OR NEW.evidence_projection_sha256<>OLD.evidence_projection_sha256 THEN
+    RAISE EXCEPTION USING ERRCODE='NV005', MESSAGE='planning run inputs are immutable';
+  END IF;
+  RETURN NEW;
+END; $$;
+
 ALTER TABLE app.collaboration_threads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE app.collaboration_threads FORCE ROW LEVEL SECURITY;
 CREATE POLICY collaboration_threads_tenant_isolation ON app.collaboration_threads
@@ -268,7 +304,7 @@ BEGIN
        OR value_text ~ '[[:cntrl:]]'
        OR value_text ~* '(api[_-]?key|password|passwd|secret|access[_-]?token|bearer)[[:space:]]*[:=]'
        OR value_text ~ '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-       OR value_text ~ '(/Users/|/home/|/etc/|/private/|/var/|/tmp/|file://|[A-Za-z]:\\|://)'
+       OR value_text ~ '/(Users|home|etc|private|var|tmp)/|file://|[A-Za-z]:\\|://'
        OR value_text ~ E'(&&|\\|\\||\\$\\(|`)'
        OR value_text ~* '(^|[[:space:]])(sudo|rm|bash|sh|zsh|curl|wget|python)[[:space:]]+' THEN
       RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='unsafe collaboration fact value';
@@ -318,7 +354,7 @@ BEGIN
        OR jsonb_typeof(p_value->'refused')<>'boolean'
        OR jsonb_typeof(p_value->'elasticity_bps')<>'number'
        OR (p_value->>'elasticity_bps') !~ '^[0-9]+$'
-       OR (p_value->>'elasticity_bps')::integer NOT BETWEEN 0 AND 2500 THEN
+       OR (p_value->>'elasticity_bps')::numeric NOT BETWEEN 0 AND 2500 THEN
       RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='unsafe collaboration fact value';
     END IF;
     IF (p_value->>'refused')::boolean THEN
@@ -333,6 +369,41 @@ BEGIN
       RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='unsafe collaboration fact value';
     END IF;
   END IF;
+END; $$;
+"""
+
+PLANNING_PERSISTENCE_LOCK_SQL = r"""
+CREATE OR REPLACE FUNCTION app.persist_planning_result(p_org uuid,p_run uuid,p_case uuid,p_revision integer,p_pack uuid,p_version integer,p_policy text,p_evidence_hash text,p_state text,p_reason text,p_output_hash text,p_supersedes uuid,p_output jsonb) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE item jsonb; dimension jsonb; evidence_use jsonb; cost_item jsonb; ranking_item jsonb; route_index integer := 0; dimension_index integer := 0; cost_index integer := 0; ranking_index integer := 0; route_uuid uuid; dimension_uuid uuid; selected_case app.student_cases%ROWTYPE;
+BEGIN
+ PERFORM app.assert_context(p_org);
+ IF p_state NOT IN ('failed','blocked','review_required') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='result must be terminal'; END IF;
+ SELECT * INTO selected_case FROM app.student_cases selected_case_row WHERE selected_case_row.organization_id=p_org AND selected_case_row.id=p_case FOR UPDATE;
+ IF NOT FOUND OR selected_case.current_revision IS DISTINCT FROM p_revision OR selected_case.state IS DISTINCT FROM 'planning' THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='case revision or state is stale'; END IF;
+ IF p_supersedes IS NOT NULL THEN UPDATE app.planning_runs SET is_current=false WHERE organization_id=p_org AND id=p_supersedes AND is_current=true; IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='superseded run is stale'; END IF; END IF;
+ INSERT INTO app.planning_runs(organization_id,id,case_id,case_revision,source_pack_id,source_pack_version,policy_version,evidence_projection_sha256,state,reason_code,output_sha256,supersedes_run_id,is_current) VALUES(p_org,p_run,p_case,p_revision,p_pack,p_version,p_policy,p_evidence_hash,'synthesizing',NULL,NULL,p_supersedes,true);
+ FOR item IN SELECT * FROM jsonb_array_elements(p_output->'routes') LOOP
+  route_index := route_index + 1;
+  route_uuid := ('71000000-0000-0000-0000-'||lpad(route_index::text,12,'0'))::uuid;
+  INSERT INTO app.planning_routes VALUES(p_org,p_run,route_uuid,item->>'country',item->>'outcome',item->>'reason_code');
+  FOR dimension IN SELECT * FROM jsonb_array_elements(item->'dimensions') LOOP
+   dimension_index := dimension_index + 1;
+   dimension_uuid := ('72000000-0000-0000-0000-'||lpad(dimension_index::text,12,'0'))::uuid;
+   INSERT INTO app.comparison_dimensions VALUES(p_org,p_run,route_uuid,dimension_uuid,dimension->>'dimension_key',dimension->>'outcome',dimension->>'reason_code');
+   FOR evidence_use IN SELECT * FROM jsonb_array_elements(dimension->'evidence_uses') LOOP
+    INSERT INTO app.comparison_dimension_evidence_refs VALUES(p_org,p_run,route_uuid,dimension_uuid,(evidence_use->>'evidence_id')::uuid,evidence_use->>'role');
+   END LOOP;
+  END LOOP;
+ END LOOP;
+ FOR cost_item IN SELECT * FROM jsonb_array_elements(p_output->'costs') LOOP
+  cost_index := cost_index + 1;
+  INSERT INTO app.cost_evidence VALUES(p_org,p_run,('73000000-0000-0000-0000-'||lpad(cost_index::text,12,'0'))::uuid,cost_item->>'country',cost_item->>'intake',cost_item->>'period',cost_item->>'currency',(cost_item->>'tuition_minor')::bigint,(cost_item->>'living_minor')::bigint,(cost_item->>'fx_rate')::numeric,cost_item->>'fx_source',(cost_item->>'fx_date')::date,(cost_item->>'tuition_evidence_id')::uuid,(cost_item->>'living_evidence_id')::uuid,(cost_item->>'fx_evidence_id')::uuid);
+ END LOOP;
+ FOR ranking_item IN SELECT * FROM jsonb_array_elements(p_output->'rankings') LOOP
+  ranking_index := ranking_index + 1;
+  INSERT INTO app.ranking_evidence VALUES(p_org,p_run,('74000000-0000-0000-0000-'||lpad(ranking_index::text,12,'0'))::uuid,ranking_item->>'country',ranking_item->>'ranking_system',(ranking_item->>'rank')::integer,(ranking_item->>'publication_year')::integer,(ranking_item->>'evidence_id')::uuid);
+ END LOOP;
+ UPDATE app.planning_runs SET state=p_state,reason_code=p_reason,output_sha256=p_output_hash WHERE organization_id=p_org AND id=p_run;
 END; $$;
 """
 
@@ -357,7 +428,7 @@ BEGIN
     END IF;
     SELECT * INTO selected FROM app.collaboration_threads thread
      WHERE thread.organization_id=p_org AND thread.id=prior.response_id;
-    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='idempotency response unavailable'; END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='idempotency response unavailable'; END IF;
     RETURN QUERY SELECT 1,selected.id,selected.case_id,selected.created_by_actor_id,selected.created_at,true;
     RETURN;
   END IF;
@@ -407,7 +478,7 @@ BEGIN
     END IF;
     SELECT * INTO selected FROM app.message_events event
      WHERE event.organization_id=p_org AND event.id=prior.response_id;
-    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='idempotency response unavailable'; END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='idempotency response unavailable'; END IF;
     RETURN QUERY SELECT 1,selected.id,selected.thread_id,selected.case_id,selected.sequence_no,selected.actor_id,selected.actor_role,selected.body,selected.content_sha256,selected.created_at,true;
     RETURN;
   END IF;
@@ -464,7 +535,7 @@ BEGIN
     END IF;
     SELECT * INTO selected FROM app.memory_candidates candidate
      WHERE candidate.organization_id=p_org AND candidate.id=prior.response_id;
-    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='idempotency response unavailable'; END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='idempotency response unavailable'; END IF;
     SELECT verification.decision INTO terminal_decision
       FROM app.memory_candidate_verifications verification
      WHERE verification.organization_id=p_org AND verification.candidate_id=selected.id;
@@ -548,7 +619,7 @@ BEGIN
      OR octet_length(p_reason) NOT BETWEEN 1 AND 512 OR p_reason ~ '[[:cntrl:]]'
      OR p_reason ~* '(api[_-]?key|password|passwd|secret|access[_-]?token|bearer)[[:space:]]*[:=]'
      OR p_reason ~ '-----BEGIN [A-Z ]*PRIVATE KEY-----'
-     OR p_reason ~ '(/Users/|/home/|/etc/|/private/|/var/|/tmp/|file://|[A-Za-z]:\\|://)'
+     OR p_reason ~ '/(Users|home|etc|private|var|tmp)/|file://|[A-Za-z]:\\|://'
      OR p_reason ~ E'(&&|\\|\\||\\$\\(|`)'
      OR p_reason ~* '(^|[[:space:]])(sudo|rm|bash|sh|zsh|curl|wget|python)[[:space:]]+'
      OR p_request_sha256 !~ '^[0-9a-f]{64}$' OR p_key_sha256 !~ '^[0-9a-f]{64}$'
@@ -567,7 +638,7 @@ BEGIN
     END IF;
     SELECT * INTO existing FROM app.memory_candidate_verifications verification
      WHERE verification.organization_id=p_org AND verification.id=prior.response_id;
-    IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='idempotency response unavailable'; END IF;
+    IF NOT FOUND THEN RAISE EXCEPTION USING MESSAGE='idempotency response unavailable'; END IF;
     RETURN QUERY SELECT existing.id,existing.candidate_id,existing.decision,existing.result_fact_id,existing.result_revision,true;
     RETURN;
   END IF;
@@ -577,17 +648,37 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable'; END IF;
   SELECT * INTO selected_case FROM app.student_cases selected_case_row
    WHERE selected_case_row.organization_id=p_org AND selected_case_row.id=resolved_case FOR UPDATE;
-  IF NOT FOUND OR NOT EXISTS (
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable'; END IF;
+  SELECT * INTO candidate FROM app.memory_candidates candidate_row
+   WHERE candidate_row.organization_id=p_org AND candidate_row.case_id=resolved_case
+     AND candidate_row.id=p_candidate FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable'; END IF;
+  SELECT * INTO prior_fact FROM app.confirmed_facts AS fact
+   WHERE fact.organization_id=p_org AND fact.case_id=resolved_case
+     AND fact.fact_key=candidate.fact_key
+     AND NOT EXISTS (
+       SELECT 1 FROM app.confirmed_facts AS successor
+        WHERE successor.organization_id=fact.organization_id
+          AND successor.case_id=fact.case_id
+          AND successor.fact_key=fact.fact_key
+          AND successor.supersedes_fact_id=fact.id
+     ) FOR UPDATE;
+  SELECT count(*) INTO current_run_count FROM app.planning_runs planning_run
+   WHERE planning_run.organization_id=p_org AND planning_run.case_id=resolved_case
+     AND planning_run.is_current;
+  IF current_run_count>1 THEN
+    RAISE EXCEPTION USING MESSAGE='multiple current planning runs';
+  END IF;
+  SELECT * INTO current_run FROM app.planning_runs planning_run
+   WHERE planning_run.organization_id=p_org AND planning_run.case_id=resolved_case
+     AND planning_run.is_current FOR UPDATE;
+  IF NOT EXISTS (
     SELECT 1 FROM app.student_case_participants participant
      WHERE participant.organization_id=p_org AND participant.case_id=resolved_case
        AND participant.actor_id=p_actor AND participant.role='advisor'
   ) THEN
     RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable';
   END IF;
-  SELECT * INTO candidate FROM app.memory_candidates candidate_row
-   WHERE candidate_row.organization_id=p_org AND candidate_row.case_id=resolved_case
-     AND candidate_row.id=p_candidate FOR UPDATE;
-  IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable'; END IF;
   SELECT * INTO existing FROM app.memory_candidate_verifications verification
    WHERE verification.organization_id=p_org AND verification.candidate_id=p_candidate;
   IF FOUND THEN RAISE EXCEPTION USING ERRCODE='NV012', MESSAGE='memory candidate is terminal'; END IF;
@@ -622,25 +713,6 @@ BEGIN
   ) THEN
     RAISE EXCEPTION USING ERRCODE='NV014', MESSAGE='active task blocks revision publication';
   END IF;
-  SELECT * INTO prior_fact FROM app.confirmed_facts AS fact
-   WHERE fact.organization_id=p_org AND fact.case_id=resolved_case
-     AND fact.fact_key=candidate.fact_key
-     AND NOT EXISTS (
-       SELECT 1 FROM app.confirmed_facts AS successor
-        WHERE successor.organization_id=fact.organization_id
-          AND successor.case_id=fact.case_id
-          AND successor.fact_key=fact.fact_key
-          AND successor.supersedes_fact_id=fact.id
-     ) FOR UPDATE;
-  SELECT count(*) INTO current_run_count FROM app.planning_runs planning_run
-   WHERE planning_run.organization_id=p_org AND planning_run.case_id=resolved_case
-     AND planning_run.is_current;
-  IF current_run_count>1 THEN
-    RAISE EXCEPTION USING MESSAGE='multiple current planning runs';
-  END IF;
-  SELECT * INTO current_run FROM app.planning_runs planning_run
-   WHERE planning_run.organization_id=p_org AND planning_run.case_id=resolved_case
-     AND planning_run.is_current FOR UPDATE;
   IF selected_case.state='planning' AND current_run.id IS NULL THEN
     RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='current planning run is unavailable';
   END IF;
@@ -955,10 +1027,15 @@ BEGIN
   END IF;
 END; $$;
 
-CREATE FUNCTION app.seed_demo_collaboration(p_org uuid,p_case uuid,p_thread uuid,p_advisor uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE existing app.collaboration_threads%ROWTYPE;
+CREATE FUNCTION app.seed_demo_collaboration(p_org uuid,p_case uuid,p_thread uuid,p_advisor uuid,p_subject uuid,p_message uuid,p_candidate uuid,p_task uuid,p_fixture_kind text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE existing app.collaboration_threads%ROWTYPE; existing_message app.message_events%ROWTYPE; existing_candidate app.memory_candidates%ROWTYPE; existing_task app.agent_tasks%ROWTYPE; existing_event app.agent_task_events%ROWTYPE; subject_role text; seeded_at timestamptz; source_pack app.source_packs%ROWTYPE; fixture_body text; fixture_fact_key text; fixture_value jsonb; message_content_sha text; message_request_sha text; candidate_value_sha text; candidate_request_sha text;
 BEGIN
-  IF p_org IS NULL OR p_case IS NULL OR p_thread IS NULL OR p_advisor IS NULL THEN
+  IF p_org IS NULL OR p_case IS NULL OR p_thread IS NULL OR p_advisor IS NULL
+     OR p_fixture_kind IS NULL
+     OR p_fixture_kind NOT IN ('primary','active_task','stale','expired')
+     OR (p_fixture_kind='primary' AND (p_subject IS NOT NULL OR p_message IS NOT NULL OR p_candidate IS NOT NULL OR p_task IS NOT NULL))
+     OR (p_fixture_kind='active_task' AND (p_subject IS NOT NULL OR p_message IS NOT NULL OR p_candidate IS NOT NULL OR p_task IS NULL))
+     OR (p_fixture_kind IN ('stale','expired') AND (p_subject IS NULL OR p_message IS NULL OR p_candidate IS NULL OR p_task IS NOT NULL)) THEN
     RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid demo collaboration seed';
   END IF;
   PERFORM set_config('night_voyager.organization_id',p_org::text,true);
@@ -970,13 +1047,151 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='demo collaboration participants are unavailable';
   END IF;
   INSERT INTO app.collaboration_threads(
-    organization_id,id,case_id,created_by_actor_id,created_by_role
-  ) VALUES(p_org,p_thread,p_case,p_advisor,'advisor')
+    organization_id,id,case_id,created_by_actor_id,created_by_role,created_at
+  ) VALUES(p_org,p_thread,p_case,p_advisor,'advisor',timestamptz '2026-01-01 00:00:00+00')
   ON CONFLICT (organization_id,case_id) DO NOTHING;
   SELECT * INTO existing FROM app.collaboration_threads thread
    WHERE thread.organization_id=p_org AND thread.case_id=p_case;
-  IF existing.id<>p_thread OR existing.created_by_actor_id<>p_advisor OR existing.created_by_role<>'advisor' THEN
+  IF NOT FOUND OR existing.id IS DISTINCT FROM p_thread
+     OR existing.case_id IS DISTINCT FROM p_case
+     OR existing.created_by_actor_id IS DISTINCT FROM p_advisor
+     OR existing.created_by_role IS DISTINCT FROM 'advisor'
+     OR existing.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
     RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration seed mismatch';
+  END IF;
+
+  IF p_fixture_kind='active_task' THEN
+    SELECT * INTO source_pack FROM app.source_packs pack
+     WHERE pack.organization_id=p_org ORDER BY pack.id,pack.version LIMIT 1;
+    IF NOT FOUND OR source_pack.id IS NULL THEN
+      RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='demo collaboration source pack is unavailable';
+    END IF;
+    INSERT INTO app.agent_tasks(
+      organization_id,id,case_id,operation,case_revision,source_pack_id,
+      source_pack_version,policy_version,request_sha256,created_by_actor_id,
+      row_version,state,attempt_count,lease_generation,created_at,updated_at
+    ) VALUES(
+      p_org,p_task,p_case,'generate_planning_run_v1',1,source_pack.id,
+      source_pack.version,'m3a-policy-v1',repeat('e',64),p_advisor,
+      1,'waiting_review',0,0,timestamptz '2026-01-01 00:00:00+00',
+      timestamptz '2026-01-01 00:00:00+00'
+    ) ON CONFLICT DO NOTHING;
+    SELECT * INTO existing_task FROM app.agent_tasks task
+     WHERE task.organization_id=p_org AND task.case_id=p_case
+       AND task.operation='generate_planning_run_v1'
+       AND task.case_revision=1 AND task.source_pack_id=source_pack.id
+       AND task.source_pack_version=source_pack.version
+       AND task.policy_version='m3a-policy-v1'
+       AND task.state IN ('queued','leased','running','waiting_review','succeeded');
+    IF NOT FOUND OR existing_task.id IS DISTINCT FROM p_task
+       OR existing_task.case_id IS DISTINCT FROM p_case
+       OR existing_task.operation IS DISTINCT FROM 'generate_planning_run_v1'
+       OR existing_task.case_revision IS DISTINCT FROM 1
+       OR existing_task.source_pack_id IS DISTINCT FROM source_pack.id
+       OR existing_task.source_pack_version IS DISTINCT FROM source_pack.version
+       OR existing_task.policy_version IS DISTINCT FROM 'm3a-policy-v1'
+       OR existing_task.request_sha256 IS DISTINCT FROM repeat('e',64)
+       OR existing_task.created_by_actor_id IS DISTINCT FROM p_advisor
+       OR existing_task.row_version IS DISTINCT FROM 1
+       OR existing_task.state IS DISTINCT FROM 'waiting_review'
+       OR existing_task.attempt_count IS DISTINCT FROM 0
+       OR existing_task.lease_generation IS DISTINCT FROM 0
+       OR existing_task.result_planning_run_id IS NOT NULL
+       OR existing_task.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00'
+       OR existing_task.updated_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
+      RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration active task mismatch';
+    END IF;
+    INSERT INTO app.agent_task_events(
+      organization_id,task_id,event_sequence,event_code,public_status,
+      public_code,attempt_no,result_planning_run_id,created_at
+    ) VALUES(
+      p_org,p_task,1,'waiting_review','needs_advisor_review',
+      'review_required',0,NULL,timestamptz '2026-01-01 00:00:00+00'
+    ) ON CONFLICT DO NOTHING;
+    SELECT * INTO existing_event FROM app.agent_task_events event
+     WHERE event.organization_id=p_org AND event.task_id=p_task
+       AND event.event_sequence=1;
+    IF NOT FOUND OR existing_event.event_code IS DISTINCT FROM 'waiting_review'
+       OR existing_event.public_status IS DISTINCT FROM 'needs_advisor_review'
+       OR existing_event.public_code IS DISTINCT FROM 'review_required'
+       OR existing_event.attempt_no IS DISTINCT FROM 0
+       OR existing_event.result_planning_run_id IS NOT NULL
+       OR existing_event.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
+      RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration active task event mismatch';
+    END IF;
+  END IF;
+
+  IF p_fixture_kind IN ('stale','expired') THEN
+    SELECT participant.role INTO subject_role
+      FROM app.student_case_participants participant
+     WHERE participant.organization_id=p_org AND participant.case_id=p_case
+       AND participant.actor_id=p_subject AND participant.role IN ('student','parent');
+    IF subject_role IS NULL THEN
+      RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='demo collaboration subject is unavailable';
+    END IF;
+    seeded_at := timestamptz '2000-01-01 00:00:00+00';
+    fixture_body := 'Synthetic family preference fixture.';
+    fixture_fact_key := CASE subject_role WHEN 'student' THEN 'student.intended_field' ELSE 'family.risk_tolerance' END;
+    fixture_value := CASE subject_role WHEN 'student' THEN to_jsonb('engineering'::text) ELSE to_jsonb('high'::text) END;
+    message_content_sha := encode(sha256(convert_to(fixture_body,'UTF8')),'hex');
+    message_request_sha := encode(sha256(convert_to(format(
+      '{"body":%s,"thread_id":"%s"}',to_jsonb(fixture_body)::text,p_thread::text
+    ),'UTF8')),'hex');
+    candidate_value_sha := encode(sha256(convert_to(fixture_value::text,'UTF8')),'hex');
+    candidate_request_sha := encode(sha256(convert_to(format(
+      '{"case_revision":1,"message_event_id":"%s","proposal":{"fact_key":"%s","schema_version":1,"value":%s}}',
+      p_message::text,fixture_fact_key,fixture_value::text
+    ),'UTF8')),'hex');
+    INSERT INTO app.message_events(
+      organization_id,id,thread_id,case_id,sequence_no,actor_id,actor_role,
+      body,content_sha256,request_sha256,created_at
+    ) VALUES(
+      p_org,p_message,p_thread,p_case,1,p_subject,subject_role,
+      fixture_body,message_content_sha,message_request_sha,seeded_at
+    ) ON CONFLICT DO NOTHING;
+    SELECT * INTO existing_message FROM app.message_events event
+     WHERE event.organization_id=p_org AND event.thread_id=p_thread
+       AND event.sequence_no=1;
+    IF NOT FOUND OR existing_message.id IS DISTINCT FROM p_message
+       OR existing_message.thread_id IS DISTINCT FROM p_thread
+       OR existing_message.case_id IS DISTINCT FROM p_case
+       OR existing_message.sequence_no IS DISTINCT FROM 1
+       OR existing_message.actor_id IS DISTINCT FROM p_subject
+       OR existing_message.actor_role IS DISTINCT FROM subject_role
+       OR existing_message.body IS DISTINCT FROM fixture_body
+       OR existing_message.content_sha256 IS DISTINCT FROM message_content_sha
+       OR existing_message.request_sha256 IS DISTINCT FROM message_request_sha
+       OR existing_message.created_at IS DISTINCT FROM seeded_at THEN
+      RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration message mismatch';
+    END IF;
+    INSERT INTO app.memory_candidates(
+      organization_id,id,case_id,case_revision,message_event_id,
+      subject_actor_id,subject_role,proposing_actor_id,proposing_role,
+      fact_key,proposed_value,value_sha256,request_sha256,created_at,expires_at
+    ) VALUES(
+      p_org,p_candidate,p_case,1,p_message,p_subject,subject_role,p_subject,subject_role,
+      fixture_fact_key,fixture_value,candidate_value_sha,candidate_request_sha,
+      seeded_at,seeded_at+interval '7 days'
+    ) ON CONFLICT DO NOTHING;
+    SELECT * INTO existing_candidate FROM app.memory_candidates candidate
+     WHERE candidate.organization_id=p_org AND candidate.message_event_id=p_message;
+    IF NOT FOUND OR existing_candidate.id IS DISTINCT FROM p_candidate
+       OR existing_candidate.case_id IS DISTINCT FROM p_case
+       OR existing_candidate.case_revision IS DISTINCT FROM 1
+       OR existing_candidate.message_event_id IS DISTINCT FROM p_message
+       OR existing_candidate.subject_actor_id IS DISTINCT FROM p_subject
+       OR existing_candidate.subject_role IS DISTINCT FROM subject_role
+       OR existing_candidate.proposing_actor_id IS DISTINCT FROM p_subject
+       OR existing_candidate.proposing_role IS DISTINCT FROM subject_role
+       OR existing_candidate.fact_key IS DISTINCT FROM fixture_fact_key
+       OR existing_candidate.proposed_value IS DISTINCT FROM fixture_value
+       OR existing_candidate.value_sha256 IS DISTINCT FROM candidate_value_sha
+       OR existing_candidate.request_sha256 IS DISTINCT FROM candidate_request_sha
+       OR existing_candidate.provenance_kind IS DISTINCT FROM 'participant_proposal'
+       OR existing_candidate.created_at IS DISTINCT FROM seeded_at
+       OR existing_candidate.expires_at IS DISTINCT FROM seeded_at+interval '7 days' THEN
+      RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration candidate mismatch';
+    END IF;
   END IF;
 END; $$;
 """
@@ -1041,9 +1256,9 @@ REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) F
 REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) FROM night_voyager_api;
 REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) FROM night_voyager_worker;
-REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid) FROM night_voyager_api;
-REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid) FROM night_voyager_worker;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_api;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_worker;
 
 GRANT EXECUTE ON FUNCTION app.create_collaboration_thread(uuid,uuid,text,uuid,uuid,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.append_collaboration_message(uuid,uuid,text,uuid,uuid,text,text,text,text) TO night_voyager_api;
@@ -1057,9 +1272,60 @@ GRANT EXECUTE ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) 
 REVOKE EXECUTE ON FUNCTION app.publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb) FROM night_voyager_api;
 """
 
+LEGACY_PLANNING_PERSISTENCE_SQL = r"""
+CREATE OR REPLACE FUNCTION app.persist_planning_result(p_org uuid,p_run uuid,p_case uuid,p_revision integer,p_pack uuid,p_version integer,p_policy text,p_evidence_hash text,p_state text,p_reason text,p_output_hash text,p_supersedes uuid,p_output jsonb) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE item jsonb; dimension jsonb; evidence_use jsonb; cost_item jsonb; ranking_item jsonb; route_index integer := 0; dimension_index integer := 0; cost_index integer := 0; ranking_index integer := 0; route_uuid uuid; dimension_uuid uuid;
+BEGIN
+ PERFORM app.assert_context(p_org);
+ IF p_state NOT IN ('failed','blocked','review_required') THEN RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='result must be terminal'; END IF;
+ IF NOT EXISTS (SELECT 1 FROM app.student_cases WHERE organization_id=p_org AND id=p_case AND current_revision=p_revision AND state='planning') THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='case revision or state is stale'; END IF;
+ IF p_supersedes IS NOT NULL THEN UPDATE app.planning_runs SET is_current=false WHERE organization_id=p_org AND id=p_supersedes AND is_current=true; IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='superseded run is stale'; END IF; END IF;
+ INSERT INTO app.planning_runs(organization_id,id,case_id,case_revision,source_pack_id,source_pack_version,policy_version,evidence_projection_sha256,state,reason_code,output_sha256,supersedes_run_id,is_current) VALUES(p_org,p_run,p_case,p_revision,p_pack,p_version,p_policy,p_evidence_hash,'synthesizing',NULL,NULL,p_supersedes,true);
+ FOR item IN SELECT * FROM jsonb_array_elements(p_output->'routes') LOOP
+  route_index := route_index + 1;
+  route_uuid := ('71000000-0000-0000-0000-'||lpad(route_index::text,12,'0'))::uuid;
+  INSERT INTO app.planning_routes VALUES(p_org,p_run,route_uuid,item->>'country',item->>'outcome',item->>'reason_code');
+  FOR dimension IN SELECT * FROM jsonb_array_elements(item->'dimensions') LOOP
+   dimension_index := dimension_index + 1;
+   dimension_uuid := ('72000000-0000-0000-0000-'||lpad(dimension_index::text,12,'0'))::uuid;
+   INSERT INTO app.comparison_dimensions VALUES(p_org,p_run,route_uuid,dimension_uuid,dimension->>'dimension_key',dimension->>'outcome',dimension->>'reason_code');
+   FOR evidence_use IN SELECT * FROM jsonb_array_elements(dimension->'evidence_uses') LOOP
+    INSERT INTO app.comparison_dimension_evidence_refs VALUES(p_org,p_run,route_uuid,dimension_uuid,(evidence_use->>'evidence_id')::uuid,evidence_use->>'role');
+   END LOOP;
+  END LOOP;
+ END LOOP;
+ FOR cost_item IN SELECT * FROM jsonb_array_elements(p_output->'costs') LOOP
+  cost_index := cost_index + 1;
+  INSERT INTO app.cost_evidence VALUES(p_org,p_run,('73000000-0000-0000-0000-'||lpad(cost_index::text,12,'0'))::uuid,cost_item->>'country',cost_item->>'intake',cost_item->>'period',cost_item->>'currency',(cost_item->>'tuition_minor')::bigint,(cost_item->>'living_minor')::bigint,(cost_item->>'fx_rate')::numeric,cost_item->>'fx_source',(cost_item->>'fx_date')::date,(cost_item->>'tuition_evidence_id')::uuid,(cost_item->>'living_evidence_id')::uuid,(cost_item->>'fx_evidence_id')::uuid);
+ END LOOP;
+ FOR ranking_item IN SELECT * FROM jsonb_array_elements(p_output->'rankings') LOOP
+  ranking_index := ranking_index + 1;
+  INSERT INTO app.ranking_evidence VALUES(p_org,p_run,('74000000-0000-0000-0000-'||lpad(ranking_index::text,12,'0'))::uuid,ranking_item->>'country',ranking_item->>'ranking_system',(ranking_item->>'rank')::integer,(ranking_item->>'publication_year')::integer,(ranking_item->>'evidence_id')::uuid);
+ END LOOP;
+ UPDATE app.planning_runs SET state=p_state,reason_code=p_reason,output_sha256=p_output_hash WHERE organization_id=p_org AND id=p_run;
+END; $$;
+"""
+
+LEGACY_RUN_GUARD_SQL = r"""
+CREATE OR REPLACE FUNCTION app.guard_run_transition() RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  IF OLD.state IN ('failed','blocked','review_required') THEN
+    IF OLD.is_current AND NOT NEW.is_current AND NEW.state=OLD.state AND NEW.reason_code IS NOT DISTINCT FROM OLD.reason_code AND NEW.output_sha256 IS NOT DISTINCT FROM OLD.output_sha256 AND NEW.organization_id=OLD.organization_id AND NEW.id=OLD.id AND NEW.case_id=OLD.case_id AND NEW.case_revision=OLD.case_revision AND NEW.source_pack_id=OLD.source_pack_id AND NEW.source_pack_version=OLD.source_pack_version AND NEW.policy_version=OLD.policy_version AND NEW.evidence_projection_sha256=OLD.evidence_projection_sha256 THEN RETURN NEW; END IF;
+    RAISE EXCEPTION USING ERRCODE='NV005', MESSAGE='terminal planning run is immutable';
+  END IF;
+  IF NOT ((OLD.state='draft' AND NEW.state IN ('collecting_evidence','failed')) OR (OLD.state='collecting_evidence' AND NEW.state IN ('synthesizing','failed')) OR (OLD.state='synthesizing' AND NEW.state IN ('failed','blocked','review_required'))) THEN
+    RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid planning run transition';
+  END IF;
+  IF NEW.organization_id<>OLD.organization_id OR NEW.id<>OLD.id OR NEW.case_id<>OLD.case_id OR NEW.case_revision<>OLD.case_revision OR NEW.source_pack_id<>OLD.source_pack_id OR NEW.source_pack_version<>OLD.source_pack_version OR NEW.policy_version<>OLD.policy_version OR NEW.evidence_projection_sha256<>OLD.evidence_projection_sha256 THEN
+    RAISE EXCEPTION USING ERRCODE='NV005', MESSAGE='planning run inputs are immutable';
+  END IF;
+  RETURN NEW;
+END; $$;
+"""
+
 
 def _execute(sql: str) -> None:
-    op.execute(sql.strip())
+    op.get_bind().exec_driver_sql(sql.strip())
 
 
 def _split_statements(sql: str) -> list[str]:
@@ -1094,6 +1360,7 @@ def _execute_statements(sql: str) -> None:
 
 def upgrade() -> None:
     _execute_statements(DDL_SQL)
+    _execute_statements(PLANNING_PERSISTENCE_LOCK_SQL)
     _execute_statements(MUTATION_SQL)
     _execute_statements(READ_SQL)
     _execute_statements(PRIVILEGE_SQL)
@@ -1141,16 +1408,26 @@ def downgrade() -> None:
     op.execute("ALTER TABLE app.audit_events FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE app.idempotency_records FORCE ROW LEVEL SECURITY")
 
+    _execute_statements(LEGACY_RUN_GUARD_SQL)
+    _execute_statements(LEGACY_PLANNING_PERSISTENCE_SQL)
     op.execute("DROP TRIGGER agent_tasks_collaboration_case_revision ON app.agent_tasks")
     op.execute("DROP FUNCTION app.serialize_agent_task_case_revision()")
-    op.execute("DROP FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid)")
+    op.execute(
+        "DROP FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)"
+    )
     op.execute("DROP FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer)")
     op.execute("DROP FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer)")
     op.execute("DROP FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigint,integer)")
     op.execute("DROP FUNCTION app.read_collaboration_thread(uuid,uuid,text,uuid)")
-    op.execute("DROP FUNCTION app.verify_memory_candidate(uuid,uuid,uuid,integer,text,text,uuid,uuid,text,text)")
-    op.execute("DROP FUNCTION app.propose_memory_candidate(uuid,uuid,text,uuid,uuid,integer,text,jsonb,text,text,text)")
-    op.execute("DROP FUNCTION app.append_collaboration_message(uuid,uuid,text,uuid,uuid,text,text,text,text)")
+    op.execute(
+        "DROP FUNCTION app.verify_memory_candidate(uuid,uuid,uuid,integer,text,text,uuid,uuid,text,text)"
+    )
+    op.execute(
+        "DROP FUNCTION app.propose_memory_candidate(uuid,uuid,text,uuid,uuid,integer,text,jsonb,text,text,text)"
+    )
+    op.execute(
+        "DROP FUNCTION app.append_collaboration_message(uuid,uuid,text,uuid,uuid,text,text,text,text)"
+    )
     op.execute("DROP FUNCTION app.create_collaboration_thread(uuid,uuid,text,uuid,uuid,text,text)")
     op.execute("DROP FUNCTION app.validate_collaboration_fact(text,text,jsonb)")
     op.execute("DROP FUNCTION app.validate_collaboration_message(text)")
@@ -1167,4 +1444,6 @@ def downgrade() -> None:
     for table in drop_order:
         op.execute(f"DROP TABLE app.{table}")
     op.execute("DROP FUNCTION app.reject_collaboration_mutation()")
-    op.execute("GRANT EXECUTE ON FUNCTION app.publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb) TO night_voyager_api")
+    op.execute(
+        "GRANT EXECUTE ON FUNCTION app.publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb) TO night_voyager_api"
+    )

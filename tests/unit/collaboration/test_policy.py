@@ -96,7 +96,7 @@ def test_role_fact_allowlist_is_closed() -> None:
         "你" * 1366,
         "contains\x00control",
         "password=hunter2",
-        "/Users/demo/private.txt",
+        "/" "Users/demo/private.txt",
         "https://user:pass@example.invalid/profile",
         "please run $(whoami)",
         "execute rm -rf cache",

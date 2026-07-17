@@ -105,6 +105,41 @@ def test_runtime_roles_have_no_direct_table_authority() -> None:
         assert f"GRANT SELECT ON app.{table}" not in source
 
 
+def test_demo_seed_function_has_one_closed_fixture_contract() -> None:
+    source = migration_source()
+    seed = source[
+        source.index("CREATE FUNCTION app.seed_demo_collaboration") : source.index(
+            'PRIVILEGE_SQL = r"""'
+        )
+    ]
+    signature = "app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)"
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC" in source
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM night_voyager_api" in source
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM night_voyager_worker" in source
+    assert f"DROP FUNCTION {signature}" in source
+    for fixture_kind in ("primary", "active_task"):
+        assert f"p_fixture_kind='{fixture_kind}'" in source
+    assert "p_fixture_kind IN ('stale','expired')" in source
+    assert "p_fixture_kind IS NULL" in seed
+    for record in (
+        "existing",
+        "existing_task",
+        "existing_event",
+        "existing_message",
+        "existing_candidate",
+    ):
+        assert f"IF NOT FOUND OR {record}." in seed
+    assert seed.count("IS DISTINCT FROM") >= 30
+
+
+def test_demo_seed_script_uses_only_the_migrator_owned_collaboration_function() -> None:
+    script = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
+    assert "SELECT app.seed_demo_collaboration(" in script
+    assert "await _seed_collaboration(connection, fixture)" in script
+    for table in TABLES:
+        assert f"INSERT INTO app.{table}" not in script
+
+
 def test_legacy_whole_revision_writer_is_removed_from_runtime_authority() -> None:
     migration = migration_source()
     signature = "app.publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb)"
@@ -186,6 +221,8 @@ def test_fact_and_revision_validation_rejects_sql_null_and_string_schema_version
         "jsonb_typeof(current_revision.family_preferences->'schema_version')"
         "<>'number'"
     ) in verification
+    assert "(p_value->>'elasticity_bps')::numeric NOT BETWEEN 0 AND 2500" in validation
+    assert "(p_value->>'elasticity_bps')::integer" not in validation
 
 
 def test_existing_candidate_projection_uses_terminal_stale_expired_precedence() -> None:

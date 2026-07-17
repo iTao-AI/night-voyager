@@ -74,4 +74,23 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "M4A_TABLES" in verifier
     assert "DRA_TABLES" in verifier
     assert "load_governed_mixed_planning_snapshot" in verifier
-    assert "policy_count != 27" in verifier
+    assert "policy_count != 33" in verifier
+
+
+def test_release_verifier_includes_collaboration_roles_and_legacy_revocation() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+
+    for token in (
+        "COLLABORATION_TABLES",
+        "COLLABORATION_API_FUNCTIONS",
+        "collaboration_runtime_grants",
+        "collaboration_signatures",
+        "seed_demo_collaboration",
+        "public_execute",
+        "api_execute",
+        "worker_execute",
+    ):
+        assert token in verifier
+    assert "runtime roles must not access collaboration authority tables" in verifier
+    assert "legacy Case revision writer must not be executable by the API" in verifier
+    assert "policy_count != 33" in verifier

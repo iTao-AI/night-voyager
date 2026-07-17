@@ -36,6 +36,16 @@ async def create_planning_case(connection: AsyncConnection, case_id: UUID) -> No
     )
 
 
+async def bootstrap_planning_case(case_id: UUID) -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await set_context(connection, DEMO_ORG)
+            await create_planning_case(connection, case_id)
+    finally:
+        await engine.dispose()
+
+
 async def seed_other_tenant_graph(connection: AsyncConnection) -> None:
     statements = (
         "INSERT INTO app.organizations(id,name,is_synthetic) VALUES(:org,'other synthetic tenant',true) ON CONFLICT DO NOTHING",
@@ -72,7 +82,7 @@ async def test_api_and_worker_same_tenant_reads_cross_tenant_hidden_and_pool_cle
                 assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 0
             async with engine.begin() as connection:
                 await set_context(connection, DEMO_ORG)
-                assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 2
+                assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 6
                 assert await connection.scalar(text("SELECT count(*) FROM app.planning_runs")) == 1
                 assert (
                     await connection.scalar(
@@ -115,8 +125,8 @@ async def test_api_and_worker_same_tenant_reads_cross_tenant_hidden_and_pool_cle
 
 
 @pytest.mark.asyncio
-async def test_case_revision_cas_succeeds_then_stale_conflicts() -> None:
-    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+async def test_migrator_case_revision_cas_succeeds_then_stale_conflicts() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     case_id = UUID("40000000-0000-0000-0000-000000000099")
     try:
         async with engine.begin() as connection:
@@ -186,11 +196,11 @@ async def test_only_review_required_result_publication_advances_case(
     suffix = 81 if terminal_state == "blocked" else 82
     case_id = UUID(f"40000000-0000-0000-0000-{suffix:012d}")
     run_id = UUID(f"70000000-0000-0000-0000-{suffix:012d}")
+    await bootstrap_planning_case(case_id)
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
-            await create_planning_case(connection, case_id)
             await connection.execute(
                 text(
                     "SELECT app.persist_planning_result(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',repeat('a',64),:state,'negative-result',repeat('b',64),NULL,'{\"routes\":[],\"costs\":[],\"rankings\":[]}'::jsonb)"
@@ -230,11 +240,11 @@ async def test_review_required_publication_atomically_hands_off_current_case() -
             "rankings": [item.model_dump(mode="json") for item in fixture.planning_input.rankings],
         }
     )
+    await bootstrap_planning_case(case_id)
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
-            await create_planning_case(connection, case_id)
             await connection.execute(
                 text(
                     "SELECT app.persist_planning_result(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',:evidence_hash,'review_required',:reason,:output_hash,NULL,CAST(:output AS jsonb))"
@@ -265,11 +275,11 @@ async def test_review_required_publication_atomically_hands_off_current_case() -
 @pytest.mark.asyncio
 async def test_generic_direct_handoff_is_rejected_without_a_run() -> None:
     case_id = UUID("40000000-0000-0000-0000-000000000084")
+    await bootstrap_planning_case(case_id)
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
-            await create_planning_case(connection, case_id)
         async with engine.connect() as connection:
             with pytest.raises(DBAPIError):
                 async with connection.begin():
@@ -384,11 +394,11 @@ async def test_api_persists_complete_result_and_supersedes_current_run_atomicall
             "rankings": [item.model_dump(mode="json") for item in fixture.planning_input.rankings],
         }
     )
+    await bootstrap_planning_case(case_id)
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
-            await create_planning_case(connection, case_id)
             await connection.execute(
                 text(
                     "SELECT app.persist_planning_result(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',repeat('a',64),'blocked','initial-block',repeat('b',64),NULL,'{\"routes\":[],\"costs\":[],\"rankings\":[]}'::jsonb)"

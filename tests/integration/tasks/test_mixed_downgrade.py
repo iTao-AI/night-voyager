@@ -60,6 +60,41 @@ async def create_mixed_task(
     )
 
 
+async def assert_collaboration_authority_is_empty() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            authority_rows = await connection.scalar(
+                text(
+                    "SELECT "
+                    "(SELECT count(*) FROM app.collaboration_threads)+"
+                    "(SELECT count(*) FROM app.message_events)+"
+                    "(SELECT count(*) FROM app.memory_candidates)+"
+                    "(SELECT count(*) FROM app.memory_candidate_verifications)+"
+                    "(SELECT count(*) FROM app.confirmed_facts)+"
+                    "(SELECT count(*) FROM app.case_revision_confirmed_fact_refs)"
+                )
+            )
+            ledger_rows = await connection.scalar(
+                text(
+                    "SELECT "
+                    "(SELECT count(*) FROM app.idempotency_records WHERE operation IN ("
+                    "'collaboration_thread_create','collaboration_message_append',"
+                    "'memory_candidate_propose','memory_candidate_verify'))+"
+                    "(SELECT count(*) FROM app.audit_events WHERE event_type IN ("
+                    "'memory_candidate_confirmed','memory_candidate_rejected'))"
+                )
+            )
+            assert authority_rows == 0
+            assert ledger_rows == 0
+    finally:
+        await engine.dispose()
+
+
 def alembic(*args: str) -> None:
     subprocess.run(
         ["uv", "run", "alembic", *args],
@@ -71,6 +106,7 @@ def alembic(*args: str) -> None:
 
 @pytest.mark.asyncio
 async def test_downgrade_freezes_nonterminal_mixed_tasks_and_preserves_terminal_audit() -> None:
+    await assert_collaboration_authority_is_empty()
     running_case, running_version = await approved_pack(1401)
     queued_case, queued_version = await approved_pack(1402)
     terminal_case, terminal_version = await approved_pack(1403)
@@ -143,8 +179,8 @@ async def test_downgrade_freezes_nonterminal_mixed_tasks_and_preserves_terminal_
         await api.dispose()
         await worker.dispose()
 
-    alembic("downgrade", "0005")
     try:
+        alembic("downgrade", "0005")
         inspector = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
         downgraded_worker = create_async_engine(
             os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"]
