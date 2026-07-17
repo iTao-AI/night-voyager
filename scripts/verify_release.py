@@ -50,6 +50,24 @@ M3B_TABLES = {
 }
 M4A_TABLES = {"agent_tasks", "agent_executions", "agent_task_events"}
 DRA_TABLES = {"dra_research_candidates", "external_evidence_verifications"}
+COLLABORATION_TABLES = {
+    "collaboration_threads",
+    "message_events",
+    "memory_candidates",
+    "memory_candidate_verifications",
+    "confirmed_facts",
+    "case_revision_confirmed_fact_refs",
+}
+COLLABORATION_API_FUNCTIONS = {
+    "create_collaboration_thread",
+    "append_collaboration_message",
+    "propose_memory_candidate",
+    "verify_memory_candidate",
+    "read_collaboration_thread",
+    "read_collaboration_messages",
+    "read_memory_candidates",
+    "read_confirmed_facts",
+}
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -134,6 +152,15 @@ DRA_SURFACE = (
     "docs/decisions/0007-dra-governed-mixed-evidence-boundary.md",
     "docs/reference/dra-governed-evidence.md",
     "docs/operations/dra-consumer-proof.md",
+)
+COLLABORATION_SURFACE = (
+    "migrations/versions/0007_conversation_and_memory.py",
+    "src/night_voyager/interfaces/http/collaboration.py",
+    "scripts/run_collaboration_db_tests.sh",
+    "scripts/verify_collaboration_flow.py",
+    "docs/decisions/0008-governed-collaboration-and-memory-authority.md",
+    "docs/reference/collaboration-and-confirmed-facts.md",
+    "docs/operations/collaboration-authority.md",
 )
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
@@ -255,6 +282,42 @@ def verify_dra_surface() -> None:
     ):
         raise SystemExit("governed DRA command or status contract drift")
     print("proof DRA surface: offline governed mixed decision closure confirmed")
+
+
+def verify_collaboration_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in COLLABORATION_SURFACE):
+        raise SystemExit("governed collaboration proof surface incomplete")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    compose_proof = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    adr = (ROOT / COLLABORATION_SURFACE[4]).read_text(encoding="utf-8")
+    reference = (ROOT / COLLABORATION_SURFACE[5]).read_text(encoding="utf-8")
+    operations = (ROOT / COLLABORATION_SURFACE[6]).read_text(encoding="utf-8")
+    migration = (ROOT / COLLABORATION_SURFACE[0]).read_text(encoding="utf-8")
+    if (
+        "collaboration-check:" not in makefile
+        or "make collaboration-check" not in workflow
+        or "python scripts/verify_collaboration_flow.py" not in compose_proof
+        or "verify_collaboration_flow.py --verify-existing" not in compose_proof
+        or "collaboration-and-confirmed-facts.md" not in docs_index
+        or "collaboration-authority.md" not in docs_index
+        or "0008-governed-collaboration-and-memory-authority.md" not in docs_index
+        or "- Status: Accepted" not in adr
+        or "adds exactly these six" not in adr
+        or "FastAPI exposes exactly eight" not in adr
+        or "app.case_revision_confirmed_fact_refs" not in reference
+        or "PR B Skill governance" not in reference
+        or "Case FOR UPDATE -> superseded PlanningRun update" not in reference
+        or "make collaboration-db-check SUITE=authority" not in operations
+        or "PR C browser walkthrough" not in operations
+        or 'revision = "0007"' not in migration
+        or 'down_revision = "0006"' not in migration
+        or "CREATE OR REPLACE FUNCTION app.persist_planning_result(" not in migration
+        or "LEGACY_PLANNING_PERSISTENCE_SQL" not in migration
+    ):
+        raise SystemExit("governed collaboration command, status, or documentation drift")
+    print("proof collaboration surface: governed conversation and memory authority confirmed")
 
 
 def verify_release_surface() -> None:
@@ -530,7 +593,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "organizations",
                 "actors",
                 "memberships",
-            } | M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES or any(
+            } | M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES | COLLABORATION_TABLES or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -543,7 +606,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 27:
+            if policy_count != 33:
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -554,11 +617,28 @@ async def verify_database_catalog(database_url: str) -> None:
                       AND grantee IN ('night_voyager_api','night_voyager_worker')
                       AND privilege_type IN ('INSERT', 'UPDATE', 'DELETE', 'TRUNCATE')
                     """),
-                    {"tables": sorted(M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES)},
+                    {
+                        "tables": sorted(
+                            M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES | COLLABORATION_TABLES
+                        )
+                    },
                 )
             ).scalar_one()
             if runtime_writes:
-                raise SystemExit("runtime roles must not have direct M3A write grants")
+                raise SystemExit("runtime roles must not have direct application write grants")
+
+            collaboration_runtime_grants = (
+                await connection.execute(
+                    text("""
+                    SELECT count(*) FROM information_schema.role_table_grants
+                    WHERE table_schema = 'app' AND table_name = ANY(:tables)
+                      AND grantee IN ('night_voyager_api','night_voyager_worker')
+                    """),
+                    {"tables": sorted(COLLABORATION_TABLES)},
+                )
+            ).scalar_one()
+            if collaboration_runtime_grants:
+                raise SystemExit("runtime roles must not access collaboration authority tables")
 
             app_functions = (
                 (
@@ -582,7 +662,13 @@ async def verify_database_catalog(database_url: str) -> None:
                            'fail_agent_task','finalize_agent_task_result')
                            OR p.proname IN
                           ('import_dra_research_candidate','verify_and_promote_dra_candidate',
-                           'load_governed_mixed_planning_snapshot'))
+                           'load_governed_mixed_planning_snapshot')
+                           OR p.proname IN
+                          ('create_collaboration_thread','append_collaboration_message',
+                           'propose_memory_candidate','verify_memory_candidate',
+                           'read_collaboration_thread','read_collaboration_messages',
+                           'read_memory_candidates','read_confirmed_facts',
+                           'seed_demo_collaboration'))
                         """)
                     )
                 )
@@ -607,7 +693,8 @@ async def verify_database_catalog(database_url: str) -> None:
                 "import_dra_research_candidate",
                 "verify_and_promote_dra_candidate",
                 "load_governed_mixed_planning_snapshot",
-            } or any(
+                "seed_demo_collaboration",
+            } | COLLABORATION_API_FUNCTIONS or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
                 or row["public_execute"]
@@ -615,7 +702,6 @@ async def verify_database_catalog(database_url: str) -> None:
             ):
                 raise SystemExit("app functions violate narrow SECURITY DEFINER contract")
             api_functions = {
-                "publish_case_revision",
                 "transition_case",
                 "persist_source_pack",
                 "persist_evidence_ref",
@@ -626,7 +712,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "cancel_agent_task",
                 "import_dra_research_candidate",
                 "verify_and_promote_dra_candidate",
-            }
+            } | COLLABORATION_API_FUNCTIONS
             worker_functions = {
                 "claim_agent_task",
                 "start_agent_task",
@@ -659,6 +745,55 @@ async def verify_database_catalog(database_url: str) -> None:
                 "uuid, uuid, uuid, uuid, text, integer, uuid, integer, text, text, text"
             ):
                 raise SystemExit("mixed task creation signature drift")
+            collaboration_signatures = {
+                row["proname"]: row["identity_arguments"]
+                for row in app_functions
+                if row["proname"] in COLLABORATION_API_FUNCTIONS
+                or row["proname"] == "seed_demo_collaboration"
+            }
+            if collaboration_signatures != {
+                "create_collaboration_thread": "uuid, uuid, text, uuid, uuid, text, text",
+                "append_collaboration_message": (
+                    "uuid, uuid, text, uuid, uuid, text, text, text, text"
+                ),
+                "propose_memory_candidate": (
+                    "uuid, uuid, text, uuid, uuid, integer, text, jsonb, text, text, text"
+                ),
+                "verify_memory_candidate": (
+                    "uuid, uuid, uuid, integer, text, text, uuid, uuid, text, text"
+                ),
+                "read_collaboration_thread": "uuid, uuid, text, uuid",
+                "read_collaboration_messages": ("uuid, uuid, text, uuid, bigint, integer"),
+                "read_memory_candidates": "uuid, uuid, text, uuid, integer",
+                "read_confirmed_facts": "uuid, uuid, text, uuid, integer",
+                "seed_demo_collaboration": ("uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, text"),
+            }:
+                raise SystemExit("collaboration authority signature drift")
+            planning_persistence = await connection.scalar(
+                text("SELECT pg_get_functiondef(to_regprocedure(:signature))"),
+                {
+                    "signature": (
+                        "app.persist_planning_result("
+                        "uuid,uuid,uuid,integer,uuid,integer,text,text,text,text,text,uuid,jsonb)"
+                    )
+                },
+            )
+            if not isinstance(planning_persistence, str):
+                raise SystemExit("planning result lock order drift")
+            case_lock = planning_persistence.find(
+                "FROM app.student_cases selected_case_row"
+            )
+            case_for_update = planning_persistence.find("FOR UPDATE", case_lock)
+            planning_run_update = planning_persistence.find(
+                "UPDATE app.planning_runs", case_for_update
+            )
+            if not 0 <= case_lock < case_for_update < planning_run_update:
+                raise SystemExit("planning result lock order drift")
+            legacy_writer = next(
+                row for row in app_functions if row["proname"] == "publish_case_revision"
+            )
+            if legacy_writer["api_execute"]:
+                raise SystemExit("legacy Case revision writer must not be executable by the API")
             if any(
                 (row["proname"] in api_functions) != row["api_execute"]
                 or (row["proname"] in worker_functions) != row["worker_execute"]
@@ -791,6 +926,7 @@ def main() -> None:
     verify_public_hygiene()
     verify_m5_public_evidence()
     verify_dra_surface()
+    verify_collaboration_surface()
     verify_release_surface()
     verify_config()
     verify_wheel()

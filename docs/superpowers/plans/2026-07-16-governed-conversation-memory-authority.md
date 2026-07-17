@@ -7,6 +7,11 @@
 > proof slice follows test-first RED -> GREEN. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
 
+**Implementation status (2026-07-17):** PR A is implemented on its local branch as
+an unreleased backend authority boundary. PR B, PR C, and live-provider work remain
+unimplemented and outside this plan. The checkboxes below retain the approved
+test-first execution recipe; actual command evidence belongs to the branch handoff.
+
 **Goal:** Add one shared Case collaboration thread in which an assigned student or
 parent can propose one typed fact from their own message and an assigned advisor can
 atomically confirm or reject it, with confirmation publishing the next Case revision
@@ -56,6 +61,9 @@ pytest 9, Docker Compose, and the existing opaque-session/CSRF/idempotency bound
   Case `FOR UPDATE`, candidate, current fact head, current PlanningRun, then writes.
   Confirmation writes verification, fact, cloned revision, complete fact refs, Case
   CAS, PlanningRun currentness, audit, and idempotency response in one transaction.
+- Migration `0007` must also align the existing planning-result writer with that
+  order: `persist_planning_result(...)` locks the Case before replacing a current
+  PlanningRun. Downgrade restores the exact `0006` function definition.
 - Every redundant parent reference uses an exact composite foreign key containing
   `organization_id`, `case_id`, and parent identity. Forced RLS alone is not accepted
   as same-tenant cross-Case protection.
@@ -432,6 +440,10 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
   `intake` with no current PlanningRun is valid and writes no run update. `planning`
   with one current run locks it and makes it non-current. More than one current run
   is a persistence error, not an arbitrary row choice.
+  To prevent the worker finalize path from taking the reverse PlanningRun-to-Case
+  order, `0007` replaces `persist_planning_result(...)` with an otherwise identical
+  body whose Case currentness check uses `FOR UPDATE` before the superseded-run
+  update. The downgrade must restore the exact `0006` body.
   Injected-failure test hooks may exist only in test-owned temporary function
   replacement, never as production parameters.
 
@@ -717,6 +729,9 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
   `NV014`, and confirmation first advances the revision so an old-revision task
   request fails stale. Prove `intake` with no current PlanningRun succeeds while
   `planning` with one current run marks that exact run non-current.
+  Add bounded worker-finalize races against both confirmation and rejection and fail
+  on `40P01` or timeout; both paths must preserve their documented transaction result
+  and allow the worker to complete after the verifier releases the Case lock.
 
 - [ ] **Step 2: Add deterministic seed contracts**
 

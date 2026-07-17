@@ -36,3 +36,15 @@ loads the exact promoted pack, verifies the single allowlisted external
 the canonical synthetic pack. `PlanningInput` remains the public all-synthetic
 contract; the mixed path uses the separate strict
 `GovernedMixedPlanningInput` type.
+
+Migration `0007` adds a separate governed collaboration authority. A shared
+`MessageEvent` is communication only. A participant-authored `MemoryCandidate` is a
+strict proposal pinned to one Case revision, not a fact. Only an assigned advisor's
+terminal confirmation creates a versioned `ConfirmedFact`, clones the current Case
+revision, records the complete current fact-reference set, and advances the Case by
+compare-and-swap in one transaction. Rejection creates no fact or revision.
+
+Confirmed facts retain source-message, subject, candidate, verification, advisor,
+version, and supersession lineage. Participant projections expose only current safe
+values and their own proposal status; advisor projections retain the bounded
+authority history. See [Collaboration and confirmed facts](collaboration-and-confirmed-facts.md).

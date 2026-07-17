@@ -63,6 +63,8 @@ The first screen contains exactly one current lifecycle stage, one required huma
 
 The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
+PR A adds an unreleased governed-collaboration backend contract but no new visual surface. The existing `/demo` lifecycle and screenshots remain authoritative for the current frontend. The secondary `/demo/collaboration` walkthrough, collaboration reducer, and technical inspector belong to deferred PR C and must consume the frozen role-safe HTTP projections rather than recreate authority in the browser.
+
 ## Accessibility
 
 - Provide a skip link and semantic `header`, `nav`, `main`, `section`, and `footer` landmarks.
@@ -82,3 +84,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-12 | Freeze Advisor Ledger × Global Journey for M1 | Keeps evidence and human authority primary while making the family handoff editorial and legible. |
 | 2026-07-12 | Use local/system font fallbacks | Preserves the typography intent without adding dependencies or remote runtime requirements. |
 | 2026-07-14 | Connect the M5 Australia walkthrough | Preserves backend authority while proving the advisor-to-parent flow in real Chromium. |
+| 2026-07-17 | Keep PR A collaboration backend-only | Freezes conversation, candidate, and confirmed-fact authority without prebuilding the deferred PR C interface. |

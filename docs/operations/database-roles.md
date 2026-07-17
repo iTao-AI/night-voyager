@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -60,8 +60,27 @@ function; the API and `PUBLIC` cannot execute it. Downgrade to `0005` preserves
 terminal mixed audit rows, atomically cancels queued, leased, or running mixed
 tasks with the public code `migration_downgrade`, removes their dispatch rows,
 and prevents the restored `0005` claim function from selecting mixed
-operations. The restored constraints prevent new mixed writes. A fresh
-data-free graph proves `0006 -> 0001 -> 0006`.
+operations. The restored constraints prevent new mixed writes. The current fresh
+data-free graph proves `0007 -> 0001 -> 0007`, including all earlier migrations.
+
+Migration `0007` adds exactly six migrator-owned, tenant-keyed, forced-RLS,
+immutable collaboration tables. Neither runtime role has direct table access.
+`night_voyager_api` may execute only the four closed collaboration mutations and
+four role-safe read projections; `night_voyager_worker` and `PUBLIC` have no
+collaboration function authority. The API can no longer execute the legacy
+`publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb)` writer. Confirmed
+facts can publish a revision only through the assigned-advisor
+`verify_memory_candidate(...)` transaction.
+Planning-result persistence takes the compatible Case-before-PlanningRun lock
+order; an allowed downgrade restores the exact `0006` function body as well as the
+legacy writer grant and PlanningRun guard.
+
+Use `make collaboration-check` for the deterministic offline contracts and
+`make collaboration-db-check SUITE=repository|http|authority` for focused disposable
+PostgreSQL proof. The `authority` suite runs empty, unrelated-history, table-history,
+audit-history, and idempotency-history downgrade scenarios in separate projects.
+An empty or unrelated boundary may restore `0006`; any exact PR A authority history
+must refuse before removing data. See [collaboration authority operations](collaboration-authority.md).
 
 The normal `make demo` path applies migrations, then runs the separate
 `demo-seed` one-shot service before API/worker readiness. The schema migration
@@ -69,6 +88,7 @@ remains seed-free. To re-run only the explicit idempotent seed against a running
 development stack, use `docker compose run --rm demo-seed`; it fails closed
 unless demo mode is enabled outside production. `make compose-proof` uses a
 fresh isolated volume and proves bootstrap, session mint, the M3B decision flow,
-the governed mixed fixture-to-family-decision closure, the M4A
+the governed mixed fixture-to-family-decision closure, the governed collaboration
+message-to-confirmed-fact flow and restart durability, the M4A
 HTTP-to-worker-to-PlanningRun-to-SSE flow, and API/worker restart durability,
 not health alone.

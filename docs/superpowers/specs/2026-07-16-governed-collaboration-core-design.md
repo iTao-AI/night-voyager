@@ -2,13 +2,13 @@
 
 ## Status
 
-Approved design. Implementation has not started.
+Approved design. PR A is implemented as an unreleased backend boundary; PR B and
+PR C have not started.
 
-This document defines the next bounded Night Voyager product increment after the
+This document defines the bounded Night Voyager product increment after the
 governed mixed-planning closure. It is a public-neutral design source intended to be
-landed in the project through a separate mechanical documentation task before
-implementation planning begins. Approval of this design does not by itself authorize
-implementation, push, pull request creation, release, deployment, or live-provider
+landed in the project before implementation. Approval of this design does not by
+itself authorize push, pull request creation, release, deployment, or live-provider
 execution.
 
 ## Summary
@@ -68,9 +68,10 @@ remain serialized under that PR's integration owner.
   failures, and `Cache-Control: no-store`.
 - The Next.js BFF is transport-only and already preserves bounded bodies, deadlines,
   cookies, SSE bytes, and upstream authority.
-- There is no implemented conversation, external binding, MessageEvent,
-  MemoryCandidate, ConfirmedFact, Skill registry, SkillVersion, or Skill evaluation
-  implementation on the inspected baseline.
+- The inspected baseline had no implemented conversation, external binding,
+  MessageEvent, MemoryCandidate, ConfirmedFact, Skill registry, SkillVersion, or
+  Skill evaluation implementation. PR A now supplies the conversation/candidate/fact
+  backend boundary; the external binding and Skill surfaces remain absent.
 - The runtime has no LangChain, LangGraph, DeepAgents, dynamic prompt registry, or
   policy-engine dependency.
 
@@ -421,6 +422,10 @@ candidate, prior current fact, current PlanningRun, terminal verification,
 ConfirmedFact, cloned revision, complete fact-reference projection, Case CAS,
 PlanningRun currentness change, audit event, then idempotency response. Tests must
 inject a failure after every consequential boundary and prove complete rollback.
+The existing worker planning-result writer participates in the same order: it locks
+the Case before replacing a current PlanningRun. This prevents worker finalization
+from taking the reverse PlanningRun-to-Case order while advisor verification holds
+the Case lock.
 
 ### Runtime functions and grants
 
