@@ -10,7 +10,20 @@ from uuid import UUID
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
-from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID, ensure_seed_allowed
+from night_voyager.identity.demo_seed import (
+    COLLABORATION_ACTIVE_CASE_ID,
+    COLLABORATION_ACTIVE_TASK_ID,
+    COLLABORATION_CASE_ID,
+    COLLABORATION_EXPIRED_CANDIDATE_ID,
+    COLLABORATION_EXPIRED_CASE_ID,
+    COLLABORATION_EXPIRED_MESSAGE_ID,
+    COLLABORATION_STALE_CANDIDATE_ID,
+    COLLABORATION_STALE_CASE_ID,
+    COLLABORATION_STALE_MESSAGE_ID,
+    COLLABORATION_THREAD_IDS,
+    CONNECTED_DEMO_CASE_ID,
+    ensure_seed_allowed,
+)
 from night_voyager.planning.application import POLICY_VERSION
 from night_voyager.planning.fixtures import ValidatedPlanningFixture, validate_planning_fixture
 
@@ -24,7 +37,12 @@ ACTORS = (
 )
 
 
-async def seed_demo(database_url: str, *, include_planning: bool = True) -> None:
+async def seed_demo(
+    database_url: str,
+    *,
+    include_planning: bool = True,
+    include_collaboration: bool = True,
+) -> None:
     fixture = validate_planning_fixture()
     engine = create_async_engine(database_url)
     try:
@@ -47,6 +65,8 @@ async def seed_demo(database_url: str, *, include_planning: bool = True) -> None
                     },
                 )
                 await _seed_task_case(connection, fixture)
+                if include_collaboration:
+                    await _seed_collaboration(connection, fixture)
     finally:
         await engine.dispose()
     print("demo seed: canonical synthetic identity and planning snapshot ready")
@@ -287,9 +307,7 @@ async def _seed_planning(connection: AsyncConnection, fixture: ValidatedPlanning
     )
 
 
-async def _seed_task_case(
-    connection: AsyncConnection, fixture: ValidatedPlanningFixture
-) -> None:
+async def _seed_task_case(connection: AsyncConnection, fixture: ValidatedPlanningFixture) -> None:
     source_case = fixture.planning_input.case
     await connection.execute(
         text(
@@ -331,10 +349,202 @@ async def _seed_task_case(
     )
 
 
+async def _seed_collaboration(
+    connection: AsyncConnection, fixture: ValidatedPlanningFixture
+) -> None:
+    source_case = fixture.planning_input.case
+    default_before = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT selected_case.state,selected_case.current_revision,"
+                    "revision.student_preferences,revision.family_preferences "
+                    "FROM app.student_cases selected_case "
+                    "JOIN app.student_case_revisions revision "
+                    "ON revision.organization_id=selected_case.organization_id "
+                    "AND revision.case_id=selected_case.id "
+                    "AND revision.revision=selected_case.current_revision "
+                    "WHERE selected_case.organization_id=:org AND selected_case.id=:case"
+                ),
+                {"org": DEMO_ORG, "case": CASE_ID},
+            )
+        )
+        .mappings()
+        .one()
+    )
+    case_specs = (
+        (COLLABORATION_CASE_ID, "intake"),
+        (COLLABORATION_ACTIVE_CASE_ID, "planning"),
+        (COLLABORATION_STALE_CASE_ID, "intake"),
+        (COLLABORATION_EXPIRED_CASE_ID, "intake"),
+    )
+    for case_id, state in case_specs:
+        await connection.execute(
+            text(
+                "INSERT INTO app.student_cases(organization_id,id,state) "
+                "VALUES(:org,:case,:state) ON CONFLICT DO NOTHING"
+            ),
+            {"org": DEMO_ORG, "case": case_id, "state": state},
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO app.student_case_revisions("
+                "organization_id,case_id,revision,schema_version,"
+                "student_preferences,family_preferences) "
+                "VALUES(:org,:case,1,1,CAST(:student AS jsonb),CAST(:family AS jsonb)) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "student": json.dumps(source_case.student.model_dump(mode="json")),
+                "family": json.dumps(source_case.family.model_dump(mode="json")),
+            },
+        )
+        await connection.execute(
+            text(
+                "UPDATE app.student_cases SET current_revision=1 "
+                "WHERE organization_id=:org AND id=:case AND current_revision IS NULL"
+            ),
+            {"org": DEMO_ORG, "case": case_id},
+        )
+        selected_case = (
+            (
+                await connection.execute(
+                    text(
+                        "SELECT state,current_revision FROM app.student_cases "
+                        "WHERE organization_id=:org AND id=:case"
+                    ),
+                    {"org": DEMO_ORG, "case": case_id},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        expected_revision = 2 if case_id == COLLABORATION_STALE_CASE_ID else 1
+        if selected_case["state"] != state or selected_case["current_revision"] not in {
+            1,
+            expected_revision,
+        }:
+            raise RuntimeError("demo collaboration Case seed mismatch")
+        await connection.execute(
+            text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "advisor": ACTORS[0][1],
+                "student": ACTORS[1][1],
+                "parent": ACTORS[2][1],
+            },
+        )
+
+    seed_specs = (
+        (
+            COLLABORATION_CASE_ID,
+            COLLABORATION_THREAD_IDS["primary"],
+            None,
+            None,
+            None,
+            None,
+            "primary",
+        ),
+        (
+            COLLABORATION_ACTIVE_CASE_ID,
+            COLLABORATION_THREAD_IDS["active_task"],
+            None,
+            None,
+            None,
+            COLLABORATION_ACTIVE_TASK_ID,
+            "active_task",
+        ),
+        (
+            COLLABORATION_STALE_CASE_ID,
+            COLLABORATION_THREAD_IDS["stale"],
+            ACTORS[2][1],
+            COLLABORATION_STALE_MESSAGE_ID,
+            COLLABORATION_STALE_CANDIDATE_ID,
+            None,
+            "stale",
+        ),
+        (
+            COLLABORATION_EXPIRED_CASE_ID,
+            COLLABORATION_THREAD_IDS["expired"],
+            ACTORS[2][1],
+            COLLABORATION_EXPIRED_MESSAGE_ID,
+            COLLABORATION_EXPIRED_CANDIDATE_ID,
+            None,
+            "expired",
+        ),
+    )
+    for case_id, thread_id, subject_id, message_id, candidate_id, task_id, kind in seed_specs:
+        await connection.execute(
+            text(
+                "SELECT app.seed_demo_collaboration("
+                ":org,:case,:thread,:advisor,:subject,:message,:candidate,:task,:kind)"
+            ),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "thread": thread_id,
+                "advisor": ACTORS[0][1],
+                "subject": subject_id,
+                "message": message_id,
+                "candidate": candidate_id,
+                "task": task_id,
+                "kind": kind,
+            },
+        )
+
+    stale_revision = await connection.scalar(
+        text(
+            "SELECT current_revision FROM app.student_cases WHERE organization_id=:org AND id=:case"
+        ),
+        {"org": DEMO_ORG, "case": COLLABORATION_STALE_CASE_ID},
+    )
+    if stale_revision == 1:
+        await connection.execute(
+            text(
+                "SELECT app.publish_case_revision("
+                ":org,:case,1,2,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+            ),
+            {
+                "org": DEMO_ORG,
+                "case": COLLABORATION_STALE_CASE_ID,
+                "student": json.dumps(source_case.student.model_dump(mode="json")),
+                "family": json.dumps(source_case.family.model_dump(mode="json")),
+            },
+        )
+    elif stale_revision != 2:
+        raise RuntimeError("demo collaboration stale Case seed mismatch")
+
+    default_after = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT selected_case.state,selected_case.current_revision,"
+                    "revision.student_preferences,revision.family_preferences "
+                    "FROM app.student_cases selected_case "
+                    "JOIN app.student_case_revisions revision "
+                    "ON revision.organization_id=selected_case.organization_id "
+                    "AND revision.case_id=selected_case.id "
+                    "AND revision.revision=selected_case.current_revision "
+                    "WHERE selected_case.organization_id=:org AND selected_case.id=:case"
+                ),
+                {"org": DEMO_ORG, "case": CASE_ID},
+            )
+        )
+        .mappings()
+        .one()
+    )
+    if dict(default_after) != dict(default_before):
+        raise RuntimeError("demo collaboration seed changed the default Case")
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--identity-only", action="store_true")
+    parser.add_argument("--without-collaboration", action="store_true")
     arguments = parser.parse_args(argv)
     fixture = validate_planning_fixture()
     if arguments.validate_only:
@@ -347,7 +557,13 @@ def main(argv: list[str] | None = None) -> None:
     database_url = os.environ.get("NIGHT_VOYAGER_MIGRATION_DATABASE_URL")
     if not database_url:
         raise SystemExit("NIGHT_VOYAGER_MIGRATION_DATABASE_URL is required")
-    asyncio.run(seed_demo(database_url, include_planning=not arguments.identity_only))
+    asyncio.run(
+        seed_demo(
+            database_url,
+            include_planning=not arguments.identity_only,
+            include_collaboration=not arguments.without_collaboration,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -9,15 +9,10 @@ from night_voyager.planning.models import (
     PlanningInput,
     PlanningResult,
     SourcePackManifestV1,
-    StudentCaseRevision,
 )
 
 
 class CaseRepository(Protocol):
-    async def create_revision(
-        self, revision: StudentCaseRevision, expected_current: int | None
-    ) -> None: ...
-
     async def transition_case(
         self,
         organization_id: UUID,

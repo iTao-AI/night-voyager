@@ -16,7 +16,6 @@ from night_voyager.planning.models import (
     CaseState,
     PlanningInput,
     PlanningResult,
-    StudentCaseRevision,
 )
 from night_voyager.planning.ports import (
     CaseRepository,
@@ -30,20 +29,10 @@ from tests.unit.planning.test_policy import ORG, valid_input
 class FakeRepository:
     current_revision: int | None = None
     case_state: CaseState = CaseState.INTAKE
-    published: list[int] = field(default_factory=lambda: list[int]())
     planning_hashes: tuple[str, str, str] | None = None
     stored_pack: UUID | None = None
     stored_evidence: list[UUID] = field(default_factory=lambda: list[UUID]())
     published_result_state: str | None = None
-
-    async def create_revision(
-        self, revision: StudentCaseRevision, expected_current: int | None
-    ) -> None:
-        new_revision: int = int(revision.revision)
-        if self.current_revision != expected_current:
-            raise StaleRevisionError(expected_current, self.current_revision)
-        self.current_revision = new_revision
-        self.published.append(new_revision)
 
     async def transition_case(
         self, organization_id: UUID, case_id: UUID, expected: CaseState, target: CaseState
@@ -83,15 +72,10 @@ class FakeRepository:
 
 
 @pytest.mark.asyncio
-async def test_case_revision_publication_uses_expected_version_cas() -> None:
+async def test_case_service_has_no_runtime_whole_revision_publication_seam() -> None:
     repository = FakeRepository()
     service = CaseService(cast(CaseRepository, repository))
-    await service.publish_revision(valid_input().case, expected_current=None)
-    assert repository.current_revision == 1
-    with pytest.raises(StaleRevisionError):
-        await service.publish_revision(
-            valid_input().case.model_copy(update={"revision": 2}), expected_current=None
-        )
+    assert not hasattr(service, "publish_revision")
 
 
 @pytest.mark.asyncio

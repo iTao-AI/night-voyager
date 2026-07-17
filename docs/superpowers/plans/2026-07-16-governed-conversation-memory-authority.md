@@ -7,6 +7,11 @@
 > proof slice follows test-first RED -> GREEN. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
 
+**Implementation status (2026-07-17):** PR A is implemented on its local branch as
+an unreleased backend authority boundary. PR B, PR C, and live-provider work remain
+unimplemented and outside this plan. The checkboxes below retain the approved
+test-first execution recipe; actual command evidence belongs to the branch handoff.
+
 **Goal:** Add one shared Case collaboration thread in which an assigned student or
 parent can propose one typed fact from their own message and an assigned advisor can
 atomically confirm or reject it, with confirmation publishing the next Case revision
@@ -56,6 +61,9 @@ pytest 9, Docker Compose, and the existing opaque-session/CSRF/idempotency bound
   Case `FOR UPDATE`, candidate, current fact head, current PlanningRun, then writes.
   Confirmation writes verification, fact, cloned revision, complete fact refs, Case
   CAS, PlanningRun currentness, audit, and idempotency response in one transaction.
+- Migration `0007` must also align the existing planning-result writer with that
+  order: `persist_planning_result(...)` locks the Case before replacing a current
+  PlanningRun. Downgrade restores the exact `0006` function definition.
 - Every redundant parent reference uses an exact composite foreign key containing
   `organization_id`, `case_id`, and parent identity. Forced RLS alone is not accepted
   as same-tenant cross-Case protection.
@@ -71,13 +79,16 @@ pytest 9, Docker Compose, and the existing opaque-session/CSRF/idempotency bound
 - Public problem codes are frozen to:
   `resource_unavailable`, `case_revision_stale`, `memory_candidate_stale`,
   `memory_candidate_expired`, `memory_candidate_terminal`,
+  `collaboration_thread_full`,
   `active_task_blocks_revision`, `invalid_collaboration_message`,
   `unsupported_fact_key`, `unsafe_fact_value`, `idempotency_conflict`, and
   `persistence_unavailable`. Unknown database errors become bounded 503 responses.
 - SQLSTATE mapping is frozen to existing `NV003` stale, `NV006` invalid contract,
   `NV007` non-enumerating authorization, `NV008` idempotency mismatch, and `NV012`
   terminal/concurrent conflict, plus new `NV013` solely for candidate expiry and
-  `NV014` solely for active-task revision blocking. Tests lock
+  `NV014` solely for active-task revision blocking. `NV012` is operation-sensitive:
+  append capacity maps only to `collaboration_thread_full`, candidate verification
+  maps only to `memory_candidate_terminal`, and unexpected uses fail closed. Tests lock
   SQLSTATE-to-public-code mapping; raw SQL messages are never returned.
   The mapping is operation-sensitive without parsing SQL text: `NV003` from proposal
   creation is `case_revision_stale`, while `NV003` from candidate verification is
@@ -85,8 +96,9 @@ pytest 9, Docker Compose, and the existing opaque-session/CSRF/idempotency bound
   `invalid_collaboration_message`, `unsupported_fact_key`, or `unsafe_fact_value`
   before the database call; database `NV006` is the typed unsafe-contract fallback.
 - Message body is inert UTF-8 plain text of 1..4096 bytes, rejects control characters,
-  credential/secret material, local paths, URL credentials, and executable/shell
-  structure, but does not use a broad lexical prompt-injection keyword filter.
+  credential/secret material, local paths, any case-insensitive `file://` substring,
+  URL credentials, and executable/shell structure, but does not use a broad lexical
+  prompt-injection keyword filter.
 - New bounded string fact values are 1..160 UTF-8 bytes. Verification reasons are
   1..512 UTF-8 bytes. Candidate expiry is exactly seven days by PostgreSQL clock;
   application or browser time cannot revive or expire a candidate.
@@ -158,6 +170,8 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
   `CollaborationThreadV1`, `MessageEventV1`, `MessagePageV1`,
   `MemoryCandidateParticipantV1`, `MemoryCandidateAdvisorV1`,
   `ConfirmedFactParticipantV1`, `ConfirmedFactAdvisorV1`,
+  `ConfirmedFactParticipantPageV1`, `ConfirmedFactAdvisorPageV1`,
+  `ConfirmedFactHistoryCursorV1`, `CollaborationThreadFullError`,
   `validate_message_body()`, `project_candidate_state()`, and
   `apply_confirmed_fact()`.
 
@@ -432,6 +446,10 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
   `intake` with no current PlanningRun is valid and writes no run update. `planning`
   with one current run locks it and makes it non-current. More than one current run
   is a persistence error, not an arbitrary row choice.
+  To prevent the worker finalize path from taking the reverse PlanningRun-to-Case
+  order, `0007` replaces `persist_planning_result(...)` with an otherwise identical
+  body whose Case currentness check uses `FOR UPDATE` before the superseded-run
+  update. The downgrade must restore the exact `0006` body.
   Injected-failure test hooks may exist only in test-owned temporary function
   replacement, never as production parameters.
 
@@ -599,9 +617,15 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
 
   Cover all eight routes, exact Origin/CSRF/idempotency requirements, body limits,
   `extra="forbid"`, expired session cookie clearing, wrong-role 404, no-store, stable
-  pagination, role-safe fact visibility, and error-code mapping.
+  pagination, role-safe fact visibility, the append-only `409
+  collaboration_thread_full` OpenAPI problem, and error-code mapping.
 
-  Lock the read matrix: advisor sees current and historical facts, candidate and
+  Lock the read matrix: every page keeps all current fact heads reachable; advisor
+  history uses stable bounded cursor pagination without duplicate or omitted rows.
+  The cursor carries the Case revision visible on the first read; successor
+  verification revisions at or below that immutable high-water mark freeze history
+  membership across later commits.
+  Advisor sees current and historical facts, candidate and
   verification identities, source message metadata, confirming advisor, reason, and
   supersession; student/parent see current values, fact version, confirmed-at,
   subject role, and advisor role label, plus only their own proposal status. They do
@@ -717,6 +741,9 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
   `NV014`, and confirmation first advances the revision so an old-revision task
   request fails stale. Prove `intake` with no current PlanningRun succeeds while
   `planning` with one current run marks that exact run non-current.
+  Add bounded worker-finalize races against both confirmation and rejection and fail
+  on `40P01` or timeout; both paths must preserve their documented transaction result
+  and allow the worker to complete after the verifier releases the Case lock.
 
 - [ ] **Step 2: Add deterministic seed contracts**
 

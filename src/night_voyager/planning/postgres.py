@@ -14,37 +14,12 @@ from night_voyager.planning.models import (
     PlanningInput,
     PlanningResult,
     SourcePackManifestV1,
-    StudentCaseRevision,
 )
 
 
 class PostgresPlanningRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
-
-    async def create_revision(
-        self, revision: StudentCaseRevision, expected_current: int | None
-    ) -> None:
-        try:
-            await self._session.execute(
-                text(
-                    "SELECT app.publish_case_revision("
-                    ":org,:case,:expected,:revision,"
-                    "CAST(:student AS jsonb),CAST(:family AS jsonb))"
-                ),
-                {
-                    "org": revision.organization_id,
-                    "case": revision.case_id,
-                    "expected": expected_current,
-                    "revision": revision.revision,
-                    "student": json.dumps(revision.student.model_dump(mode="json")),
-                    "family": json.dumps(revision.family.model_dump(mode="json")),
-                },
-            )
-        except DBAPIError as error:
-            if getattr(error.orig, "sqlstate", None) == "NV003":
-                raise StaleRevisionError(expected_current, None) from error
-            raise
 
     async def transition_case(
         self,

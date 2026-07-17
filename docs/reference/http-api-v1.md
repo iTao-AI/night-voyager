@@ -131,6 +131,41 @@ with `generate_governed_mixed_planning_run_v1` and the exact promoted pack pins.
 This is additive backend API behavior; it does not add a DRA browser route or
 change the connected synthetic `/demo`.
 
+## Governed collaboration and confirmed facts
+
+Migration `0007` adds exactly eight backend collaboration endpoints. Every response
+uses `Cache-Control: no-store`; authorization remains non-enumerating. Mutations
+require the opaque session, exact configured `Origin`, session-bound
+`X-CSRF-Token`, and a 1–200 character `Idempotency-Key`.
+
+| Method and path | Assigned actor | Result |
+| --- | --- | --- |
+| `POST /api/v1/cases/{case_id}/collaboration-thread` | advisor | create or return the one immutable Case thread |
+| `GET /api/v1/cases/{case_id}/collaboration-thread` | advisor/student/parent | read the shared Case thread |
+| `GET /api/v1/collaboration-threads/{thread_id}/messages` | advisor/student/parent | stable `after_sequence` message page |
+| `POST /api/v1/collaboration-threads/{thread_id}/messages` | advisor/student/parent | append one inert shared message |
+| `POST /api/v1/messages/{message_id}/memory-candidates` | source student/parent | propose one role-allowed revision-pinned fact |
+| `GET /api/v1/cases/{case_id}/memory-candidates` | advisor/student/parent | advisor authority view or caller-owned safe status |
+| `POST /api/v1/memory-candidates/{candidate_id}/verification-decisions` | advisor | atomically confirm or reject the candidate |
+| `GET /api/v1/cases/{case_id}/confirmed-facts` | advisor/student/parent | advisor lineage or current participant-safe facts |
+
+Thread messages are shared communication, not authority. One student- or
+parent-authored message may create one strict candidate from the closed fact-key
+contract. Confirmation creates a terminal verification, versioned ConfirmedFact,
+next Case revision, complete current fact references, applicable PlanningRun
+currentness change, audit event, and idempotency response in one PostgreSQL
+transaction. Rejection creates no fact or revision. No endpoint accepts tenant,
+actor, role, subject, source identity, expiry, fact version, or revision contents
+from the caller.
+
+Advisors receive candidate/fact identities, bounded source metadata, verification
+reason, and supersession lineage. Students and parents receive current values,
+versions, timestamps, subject/advisor role labels, and only their own proposal
+status; they do not receive internal IDs, source digests, reasons, or history.
+Problems use the closed collaboration codes documented in
+[Collaboration and confirmed facts](collaboration-and-confirmed-facts.md#closed-public-errors).
+PR A adds no BFF route or frontend; `/demo/collaboration` remains deferred to PR C.
+
 ## M5 same-origin BFF
 
 The connected browser uses eleven explicit `/api/demo/*` Route Handlers for

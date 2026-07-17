@@ -132,3 +132,54 @@ def test_release_verifier_rejects_mutated_v0_1_0_history(
 
     with pytest.raises(SystemExit, match="v0.1.0 historical release document drift"):
         verifier.verify_release_surface()
+
+
+def test_release_verifier_registers_collaboration_authority_without_version_change() -> None:
+    verifier = load_verifier()
+    assert verifier.VERSION == "0.1.1"
+    assert {
+        "collaboration_threads",
+        "message_events",
+        "memory_candidates",
+        "memory_candidate_verifications",
+        "confirmed_facts",
+        "case_revision_confirmed_fact_refs",
+    } == verifier.COLLABORATION_TABLES
+    assert {
+        "create_collaboration_thread",
+        "append_collaboration_message",
+        "propose_memory_candidate",
+        "verify_memory_candidate",
+        "read_collaboration_thread",
+        "read_collaboration_messages",
+        "read_memory_candidates",
+        "read_confirmed_facts",
+    } == verifier.COLLABORATION_API_FUNCTIONS
+    source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    assert '"read_confirmed_facts": (' in source
+    assert (
+        '"uuid, uuid, text, uuid, integer, text, integer, integer"'
+        in source
+    )
+
+
+def test_release_verifier_checks_the_collaboration_authority_surface(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_collaboration_surface()
+
+    output = capsys.readouterr().out
+    assert (
+        "proof collaboration surface: governed conversation and memory authority confirmed"
+        in output
+    )
+
+
+def test_release_verifier_freezes_the_cross_runtime_lock_order() -> None:
+    source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    assert '"CREATE OR REPLACE FUNCTION app.persist_planning_result("' in source
+    assert '"LEGACY_PLANNING_PERSISTENCE_SQL"' in source
+    assert '"Case FOR UPDATE -> superseded PlanningRun update"' in source
+    assert '"planning result lock order drift"' in source

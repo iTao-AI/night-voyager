@@ -16,6 +16,7 @@ behavior is the connected M5 local synthetic walkthrough.
 | Package identity, dependencies, or release proof | Regenerate the affected lockfile, build artifacts, then `make proof` and `make check` |
 | Optional MKE contract or process adapter | `make mke-check`; maintainers additionally run the exact-artifact proof runbook |
 | Governed DRA candidate, promotion, or mixed-planning authority | `make dra-check`, `make db-check`, and `make compose-proof`; live provider proof requires separate authorization |
+| Governed collaboration, confirmed fact, or revision authority | `make collaboration-check`, the focused `collaboration-db-check` suite, `make db-check`, and `make compose-proof` |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
 Plain `uv run pytest -q` and the required hosted `python` job run the
@@ -34,6 +35,7 @@ an external artifact, while the real candidate proof remains maintainer-operated
 - Never commit `.env`, credentials, private paths, personal data, or generated proof noise.
 - Never rebuild or commit an operator-supplied MKE wheel/receipt. Follow [the candidate proof runbook](docs/operations/mke-candidate-proof.md); all projected Evidence remains `UNTRUSTED_CANDIDATE` and cannot enter `PlanningAdapter`.
 - DRA import must remain `UNTRUSTED_CANDIDATE`; verification and promotion stay one atomic database authority. Mixed planning may use external authority only for `australia_program_fit` and must preserve the exact synthetic baseline for all other facts. Never put `make dra-consumer-proof` in required CI or run it without the [separate authorization gate](docs/operations/dra-consumer-proof.md).
+- Collaboration messages never grant Case authority. Participant proposals remain revision-pinned candidates until an assigned advisor confirms them through the atomic PostgreSQL gate; runtime code must not restore the legacy whole-revision writer.
 - Run `make check` and `git diff --check`, inspect the exact diff, and stage exact paths before committing.
 
 Pull requests should state scope, actual verification, documentation impact, and remaining risk.

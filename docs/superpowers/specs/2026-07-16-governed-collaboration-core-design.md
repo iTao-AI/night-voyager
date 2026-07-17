@@ -2,13 +2,13 @@
 
 ## Status
 
-Approved design. Implementation has not started.
+Approved design. PR A is implemented as an unreleased backend boundary; PR B and
+PR C have not started.
 
-This document defines the next bounded Night Voyager product increment after the
+This document defines the bounded Night Voyager product increment after the
 governed mixed-planning closure. It is a public-neutral design source intended to be
-landed in the project through a separate mechanical documentation task before
-implementation planning begins. Approval of this design does not by itself authorize
-implementation, push, pull request creation, release, deployment, or live-provider
+landed in the project before implementation. Approval of this design does not by
+itself authorize push, pull request creation, release, deployment, or live-provider
 execution.
 
 ## Summary
@@ -68,9 +68,10 @@ remain serialized under that PR's integration owner.
   failures, and `Cache-Control: no-store`.
 - The Next.js BFF is transport-only and already preserves bounded bodies, deadlines,
   cookies, SSE bytes, and upstream authority.
-- There is no implemented conversation, external binding, MessageEvent,
-  MemoryCandidate, ConfirmedFact, Skill registry, SkillVersion, or Skill evaluation
-  implementation on the inspected baseline.
+- The inspected baseline had no implemented conversation, external binding,
+  MessageEvent, MemoryCandidate, ConfirmedFact, Skill registry, SkillVersion, or
+  Skill evaluation implementation. PR A now supplies the conversation/candidate/fact
+  backend boundary; the external binding and Skill surfaces remain absent.
 - The runtime has no LangChain, LangGraph, DeepAgents, dynamic prompt registry, or
   policy-engine dependency.
 
@@ -302,6 +303,10 @@ event when the canonical request hash matches. Reuse with a different request ha
 returns a typed conflict. No external source or delivery identity is reserved in
 v1. The UTF-8 body is limited to `1..4096` bytes, a thread is limited to
 `1000` events in v1, and read pages default to `50` with a hard maximum of `100`.
+After the limit, a new idempotency key returns `409 collaboration_thread_full`;
+same-key replay is evaluated first and still returns the original event. Existing
+`NV012` is mapped by operation so append capacity remains distinct from a terminal
+memory candidate and unexpected uses fail closed.
 Append locks the thread row `FOR UPDATE` before deriving the next sequence number;
 concurrent append tests prove a gap-free unique monotonic sequence without making
 the thread itself mutable business state.
@@ -421,6 +426,10 @@ candidate, prior current fact, current PlanningRun, terminal verification,
 ConfirmedFact, cloned revision, complete fact-reference projection, Case CAS,
 PlanningRun currentness change, audit event, then idempotency response. Tests must
 inject a failure after every consequential boundary and prove complete rollback.
+The existing worker planning-result writer participates in the same order: it locks
+the Case before replacing a current PlanningRun. This prevents worker finalization
+from taking the reverse PlanningRun-to-Case order while advisor verification holds
+the Case lock.
 
 ### Runtime functions and grants
 
@@ -473,8 +482,14 @@ Authorization failures remain non-enumerating.
 | `POST /api/v1/memory-candidates/{candidate_id}/verification-decisions` | assigned advisor |
 | `GET /api/v1/cases/{case_id}/confirmed-facts` | assigned participants through role-safe projection |
 
-Pagination uses a stable sequence cursor. There is no websocket, message SSE, typing
-indicator, unread counter, free-text search, or external webhook.
+Message pagination uses a stable sequence cursor. Confirmed-fact reads always return
+all current heads outside the history bound. Advisor-only superseded history uses a
+keyset cursor carrying the Case revision visible on the first read. Successor
+verification revisions at or below that immutable high-water mark freeze membership
+with no duplicate or omitted rows; participant pages contain only the current
+projection and expose neither history nor cursor metadata.
+There is no websocket, message SSE, typing indicator, unread counter, free-text
+search, or external webhook.
 
 ### ConfirmedFact visibility matrix
 
@@ -509,9 +524,10 @@ local paths, URLs, and executable or shell-like content. A normal preference tha
 happens to contain words such as “approve” or “ignore” is not rejected merely by
 keyword.
 
-The message itself is bounded inert plain text after control-character and
-secret-pattern checks. It is never interpreted as a prompt or command, and storing
-it never grants its contents authority.
+The message itself is bounded inert plain text after control-character,
+secret-pattern, and case-insensitive `file://` substring checks. It is never
+interpreted as a prompt or command, and storing it never grants its contents
+authority.
 
 ## PR B detailed design
 
@@ -965,7 +981,7 @@ categories are:
 - stale Case revision, candidate, or activation sequence;
 - invalid message, unsupported fact, unsafe value, or expired candidate;
 - active task prevents Case revision publication;
-- candidate already terminal or idempotency conflict;
+- candidate already terminal, collaboration thread full, or idempotency conflict;
 - Skill unavailable, unsupported contract, evaluation failed, scope expansion,
   unsupported rollback target, or task pin invalid;
 - session recovery required, upstream unavailable, or bounded deadline exceeded;

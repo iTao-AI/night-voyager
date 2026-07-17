@@ -38,6 +38,7 @@ docker compose exec -T api python -c \
     "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
 printf 'compose-proof: API probe passed\n'
 docker compose exec -T api python scripts/verify_demo_identity.py
+docker compose exec -T api python scripts/verify_collaboration_flow.py
 docker compose run --rm demo-seed python scripts/seed_dra_proof.py
 docker compose exec -T api python scripts/verify_dra_governed_flow.py --fixture
 docker compose exec -T api python scripts/verify_m3b_flow.py
@@ -55,6 +56,7 @@ worker=$(docker compose ps -q worker)
 worker_status=$(docker inspect --format '{{.State.Status}}' "$worker")
 [ "$worker_status" = "running" ]
 printf 'compose-proof: API and worker restart probe passed\n'
+docker compose exec -T api python scripts/verify_collaboration_flow.py --verify-existing
 docker compose exec -T api python scripts/verify_m4a_flow.py --verify-existing
 docker compose exec -T web wget -q --spider http://127.0.0.1:3000
 printf 'compose-proof: Web probe passed\n'
