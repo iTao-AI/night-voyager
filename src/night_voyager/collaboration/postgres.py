@@ -17,7 +17,9 @@ from night_voyager.collaboration.errors import (
     CaseRevisionStaleError,
     CollaborationAuthorizationError,
     CollaborationPersistenceError,
+    CollaborationThreadFullError,
     IdempotencyConflictError,
+    InvalidCollaborationMessageError,
     MemoryCandidateExpiredError,
     MemoryCandidateStaleError,
     MemoryCandidateTerminalError,
@@ -26,7 +28,10 @@ from night_voyager.collaboration.errors import (
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
     CollaborationThreadV1,
+    ConfirmedFactAdvisorPageV1,
     ConfirmedFactAdvisorV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     ConfirmedFactParticipantV1,
     MemoryCandidateAdvisorV1,
     MemoryCandidateParticipantV1,
@@ -38,7 +43,6 @@ from night_voyager.collaboration.models import (
     VerifyMemoryCandidateCommand,
 )
 from night_voyager.collaboration.ports import (
-    ConfirmedFactProjection,
     MemoryCandidateProjection,
     MemoryCandidateVerificationV1,
 )
@@ -145,6 +149,8 @@ class PostgresCollaborationRepository:
                 "request_sha256": request_sha256,
                 "key_sha256": self._key_sha256(idempotency_key),
             },
+            invalid_message=True,
+            thread_full=True,
         )
         return self._parse_row(
             self._one(result),
@@ -245,22 +251,71 @@ class PostgresCollaborationRepository:
         context: ActorContext,
         case_id: UUID,
         limit: int,
-    ) -> tuple[ConfirmedFactProjection, ...]:
+        cursor: ConfirmedFactHistoryCursorV1 | None = None,
+    ) -> ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1:
         result = await self._execute(
-            "SELECT projection FROM app.read_confirmed_facts("
-            ":org,:actor,:role,:case,:limit)",
+            "SELECT section,projection,page_snapshot FROM app.read_confirmed_facts("
+            ":org,:actor,:role,:case,:snapshot,:after_fact_key,"
+            ":after_fact_version,:limit)",
             {
                 **self._context_parameters(context),
                 "case": case_id,
+                "snapshot": cursor.snapshot if cursor is not None else None,
+                "after_fact_key": cursor.fact_key.value if cursor is not None else None,
+                "after_fact_version": cursor.fact_version if cursor is not None else None,
                 "limit": limit,
             },
         )
-        model = (
-            ConfirmedFactAdvisorV1
-            if context.role is ActorRole.ADVISOR
-            else ConfirmedFactParticipantV1
-        )
-        return self._parse_projection_rows(self._all(result), model)
+        try:
+            rows = self._all(result)
+            if any(set(row) != {"section", "projection", "page_snapshot"} for row in rows):
+                raise ValueError("unexpected confirmed fact page row")
+            if context.role is not ActorRole.ADVISOR:
+                if any(row["section"] != "current" for row in rows):
+                    raise ValueError("participant confirmed fact page exposed history")
+                return ConfirmedFactParticipantPageV1(
+                    schema_version=1,
+                    current=tuple(
+                        self._parse_fact_projection(row, ConfirmedFactParticipantV1)
+                        for row in rows
+                    ),
+                )
+
+            current_rows = [row for row in rows if row["section"] == "current"]
+            history_rows = [row for row in rows if row["section"] == "history"]
+            if len(current_rows) + len(history_rows) != len(rows) or len(current_rows) > 6:
+                raise ValueError("unexpected advisor confirmed fact page section")
+            has_more = len(history_rows) > limit
+            returned_history_rows = history_rows[:limit]
+            history = tuple(
+                self._parse_fact_projection(row, ConfirmedFactAdvisorV1)
+                for row in returned_history_rows
+            )
+            next_cursor = None
+            if has_more:
+                if not history or not returned_history_rows:
+                    raise ValueError("invalid confirmed fact history continuation")
+                snapshot = returned_history_rows[-1]["page_snapshot"]
+                if not isinstance(snapshot, datetime) or snapshot.tzinfo is None:
+                    raise ValueError("invalid confirmed fact history snapshot")
+                last = history[-1]
+                next_cursor = ConfirmedFactHistoryCursorV1(
+                    schema_version=1,
+                    snapshot=snapshot,
+                    fact_key=last.fact_key,
+                    fact_version=last.fact_version,
+                ).encode()
+            return ConfirmedFactAdvisorPageV1(
+                schema_version=1,
+                current=tuple(
+                    self._parse_fact_projection(row, ConfirmedFactAdvisorV1)
+                    for row in current_rows
+                ),
+                history=history,
+                next_cursor=next_cursor,
+            )
+        except (KeyError, TypeError, ValueError, SQLAlchemyError) as error:
+            self._raise_persistence(error)
 
     async def _execute(
         self,
@@ -269,6 +324,8 @@ class PostgresCollaborationRepository:
         *,
         stale_error: type[CaseRevisionStaleError | MemoryCandidateStaleError] | None = None,
         terminal_error: bool = False,
+        invalid_message: bool = False,
+        thread_full: bool = False,
     ) -> Any:
         try:
             return await self._session.execute(text(statement), parameters)
@@ -277,6 +334,8 @@ class PostgresCollaborationRepository:
                 error,
                 stale_error=stale_error,
                 terminal_error=terminal_error,
+                invalid_message=invalid_message,
+                thread_full=thread_full,
             )
         except SQLAlchemyError as error:
             self._raise_persistence(error)
@@ -332,6 +391,20 @@ class PostgresCollaborationRepository:
             return tuple(projections)
         except (KeyError, TypeError, ValueError, SQLAlchemyError) as error:
             cls._raise_persistence(error)
+
+    @classmethod
+    def _parse_fact_projection(
+        cls,
+        row: Mapping[str, Any],
+        model: type[ModelT],
+    ) -> ModelT:
+        projection = row.get("projection")
+        if not isinstance(projection, Mapping):
+            raise ValueError("unexpected confirmed fact projection")
+        normalized = cls._normalize_closed_scalars(
+            dict(cast(Mapping[str, Any], projection))
+        )
+        return model.model_validate(normalized, strict=True)
 
     @classmethod
     def _parse_row(
@@ -423,6 +496,8 @@ class PostgresCollaborationRepository:
         *,
         stale_error: type[CaseRevisionStaleError | MemoryCandidateStaleError] | None,
         terminal_error: bool,
+        invalid_message: bool,
+        thread_full: bool,
     ) -> NoReturn:
         sqlstate = getattr(error.orig, "sqlstate", None)
         if sqlstate == "NV003" and stale_error is not None:
@@ -435,7 +510,11 @@ class PostgresCollaborationRepository:
         if sqlstate == "NV012":
             if terminal_error:
                 raise MemoryCandidateTerminalError("memory_candidate_terminal") from error
+            if thread_full:
+                raise CollaborationThreadFullError("collaboration_thread_full") from error
             PostgresCollaborationRepository._raise_persistence(error)
+        if sqlstate == "NV006" and invalid_message:
+            raise InvalidCollaborationMessageError("invalid_collaboration_message") from error
         mapped: dict[str, tuple[type[Exception], str]] = {
             "NV006": (UnsafeFactValueError, "unsafe_fact_value"),
             "NV007": (CollaborationAuthorizationError, "resource_unavailable"),

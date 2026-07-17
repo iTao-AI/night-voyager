@@ -17,12 +17,17 @@ from sqlalchemy.ext.asyncio import (
 
 from night_voyager.collaboration.errors import (
     CollaborationPersistenceError,
+    CollaborationThreadFullError,
     MemoryCandidateTerminalError,
 )
 from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
+    BudgetProposal,
+    ConfirmedFactAdvisorPageV1,
     ConfirmedFactAdvisorV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     ConfirmedFactParticipantV1,
     FactKey,
     JapanRiskAcceptedProposal,
@@ -49,6 +54,7 @@ from night_voyager.identity.demo_seed import (
 )
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.models import BudgetEnvelope
 
 pytestmark = pytest.mark.database
 
@@ -135,6 +141,13 @@ SUPERSESSION_FACT_IDS = (
     UUID("94000000-0000-0000-0000-000000000333"),
 )
 
+PAGINATED_FACT_CASE_ID = UUID("40000000-0000-0000-0000-000000000315")
+PAGINATED_FACT_THREAD_ID = UUID("90000000-0000-0000-0000-000000000315")
+BOUNDED_THREAD_CASE_ID = UUID("40000000-0000-0000-0000-000000000316")
+BOUNDED_THREAD_ID = UUID("90000000-0000-0000-0000-000000000316")
+BOUNDED_MESSAGE_ID = UUID("91000000-0000-0000-0000-000000001000")
+OVERFLOW_MESSAGE_ID = UUID("91000000-0000-0000-0000-000000001001")
+
 COLLABORATION_TABLES = (
     "collaboration_threads",
     "message_events",
@@ -157,7 +170,9 @@ COLLABORATION_API_FUNCTIONS = {
     "read_collaboration_thread": "uuid, uuid, text, uuid",
     "read_collaboration_messages": "uuid, uuid, text, uuid, bigint, integer",
     "read_memory_candidates": "uuid, uuid, text, uuid, integer",
-    "read_confirmed_facts": "uuid, uuid, text, uuid, integer",
+    "read_confirmed_facts": (
+        "uuid, uuid, text, uuid, timestamp with time zone, text, integer, integer"
+    ),
 }
 COLLABORATION_INTERNAL_FUNCTIONS = {
     "reject_collaboration_mutation": "",
@@ -1878,7 +1893,10 @@ async def test_successful_reject_is_terminal_replayable_and_revision_neutral() -
             assert candidate.verification_id == REJECT_VERIFICATION_ID
             assert candidate.decision is VerificationDecision.REJECT
             assert candidate.reason == reason
-            assert await adapter.list_confirmed_facts(advisor, REJECT_CASE_ID, 50) == ()
+            facts = await adapter.list_confirmed_facts(advisor, REJECT_CASE_ID, 50)
+            assert type(facts) is ConfirmedFactAdvisorPageV1
+            assert facts.current == facts.history == ()
+            assert facts.next_cursor is None
             assert (
                 await session.scalar(
                     text(
@@ -2327,6 +2345,289 @@ async def test_three_confirmations_supersede_one_head_and_clone_complete_fact_re
         await migrator.dispose()
 
 
+@pytest.mark.asyncio
+async def test_confirmed_fact_pages_keep_all_current_heads_and_page_history_stably() -> None:
+    await ensure_additional_intake_case(PAGINATED_FACT_CASE_ID)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    advisor = actor_context(ActorRole.ADVISOR)
+    parent = actor_context(ActorRole.PARENT)
+    scenarios = tuple(
+        BudgetProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_BUDGET,
+            value=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=34_000_000 + index,
+                hard_ceiling_minor=40_000_000 + index,
+                elasticity_bps=1_000,
+            ),
+        )
+        for index in range(52)
+    ) + (
+        RiskToleranceProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
+            value="high",
+        ),
+        JapanRiskAcceptedProposal(
+            schema_version=1,
+            fact_key=FactKey.FAMILY_JAPAN_RISK_ACCEPTED,
+            value=True,
+        ),
+    )
+
+    try:
+        async with sessions() as session, session.begin():
+            adapter = PostgresCollaborationRepository(session)
+            await set_actor_context(session, advisor)
+            await adapter.create_thread(
+                advisor,
+                PAGINATED_FACT_CASE_ID,
+                PAGINATED_FACT_THREAD_ID,
+                sha256("paginated-fact-thread-request"),
+                "paginated-fact-thread",
+            )
+            for index, proposal in enumerate(scenarios, start=1):
+                suffix = 400 + index
+                message_id = UUID(f"91000000-0000-0000-0000-{suffix:012d}")
+                candidate_id = UUID(f"92000000-0000-0000-0000-{suffix:012d}")
+                verification_id = UUID(f"93000000-0000-0000-0000-{suffix:012d}")
+                fact_id = UUID(f"94000000-0000-0000-0000-{suffix:012d}")
+                body = f"Bounded fact history message {index}."
+                await set_actor_context(session, parent)
+                await adapter.append_message(
+                    parent,
+                    AppendMessageCommand(
+                        thread_id=PAGINATED_FACT_THREAD_ID,
+                        body=body,
+                    ),
+                    message_id,
+                    sha256(body),
+                    sha256(f"paginated-fact-message-request-{index}"),
+                    f"paginated-fact-message-{index}",
+                )
+                value = proposal.model_dump(mode="json")["value"]
+                await adapter.propose_candidate(
+                    parent,
+                    ProposeMemoryCandidateCommand(
+                        message_event_id=message_id,
+                        case_revision=index,
+                        proposal=proposal,
+                    ),
+                    candidate_id,
+                    canonical_sha256(value),
+                    sha256(f"paginated-fact-candidate-request-{index}"),
+                    f"paginated-fact-candidate-{index}",
+                )
+                await set_actor_context(session, advisor)
+                await adapter.verify_candidate(
+                    advisor,
+                    VerifyMemoryCandidateCommand(
+                        candidate_id=candidate_id,
+                        expected_case_revision=index,
+                        decision=VerificationDecision.CONFIRM,
+                        reason=(
+                            "The participant explicitly confirmed this bounded fact."
+                        ),
+                    ),
+                    verification_id,
+                    fact_id,
+                    sha256(f"paginated-fact-verification-request-{index}"),
+                    f"paginated-fact-verification-{index}",
+                )
+
+            first_page = await adapter.list_confirmed_facts(
+                advisor, PAGINATED_FACT_CASE_ID, 50
+            )
+            assert isinstance(first_page, ConfirmedFactAdvisorPageV1)
+            assert {fact.fact_key for fact in first_page.current} == {
+                FactKey.FAMILY_BUDGET,
+                FactKey.FAMILY_RISK_TOLERANCE,
+                FactKey.FAMILY_JAPAN_RISK_ACCEPTED,
+            }
+            assert len(first_page.history) == 50
+            assert first_page.next_cursor is not None
+
+            second_page = await adapter.list_confirmed_facts(
+                advisor,
+                PAGINATED_FACT_CASE_ID,
+                50,
+                ConfirmedFactHistoryCursorV1.decode(first_page.next_cursor),
+            )
+            assert isinstance(second_page, ConfirmedFactAdvisorPageV1)
+            assert len(second_page.history) == 1
+            assert second_page.next_cursor is None
+            history_ids = [
+                fact.confirmed_fact_id
+                for page in (first_page, second_page)
+                for fact in page.history
+            ]
+            assert len(history_ids) == len(set(history_ids)) == 51
+
+            await set_actor_context(session, parent)
+            participant_page = await adapter.list_confirmed_facts(
+                parent,
+                PAGINATED_FACT_CASE_ID,
+                50,
+                ConfirmedFactHistoryCursorV1.decode(first_page.next_cursor),
+            )
+            assert isinstance(participant_page, ConfirmedFactParticipantPageV1)
+            assert {fact.fact_key for fact in participant_page.current} == {
+                FactKey.FAMILY_BUDGET,
+                FactKey.FAMILY_RISK_TOLERANCE,
+                FactKey.FAMILY_JAPAN_RISK_ACCEPTED,
+            }
+            assert "history" not in participant_page.model_dump()
+            assert "next_cursor" not in participant_page.model_dump()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_message_event_limit_allows_1000_replay_and_rejects_1001_atomically() -> None:
+    await ensure_additional_intake_case(BOUNDED_THREAD_CASE_ID)
+    api_engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    migration_engine = create_async_engine(
+        os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+    )
+    advisor = actor_context(ActorRole.ADVISOR)
+    parent = actor_context(ActorRole.PARENT)
+    success_key = "bounded-thread-message-1000"
+    overflow_key = "bounded-thread-message-1001"
+    success_request_sha256 = sha256("bounded-thread-message-1000-request")
+    overflow_request_sha256 = sha256("bounded-thread-message-1001-request")
+    try:
+        async with async_sessionmaker(
+            api_engine, expire_on_commit=False
+        )() as session, session.begin():
+            adapter = PostgresCollaborationRepository(session)
+            await set_actor_context(session, advisor)
+            await adapter.create_thread(
+                advisor,
+                BOUNDED_THREAD_CASE_ID,
+                BOUNDED_THREAD_ID,
+                sha256("bounded-thread-create-request"),
+                "bounded-thread-create",
+            )
+
+        async with migration_engine.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG_ID)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.message_events("
+                    "organization_id,id,thread_id,case_id,sequence_no,actor_id,actor_role,"
+                    "body,content_sha256,request_sha256) "
+                    "SELECT :org,('95000000-0000-0000-0000-' || "
+                    "lpad(sequence_no::text,12,'0'))::uuid,:thread,:case,sequence_no,"
+                    ":actor,'parent','Preloaded bounded message ' || sequence_no,"
+                    "repeat('a',64),repeat('b',64) FROM generate_series(1,999) sequence_no"
+                ),
+                {
+                    "org": ORG_ID,
+                    "thread": BOUNDED_THREAD_ID,
+                    "case": BOUNDED_THREAD_CASE_ID,
+                    "actor": PARENT_ID,
+                },
+            )
+
+        async with async_sessionmaker(
+            api_engine, expire_on_commit=False
+        )() as session, session.begin():
+            adapter = PostgresCollaborationRepository(session)
+            await set_actor_context(session, parent)
+            command = AppendMessageCommand(
+                thread_id=BOUNDED_THREAD_ID,
+                body="The final bounded message is accepted.",
+            )
+            accepted = await adapter.append_message(
+                parent,
+                command,
+                BOUNDED_MESSAGE_ID,
+                sha256(command.body),
+                success_request_sha256,
+                success_key,
+            )
+            replay = await adapter.append_message(
+                parent,
+                command,
+                UUID("91000000-0000-0000-0000-000000001099"),
+                sha256(command.body),
+                success_request_sha256,
+                success_key,
+            )
+            assert accepted.sequence_no == replay.sequence_no == 1000
+            assert accepted.message_event_id == replay.message_event_id
+            assert accepted.message_event_id == BOUNDED_MESSAGE_ID
+
+            with pytest.raises(CollaborationThreadFullError) as rejected:
+                async with session.begin_nested():
+                    await adapter.append_message(
+                        parent,
+                        AppendMessageCommand(
+                            thread_id=BOUNDED_THREAD_ID,
+                            body="This message exceeds the bounded thread.",
+                        ),
+                        OVERFLOW_MESSAGE_ID,
+                        sha256("This message exceeds the bounded thread."),
+                        overflow_request_sha256,
+                        overflow_key,
+                    )
+            assert str(rejected.value) == "collaboration_thread_full"
+
+        async with migration_engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG_ID)},
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.message_events "
+                        "WHERE organization_id=:org AND thread_id=:thread"
+                    ),
+                    {"org": ORG_ID, "thread": BOUNDED_THREAD_ID},
+                )
+                == 1000
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.idempotency_records "
+                        "WHERE organization_id=:org AND actor_id=:actor "
+                        "AND operation='collaboration_message_append' "
+                        "AND key_sha256=:key_sha256"
+                    ),
+                    {
+                        "org": ORG_ID,
+                        "actor": PARENT_ID,
+                        "key_sha256": sha256(overflow_key),
+                    },
+                )
+                == 0
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.message_events "
+                        "WHERE organization_id=:org AND id=:message"
+                    ),
+                    {"org": ORG_ID, "message": OVERFLOW_MESSAGE_ID},
+                )
+                == 0
+            )
+            await transaction.rollback()
+    finally:
+        await api_engine.dispose()
+        await migration_engine.dispose()
+
+
 def sha256(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
@@ -2618,8 +2919,13 @@ async def raw_projections(
     context: ActorContext,
 ) -> tuple[dict[str, object], ...]:
     await set_actor_context(session, context)
+    arguments = (
+        ":org,:actor,:role,:case,NULL,NULL,NULL,50"
+        if function == "read_confirmed_facts"
+        else ":org,:actor,:role,:case,50"
+    )
     result = await session.execute(
-        text(f"SELECT projection FROM app.{function}(:org,:actor,:role,:case,50)"),
+        text(f"SELECT projection FROM app.{function}({arguments})"),
         {
             "org": ORG_ID,
             "actor": context.actor_id,
@@ -2750,8 +3056,13 @@ async def test_adapter_round_trip_is_typed_idempotent_and_database_role_safe() -
                 advisor_fact_rows = await raw_projections(session, "read_confirmed_facts", advisor)
                 assert set(advisor_fact_rows[0]) == ADVISOR_FACT_KEYS
                 advisor_facts = await adapter.list_confirmed_facts(advisor, CASE_ID, 50)
-                assert all(type(item) is ConfirmedFactAdvisorV1 for item in advisor_facts)
-                advisor_fact = advisor_facts[0]
+                assert type(advisor_facts) is ConfirmedFactAdvisorPageV1
+                assert advisor_facts.history == ()
+                assert all(
+                    type(item) is ConfirmedFactAdvisorV1
+                    for item in advisor_facts.current
+                )
+                advisor_fact = advisor_facts.current[0]
                 assert isinstance(advisor_fact, ConfirmedFactAdvisorV1)
                 assert advisor_fact.confirmed_fact_id == FACT_ID
 
@@ -2773,7 +3084,11 @@ async def test_adapter_round_trip_is_typed_idempotent_and_database_role_safe() -
                     & participant_fact_rows[0].keys()
                 )
                 participant_facts = await adapter.list_confirmed_facts(parent, CASE_ID, 50)
-                assert all(type(item) is ConfirmedFactParticipantV1 for item in participant_facts)
+                assert type(participant_facts) is ConfirmedFactParticipantPageV1
+                assert all(
+                    type(item) is ConfirmedFactParticipantV1
+                    for item in participant_facts.current
+                )
             finally:
                 if transaction.is_active:
                     await transaction.rollback()
@@ -2959,6 +3274,32 @@ async def test_database_fact_validation_maps_large_numeric_values_to_nv006() -> 
             finally:
                 if transaction.is_active:
                     await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_database_message_validator_matches_the_python_safety_contract() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(
+                text("SELECT app.validate_collaboration_message(:body)"),
+                {
+                    "body": (
+                        "A bounded HTTPS reference "
+                        "https://example.invalid/info is allowed."
+                    )
+                },
+            )
+            for body in ("password=", "password= ", "file://local/private.txt"):
+                with pytest.raises(DBAPIError) as rejected:
+                    async with connection.begin_nested():
+                        await connection.execute(
+                            text("SELECT app.validate_collaboration_message(:body)"),
+                            {"body": body},
+                        )
+                assert getattr(rejected.value.orig, "sqlstate", None) == "NV006"
     finally:
         await engine.dispose()
 

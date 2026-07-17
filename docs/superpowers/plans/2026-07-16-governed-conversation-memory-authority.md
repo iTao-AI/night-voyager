@@ -79,13 +79,16 @@ pytest 9, Docker Compose, and the existing opaque-session/CSRF/idempotency bound
 - Public problem codes are frozen to:
   `resource_unavailable`, `case_revision_stale`, `memory_candidate_stale`,
   `memory_candidate_expired`, `memory_candidate_terminal`,
+  `collaboration_thread_full`,
   `active_task_blocks_revision`, `invalid_collaboration_message`,
   `unsupported_fact_key`, `unsafe_fact_value`, `idempotency_conflict`, and
   `persistence_unavailable`. Unknown database errors become bounded 503 responses.
 - SQLSTATE mapping is frozen to existing `NV003` stale, `NV006` invalid contract,
   `NV007` non-enumerating authorization, `NV008` idempotency mismatch, and `NV012`
   terminal/concurrent conflict, plus new `NV013` solely for candidate expiry and
-  `NV014` solely for active-task revision blocking. Tests lock
+  `NV014` solely for active-task revision blocking. `NV012` is operation-sensitive:
+  append capacity maps only to `collaboration_thread_full`, candidate verification
+  maps only to `memory_candidate_terminal`, and unexpected uses fail closed. Tests lock
   SQLSTATE-to-public-code mapping; raw SQL messages are never returned.
   The mapping is operation-sensitive without parsing SQL text: `NV003` from proposal
   creation is `case_revision_stale`, while `NV003` from candidate verification is
@@ -166,6 +169,8 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
   `CollaborationThreadV1`, `MessageEventV1`, `MessagePageV1`,
   `MemoryCandidateParticipantV1`, `MemoryCandidateAdvisorV1`,
   `ConfirmedFactParticipantV1`, `ConfirmedFactAdvisorV1`,
+  `ConfirmedFactParticipantPageV1`, `ConfirmedFactAdvisorPageV1`,
+  `ConfirmedFactHistoryCursorV1`, `CollaborationThreadFullError`,
   `validate_message_body()`, `project_candidate_state()`, and
   `apply_confirmed_fact()`.
 
@@ -611,9 +616,12 @@ seed ordering, database catalog tests, full gates, docs, and final branch review
 
   Cover all eight routes, exact Origin/CSRF/idempotency requirements, body limits,
   `extra="forbid"`, expired session cookie clearing, wrong-role 404, no-store, stable
-  pagination, role-safe fact visibility, and error-code mapping.
+  pagination, role-safe fact visibility, the append-only `409
+  collaboration_thread_full` OpenAPI problem, and error-code mapping.
 
-  Lock the read matrix: advisor sees current and historical facts, candidate and
+  Lock the read matrix: every page keeps all current fact heads reachable; advisor
+  history uses stable bounded cursor pagination without duplicate or omitted rows.
+  Advisor sees current and historical facts, candidate and
   verification identities, source message metadata, confirming advisor, reason, and
   supersession; student/parent see current values, fact version, confirmed-at,
   subject role, and advisor role label, plus only their own proposal status. They do

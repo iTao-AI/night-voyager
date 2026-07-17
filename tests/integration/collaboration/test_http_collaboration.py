@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Iterator, Mapping
@@ -30,6 +31,7 @@ from night_voyager.collaboration.errors import (
     CaseRevisionStaleError,
     CollaborationAuthorizationError,
     CollaborationPersistenceError,
+    CollaborationThreadFullError,
     IdempotencyConflictError,
     InvalidCollaborationMessageError,
     MemoryCandidateExpiredError,
@@ -41,7 +43,10 @@ from night_voyager.collaboration.errors import (
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
     CollaborationThreadV1,
+    ConfirmedFactAdvisorPageV1,
     ConfirmedFactAdvisorV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     ConfirmedFactParticipantV1,
     FactKey,
     MemoryCandidateAdvisorV1,
@@ -332,7 +337,8 @@ class RecordingRepository:
         context: ActorContext,
         _case_id: UUID,
         _limit: int,
-    ) -> tuple[ConfirmedFactAdvisorV1 | ConfirmedFactParticipantV1, ...]:
+        cursor: ConfirmedFactHistoryCursorV1 | None = None,
+    ) -> ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1:
         self._record("list_confirmed_facts")
         participant = ConfirmedFactParticipantV1(
             schema_version=1,
@@ -344,20 +350,30 @@ class RecordingRepository:
             confirming_advisor_role=ActorRole.ADVISOR,
         )
         if context.role is not ActorRole.ADVISOR:
-            return (participant,)
-        return (
-            ConfirmedFactAdvisorV1(
-                **participant.model_dump(),
-                confirmed_fact_id=FACT_ID,
-                candidate_id=CANDIDATE_ID,
-                verification_id=VERIFICATION_ID,
-                source_message_event_id=MESSAGE_ID,
-                source_message_sequence_no=1,
-                source_message_sha256_prefix="c" * 12,
-                confirming_advisor_actor_id=ADVISOR_ID,
-                reason="The participant confirmed this bounded preference.",
-                supersedes_fact_id=None,
-            ),
+            return ConfirmedFactParticipantPageV1(schema_version=1, current=(participant,))
+        advisor = ConfirmedFactAdvisorV1(
+            **participant.model_dump(),
+            confirmed_fact_id=FACT_ID,
+            candidate_id=CANDIDATE_ID,
+            verification_id=VERIFICATION_ID,
+            source_message_event_id=MESSAGE_ID,
+            source_message_sequence_no=1,
+            source_message_sha256_prefix="c" * 12,
+            confirming_advisor_actor_id=ADVISOR_ID,
+            reason="The participant confirmed this bounded preference.",
+            supersedes_fact_id=None,
+        )
+        next_cursor = ConfirmedFactHistoryCursorV1(
+            schema_version=1,
+            snapshot=NOW,
+            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
+            fact_version=1,
+        ).encode()
+        return ConfirmedFactAdvisorPageV1(
+            schema_version=1,
+            current=(advisor,),
+            history=(() if cursor is not None else (advisor,)),
+            next_cursor=(None if cursor is not None else next_cursor),
         )
 
 
@@ -559,6 +575,20 @@ def test_router_registers_exact_closed_http_surface(http_harness: HttpHarness) -
         ("/api/v1/memory-candidates/{candidate_id}/verification-decisions", "post"),
         ("/api/v1/cases/{case_id}/confirmed-facts", "get"),
     }
+    append_operation = cast(
+        dict[str, object],
+        paths["/api/v1/collaboration-threads/{thread_id}/messages"]["post"],
+    )
+    responses = cast(dict[str, dict[str, object]], append_operation["responses"])
+    conflict = responses["409"]
+    content = cast(dict[str, dict[str, object]], conflict["content"])
+    assert content["application/problem+json"]["example"] == {
+        "type": "https://night-voyager.invalid/problems/collaboration_thread_full",
+        "title": "Request could not be completed",
+        "status": 409,
+        "detail": "collaboration thread is full",
+        "code": "collaboration_thread_full",
+    }
 
 
 @pytest.mark.parametrize(
@@ -654,6 +684,16 @@ def test_strict_body_validation_uses_closed_problem_codes(
         headers=mutation_headers(ActorRole.PARENT, "unsafe-message"),
         json={"schema_version": 1, "body": "https://user:pass@example.invalid"},
     )
+    empty_credential_message = http_harness.client.post(
+        MESSAGES_PATH,
+        headers=mutation_headers(ActorRole.PARENT, "empty-credential-message"),
+        json={"schema_version": 1, "body": "password= "},
+    )
+    file_url_message = http_harness.client.post(
+        MESSAGES_PATH,
+        headers=mutation_headers(ActorRole.PARENT, "file-url-message"),
+        json={"schema_version": 1, "body": "file://local/private.txt"},
+    )
     oversized_message = http_harness.client.post(
         MESSAGES_PATH,
         headers=mutation_headers(ActorRole.PARENT, "oversized-message"),
@@ -695,6 +735,8 @@ def test_strict_body_validation_uses_closed_problem_codes(
 
     assert extra.json()["code"] == "request_validation_failed"
     assert unsafe_message.json()["code"] == "invalid_collaboration_message"
+    assert empty_credential_message.json()["code"] == "invalid_collaboration_message"
+    assert file_url_message.json()["code"] == "invalid_collaboration_message"
     assert oversized_message.json()["code"] == "invalid_collaboration_message"
     assert unsupported_fact.json()["code"] == "unsupported_fact_key"
     assert unsafe_fact.json()["code"] == "unsafe_fact_value"
@@ -702,6 +744,8 @@ def test_strict_body_validation_uses_closed_problem_codes(
     for response in (
         extra,
         unsafe_message,
+        empty_credential_message,
+        file_url_message,
         oversized_message,
         unsupported_fact,
         unsafe_fact,
@@ -712,6 +756,49 @@ def test_strict_body_validation_uses_closed_problem_codes(
         assert response.headers["content-type"].startswith("application/problem+json")
     assert http_harness.repository.calls == []
     assert http_harness.transactions == []
+
+
+def test_confirmed_fact_http_page_keeps_current_heads_and_history_role_safe(
+    http_harness: HttpHarness,
+) -> None:
+    set_session(http_harness.client, ActorRole.ADVISOR)
+    advisor_response = http_harness.client.get(FACTS_PATH, params={"limit": 50})
+    assert advisor_response.status_code == 200
+    advisor_page = advisor_response.json()
+    assert set(advisor_page) == {
+        "schema_version",
+        "current",
+        "history",
+        "next_cursor",
+    }
+    assert advisor_page["schema_version"] == 1
+    assert len(advisor_page["current"]) == 1
+    assert len(advisor_page["history"]) == 1
+    assert advisor_page["next_cursor"] is not None
+
+    cursor_response = http_harness.client.get(
+        FACTS_PATH,
+        params={"limit": 50, "cursor": advisor_page["next_cursor"]},
+    )
+    assert cursor_response.status_code == 200
+
+    set_session(http_harness.client, ActorRole.PARENT)
+    participant_response = http_harness.client.get(
+        FACTS_PATH,
+        params={"cursor": advisor_page["next_cursor"]},
+    )
+    assert participant_response.status_code == 200
+    participant_page = participant_response.json()
+    assert set(participant_page) == {"schema_version", "current"}
+    assert set(participant_page["current"][0]) == {
+        "schema_version",
+        "fact_key",
+        "value",
+        "fact_version",
+        "confirmed_at",
+        "subject_role",
+        "confirming_advisor_role",
+    }
 
 
 def test_happy_path_exposes_shared_messages_and_role_safe_projections(
@@ -780,11 +867,12 @@ def test_happy_path_exposes_shared_messages_and_role_safe_projections(
         "confirming_advisor_actor_id",
         "reason",
         "supersedes_fact_id",
-    } <= set(advisor_facts.json()[0])
+    } <= set(advisor_facts.json()["current"][0])
 
     set_session(http_harness.client, ActorRole.PARENT)
     parent_facts = http_harness.client.get(FACTS_PATH)
-    assert set(parent_facts.json()[0]) == {
+    assert set(parent_facts.json()) == {"schema_version", "current"}
+    assert set(parent_facts.json()["current"][0]) == {
         "schema_version",
         "fact_key",
         "value",
@@ -995,13 +1083,128 @@ async def test_real_http_surface_uses_identity_postgres_rls_and_closed_sqlstates
 
             facts_path = f"/api/v1/cases/{REAL_CASE_ID}/confirmed-facts"
             advisor_facts = await client.get(facts_path)
-            assert len(advisor_facts.json()) == 1
-            assert set(advisor_facts.json()[0]) > participant_fact_fields
+            assert len(advisor_facts.json()["current"]) == 1
+            assert advisor_facts.json()["history"] == []
+            assert advisor_facts.json()["next_cursor"] is None
+            assert set(advisor_facts.json()["current"][0]) > participant_fact_fields
 
             set_real_session(client, parent)
             parent_facts = await client.get(facts_path)
-            assert len(parent_facts.json()) == 1
-            assert set(parent_facts.json()[0]) == participant_fact_fields
+            assert set(parent_facts.json()) == {"schema_version", "current"}
+            assert len(parent_facts.json()["current"]) == 1
+            assert set(parent_facts.json()["current"][0]) == participant_fact_fields
+
+            migration_engine = create_async_engine(
+                os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+            )
+            try:
+                async with migration_engine.begin() as connection:
+                    await connection.execute(
+                        text(
+                            "SELECT set_config("
+                            "'night_voyager.organization_id',:org,true)"
+                        ),
+                        {"org": str(ORG_ID)},
+                    )
+                    await connection.execute(
+                        text(
+                            "INSERT INTO app.message_events("
+                            "organization_id,id,thread_id,case_id,sequence_no,actor_id,"
+                            "actor_role,body,content_sha256,request_sha256) "
+                            "SELECT :org,('96000000-0000-0000-0000-' || "
+                            "lpad(sequence_no::text,12,'0'))::uuid,:thread,:case,"
+                            "sequence_no,:actor,'parent',"
+                            "'Preloaded HTTP bounded message ' || sequence_no,"
+                            "repeat('a',64),repeat('b',64) "
+                            "FROM generate_series(2,999) sequence_no"
+                        ),
+                        {
+                            "org": ORG_ID,
+                            "thread": thread_id,
+                            "case": REAL_CASE_ID,
+                            "actor": PARENT_ID,
+                        },
+                    )
+
+                set_real_session(client, parent)
+                final_headers = real_mutation_headers(parent, "real-message-1000")
+                final_payload = {
+                    "schema_version": 1,
+                    "body": "The final HTTP bounded message is accepted.",
+                }
+                final_message = await client.post(
+                    messages_path,
+                    headers=final_headers,
+                    json=final_payload,
+                )
+                final_replay = await client.post(
+                    messages_path,
+                    headers=final_headers,
+                    json=final_payload,
+                )
+                overflow_key = "real-message-1001"
+                overflow = await client.post(
+                    messages_path,
+                    headers=real_mutation_headers(parent, overflow_key),
+                    json={
+                        "schema_version": 1,
+                        "body": "This HTTP message exceeds the bounded thread.",
+                    },
+                )
+                assert final_message.status_code == final_replay.status_code == 201
+                assert final_message.json() == final_replay.json()
+                assert final_message.json()["sequence_no"] == 1000
+                assert (overflow.status_code, overflow.json()) == (
+                    409,
+                    {
+                        "type": "https://night-voyager.invalid/problems/collaboration_thread_full",
+                        "title": "Request could not be completed",
+                        "status": 409,
+                        "detail": "collaboration thread is full",
+                        "code": "collaboration_thread_full",
+                    },
+                )
+
+                async with migration_engine.connect() as connection:
+                    transaction = await connection.begin()
+                    await connection.execute(
+                        text(
+                            "SELECT set_config("
+                            "'night_voyager.organization_id',:org,true)"
+                        ),
+                        {"org": str(ORG_ID)},
+                    )
+                    assert (
+                        await connection.scalar(
+                            text(
+                                "SELECT count(*) FROM app.message_events "
+                                "WHERE organization_id=:org AND thread_id=:thread"
+                            ),
+                            {"org": ORG_ID, "thread": thread_id},
+                        )
+                        == 1000
+                    )
+                    assert (
+                        await connection.scalar(
+                            text(
+                                "SELECT count(*) FROM app.idempotency_records "
+                                "WHERE organization_id=:org AND actor_id=:actor "
+                                "AND operation='collaboration_message_append' "
+                                "AND key_sha256=:key_sha256"
+                            ),
+                            {
+                                "org": ORG_ID,
+                                "actor": PARENT_ID,
+                                "key_sha256": hashlib.sha256(
+                                    overflow_key.encode("utf-8")
+                                ).hexdigest(),
+                            },
+                        )
+                        == 0
+                    )
+                    await transaction.rollback()
+            finally:
+                await migration_engine.dispose()
 
             set_real_session(client, advisor)
             stale = await client.post(
@@ -1095,6 +1298,7 @@ def test_wrong_role_is_non_enumerating_and_rolls_back(
         (MemoryCandidateStaleError("sensitive detail"), 409, "memory_candidate_stale"),
         (MemoryCandidateExpiredError("sensitive detail"), 409, "memory_candidate_expired"),
         (MemoryCandidateTerminalError("sensitive detail"), 409, "memory_candidate_terminal"),
+        (CollaborationThreadFullError("sensitive detail"), 409, "collaboration_thread_full"),
         (ActiveTaskBlocksRevisionError("sensitive detail"), 409, "active_task_blocks_revision"),
         (
             InvalidCollaborationMessageError("sensitive detail"),

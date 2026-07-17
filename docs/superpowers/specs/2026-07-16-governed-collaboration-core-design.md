@@ -303,6 +303,10 @@ event when the canonical request hash matches. Reuse with a different request ha
 returns a typed conflict. No external source or delivery identity is reserved in
 v1. The UTF-8 body is limited to `1..4096` bytes, a thread is limited to
 `1000` events in v1, and read pages default to `50` with a hard maximum of `100`.
+After the limit, a new idempotency key returns `409 collaboration_thread_full`;
+same-key replay is evaluated first and still returns the original event. Existing
+`NV012` is mapped by operation so append capacity remains distinct from a terminal
+memory candidate and unexpected uses fail closed.
 Append locks the thread row `FOR UPDATE` before deriving the next sequence number;
 concurrent append tests prove a gap-free unique monotonic sequence without making
 the thread itself mutable business state.
@@ -478,8 +482,12 @@ Authorization failures remain non-enumerating.
 | `POST /api/v1/memory-candidates/{candidate_id}/verification-decisions` | assigned advisor |
 | `GET /api/v1/cases/{case_id}/confirmed-facts` | assigned participants through role-safe projection |
 
-Pagination uses a stable sequence cursor. There is no websocket, message SSE, typing
-indicator, unread counter, free-text search, or external webhook.
+Message pagination uses a stable sequence cursor. Confirmed-fact reads always return
+all current heads outside the history bound. Advisor-only superseded history uses a
+stable snapshot/keyset cursor with no duplicate or omitted rows; participant pages
+contain only the current projection and expose neither history nor cursor metadata.
+There is no websocket, message SSE, typing indicator, unread counter, free-text
+search, or external webhook.
 
 ### ConfirmedFact visibility matrix
 
@@ -970,7 +978,7 @@ categories are:
 - stale Case revision, candidate, or activation sequence;
 - invalid message, unsupported fact, unsafe value, or expired candidate;
 - active task prevents Case revision publication;
-- candidate already terminal or idempotency conflict;
+- candidate already terminal, collaboration thread full, or idempotency conflict;
 - Skill unavailable, unsupported contract, evaluation failed, scope expansion,
   unsupported rollback target, or task pin invalid;
 - session recovery required, upstream unavailable, or bounded deadline exceeded;

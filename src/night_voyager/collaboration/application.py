@@ -9,8 +9,9 @@ from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
     CollaborationThreadV1,
-    ConfirmedFactAdvisorV1,
-    ConfirmedFactParticipantV1,
+    ConfirmedFactAdvisorPageV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     MemoryCandidateAdvisorV1,
     MemoryCandidateParticipantV1,
     MessageEventV1,
@@ -145,8 +146,11 @@ class CollaborationService:
         case_id: UUID,
         *,
         limit: int = 50,
-    ) -> tuple[ConfirmedFactAdvisorV1 | ConfirmedFactParticipantV1, ...]:
-        return await self._repository.list_confirmed_facts(context, case_id, limit)
+        cursor: ConfirmedFactHistoryCursorV1 | None = None,
+    ) -> ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1:
+        return await self._repository.list_confirmed_facts(
+            context, case_id, limit, cursor
+        )
 
     @staticmethod
     def _require_advisor(context: ActorContext) -> None:

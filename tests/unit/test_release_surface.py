@@ -155,6 +155,12 @@ def test_release_verifier_registers_collaboration_authority_without_version_chan
         "read_memory_candidates",
         "read_confirmed_facts",
     } == verifier.COLLABORATION_API_FUNCTIONS
+    source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    assert '"read_confirmed_facts": (' in source
+    assert (
+        '"uuid, uuid, text, uuid, timestamp with time zone, text, integer, integer"'
+        in source
+    )
 
 
 def test_release_verifier_checks_the_collaboration_authority_surface(

@@ -184,12 +184,17 @@ and authority fields are never accepted from request JSON.
 | `POST /api/v1/messages/{message_id}/memory-candidates` | source student/parent | `{schema_version: 1, case_revision, proposal}`; participant-safe proposal projection |
 | `GET /api/v1/cases/{case_id}/memory-candidates` | advisor or source participant | advisor sees all; participant sees only their own proposals |
 | `POST /api/v1/memory-candidates/{candidate_id}/verification-decisions` | advisor | `{schema_version: 1, expected_case_revision, decision, reason}`; terminal result |
-| `GET /api/v1/cases/{case_id}/confirmed-facts` | advisor/student/parent | role-safe fact projection |
+| `GET /api/v1/cases/{case_id}/confirmed-facts` | advisor/student/parent | role-safe current page; advisor-only bounded history |
 
 Message paging uses `after_sequence` default `0`, `limit` default `50`, and maximum
 `100`. `next_after_sequence` is the stable cursor when another page may exist. A
-thread is capped at 1000 events. Candidate and fact list limits default to `50` and
-are capped at `100`.
+thread is capped at 1000 events. Same-key replay remains available at capacity; a
+different-key append returns `409 collaboration_thread_full`. Candidate limits
+default to `50` and are capped at `100`. Confirmed-fact `limit` bounds only
+advisor history: all current heads remain present, and `next_cursor` advances a
+stable snapshot/keyset page without duplicates or omissions. Student and parent
+responses contain only `{schema_version, current}` and never expose history or cursor
+metadata.
 
 ### Role-safe projections
 
@@ -217,6 +222,7 @@ case_revision_stale
 memory_candidate_stale
 memory_candidate_expired
 memory_candidate_terminal
+collaboration_thread_full
 active_task_blocks_revision
 invalid_collaboration_message
 unsupported_fact_key
@@ -229,8 +235,10 @@ The shared HTTP boundary may also return bounded authentication, Origin, CSRF,
 idempotency-header, and request-validation problems. PostgreSQL SQLSTATE mapping is
 operation-sensitive: `NV003` is Case or candidate staleness, `NV006` is the unsafe
 contract fallback, `NV007` is non-enumerating authorization, `NV008` is idempotency
-conflict, `NV012` is terminal/concurrent conflict, `NV013` is expiry, and `NV014`
-is active-task blocking. Unknown, permission, connection, serialization, and result
+conflict, `NV012` maps by operation to append-only `collaboration_thread_full` or
+candidate-only `memory_candidate_terminal`, `NV013` is expiry, and `NV014` is
+active-task blocking. Unexpected `NV012` uses and unknown, permission, connection,
+serialization, and result
 shape failures become `503 persistence_unavailable`. Public problems never include
 raw SQL messages, tracebacks, credentials, cookies, local paths, or unbounded input.
 

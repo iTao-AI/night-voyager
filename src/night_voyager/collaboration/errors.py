@@ -47,3 +47,7 @@ class IdempotencyConflictError(CollaborationError):
 
 class CollaborationPersistenceError(CollaborationError):
     pass
+
+
+class CollaborationThreadFullError(CollaborationError):
+    pass

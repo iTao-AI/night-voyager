@@ -69,6 +69,7 @@ check: ## Run backend, frontend, Compose, and proof checks
 	npm --prefix web run build
 	docker compose config --quiet
 	$(MAKE) db-check
+	$(MAKE) collaboration-db-check SUITE=authority
 	$(MAKE) fixtures-check
 	$(MAKE) proof
 

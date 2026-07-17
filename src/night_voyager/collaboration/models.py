@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import re
 import unicodedata
 from collections.abc import Mapping
@@ -14,6 +17,7 @@ from pydantic import (
     Field,
     PositiveInt,
     TypeAdapter,
+    ValidationError,
     field_validator,
     model_validator,
 )
@@ -49,10 +53,11 @@ class VerificationDecision(StrEnum):
 
 
 _SECRET_PATTERN = re.compile(
-    r"(?i)(?:api[_-]?key|password|passwd|secret|access[_-]?token|bearer)\s*[:=]\s*\S+"
+    r"(?i)(?:api[_-]?key|password|passwd|secret|access[_-]?token|bearer)\s*[:=]"
     r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
 )
 _URL_PATTERN = re.compile(r"(?i)\b(?:https?|file|ftp|ssh)://\S+")
+_FILE_URL_PATTERN = re.compile(r"(?i)\bfile://\S+")
 _URL_CREDENTIAL_PATTERN = re.compile(
     r"(?i)\b(?:https?|ftp|ssh)://[^\s/:@]+:[^\s/@]+@[^\s/]+"
 )
@@ -78,7 +83,11 @@ def validate_safe_text(
         raise ValueError(f"{label} contains a control character")
     if _SECRET_PATTERN.search(value):
         raise ValueError(f"{label} contains credential material")
-    if (reject_plain_urls and _URL_PATTERN.search(value)) or _URL_CREDENTIAL_PATTERN.search(value):
+    if (
+        (reject_plain_urls and _URL_PATTERN.search(value))
+        or _FILE_URL_PATTERN.search(value)
+        or _URL_CREDENTIAL_PATTERN.search(value)
+    ):
         raise ValueError(f"{label} contains a URL")
     if _LOCAL_PATH_PATTERN.search(value):
         raise ValueError(f"{label} contains a local path")
@@ -306,3 +315,48 @@ class ConfirmedFactAdvisorV1(ConfirmedFactParticipantV1):
     confirming_advisor_actor_id: UUID
     reason: str
     supersedes_fact_id: UUID | None
+
+
+class ConfirmedFactHistoryCursorV1(_StrictModel):
+    schema_version: Literal[1]
+    snapshot: datetime
+    fact_key: FactKey
+    fact_version: PositiveInt
+
+    @field_validator("snapshot")
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None:
+            raise ValueError("confirmed fact cursor snapshot requires a timezone")
+        return value
+
+    def encode(self) -> str:
+        payload = json.dumps(
+            self.model_dump(mode="json"),
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+
+    @classmethod
+    def decode(cls, value: str) -> ConfirmedFactHistoryCursorV1:
+        if not 1 <= len(value) <= 512 or re.fullmatch(r"[A-Za-z0-9_-]+", value) is None:
+            raise ValueError("invalid confirmed fact cursor")
+        try:
+            payload = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+            return cls.model_validate_json(payload)
+        except (binascii.Error, UnicodeDecodeError, ValidationError) as error:
+            raise ValueError("invalid confirmed fact cursor") from error
+
+
+class ConfirmedFactParticipantPageV1(_StrictModel):
+    schema_version: Literal[1]
+    current: tuple[ConfirmedFactParticipantV1, ...]
+
+
+class ConfirmedFactAdvisorPageV1(_StrictModel):
+    schema_version: Literal[1]
+    current: tuple[ConfirmedFactAdvisorV1, ...]
+    history: tuple[ConfirmedFactAdvisorV1, ...]
+    next_cursor: str | None

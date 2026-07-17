@@ -18,6 +18,7 @@ from night_voyager.collaboration.errors import (
     CollaborationAuthorizationError,
     CollaborationError,
     CollaborationPersistenceError,
+    CollaborationThreadFullError,
     IdempotencyConflictError,
     InvalidCollaborationMessageError,
     MemoryCandidateExpiredError,
@@ -29,8 +30,9 @@ from night_voyager.collaboration.errors import (
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
     CollaborationThreadV1,
-    ConfirmedFactAdvisorV1,
-    ConfirmedFactParticipantV1,
+    ConfirmedFactAdvisorPageV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     FactProposal,
     MemoryCandidateAdvisorV1,
     MemoryCandidateParticipantV1,
@@ -209,6 +211,12 @@ def _runtime_problem(
             status.HTTP_409_CONFLICT,
             "memory_candidate_terminal",
             "request conflicts with current state",
+        ),
+        (
+            CollaborationThreadFullError,
+            status.HTTP_409_CONFLICT,
+            "collaboration_thread_full",
+            "collaboration thread is full",
         ),
         (
             ActiveTaskBlocksRevisionError,
@@ -412,6 +420,22 @@ def create_collaboration_router(
         "/collaboration-threads/{thread_id}/messages",
         status_code=status.HTTP_201_CREATED,
         response_model=MessageEventV1,
+        responses={
+            status.HTTP_409_CONFLICT: {
+                "description": "Collaboration thread capacity conflict",
+                "content": {
+                    "application/problem+json": {
+                        "example": {
+                            "type": "https://night-voyager.invalid/problems/collaboration_thread_full",
+                            "title": "Request could not be completed",
+                            "status": 409,
+                            "detail": "collaboration thread is full",
+                            "code": "collaboration_thread_full",
+                        }
+                    }
+                },
+            }
+        },
     )
     async def append_message(  # pyright: ignore[reportUnusedFunction]
         thread_id: UUID,
@@ -538,17 +562,32 @@ def create_collaboration_router(
 
     @router.get(
         "/cases/{case_id}/confirmed-facts",
-        response_model=list[ConfirmedFactAdvisorV1 | ConfirmedFactParticipantV1],
+        response_model=ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1,
     )
     async def list_confirmed_facts(  # pyright: ignore[reportUnusedFunction]
         case_id: UUID,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
         limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    ) -> tuple[ConfirmedFactAdvisorV1 | ConfirmedFactParticipantV1, ...] | JSONResponse:
+        cursor: Annotated[
+            str | None,
+            Query(min_length=1, max_length=512, pattern=r"^[A-Za-z0-9_-]+$"),
+        ] = None,
+    ) -> ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1 | JSONResponse:
+        try:
+            decoded_cursor = (
+                ConfirmedFactHistoryCursorV1.decode(cursor) if cursor is not None else None
+            )
+        except ValueError:
+            return problem(422, "request_validation_failed", "request validation failed")
         result = await run_read(
             raw_session,
-            lambda context, service: service.list_confirmed_facts(context, case_id, limit=limit),
+            lambda context, service: service.list_confirmed_facts(
+                context,
+                case_id,
+                limit=limit,
+                cursor=decoded_cursor,
+            ),
         )
         if isinstance(result, JSONResponse):
             return result

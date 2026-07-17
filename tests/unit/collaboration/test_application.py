@@ -17,8 +17,9 @@ from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
     CollaborationThreadV1,
-    ConfirmedFactAdvisorV1,
-    ConfirmedFactParticipantV1,
+    ConfirmedFactAdvisorPageV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     FactKey,
     IntendedFieldProposal,
     MemoryCandidateAdvisorV1,
@@ -284,11 +285,19 @@ class RecordingRepository:
         )
 
     async def list_confirmed_facts(
-        self, context: ActorContext, case_id: UUID, limit: int
-    ) -> tuple[ConfirmedFactAdvisorV1 | ConfirmedFactParticipantV1, ...]:
-        self.calls.append(("list_confirmed_facts", context, case_id, limit))
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        limit: int,
+        cursor: ConfirmedFactHistoryCursorV1 | None = None,
+    ) -> ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1:
+        self.calls.append(("list_confirmed_facts", context, case_id, limit, cursor))
         self._raise_failure()
-        return ()
+        if context.role is ActorRole.ADVISOR:
+            return ConfirmedFactAdvisorPageV1(
+                schema_version=1, current=(), history=(), next_cursor=None
+            )
+        return ConfirmedFactParticipantPageV1(schema_version=1, current=())
 
 
 def id_factory(*values: UUID) -> Callable[[], UUID]:
@@ -321,7 +330,12 @@ async def test_assigned_shared_reads_delegate_every_closed_participant_role() ->
         page = await service.list_messages(actor, THREAD)
         assert page.items[0].body == "Shared message"
         assert await service.list_candidates(actor, CASE) == ()
-        assert await service.list_confirmed_facts(actor, CASE) == ()
+        facts = await service.list_confirmed_facts(actor, CASE)
+        assert facts.current == ()
+        if role is ActorRole.ADVISOR:
+            assert type(facts) is ConfirmedFactAdvisorPageV1
+        else:
+            assert type(facts) is ConfirmedFactParticipantPageV1
 
     assert [call[0] for call in repository.calls] == [
         operation

@@ -8,7 +8,10 @@ from pydantic import BaseModel, ConfigDict, PositiveInt, model_validator
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
     CollaborationThreadV1,
+    ConfirmedFactAdvisorPageV1,
     ConfirmedFactAdvisorV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     ConfirmedFactParticipantV1,
     MemoryCandidateAdvisorV1,
     MemoryCandidateParticipantV1,
@@ -47,6 +50,7 @@ class MemoryCandidateVerificationV1(_StrictPortModel):
 
 type MemoryCandidateProjection = MemoryCandidateAdvisorV1 | MemoryCandidateParticipantV1
 type ConfirmedFactProjection = ConfirmedFactAdvisorV1 | ConfirmedFactParticipantV1
+type ConfirmedFactPage = ConfirmedFactAdvisorPageV1 | ConfirmedFactParticipantPageV1
 
 
 class CollaborationRepository(Protocol):
@@ -113,4 +117,5 @@ class CollaborationRepository(Protocol):
         context: ActorContext,
         case_id: UUID,
         limit: int,
-    ) -> tuple[ConfirmedFactProjection, ...]: ...
+        cursor: ConfirmedFactHistoryCursorV1 | None,
+    ) -> ConfirmedFactPage: ...

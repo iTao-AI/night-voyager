@@ -17,7 +17,9 @@ from night_voyager.collaboration.errors import (
     CaseRevisionStaleError,
     CollaborationAuthorizationError,
     CollaborationPersistenceError,
+    CollaborationThreadFullError,
     IdempotencyConflictError,
+    InvalidCollaborationMessageError,
     MemoryCandidateExpiredError,
     MemoryCandidateStaleError,
     MemoryCandidateTerminalError,
@@ -25,7 +27,10 @@ from night_voyager.collaboration.errors import (
 )
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
+    ConfirmedFactAdvisorPageV1,
     ConfirmedFactAdvisorV1,
+    ConfirmedFactHistoryCursorV1,
+    ConfirmedFactParticipantPageV1,
     ConfirmedFactParticipantV1,
     FactKey,
     MemoryCandidateAdvisorV1,
@@ -464,12 +469,14 @@ async def test_confirmed_fact_projections_are_selected_by_trusted_context_role()
         "subject_role": "parent",
         "confirming_advisor_role": "advisor",
     }
-    session = session_returning({"projection": participant_projection})
-    participant = (
-        await repository(session).list_confirmed_facts(
-            context(ActorRole.PARENT), CASE_ID, limit=50
-        )
-    )[0]
+    session = session_returning(
+        {"section": "current", "projection": participant_projection, "page_snapshot": NOW}
+    )
+    participant_page = await repository(session).list_confirmed_facts(
+        context(ActorRole.PARENT), CASE_ID, limit=50
+    )
+    assert type(participant_page) is ConfirmedFactParticipantPageV1
+    participant = participant_page.current[0]
     assert type(participant) is ConfirmedFactParticipantV1
     assert set(participant.model_dump()) == {
         "schema_version",
@@ -493,12 +500,30 @@ async def test_confirmed_fact_projections_are_selected_by_trusted_context_role()
         "reason": "The participant confirmed this bounded preference.",
         "supersedes_fact_id": None,
     }
-    session = session_returning({"projection": advisor_projection})
-    advisor = (
-        await repository(session).list_confirmed_facts(context(), CASE_ID, limit=50)
-    )[0]
+    older_projection = {
+        **advisor_projection,
+        "confirmed_fact_id": str(UUID("94000000-0000-0000-0000-000000000011")),
+        "fact_version": 2,
+        "supersedes_fact_id": str(FACT_ID),
+    }
+    session = session_returning(
+        {"section": "current", "projection": advisor_projection, "page_snapshot": NOW},
+        {"section": "history", "projection": advisor_projection, "page_snapshot": NOW},
+        {"section": "history", "projection": older_projection, "page_snapshot": NOW},
+    )
+    advisor_page = await repository(session).list_confirmed_facts(
+        context(), CASE_ID, limit=1
+    )
+    assert type(advisor_page) is ConfirmedFactAdvisorPageV1
+    advisor = advisor_page.current[0]
     assert type(advisor) is ConfirmedFactAdvisorV1
     assert advisor.confirmed_fact_id == FACT_ID
+    assert len(advisor_page.history) == 1
+    assert advisor_page.next_cursor is not None
+    cursor = ConfirmedFactHistoryCursorV1.decode(advisor_page.next_cursor)
+    assert cursor.snapshot == NOW
+    assert cursor.fact_key is FactKey.FAMILY_RISK_TOLERANCE
+    assert cursor.fact_version == 1
 
 
 @pytest.mark.parametrize(
@@ -528,6 +553,49 @@ async def test_frozen_sqlstates_map_to_separate_typed_errors(
             IDEMPOTENCY_KEY,
         )
     assert "database detail" not in str(raised.value)
+
+
+@pytest.mark.asyncio
+async def test_append_nv006_fallback_maps_to_closed_message_error() -> None:
+    session = AsyncMock(spec=AsyncSession)
+    session.execute.side_effect = db_error("NV006")
+    command = AppendMessageCommand.model_construct(
+        thread_id=THREAD_ID,
+        body="file://local/private.txt",
+    )
+
+    with pytest.raises(InvalidCollaborationMessageError) as raised:
+        await repository(session).append_message(
+            context(ActorRole.PARENT),
+            command,
+            MESSAGE_ID,
+            CONTENT_HASH,
+            REQUEST_HASH,
+            IDEMPOTENCY_KEY,
+        )
+    assert str(raised.value) == "invalid_collaboration_message"
+    assert "database detail" not in str(raised.value)
+
+
+@pytest.mark.asyncio
+async def test_append_nv012_maps_to_thread_full_without_widening_other_operations() -> None:
+    append_session = AsyncMock(spec=AsyncSession)
+    append_session.execute.side_effect = db_error("NV012")
+    with pytest.raises(CollaborationThreadFullError) as raised:
+        await repository(append_session).append_message(
+            context(ActorRole.PARENT),
+            append_command(),
+            MESSAGE_ID,
+            CONTENT_HASH,
+            REQUEST_HASH,
+            IDEMPOTENCY_KEY,
+        )
+    assert str(raised.value) == "collaboration_thread_full"
+
+    read_session = AsyncMock(spec=AsyncSession)
+    read_session.execute.side_effect = db_error("NV012")
+    with pytest.raises(CollaborationPersistenceError, match="persistence_unavailable"):
+        await repository(read_session).get_thread(context(), CASE_ID)
 
 
 @pytest.mark.asyncio

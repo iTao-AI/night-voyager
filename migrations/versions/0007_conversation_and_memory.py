@@ -955,10 +955,19 @@ BEGIN
   END IF;
 END; $$;
 
-CREATE FUNCTION app.read_confirmed_facts(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_limit integer) RETURNS TABLE(projection jsonb) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+CREATE FUNCTION app.read_confirmed_facts(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_snapshot timestamptz,p_after_fact_key text,p_after_fact_version integer,p_limit integer) RETURNS TABLE(section text,projection jsonb,page_snapshot timestamptz) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE selected_snapshot timestamptz;
 BEGIN
   IF p_org IS NULL OR p_actor IS NULL OR p_role IS NULL OR p_case IS NULL
-     OR p_limit IS NULL THEN
+     OR p_limit IS NULL OR NOT (
+       (p_snapshot IS NULL AND p_after_fact_key IS NULL AND p_after_fact_version IS NULL)
+       OR (p_snapshot IS NOT NULL
+           AND p_after_fact_key IN (
+             'student.intended_field','student.preferred_countries','student.intake',
+             'family.risk_tolerance','family.japan_risk_accepted','family.budget'
+           )
+           AND p_after_fact_version>0)
+     ) THEN
     RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid confirmed fact page';
   END IF;
   PERFORM app.assert_collaboration_context(p_org,p_actor,p_role);
@@ -972,9 +981,10 @@ BEGIN
     END IF;
     RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='collaboration resource unavailable';
   END IF;
+  selected_snapshot := COALESCE(p_snapshot,clock_timestamp());
   IF p_role='advisor' THEN
     RETURN QUERY
-    SELECT jsonb_build_object(
+    SELECT 'current'::text,jsonb_build_object(
       'schema_version',1,
       'fact_key',fact.fact_key,
       'value',fact.value,
@@ -991,7 +1001,7 @@ BEGIN
       'confirming_advisor_actor_id',fact.confirming_advisor_actor_id,
       'reason',verification.reason,
       'supersedes_fact_id',fact.supersedes_fact_id
-    )
+    ),selected_snapshot
       FROM app.confirmed_facts fact
       JOIN app.memory_candidate_verifications verification
         ON verification.organization_id=fact.organization_id
@@ -1000,11 +1010,58 @@ BEGIN
         ON message.organization_id=fact.organization_id
        AND message.id=fact.source_message_event_id
      WHERE fact.organization_id=p_org AND fact.case_id=p_case
+       AND NOT EXISTS (
+         SELECT 1 FROM app.confirmed_facts successor
+          WHERE successor.organization_id=fact.organization_id
+            AND successor.case_id=fact.case_id
+            AND successor.fact_key=fact.fact_key
+            AND successor.supersedes_fact_id=fact.id
+       )
+     ORDER BY fact.fact_key;
+
+    RETURN QUERY
+    SELECT 'history'::text,jsonb_build_object(
+      'schema_version',1,
+      'fact_key',fact.fact_key,
+      'value',fact.value,
+      'fact_version',fact.fact_version,
+      'confirmed_at',fact.confirmed_at,
+      'subject_role',fact.subject_role,
+      'confirming_advisor_role',fact.confirming_advisor_role,
+      'confirmed_fact_id',fact.id,
+      'candidate_id',fact.source_candidate_id,
+      'verification_id',verification.id,
+      'source_message_event_id',fact.source_message_event_id,
+      'source_message_sequence_no',message.sequence_no,
+      'source_message_sha256_prefix',left(message.content_sha256,12),
+      'confirming_advisor_actor_id',fact.confirming_advisor_actor_id,
+      'reason',verification.reason,
+      'supersedes_fact_id',fact.supersedes_fact_id
+    ),selected_snapshot
+      FROM app.confirmed_facts fact
+      JOIN app.confirmed_facts successor
+        ON successor.organization_id=fact.organization_id
+       AND successor.case_id=fact.case_id
+       AND successor.fact_key=fact.fact_key
+       AND successor.supersedes_fact_id=fact.id
+       AND successor.confirmed_at<=selected_snapshot
+      JOIN app.memory_candidate_verifications verification
+        ON verification.organization_id=fact.organization_id
+       AND verification.result_fact_id=fact.id
+      JOIN app.message_events message
+        ON message.organization_id=fact.organization_id
+       AND message.id=fact.source_message_event_id
+     WHERE fact.organization_id=p_org AND fact.case_id=p_case
+       AND (
+         p_after_fact_key IS NULL
+         OR fact.fact_key>p_after_fact_key
+         OR (fact.fact_key=p_after_fact_key AND fact.fact_version<p_after_fact_version)
+       )
      ORDER BY fact.fact_key,fact.fact_version DESC
-     LIMIT p_limit;
+     LIMIT p_limit+1;
   ELSE
     RETURN QUERY
-    SELECT jsonb_build_object(
+    SELECT 'current'::text,jsonb_build_object(
       'schema_version',1,
       'fact_key',fact.fact_key,
       'value',fact.value,
@@ -1012,7 +1069,7 @@ BEGIN
       'confirmed_at',fact.confirmed_at,
       'subject_role',fact.subject_role,
       'confirming_advisor_role',fact.confirming_advisor_role
-    )
+    ),selected_snapshot
       FROM app.confirmed_facts fact
      WHERE fact.organization_id=p_org AND fact.case_id=p_case
        AND NOT EXISTS (
@@ -1022,8 +1079,7 @@ BEGIN
             AND successor.fact_key=fact.fact_key
             AND successor.supersedes_fact_id=fact.id
        )
-     ORDER BY fact.fact_key
-     LIMIT p_limit;
+     ORDER BY fact.fact_key;
   END IF;
 END; $$;
 
@@ -1253,9 +1309,9 @@ REVOKE ALL ON FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigin
 REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) FROM night_voyager_api;
 REVOKE ALL ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) FROM night_voyager_worker;
-REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) FROM night_voyager_api;
-REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) FROM night_voyager_worker;
+REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) FROM night_voyager_api;
+REVOKE ALL ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) FROM night_voyager_worker;
 REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_api;
 REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_worker;
@@ -1267,7 +1323,7 @@ GRANT EXECUTE ON FUNCTION app.verify_memory_candidate(uuid,uuid,uuid,integer,tex
 GRANT EXECUTE ON FUNCTION app.read_collaboration_thread(uuid,uuid,text,uuid) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigint,integer) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer) TO night_voyager_api;
 
 REVOKE EXECUTE ON FUNCTION app.publish_case_revision(uuid,uuid,integer,integer,jsonb,jsonb) FROM night_voyager_api;
 """
@@ -1415,7 +1471,9 @@ def downgrade() -> None:
     op.execute(
         "DROP FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)"
     )
-    op.execute("DROP FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,integer)")
+    op.execute(
+        "DROP FUNCTION app.read_confirmed_facts(uuid,uuid,text,uuid,timestamptz,text,integer,integer)"
+    )
     op.execute("DROP FUNCTION app.read_memory_candidates(uuid,uuid,text,uuid,integer)")
     op.execute("DROP FUNCTION app.read_collaboration_messages(uuid,uuid,text,uuid,bigint,integer)")
     op.execute("DROP FUNCTION app.read_collaboration_thread(uuid,uuid,text,uuid)")

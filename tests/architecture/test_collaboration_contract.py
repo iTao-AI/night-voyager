@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from night_voyager.collaboration import CollaborationThreadFullError
 from night_voyager.collaboration.models import (
     CollaborationThreadV1,
     ConfirmedFactAdvisorV1,
@@ -44,6 +45,7 @@ def test_collaboration_pure_contracts_are_framework_independent() -> None:
 
 
 def test_collaboration_closed_vocabularies_are_exact() -> None:
+    assert CollaborationThreadFullError.__name__ == "CollaborationThreadFullError"
     assert {item.value for item in FactKey} == {
         "student.intended_field",
         "student.preferred_countries",
@@ -327,9 +329,29 @@ def test_collaboration_proof_and_documentation_surface_is_registered() -> None:
     assert "collaboration-check:" in makefile
     assert "make collaboration-check" in workflow
     assert "python scripts/verify_collaboration_flow.py" in compose_proof
+    collaboration_proof = (ROOT / "scripts/verify_collaboration_flow.py").read_text(
+        encoding="utf-8"
+    )
+    assert "def one_current_fact(" in collaboration_proof
+    assert 'page.get("current")' in collaboration_proof
+    assert 'page.get("history")' in collaboration_proof
     assert "collaboration-and-confirmed-facts.md" in docs_index
     assert "collaboration-authority.md" in docs_index
     assert "0008-governed-collaboration-and-memory-authority.md" in docs_index
+
+
+def test_public_contract_documents_freeze_capacity_and_fact_paging() -> None:
+    documents = (
+        "docs/superpowers/specs/2026-07-16-governed-collaboration-core-design.md",
+        "docs/superpowers/plans/2026-07-16-governed-conversation-memory-authority.md",
+        "docs/decisions/0008-governed-collaboration-and-memory-authority.md",
+        "docs/reference/collaboration-and-confirmed-facts.md",
+    )
+    for relative in documents:
+        content = (ROOT / relative).read_text(encoding="utf-8")
+        assert "collaboration_thread_full" in content, relative
+        assert "NV012" in content, relative
+        assert "current" in content and "history" in content, relative
 
 
 def test_collaboration_offline_lane_runs_only_fake_http_contracts() -> None:

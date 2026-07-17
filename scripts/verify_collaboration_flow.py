@@ -164,6 +164,29 @@ def one(items: dict[str, Any] | list[Any], label: str) -> dict[str, Any]:
     return item
 
 
+def one_current_fact(
+    page: dict[str, Any] | list[Any],
+    label: str,
+    *,
+    advisor: bool,
+) -> dict[str, Any]:
+    if not isinstance(page, dict):
+        raise SystemExit(f"{label} page was not an object")
+    expected_fields = (
+        {"schema_version", "current", "history", "next_cursor"}
+        if advisor
+        else {"schema_version", "current"}
+    )
+    require(set(page) == expected_fields, f"{label} page contract mismatch")
+    if advisor:
+        require(page.get("history") == [], f"{label} unexpected history")
+        require(page.get("next_cursor") is None, f"{label} unexpected cursor")
+    current = page.get("current")
+    if not isinstance(current, list):
+        raise SystemExit(f"{label} current projection was not a list")
+    return one(cast(list[Any], current), label)
+
+
 def proposal_payload() -> dict[str, object]:
     return {
         "schema_version": 1,
@@ -237,7 +260,9 @@ def verify_role_safe_facts(
     parent: urllib.request.OpenerDirector,
 ) -> None:
     facts_path = f"/cases/{PRIMARY_CASE}/confirmed-facts"
-    advisor_fact = one(get_json(advisor, facts_path), "advisor confirmed fact")
+    advisor_fact = one_current_fact(
+        get_json(advisor, facts_path), "advisor confirmed fact", advisor=True
+    )
     require(
         set(advisor_fact) > PARTICIPANT_FACT_FIELDS,
         "advisor confirmed fact omitted authority metadata",
@@ -249,7 +274,9 @@ def verify_role_safe_facts(
         and advisor_fact.get("reason") == CONFIRM_REASON,
         "advisor confirmed fact projection mismatch",
     )
-    parent_fact = one(get_json(parent, facts_path), "participant confirmed fact")
+    parent_fact = one_current_fact(
+        get_json(parent, facts_path), "participant confirmed fact", advisor=False
+    )
     require(
         set(parent_fact) == PARTICIPANT_FACT_FIELDS,
         "participant confirmed fact leaked authority metadata",
