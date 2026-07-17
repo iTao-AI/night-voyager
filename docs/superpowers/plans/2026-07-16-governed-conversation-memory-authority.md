@@ -7,10 +7,11 @@
 > proof slice follows test-first RED -> GREEN. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
 
-**Implementation status (2026-07-17):** PR A is implemented on its local branch as
-an unreleased backend authority boundary. PR B, PR C, and live-provider work remain
-unimplemented and outside this plan. The checkboxes below retain the approved
-test-first execution recipe; actual command evidence belongs to the branch handoff.
+**Implementation status:** Complete. PR A was merged to `main` through PR #30 as an
+unreleased post-v0.1.1 backend capability.
+PR B, PR C, and live-provider work remain unimplemented and outside this plan.
+The checkboxes below retain the approved test-first execution recipe; actual command
+evidence belongs to the implementation record.
 
 **Goal:** Add one shared Case collaboration thread in which an assigned student or
 parent can propose one typed fact from their own message and an assigned advisor can

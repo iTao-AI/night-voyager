@@ -1,5 +1,8 @@
 # M2 Identity, Session, and RLS Implementation Plan
 
+**Implementation status:** Complete. The steps below preserve the historical
+implementation record.
+
 1. Freeze dependency, migration-head, role-init, ADR, API, operations, and
    milestone-boundary contracts.
 2. Add fresh-volume roles, async Alembic migration, forced tenant RLS,

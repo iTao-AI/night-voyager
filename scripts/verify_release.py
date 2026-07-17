@@ -86,10 +86,14 @@ RELEASE_DOCUMENTS = (
     f"docs/releases/v{VERSION}.md",
     f"docs/how-to/verify-v{VERSION}-release.md",
 )
-HISTORICAL_RELEASE_DOCUMENTS = {
+PUBLISHED_RELEASE_DOCUMENTS = {
     "docs/releases/v0.1.0.md": "a3251cdb572b4d982f989917f7e44d111cf887cf7fc8d75629cdd69c393d3a93",
     "docs/how-to/verify-v0.1.0-release.md": (
         "b65e18c6dc0e193e2de445ad41930230846bea3abfe43304f58f4cd133275ea3"
+    ),
+    "docs/releases/v0.1.1.md": "0e7724ca54a9d9c8b3ed403f6bbbd86c04dde3ee79e0644e95ee3ccf90513ab2",
+    "docs/how-to/verify-v0.1.1-release.md": (
+        "3e20b41e3256c275d557e6165e7e224a95a3a642286f6993da209a51aebe8f16"
     ),
 }
 RELEASE_HEADINGS = (
@@ -362,10 +366,10 @@ def verify_release_surface() -> None:
         if not (ROOT / relative).is_file():
             raise SystemExit(f"missing {RELEASE_TAG} release document: {relative}")
 
-    for relative, expected_digest in HISTORICAL_RELEASE_DOCUMENTS.items():
+    for relative, expected_digest in PUBLISHED_RELEASE_DOCUMENTS.items():
         actual_digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
         if actual_digest != expected_digest:
-            raise SystemExit(f"v0.1.0 historical release document drift: {relative}")
+            raise SystemExit(f"published release document drift: {relative}")
     release = (ROOT / RELEASE_DOCUMENTS[0]).read_text(encoding="utf-8")
     try:
         heading_positions = [release.index(heading) for heading in RELEASE_HEADINGS]

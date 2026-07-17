@@ -59,6 +59,10 @@ When sources disagree, use this order:
 
 Completed plans explain history but do not override current behavior. If implementation and long-lived documentation disagree, verify the implementation and update the stale document in the same change when appropriate.
 
+Treat the current release entry point as current public guidance and older tagged
+release records as immutable history. Do not infer current behavior from an older
+release document.
+
 ## Read before changing
 
 Always read:
@@ -164,6 +168,14 @@ Persist an approved design or plan when the change introduces a public contract,
 
 Keep public project documents product-neutral. Do not copy private planning material, personal context, private machine paths, or raw planning-system artifacts into this repository.
 
+Keep active plan status and checklists current as implementation progresses. Mark
+completed plans explicitly. `docs/README.md` must distinguish implemented,
+approved-but-not-implemented, historical, and superseded work.
+
+Published release notes and verification guides are immutable historical records.
+Create a new versioned record for a later release and update the current-release entry
+point instead of repurposing an older release document.
+
 ## Documentation structure
 
 Use Diataxis-style documentation where it helps users find answers:
@@ -180,6 +192,15 @@ Use Diataxis-style documentation where it helps users find answers:
 - `docs/releases/`: release notes when releases exist.
 
 Do not create empty documentation folders. Update docs with the code whenever API, configuration, architecture, domain semantics, setup, demo flow, or user-visible behavior changes.
+
+For important features, public-contract changes, architecture changes, and release PRs,
+run a targeted documentation-release audit before merge. Check reference, how-to,
+explanation, and tutorial coverage according to actual user need; verify commands,
+relative links, and discoverability from the README or docs index.
+
+Use document generation only to close a confirmed documentation gap. Do not create every
+Diataxis quadrant mechanically or duplicate existing material. For an internal change
+with no documentation effect, record `No documentation impact` in the PR.
 
 ## Implementation and testing
 
@@ -214,6 +235,25 @@ Report command success only when the command exists and has actually passed in t
 - Write PR titles in concise English Conventional Commit style unless the user explicitly requests otherwise.
 - Write PR descriptions in Simplified Chinese by default for efficient local review, while keeping section headings, commands, code identifiers, API names, CLI output, file paths, and public product terms in English. Use English throughout only when the PR explicitly targets external collaborators or the user requests it.
 - Structure PR descriptions result-first with `Summary`, `Completion`, and `Verification`, followed when relevant by `Scope`, `Risk / Impact`, and `Documentation impact`.
+- After creating or updating a PR, read back its persisted title, body, base, head, and
+  draft state. Use checkboxes only for genuine pending merge gates.
+- Query hosted CI at low frequency and for a bounded duration. If the wait times out,
+  record the exact pending check or trigger and stop instead of polling indefinitely.
+- Before merge, bind the exact base, reviewed HEAD, current PR head, required approvals,
+  unresolved review or platform blockers, mergeability, and successful hosted checks.
+  The reviewed HEAD, current PR head, and check SHA must identify the same commit. Any
+  commit or diff added after review requires targeted re-review before merge.
+- After a squash merge, verify that the reviewed head tree equals the merge commit tree.
+- Cleanup is a separate ownership and authorization gate. Authorization is specific to
+  each linked worktree, local branch, and remote branch; authorization for one resource
+  class does not authorize another. Remote branch deletion requires separate explicit
+  authorization.
+- Remove only task-owned, clean, inactive resources with no open PR or running task,
+  after proving that all intended unique changes are retained by merged history, a tag,
+  or another explicit authority. Preserve unclear or unrelated resources and confirm
+  other worktrees remain unchanged.
+- Before and after cleanup, record the final worktree inventory, unique commits, PR state,
+  and which task resources were retained or cleaned up.
 - Repository or bootstrap setup is complete only after the applicable GitHub-hosted merge policy, security settings, and `main` ruleset are configured and verified by a live API, CLI, or connector re-query.
 - Required check names must come from successful hosted runs; never infer them from workflow files or memory.
 - Do not push, create or merge a PR, tag, release, publish, or deploy without explicit user authorization.

@@ -68,37 +68,37 @@ def test_release_verifier_checks_the_governed_mixed_planning_surface(
         (
             "docs/how-to/verify-v0.1.1-release.md",
             "git cat-file -t v0.1.1",
-            "release how-to contract",
+            "published release document drift",
         ),
         (
             "docs/how-to/verify-v0.1.1-release.md",
             "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.1.tar.gz",
-            "release how-to contract",
+            "published release document drift",
         ),
         (
             "docs/how-to/verify-v0.1.1-release.md",
             "Do not force-move `v0.1.1`",
-            "release how-to contract",
+            "published release document drift",
         ),
         (
             "docs/releases/v0.1.1.md",
             "## Risk / Impact",
-            "release notes contract",
+            "published release document drift",
         ),
         (
             "docs/releases/v0.1.1.md",
             "UNTRUSTED_CANDIDATE",
-            "release notes contract",
+            "published release document drift",
         ),
         (
             "docs/releases/v0.1.1.md",
             "australia_program_fit",
-            "release notes contract",
+            "published release document drift",
         ),
         (
             "docs/releases/v0.1.1.md",
             "Live provider proof was not run",
-            "release notes contract",
+            "published release document drift",
         ),
     ),
 )
@@ -121,16 +121,25 @@ def test_release_verifier_rejects_missing_publication_contract(
         verifier.verify_release_surface()
 
 
-def test_release_verifier_rejects_mutated_v0_1_0_history(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "docs/releases/v0.1.0.md",
+        "docs/how-to/verify-v0.1.0-release.md",
+        "docs/releases/v0.1.1.md",
+        "docs/how-to/verify-v0.1.1-release.md",
+    ),
+)
+def test_release_verifier_rejects_mutated_published_release_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str
 ) -> None:
     verifier = load_verifier()
     copy_release_surface(tmp_path)
-    target = tmp_path / "docs/releases/v0.1.0.md"
+    target = tmp_path / relative
     target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
-    with pytest.raises(SystemExit, match="v0.1.0 historical release document drift"):
+    with pytest.raises(SystemExit, match="published release document drift"):
         verifier.verify_release_surface()
 
 

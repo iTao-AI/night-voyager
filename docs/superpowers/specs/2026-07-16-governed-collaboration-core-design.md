@@ -1158,9 +1158,9 @@ Each implementation PR updates, where applicable:
   versioned Skills;
 - implementation spec/plan completion state;
 - demo storyboard, route/state matrix, and browser screenshots in PR C.
-- PR C also corrects ADR `0006` so its status accurately records that the connected
-  demo/BFF authority was implemented before this increment; it must no longer say
-  that M5 implementation has not started.
+- ADR 0006 already records M5 as implemented. PR C preserves that status while updating
+  the route, state, storyboard, runbook, and screenshot documentation affected by the
+  collaboration walkthrough.
 - PR C updates `docs/design/route-map.md`, whose current single-connected-route
   statement becomes stale, plus the state matrix, storyboard, connected-demo
   runbook, and a new real collaboration screenshot. Existing M5 screenshots are not
@@ -1176,8 +1176,9 @@ Public documentation must distinguish:
 ## Parallel execution boundary
 
 The three top-level PRs remain sequential. Each PR uses one integration owner that
-may delegate at most three independent bounded lanes with explicit file ownership
-and local acceptance boundaries. The parent exclusively owns:
+may delegate independent bounded lanes with explicit file ownership and local acceptance
+boundaries. There is no fixed lane count; delegation must match actual separability and
+available execution capacity. The parent exclusively owns:
 
 - migration graph and all migration files;
 - shared router registration and `api.py`;

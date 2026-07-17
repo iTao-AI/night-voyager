@@ -1,5 +1,8 @@
 # M4A Durable Agent Task, Lease, Worker, and SSE Implementation Plan
 
+**Implementation status:** Complete. The tasks below preserve the historical
+implementation recipe.
+
 > **For agentic workers:** Use `superpowers:executing-plans` task-by-task. Each
 > behavioral, security, and concurrency slice follows test-first RED -> GREEN.
 

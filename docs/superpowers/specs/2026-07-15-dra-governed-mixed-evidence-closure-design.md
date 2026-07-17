@@ -1,7 +1,9 @@
 # DRA Governed Mixed-Evidence Closure Design
 
-**Status:** Approved design. Implementation has not started. The Decision
-Research Agent runtime and public contract remain unchanged in this stage.
+**Status:** Implemented and released in v0.1.1 through PR #26 and PR #27.
+Deterministic local candidate import, atomic human promotion, and governed mixed
+planning are complete. Live provider proof was not run. The Decision Research Agent
+runtime and public contract remained unchanged.
 
 ## Goal
 

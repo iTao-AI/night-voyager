@@ -1,5 +1,10 @@
 # DRA Governed Mixed-Evidence Closure Implementation Plan
 
+**Implementation status:** Complete. PR #26 delivered governed candidate import and
+atomic human promotion; PR #27 delivered deterministic governed mixed planning. The
+closure was released in v0.1.1. Live provider proof was not run. The unchecked tasks
+below preserve the original approved implementation recipe rather than current progress.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans`
 > to implement this plan task-by-task in an isolated worktree. Every behavioral,
 > authority, migration, transport, and proof slice follows test-first RED -> GREEN.

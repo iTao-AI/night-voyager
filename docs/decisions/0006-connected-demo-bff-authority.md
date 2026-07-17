@@ -2,13 +2,13 @@
 
 ## Status
 
-Accepted for M5 design. Implementation has not started.
+Accepted. Implemented in M5.
 
 ## Context
 
-M2 through M4A provide synthetic identity, forced-RLS domain authority, deterministic
-planning, advisor/family decisions, a durable worker, and authorized SSE. The public
-`/demo` remains a disconnected M1 visual fixture. A browser-visible flow needs a
+Before M5, M2 through M4A provided synthetic identity, forced-RLS domain authority,
+deterministic planning, advisor/family decisions, a durable worker, and authorized SSE.
+Before M5, `/demo` was a disconnected M1 visual fixture. A browser-visible flow needed a
 same-origin transport boundary and resumable read projections without moving business
 authority into Next.js or combining the old Japan fixture with the Australia backend
 proof.

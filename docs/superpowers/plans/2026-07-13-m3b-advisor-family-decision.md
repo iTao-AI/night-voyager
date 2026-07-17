@@ -1,5 +1,8 @@
 # M3B Advisor and Family Decision Implementation Plan
 
+**Implementation status:** Complete. The unchecked tasks below preserve the historical
+implementation recipe rather than current progress.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add the immutable advisor-review, family-safe brief, explicit family decision, receipt, and deterministic timeline backend flow.
