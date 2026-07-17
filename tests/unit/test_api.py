@@ -57,3 +57,31 @@ def test_dra_candidate_http_matrix_is_registered() -> None:
             "/api/v1/cases/{case_id}/dra-candidates/{candidate_id}/verification-decisions"
         ]
     )
+
+
+def test_governed_collaboration_http_matrix_is_exactly_registered() -> None:
+    paths = create_app().openapi()["paths"]
+    expected = {
+        "/api/v1/cases/{case_id}/collaboration-thread": {"get", "post"},
+        "/api/v1/collaboration-threads/{thread_id}/messages": {"get", "post"},
+        "/api/v1/messages/{message_id}/memory-candidates": {"post"},
+        "/api/v1/cases/{case_id}/memory-candidates": {"get"},
+        "/api/v1/memory-candidates/{candidate_id}/verification-decisions": {
+            "post"
+        },
+        "/api/v1/cases/{case_id}/confirmed-facts": {"get"},
+    }
+    for path, methods in expected.items():
+        assert set(paths[path]) >= methods
+
+
+def test_collaboration_validation_uses_bounded_problem_json() -> None:
+    response: Response = TestClient(create_app()).post(
+        "/api/v1/collaboration-threads/"
+        "42000000-0000-0000-0000-000000000001/messages",
+        json={"schema_version": 1},
+    )
+    assert response.status_code == 422
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["code"] == "invalid_collaboration_message"

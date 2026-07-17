@@ -6,6 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from night_voyager.config import Settings
 from night_voyager.database import create_engine, create_session_factory
+from night_voyager.interfaces.http.collaboration import (
+    collaboration_request_validation_problem,
+    create_collaboration_router,
+    is_collaboration_http_path,
+)
 from night_voyager.interfaces.http.connected_demo import create_connected_demo_router
 from night_voyager.interfaces.http.decision import create_decision_router
 from night_voyager.interfaces.http.decision import problem as decision_problem
@@ -31,13 +36,19 @@ def create_app(
     service_factory = identity_service_factory or default_service_factory(resolved_settings)
     app = FastAPI(title="Night Voyager API", version="0.1.1")
 
+    def uses_problem_json(path: str) -> bool:
+        return (
+            path.startswith("/api/v1/cases/")
+            or path.startswith("/api/v1/decision-briefs/")
+            or path.startswith("/api/v1/tasks/")
+            or is_collaboration_http_path(path)
+        )
+
     @app.exception_handler(HTTPException)
     async def http_exception_handler(  # pyright: ignore[reportUnusedFunction]
         request: Request, error: HTTPException
     ):
-        if request.url.path.startswith("/api/v1/cases/") or request.url.path.startswith(
-            "/api/v1/decision-briefs/"
-        ) or request.url.path.startswith("/api/v1/tasks/"):
+        if uses_problem_json(request.url.path):
             code = "authentication_failed" if error.status_code == 401 else "request_rejected"
             return decision_problem(error.status_code, code, str(error.detail))
         from starlette.responses import JSONResponse
@@ -48,9 +59,10 @@ def create_app(
     async def validation_exception_handler(  # pyright: ignore[reportUnusedFunction]
         request: Request, error: RequestValidationError
     ):
-        if request.url.path.startswith("/api/v1/cases/") or request.url.path.startswith(
-            "/api/v1/decision-briefs/"
-        ) or request.url.path.startswith("/api/v1/tasks/"):
+        collaboration_response = collaboration_request_validation_problem(request, error)
+        if collaboration_response is not None:
+            return collaboration_response
+        if uses_problem_json(request.url.path):
             return decision_problem(422, "request_validation_failed", "request validation failed")
         from fastapi.exception_handlers import request_validation_exception_handler
 
@@ -63,6 +75,7 @@ def create_app(
     app.include_router(create_identity_router(resolved_settings, session_factory, service_factory))
     if session_factory is not None:
         app.include_router(create_connected_demo_router(resolved_settings, session_factory))
+        app.include_router(create_collaboration_router(resolved_settings, session_factory))
         app.include_router(create_decision_router(resolved_settings, session_factory))
         app.include_router(create_dra_router(resolved_settings, session_factory))
         app.include_router(create_task_router(resolved_settings, session_factory))
