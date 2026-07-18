@@ -15,6 +15,7 @@ from night_voyager.adapters.protocols import (
 from night_voyager.planning.mixed import validate_governed_mixed_payload_baseline
 from night_voyager.planning.models import EvidenceAuthority, PlanningInput
 from night_voyager.planning.trusted import GovernedMixedPlanningInput
+from night_voyager.skills.models import SkillLeafBindingV1
 from night_voyager.tasks.models import AgentTaskState, TaskRuntimePolicy, TaskViewStatus
 
 APPROVED_COUNTRIES = frozenset({"australia", "japan", "malaysia"})
@@ -77,7 +78,9 @@ def classify_adapter_outcome(failure: AdapterFailure, *, attempt_no: int) -> Ret
 
 
 def validate_adapter_payload(
-    outcome: AdapterPayload, request: PlanningAdapterRequest
+    outcome: AdapterPayload,
+    request: PlanningAdapterRequest,
+    leaf_binding: SkillLeafBindingV1 | None = None,
 ) -> PlanningInput | GovernedMixedPlanningInput:
     policy = TaskRuntimePolicy()
     if len(outcome.payload) > policy.max_payload_bytes:
@@ -123,12 +126,19 @@ def validate_adapter_payload(
         or not set(country_strings) <= APPROVED_COUNTRIES
     ):
         raise AdapterPayloadError("country_scope_invalid")
-    expected_pair = (
-        ("deterministic_planning", "m4a-v1")
-        if request.operation == "generate_planning_run_v1"
-        else ("governed_mixed_planning", "dra-mixed-v1")
-    )
-    if (outcome.adapter_id, outcome.adapter_version) != expected_pair:
+    if leaf_binding is None:
+        try:
+            leaf_binding = SkillLeafBindingV1(
+                operation=request.operation,
+                adapter_id=outcome.adapter_id,
+                adapter_version=outcome.adapter_version,
+            )
+        except ValidationError as error:
+            raise AdapterPayloadError("invalid_schema") from error
+    if leaf_binding.operation != request.operation or (
+        outcome.adapter_id,
+        outcome.adapter_version,
+    ) != (leaf_binding.adapter_id, leaf_binding.adapter_version):
         raise AdapterPayloadError("invalid_schema")
     try:
         planning_input = (

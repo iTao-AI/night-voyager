@@ -4,7 +4,12 @@ from collections.abc import Callable, Mapping
 from uuid import UUID, uuid4
 
 from night_voyager.identity.models import ActorContext, ActorRole
-from night_voyager.tasks.errors import TaskAuthorizationError
+from night_voyager.skills.models import SkillLeafBindingV1, SkillRuntimePin
+from night_voyager.skills.registry import (
+    SkillRuntimeIncompatibility,
+    SkillRuntimeRegistry,
+)
+from night_voyager.tasks.errors import TaskAuthorizationError, TaskConflictError
 from night_voyager.tasks.models import (
     AgentTaskState,
     CancelTaskCommand,
@@ -21,9 +26,11 @@ class TaskService:
         self,
         repository: TaskRepository,
         *,
+        registry: SkillRuntimeRegistry,
         id_factory: Callable[[], UUID] = uuid4,
     ) -> None:
         self._repository = repository
+        self._registry = registry
         self._id_factory = id_factory
 
     async def create(
@@ -33,8 +40,19 @@ class TaskService:
         idempotency_key: str,
     ) -> dict[str, object]:
         self._require_advisor(context)
+        skill_key, semantic_version = await self._repository.resolve_active_skill_version(
+            context
+        )
+        try:
+            skill_manifest = self._registry.get(skill_key, semantic_version)
+        except SkillRuntimeIncompatibility as error:
+            raise TaskConflictError("skill_version_unavailable") from error
         row = await self._repository.create(
-            context, command, self._id_factory(), idempotency_key
+            context,
+            command,
+            self._id_factory(),
+            idempotency_key,
+            skill_manifest,
         )
         return self._project(row)
 
@@ -61,9 +79,9 @@ class TaskService:
         if context.role is not ActorRole.ADVISOR:
             raise TaskAuthorizationError
 
-    @staticmethod
-    def _project(row: Mapping[str, object]) -> dict[str, object]:
+    def _project(self, row: Mapping[str, object]) -> dict[str, object]:
         state = AgentTaskState(str(row["state"]))
+        skill_pin = self._project_skill_pin(row)
         projected = {
             "task_id": row["task_id"],
             "row_version": row["row_version"],
@@ -76,7 +94,58 @@ class TaskService:
             "planning_run_id": row.get("result_planning_run_id"),
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
+            "skill_pin": skill_pin,
+            "leaf_binding": self._project_leaf_binding(row, skill_pin),
         }
         if "replayed" in row:
             projected["replayed"] = row["replayed"]
         return projected
+
+    @staticmethod
+    def _project_skill_pin(row: Mapping[str, object]) -> SkillRuntimePin | None:
+        if row.get("skill_definition_id") is None:
+            return None
+        return SkillRuntimePin.model_validate(
+            {
+                field: row[field]
+                for field in (
+                    "skill_definition_id",
+                    "skill_version_id",
+                    "skill_activation_event_id",
+                    "skill_activation_sequence",
+                    "runtime_binding_sha256",
+                )
+            }
+        )
+
+    def _project_leaf_binding(
+        self,
+        row: Mapping[str, object],
+        skill_pin: SkillRuntimePin | None,
+    ) -> SkillLeafBindingV1 | None:
+        if skill_pin is None:
+            return None
+        skill_key = row.get("skill_key")
+        semantic_version = row.get("semantic_version")
+        operation = row.get("operation")
+        if not all(isinstance(value, str) for value in (skill_key, semantic_version, operation)):
+            raise RuntimeError("pinned task runtime identity is unavailable")
+        entry = self._registry.get(str(skill_key), str(semantic_version))
+        leaf = next(
+            (
+                item
+                for item in entry.operation_bindings or ()
+                if item.operation == operation
+            ),
+            None,
+        )
+        if leaf is None:
+            raise RuntimeError("pinned task operation leaf is unavailable")
+        self._registry.validate_pin(
+            skill_pin,
+            str(skill_key),
+            str(semantic_version),
+            str(operation),
+            leaf,
+        )
+        return leaf

@@ -1,6 +1,7 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
+import json
 import os
 from uuid import UUID
 
@@ -9,6 +10,10 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
+from night_voyager.identity.demo_seed import build_demo_skill_seed
+from night_voyager.skills.evaluation import SkillEvaluator
+from night_voyager.skills.models import SkillKey
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
 
 pytestmark = pytest.mark.database
@@ -18,6 +23,26 @@ PACK = UUID("50000000-0000-0000-0000-000000000001")
 OTHER_ORG = UUID("10000000-0000-0000-0000-000000000002")
 OTHER_ADVISOR = UUID("20000000-0000-0000-0000-000000000099")
 OTHER_PACK = UUID("50000000-0000-0000-0000-000000000002")
+
+
+def registry() -> SkillRuntimeRegistry:
+    return SkillRuntimeRegistry.load_packaged()
+
+
+def skill_manifest() -> str:
+    return registry().get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    ).model_dump_json(exclude_none=True)
+
+
+def skill_seed() -> str:
+    runtime_registry = registry()
+    return json.dumps(
+        build_demo_skill_seed(
+            runtime_registry,
+            SkillEvaluator.load_packaged(runtime_registry),
+        )
+    )
 
 
 async def context(
@@ -83,6 +108,17 @@ async def seed_other_tenant_case(case_id: UUID) -> None:
                     {"org": OTHER_ORG, "actor": OTHER_ADVISOR, "pack": OTHER_PACK},
                 )
             await connection.execute(
+                text(
+                    "SELECT app.seed_demo_skill_registry("
+                    ":org,:owner,CAST(:projection AS jsonb))"
+                ),
+                {
+                    "org": OTHER_ORG,
+                    "owner": OTHER_ADVISOR,
+                    "projection": skill_seed(),
+                },
+            )
+            await connection.execute(
                 text("SELECT app.publish_case_revision(:org,:case,NULL,1,'{}'::jsonb,'{}'::jsonb)"),
                 {"org": OTHER_ORG, "case": case_id},
             )
@@ -107,7 +143,7 @@ async def create_task(connection: AsyncConnection, case_id: UUID, task_id: UUID,
         text(
             "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
             "'generate_planning_run_v1',1,:pack,1,"
-            "'m3a-policy-v1',:request_hash,:key_hash)"
+            "'m3a-policy-v1',CAST(:skill_manifest AS jsonb),:request_hash,:key_hash)"
         ),
         {
             "org": ORG,
@@ -115,6 +151,7 @@ async def create_task(connection: AsyncConnection, case_id: UUID, task_id: UUID,
             "case": case_id,
             "task": task_id,
             "pack": PACK,
+            "skill_manifest": skill_manifest(),
             "request_hash": "a" * 64,
             "key_hash": key * 64,
         },
@@ -128,7 +165,8 @@ async def test_mixed_task_creation_requires_promoted_pack_and_exact_operation() 
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     statement = text(
         "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,:operation,1,"
-        ":pack,:version,'m3a-policy-v1',:request_hash,:key_hash)"
+        ":pack,:version,'m3a-policy-v1',CAST(:skill_manifest AS jsonb),"
+        ":request_hash,:key_hash)"
     )
     base = {
         "org": ORG,
@@ -136,6 +174,7 @@ async def test_mixed_task_creation_requires_promoted_pack_and_exact_operation() 
         "case": case_id,
         "pack": PACK,
         "operation": "generate_governed_mixed_planning_run_v1",
+        "skill_manifest": skill_manifest(),
         "request_hash": "e" * 64,
         "key_hash": "0123456789abcdef" * 4,
     }
@@ -224,7 +263,8 @@ async def test_assigned_advisor_create_replay_conflict_and_direct_dml_denial() -
                         text(
                             "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
                             "'generate_planning_run_v1',1,:pack,1,"
-                            "'m3a-policy-v1',:request_hash,:key_hash)"
+                            "'m3a-policy-v1',CAST(:skill_manifest AS jsonb),"
+                            ":request_hash,:key_hash)"
                         ),
                         {
                             "org": ORG,
@@ -232,6 +272,7 @@ async def test_assigned_advisor_create_replay_conflict_and_direct_dml_denial() -
                             "case": case_id,
                             "task": UUID(int=998),
                             "pack": PACK,
+                            "skill_manifest": skill_manifest(),
                             "request_hash": "b" * 64,
                             "key_hash": "1" * 64,
                         },
@@ -607,7 +648,8 @@ async def test_two_tenant_claim_isolation_and_pool_context_cleanup() -> None:
                     text(
                         "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
                         "'generate_planning_run_v1',1,:pack,1,"
-                        "'m3a-policy-v1',repeat('a',64),repeat('7',64))"
+                        "'m3a-policy-v1',CAST(:skill_manifest AS jsonb),"
+                        "repeat('a',64),repeat('7',64))"
                     ),
                     {
                         "org": OTHER_ORG,
@@ -615,6 +657,7 @@ async def test_two_tenant_claim_isolation_and_pool_context_cleanup() -> None:
                         "case": other_case,
                         "task": other_task,
                         "pack": OTHER_PACK,
+                        "skill_manifest": skill_manifest(),
                     },
                 )
             ).mappings().one()

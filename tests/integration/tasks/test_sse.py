@@ -18,7 +18,10 @@ from night_voyager.config import Settings
 from night_voyager.identity.models import ActorContext, ActorRole, DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
+from night_voyager.skills.registry import SkillRuntimeRegistry
+from night_voyager.tasks.application import CreateTaskCommand, TaskService
 from night_voyager.tasks.errors import TaskAuthorizationError
+from night_voyager.tasks.postgres import PostgresTaskRepository
 from night_voyager.tasks.streaming import (
     PostgresTaskEventReader,
     TaskEventPage,
@@ -47,9 +50,9 @@ async def mint(
     sessions: async_sessionmaker[AsyncSession], choice: DemoActorChoice
 ) -> IssuedSession:
     async with sessions() as session, session.begin():
-        return await IdentityService(
-            IdentityRepository(session), "test-session-secret"
-        ).mint(choice)
+        return await IdentityService(IdentityRepository(session), "test-session-secret").mint(
+            choice
+        )
 
 
 async def seed_task(case_id: UUID = CASE, task_id: UUID = TASK) -> None:
@@ -81,30 +84,30 @@ async def seed_task(case_id: UUID = CASE, task_id: UUID = TASK) -> None:
                 ),
                 {"org": ORG, "case": case_id, "advisor": ADVISOR, "parent": PARENT},
             )
-        async with api.begin() as connection:
+        sessions = async_sessionmaker(api, expire_on_commit=False)
+        async with sessions() as session, session.begin():
             for name, value in (
                 ("night_voyager.organization_id", str(ORG)),
                 ("night_voyager.actor_id", str(ADVISOR)),
                 ("night_voyager.role", "advisor"),
             ):
-                await connection.execute(
+                await session.execute(
                     text("SELECT set_config(:name,:value,true)"),
                     {"name": name, "value": value},
                 )
-            await connection.execute(
-                text(
-                    "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
-                    "'generate_planning_run_v1',1,:pack,1,"
-                    "'m3a-policy-v1',repeat('a',64),:key_hash)"
+            await TaskService(
+                PostgresTaskRepository(session),
+                registry=SkillRuntimeRegistry.load_packaged(),
+                id_factory=lambda: task_id,
+            ).create(
+                ActorContext(ORG, ADVISOR, ActorRole.ADVISOR, UUID(int=1)),
+                CreateTaskCommand(
+                    case_id=case_id,
+                    expected_case_revision=1,
+                    source_pack_id=PACK,
+                    source_pack_version=1,
                 ),
-                {
-                    "org": ORG,
-                    "actor": ADVISOR,
-                    "case": case_id,
-                    "task": task_id,
-                    "pack": PACK,
-                    "key_hash": hashlib.sha256(str(task_id).encode()).hexdigest(),
-                },
+                f"sse-task-{task_id}",
             )
     finally:
         await migrator.dispose()
@@ -224,9 +227,7 @@ async def test_http_sse_replay_paginates_reconnects_and_reauthorizes() -> None:
             reconnect = await client.get(
                 f"/api/v1/tasks/{TASK}/events", headers={"Last-Event-ID": "100"}
             )
-            assert [item[0] for item in event_frames(reconnect.text)] == list(
-                range(101, 108)
-            )
+            assert [item[0] for item in event_frames(reconnect.text)] == list(range(101, 108))
 
             ahead = await client.get(
                 f"/api/v1/tasks/{TASK}/events", headers={"Last-Event-ID": "108"}
@@ -257,7 +258,9 @@ async def test_http_sse_replay_paginates_reconnects_and_reauthorizes() -> None:
                 )
             )
             assert all(response.status_code == 200 for response in results)
-            assert all([item[0] for item in event_frames(response.text)] == [107] for response in results)
+            assert all(
+                [item[0] for item in event_frames(response.text)] == [107] for response in results
+            )
 
         foreign_context = ActorContext(
             organization_id=FOREIGN_ORG,
@@ -268,9 +271,7 @@ async def test_http_sse_replay_paginates_reconnects_and_reauthorizes() -> None:
         async with sessions() as session, session.begin():
             await IdentityRepository(session).set_actor_context(foreign_context)
             with pytest.raises(TaskAuthorizationError):
-                await PostgresTaskEventReader(session).read_page(
-                    foreign_context, TASK, 0
-                )
+                await PostgresTaskEventReader(session).read_page(foreign_context, TASK, 0)
     finally:
         await engine.dispose()
 
@@ -303,9 +304,7 @@ async def test_heartbeat_is_comment_and_stream_holds_no_session_while_waiting() 
         assert reader_sessions == 0
         clock += 1
         if clock == 15:
-            migrator = create_async_engine(
-                os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
-            )
+            migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
             try:
                 async with migrator.begin() as connection:
                     for name, value in (
@@ -326,9 +325,7 @@ async def test_heartbeat_is_comment_and_stream_holds_no_session_while_waiting() 
                             "org": ORG,
                             "actor": ADVISOR,
                             "task": HEARTBEAT_TASK,
-                            "key_hash": hashlib.sha256(
-                                b"sse-cancel-431"
-                            ).hexdigest(),
+                            "key_hash": hashlib.sha256(b"sse-cancel-431").hexdigest(),
                         },
                     )
             finally:

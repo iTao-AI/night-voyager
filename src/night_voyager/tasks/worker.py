@@ -12,18 +12,36 @@ from night_voyager.adapters.protocols import (
     AdapterFailure,
     AdapterFailureCode,
     PlanningAdapterRequest,
+    PlanningAdapterResolution,
+    PlanningAdapterResolver,
 )
 from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.planning.policy import evaluate_planning_run
-from night_voyager.tasks.errors import TaskLeaseLostError, TaskTransientError
+from night_voyager.skills.models import (
+    SkillKey,
+    SkillLeafBindingV1,
+    SkillRuntimeManifestEntryV1,
+    SkillRuntimePin,
+)
+from night_voyager.skills.registry import (
+    SkillRuntimeIncompatibility,
+    SkillRuntimeRegistry,
+)
+from night_voyager.tasks.errors import (
+    TaskLeaseLostError,
+    TaskTransientError,
+)
 from night_voyager.tasks.policy import (
     AdapterPayloadError,
     classify_adapter_outcome,
     validate_adapter_payload,
 )
-from night_voyager.tasks.ports import PlanningAdapterPort
 
 LOGGER = logging.getLogger(__name__)
+
+
+class TaskPinInvalidError(Exception):
+    """Trusted database projection cannot prove the claimed runtime pin."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +54,14 @@ class AgentTaskClaim:
 @dataclass(frozen=True, slots=True)
 class WorkerTaskInput:
     request: PlanningAdapterRequest
+    skill_pin: SkillRuntimePin
+    skill_key: SkillKey
+    semantic_version: str
+    leaf_binding: SkillLeafBindingV1
+    registered_manifest: SkillRuntimeManifestEntryV1
+    runtime_manifest_id: str
+    runtime_manifest_version: str
+    runtime_manifest_sha256: str
     supersedes_run_id: UUID | None
     attempt_no: int = 1
 
@@ -45,9 +71,7 @@ class WorkerTaskRepository(Protocol):
 
     async def load(self, claim: AgentTaskClaim) -> WorkerTaskInput: ...
 
-    async def start(
-        self, claim: AgentTaskClaim, worker_id: str, input_sha256: str
-    ) -> None: ...
+    async def start(self, claim: AgentTaskClaim, worker_id: str, input_sha256: str) -> None: ...
 
     async def heartbeat(self, claim: AgentTaskClaim, worker_id: str) -> None: ...
 
@@ -76,23 +100,23 @@ class WorkerTaskRepository(Protocol):
     ) -> str: ...
 
 
-type RepositoryFactory = Callable[
-    [], AbstractAsyncContextManager[WorkerTaskRepository]
-]
+type RepositoryFactory = Callable[[], AbstractAsyncContextManager[WorkerTaskRepository]]
 
 
 class TaskWorker:
     def __init__(
         self,
         repository_factory: RepositoryFactory,
-        adapter: PlanningAdapterPort,
+        router: PlanningAdapterResolver,
+        registry: SkillRuntimeRegistry,
         *,
         worker_id: str,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         run_id_factory: Callable[[], UUID] = uuid4,
     ) -> None:
         self._repository_factory = repository_factory
-        self._adapter = adapter
+        self._router = router
+        self._registry = registry
         self._worker_id = worker_id
         self._sleep = sleep
         self._run_id_factory = run_id_factory
@@ -105,12 +129,21 @@ class TaskWorker:
         try:
             async with self._repository_factory() as repository:
                 task_input = await repository.load(claim)
+            resolution = self._resolve_runtime(task_input)
             async with self._repository_factory() as repository:
                 await repository.start(
                     claim,
                     self._worker_id,
-                    canonical_sha256(task_input.request.model_dump(mode="json")),
+                    canonical_sha256(
+                        {
+                            "request": task_input.request.model_dump(mode="json"),
+                            "five_field_pin": task_input.skill_pin.model_dump(mode="json"),
+                        }
+                    ),
                 )
+        except (TaskPinInvalidError, SkillRuntimeIncompatibility):
+            await self._fail_invalid_pin(claim)
+            return True
         except TaskLeaseLostError:
             return True
 
@@ -120,7 +153,7 @@ class TaskWorker:
             self._heartbeat_loop(claim, stop_heartbeat, lease_lost)
         )
         try:
-            outcome = await self._adapter.generate(task_input.request)
+            outcome = await resolution.adapter.generate(task_input.request)
         finally:
             stop_heartbeat.set()
             if not heartbeat_task.done():
@@ -132,22 +165,22 @@ class TaskWorker:
 
         try:
             if isinstance(outcome, AdapterFailure):
-                decision = classify_adapter_outcome(
-                    outcome, attempt_no=task_input.attempt_no
-                )
+                decision = classify_adapter_outcome(outcome, attempt_no=task_input.attempt_no)
                 async with self._repository_factory() as repository:
                     await repository.fail(
                         claim,
                         self._worker_id,
                         decision.public_code,
                         retryable=decision.retryable,
-                        fallback_used=(
-                            outcome.code is AdapterFailureCode.FALLBACK_AUTHORITY
-                        ),
+                        fallback_used=(outcome.code is AdapterFailureCode.FALLBACK_AUTHORITY),
                     )
                 return True
             try:
-                planning_input = validate_adapter_payload(outcome, task_input.request)
+                planning_input = validate_adapter_payload(
+                    outcome,
+                    task_input.request,
+                    resolution.leaf_binding,
+                )
             except AdapterPayloadError as error:
                 async with self._repository_factory() as repository:
                     await repository.fail(
@@ -162,9 +195,7 @@ class TaskWorker:
             output: dict[str, object] = {
                 **result.model_dump(mode="json"),
                 "costs": [item.model_dump(mode="json") for item in planning_input.costs],
-                "rankings": [
-                    item.model_dump(mode="json") for item in planning_input.rankings
-                ],
+                "rankings": [item.model_dump(mode="json") for item in planning_input.rankings],
             }
             async with self._repository_factory() as repository:
                 await repository.finalize(
@@ -183,6 +214,50 @@ class TaskWorker:
         except TaskLeaseLostError:
             return True
         return True
+
+    def _resolve_runtime(self, task_input: WorkerTaskInput) -> PlanningAdapterResolution:
+        try:
+            resolution = self._router.resolve(task_input.request.operation)
+        except ValueError as error:
+            raise SkillRuntimeIncompatibility("task operation is not configured") from error
+        if resolution.leaf_binding != task_input.leaf_binding:
+            raise SkillRuntimeIncompatibility(
+                "claimed execution leaf does not match resolved router leaf"
+            )
+        packaged = self._registry.validate_pin(
+            task_input.skill_pin,
+            task_input.skill_key,
+            task_input.semantic_version,
+            task_input.request.operation,
+            resolution.leaf_binding,
+        )
+        if packaged != task_input.registered_manifest:
+            raise SkillRuntimeIncompatibility(
+                "registered Skill manifest does not match packaged runtime"
+            )
+        manifest = self._registry.manifest
+        if (
+            task_input.runtime_manifest_id != manifest.manifest_id
+            or task_input.runtime_manifest_version != manifest.manifest_version
+            or task_input.runtime_manifest_sha256 != manifest.manifest_sha256
+        ):
+            raise SkillRuntimeIncompatibility(
+                "registered runtime manifest identity does not match package"
+            )
+        return resolution
+
+    async def _fail_invalid_pin(self, claim: AgentTaskClaim) -> None:
+        try:
+            async with self._repository_factory() as repository:
+                await repository.fail(
+                    claim,
+                    self._worker_id,
+                    "skill_pin_invalid",
+                    retryable=False,
+                    fallback_used=False,
+                )
+        except TaskLeaseLostError:
+            return
 
     async def run_forever(self, stop: asyncio.Event | None = None) -> None:
         stop_event = stop or asyncio.Event()

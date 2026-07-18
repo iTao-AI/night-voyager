@@ -10,6 +10,10 @@ from night_voyager.adapters.router import PlanningAdapterRouter
 from night_voyager.config import Settings
 from night_voyager.database import create_engine, create_session_factory
 from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
+from night_voyager.planning.synthetic_postgres import (
+    PersistedSyntheticSnapshotRepository,
+)
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.postgres import postgres_worker_repository_factory
 from night_voyager.tasks.worker import TaskWorker
 
@@ -23,11 +27,14 @@ async def run() -> None:
         worker = TaskWorker(
             postgres_worker_repository_factory(session_factory),
             PlanningAdapterRouter(
-                synthetic=DeterministicPlanningAdapter(),
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(session_factory)
+                ),
                 mixed=GovernedMixedPlanningAdapter(
                     PostgresMixedPlanningRepository(session_factory)
                 ),
             ),
+            SkillRuntimeRegistry.load_packaged(),
             worker_id=worker_id,
         )
         await worker.run_forever()

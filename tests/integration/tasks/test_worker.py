@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import os
+from typing import Never
 from uuid import UUID
 
 import pytest
@@ -19,8 +21,14 @@ from night_voyager.adapters.protocols import (
     PlanningAdapterRequest,
 )
 from night_voyager.adapters.router import PlanningAdapterRouter
+from night_voyager.planning.fixtures import validate_planning_fixture
 from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
+from night_voyager.planning.synthetic_postgres import (
+    PersistedSyntheticSnapshotRepository,
+)
+from night_voyager.skills.models import SkillKey, SkillRuntimePin
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.postgres import postgres_worker_repository_factory
 from night_voyager.tasks.worker import TaskWorker
 from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
@@ -29,20 +37,47 @@ pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PACK = UUID("50000000-0000-0000-0000-000000000001")
+PLANNING_FIXTURE = validate_planning_fixture().planning_input
+
+
+def registry() -> SkillRuntimeRegistry:
+    return SkillRuntimeRegistry.load_packaged()
+
+
+def skill_manifest() -> str:
+    return registry().get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    ).model_dump_json(exclude_none=True)
+
+
+def skill_pin() -> SkillRuntimePin:
+    runtime_binding_sha256 = registry().get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    ).runtime_binding_sha256
+    return SkillRuntimePin(
+        skill_definition_id=UUID("81000000-0000-0000-0000-000000000002"),
+        skill_version_id=UUID("82000000-0000-0000-0000-000000000002"),
+        skill_activation_event_id=UUID("84000000-0000-0000-0000-000000000001"),
+        skill_activation_sequence=1,
+        runtime_binding_sha256=runtime_binding_sha256 or "",
+    )
 
 
 def expected_input_sha256(case_id: UUID) -> str:
     return canonical_sha256(
-        PlanningAdapterRequest(
-            schema_version=1,
-            operation="generate_planning_run_v1",
-            organization_id=ORG,
-            case_id=case_id,
-            case_revision=1,
-            source_pack_id=PACK,
-            source_pack_version=1,
-            policy_version="m3a-policy-v1",
-        ).model_dump(mode="json")
+        {
+            "request": PlanningAdapterRequest(
+                schema_version=1,
+                operation="generate_planning_run_v1",
+                organization_id=ORG,
+                case_id=case_id,
+                case_revision=1,
+                source_pack_id=PACK,
+                source_pack_version=1,
+                policy_version="m3a-policy-v1",
+            ).model_dump(mode="json"),
+            "five_field_pin": skill_pin().model_dump(mode="json"),
+        }
     )
 
 
@@ -50,12 +85,18 @@ class BlockingAdapter:
     def __init__(self) -> None:
         self.started = asyncio.Event()
         self.release = asyncio.Event()
-        self.inner = DeterministicPlanningAdapter()
+        self.inner: DeterministicPlanningAdapter | None = None
 
     async def generate(self, request: PlanningAdapterRequest) -> AdapterOutcome:
         self.started.set()
         await self.release.wait()
+        assert self.inner is not None
         return await self.inner.generate(request)
+
+
+class NeverSnapshotRepository:
+    async def load(self, request: PlanningAdapterRequest) -> Never:
+        raise AssertionError(f"unexpected snapshot load for {request.operation}")
 
 
 async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
@@ -68,8 +109,16 @@ async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
                 {"org": str(ORG)},
             )
             await connection.execute(
-                text("SELECT app.publish_case_revision(:org,:case,NULL,1,'{}'::jsonb,'{}'::jsonb)"),
-                {"org": ORG, "case": case_id},
+                text(
+                    "SELECT app.publish_case_revision("
+                    ":org,:case,NULL,1,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": ORG,
+                    "case": case_id,
+                    "student": json.dumps(PLANNING_FIXTURE.case.student.model_dump(mode="json")),
+                    "family": json.dumps(PLANNING_FIXTURE.case.family.model_dump(mode="json")),
+                },
             )
             await connection.execute(
                 text("SELECT app.transition_case(:org,:case,'intake','planning')"),
@@ -96,7 +145,8 @@ async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
                 text(
                     "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
                     "'generate_planning_run_v1',1,:pack,1,"
-                    "'m3a-policy-v1',repeat('a',64),:key_hash)"
+                    "'m3a-policy-v1',CAST(:skill_manifest AS jsonb),"
+                    "repeat('a',64),:key_hash)"
                 ),
                 {
                     "org": ORG,
@@ -104,6 +154,7 @@ async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
                     "case": case_id,
                     "task": task_id,
                     "pack": PACK,
+                    "skill_manifest": skill_manifest(),
                     "key_hash": key * 64,
                 },
             )
@@ -115,9 +166,17 @@ async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
 def task_worker(worker_id: str, adapter: object | None = None) -> tuple[TaskWorker, object]:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
     sessions = async_sessionmaker(engine, expire_on_commit=False)
+    repository = PersistedSyntheticSnapshotRepository(sessions)
+    synthetic = adapter or DeterministicPlanningAdapter(repository)
+    if isinstance(synthetic, BlockingAdapter):
+        synthetic.inner = DeterministicPlanningAdapter(repository)
     worker = TaskWorker(
         postgres_worker_repository_factory(sessions),
-        adapter or DeterministicPlanningAdapter(),  # type: ignore[arg-type]
+        PlanningAdapterRouter(
+            synthetic=synthetic,  # type: ignore[arg-type]
+            mixed=GovernedMixedPlanningAdapter(PostgresMixedPlanningRepository(sessions)),
+        ),
+        registry(),
         worker_id=worker_id,
     )
     return worker, engine
@@ -143,7 +202,9 @@ async def task_row(task_id: UUID) -> dict[str, object]:
                         ),
                         {"org": ORG, "task": task_id},
                     )
-                ).mappings().one()
+                )
+                .mappings()
+                .one()
             )
     finally:
         await api.dispose()
@@ -197,7 +258,8 @@ async def test_mixed_operation_reuses_the_existing_queue_and_worker_authority() 
                 text(
                     "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
                     "'generate_governed_mixed_planning_run_v1',1,:pack,:version,"
-                    "'m3a-policy-v1',:request_hash,:key_hash)"
+                    "'m3a-policy-v1',CAST(:skill_manifest AS jsonb),"
+                    ":request_hash,:key_hash)"
                 ),
                 {
                     "org": ORG,
@@ -206,6 +268,7 @@ async def test_mixed_operation_reuses_the_existing_queue_and_worker_authority() 
                     "task": task_id,
                     "pack": PACK,
                     "version": version,
+                    "skill_manifest": skill_manifest(),
                     "request_hash": hashlib.sha256(str(task_id).encode()).hexdigest(),
                     "key_hash": hashlib.sha256(f"key:{task_id}".encode()).hexdigest(),
                 },
@@ -213,36 +276,39 @@ async def test_mixed_operation_reuses_the_existing_queue_and_worker_authority() 
         worker = TaskWorker(
             postgres_worker_repository_factory(sessions),
             PlanningAdapterRouter(
-                synthetic=DeterministicPlanningAdapter(),
-                mixed=GovernedMixedPlanningAdapter(
-                    PostgresMixedPlanningRepository(sessions)
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(sessions)
                 ),
+                mixed=GovernedMixedPlanningAdapter(PostgresMixedPlanningRepository(sessions)),
             ),
+            registry(),
             worker_id="worker-mixed-real",
         )
         assert await worker.run_once() is True
-        inspector = create_async_engine(
-            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
-        )
+        inspector = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
         async with inspector.begin() as connection:
             await connection.execute(
                 text("SELECT set_config('night_voyager.organization_id',:org,true)"),
                 {"org": str(ORG)},
             )
             row = (
-                await connection.execute(
-                    text(
-                        "SELECT t.state,r.state AS run_state,r.source_pack_version,"
-                        "e.adapter_id,e.adapter_version "
-                        "FROM app.agent_tasks t JOIN app.agent_executions e "
-                        "ON e.organization_id=t.organization_id AND e.task_id=t.id "
-                        "JOIN app.planning_runs r ON r.organization_id=t.organization_id "
-                        "AND r.id=t.result_planning_run_id "
-                        "WHERE t.organization_id=:org AND t.id=:task"
-                    ),
-                    {"org": ORG, "task": task_id},
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT t.state,r.state AS run_state,r.source_pack_version,"
+                            "e.adapter_id,e.adapter_version "
+                            "FROM app.agent_tasks t JOIN app.agent_executions e "
+                            "ON e.organization_id=t.organization_id AND e.task_id=t.id "
+                            "JOIN app.planning_runs r ON r.organization_id=t.organization_id "
+                            "AND r.id=t.result_planning_run_id "
+                            "WHERE t.organization_id=:org AND t.id=:task"
+                        ),
+                        {"org": ORG, "task": task_id},
+                    )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             assert dict(row) == {
                 "state": "waiting_review",
                 "run_state": "review_required",
@@ -274,9 +340,7 @@ async def test_two_workers_accept_one_result_and_clear_lease() -> None:
         assert row["lease_owner"] is None
         assert row["result_planning_run_id"] is not None
         assert row["waiting_events"] == 1
-        inspector = create_async_engine(
-            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
-        )
+        inspector = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
         try:
             async with inspector.begin() as connection:
                 await connection.execute(
@@ -284,15 +348,19 @@ async def test_two_workers_accept_one_result_and_clear_lease() -> None:
                     {"org": str(ORG)},
                 )
                 execution = (
-                    await connection.execute(
-                        text(
-                            "SELECT status,retryable,fallback_used,input_sha256,output_sha256,"
-                            "duration_ms,cost_status FROM app.agent_executions "
-                            "WHERE organization_id=:org AND task_id=:task"
-                        ),
-                        {"org": ORG, "task": task_id},
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT status,retryable,fallback_used,input_sha256,output_sha256,"
+                                "duration_ms,cost_status FROM app.agent_executions "
+                                "WHERE organization_id=:org AND task_id=:task"
+                            ),
+                            {"org": ORG, "task": task_id},
+                        )
                     )
-                ).mappings().one()
+                    .mappings()
+                    .one()
+                )
         finally:
             await inspector.dispose()
         assert execution.status == "succeeded"
@@ -387,13 +455,17 @@ async def test_restart_reclaims_expired_started_execution() -> None:
             claim = await repository.claim("worker-before-restart")
         assert claim is not None
         async with factory() as repository:
-            await repository.start(
-                claim, "worker-before-restart", expected_input_sha256(case_id)
-            )
+            await repository.start(claim, "worker-before-restart", expected_input_sha256(case_id))
         await expire_lease(task_id)
         restarted = TaskWorker(
             factory,
-            DeterministicPlanningAdapter(),
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(PostgresMixedPlanningRepository(sessions)),
+            ),
+            registry(),
             worker_id="worker-after-restart",
         )
         assert await restarted.run_once() is True
@@ -411,9 +483,8 @@ async def test_transient_adapter_failure_stops_after_three_attempts() -> None:
     task_id = UUID("80000000-0000-0000-0000-000000000405")
     await seed_and_create(case_id, task_id, "9")
     adapter = DeterministicPlanningAdapter(
-        injected_failure=AdapterFailure(
-            code=AdapterFailureCode.TRANSIENT_UNAVAILABLE
-        )
+        NeverSnapshotRepository(),
+        injected_failure=AdapterFailure(code=AdapterFailureCode.TRANSIENT_UNAVAILABLE),
     )
     worker, engine = task_worker("worker-retry", adapter)
     try:
@@ -421,43 +492,47 @@ async def test_transient_adapter_failure_stops_after_three_attempts() -> None:
         assert await worker.run_once() is True
         assert await worker.run_once() is True
         assert await worker.run_once() is False
-        inspector = create_async_engine(
-            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
-        )
+        inspector = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
         try:
             async with inspector.begin() as connection:
                 await connection.execute(
-                    text(
-                        "SELECT set_config('night_voyager.organization_id',:org,true)"
-                    ),
+                    text("SELECT set_config('night_voyager.organization_id',:org,true)"),
                     {"org": str(ORG)},
                 )
                 row = (
-                    await connection.execute(
-                        text(
-                            "SELECT state,attempt_count,terminal_code,"
-                            "(SELECT count(*) FROM app.agent_executions e WHERE "
-                            "e.organization_id=t.organization_id AND e.task_id=t.id) "
-                            "AS executions,"
-                            "(SELECT count(*) FROM app.agent_task_events e WHERE "
-                            "e.organization_id=t.organization_id AND e.task_id=t.id "
-                            "AND e.event_code='retry_scheduled') AS retries "
-                            "FROM app.agent_tasks t WHERE organization_id=:org AND id=:task"
-                        ),
-                        {"org": ORG, "task": task_id},
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT state,attempt_count,terminal_code,"
+                                "(SELECT count(*) FROM app.agent_executions e WHERE "
+                                "e.organization_id=t.organization_id AND e.task_id=t.id) "
+                                "AS executions,"
+                                "(SELECT count(*) FROM app.agent_task_events e WHERE "
+                                "e.organization_id=t.organization_id AND e.task_id=t.id "
+                                "AND e.event_code='retry_scheduled') AS retries "
+                                "FROM app.agent_tasks t WHERE organization_id=:org AND id=:task"
+                            ),
+                            {"org": ORG, "task": task_id},
+                        )
                     )
-                ).mappings().one()
+                    .mappings()
+                    .one()
+                )
                 executions = (
-                    await connection.execute(
-                        text(
-                            "SELECT attempt_no,status,retryable,fallback_used,input_sha256,"
-                            "output_sha256,duration_ms,cost_status "
-                            "FROM app.agent_executions WHERE organization_id=:org "
-                            "AND task_id=:task ORDER BY attempt_no"
-                        ),
-                        {"org": ORG, "task": task_id},
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT attempt_no,status,retryable,fallback_used,input_sha256,"
+                                "output_sha256,duration_ms,cost_status "
+                                "FROM app.agent_executions WHERE organization_id=:org "
+                                "AND task_id=:task ORDER BY attempt_no"
+                            ),
+                            {"org": ORG, "task": task_id},
+                        )
                     )
-                ).mappings().all()
+                    .mappings()
+                    .all()
+                )
         finally:
             await inspector.dispose()
         assert dict(row) == {
@@ -475,8 +550,7 @@ async def test_transient_adapter_failure_stops_after_three_attempts() -> None:
         assert [execution.retryable for execution in executions] == [True, True, False]
         assert all(execution.fallback_used is False for execution in executions)
         assert all(
-            execution.input_sha256 == expected_input_sha256(case_id)
-            for execution in executions
+            execution.input_sha256 == expected_input_sha256(case_id) for execution in executions
         )
         assert all(execution.output_sha256 is None for execution in executions)
         assert all(
@@ -494,14 +568,13 @@ async def test_fallback_authority_failure_is_audited_without_raw_payload() -> No
     task_id = UUID("80000000-0000-0000-0000-000000000406")
     await seed_and_create(case_id, task_id, "8")
     adapter = DeterministicPlanningAdapter(
-        injected_failure=AdapterFailure(code=AdapterFailureCode.FALLBACK_AUTHORITY)
+        NeverSnapshotRepository(),
+        injected_failure=AdapterFailure(code=AdapterFailureCode.FALLBACK_AUTHORITY),
     )
     worker, engine = task_worker("worker-fallback", adapter)
     try:
         assert await worker.run_once() is True
-        inspector = create_async_engine(
-            os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
-        )
+        inspector = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
         try:
             async with inspector.begin() as connection:
                 await connection.execute(
@@ -509,16 +582,20 @@ async def test_fallback_authority_failure_is_audited_without_raw_payload() -> No
                     {"org": str(ORG)},
                 )
                 execution = (
-                    await connection.execute(
-                        text(
-                            "SELECT status,retryable,fallback_used,input_sha256,output_sha256,"
-                            "public_code,duration_ms,cost_status "
-                            "FROM app.agent_executions WHERE organization_id=:org "
-                            "AND task_id=:task"
-                        ),
-                        {"org": ORG, "task": task_id},
+                    (
+                        await connection.execute(
+                            text(
+                                "SELECT status,retryable,fallback_used,input_sha256,output_sha256,"
+                                "public_code,duration_ms,cost_status "
+                                "FROM app.agent_executions WHERE organization_id=:org "
+                                "AND task_id=:task"
+                            ),
+                            {"org": ORG, "task": task_id},
+                        )
                     )
-                ).mappings().one()
+                    .mappings()
+                    .one()
+                )
         finally:
             await inspector.dispose()
         assert execution.status == "failed"
