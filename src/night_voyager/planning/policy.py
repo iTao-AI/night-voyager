@@ -17,6 +17,7 @@ from night_voyager.planning.models import (
     RouteOutcome,
     RouteResult,
     RunState,
+    preferred_country_scope_is_valid,
 )
 from night_voyager.planning.trusted import GovernedMixedPlanningInput, TrustedEvidenceRef
 
@@ -68,7 +69,15 @@ def evaluate_planning_run(planning_input: PlanningPolicyInput) -> PlanningResult
         else "direct_program_fit_evidence_absent"
     )
     malaysia = _route_result(Country.MALAYSIA, malaysia_outcome, malaysia_reason, evidence_by_claim)
-    routes = (australia, japan, malaysia)
+    routes_by_country = {
+        Country.AUSTRALIA: australia,
+        Country.JAPAN: japan,
+        Country.MALAYSIA: malaysia,
+    }
+    routes = tuple(
+        routes_by_country[country]
+        for country in planning_input.case.student.preferred_countries
+    )
     recommended = sum(route.outcome is RouteOutcome.RECOMMENDED_WITH_CONDITION for route in routes)
     return PlanningResult(
         state=RunState.REVIEW_REQUIRED if recommended == 1 else RunState.BLOCKED,
@@ -96,6 +105,10 @@ def _validate_contract(planning_input: PlanningPolicyInput) -> str | None:
     )
     if any(getattr(item, "schema_version", None) != 1 for item in versioned):
         return "schema_or_version_invalid"
+    if not preferred_country_scope_is_valid(
+        planning_input.case.student.preferred_countries
+    ):
+        return "country_scope_invalid"
     if (
         not _is_uuid(planning_input.organization_id)
         or planning_input.case.revision <= 0

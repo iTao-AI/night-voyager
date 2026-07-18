@@ -5,6 +5,7 @@ from pathlib import Path
 
 from night_voyager.planning.fixtures import DEFAULT_MANIFEST, validate_planning_fixture
 from night_voyager.planning.models import EvidenceAuthority, PlanningInput
+from night_voyager.planning.synthetic import project_selected_country_rows
 from night_voyager.planning.trusted import (
     GovernedMixedPlanningInput,
     GovernedMixedSnapshotV1,
@@ -130,6 +131,9 @@ def validate_governed_mixed_payload_baseline(
         )
         for item in baseline.rankings
     )
+    expected_costs, expected_rankings = project_selected_country_rows(
+        planning_input.case, expected_costs, expected_rankings
+    )
     if planning_input.costs != expected_costs or planning_input.rankings != expected_rankings:
         raise ValueError("governed mixed payload baseline drift")
 
@@ -246,6 +250,7 @@ def materialize_governed_mixed_input(
         )
         for item in baseline_input.rankings
     )
+    costs, rankings = project_selected_country_rows(snapshot.case, costs, rankings)
     return GovernedMixedPlanningInput(
         schema_version=1,
         operation="generate_governed_mixed_planning_run_v1",

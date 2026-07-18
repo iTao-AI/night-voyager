@@ -11,6 +11,7 @@ from pydantic import AnyUrl, ValidationError
 from night_voyager.planning.fixtures import DEFAULT_MANIFEST, validate_planning_fixture
 from night_voyager.planning.mixed import materialize_governed_mixed_input
 from night_voyager.planning.models import (
+    Country,
     EvidenceAuthority,
     EvidenceClass,
     EvidenceRef,
@@ -246,4 +247,49 @@ def test_materializer_remaps_only_baseline_cost_and_ranking_ids() -> None:
             item.claim: item.evidence_id for item in baseline.evidence
         }.items()
         if claim != "australia_program_fit"
+    )
+
+
+def test_mixed_materializer_uses_persisted_case_and_selected_country_scope() -> None:
+    snapshot = governed_snapshot()
+    baseline_case = snapshot.case
+    persisted_budget = baseline_case.family.budget.model_copy(
+        update={
+            "preferred_minor": 18000000,
+            "hard_ceiling_minor": 22000000,
+            "elasticity_bps": 500,
+        }
+    )
+    persisted_case = baseline_case.model_copy(
+        update={
+            "revision": 2,
+            "student": baseline_case.student.model_copy(
+                update={
+                    "preferred_countries": (Country.JAPAN,),
+                    "intake": "2028-09",
+                }
+            ),
+            "family": baseline_case.family.model_copy(
+                update={
+                    "risk_tolerance": "low",
+                    "japan_risk_accepted": False,
+                    "budget": persisted_budget,
+                }
+            ),
+        }
+    )
+    planning_input = materialize_governed_mixed_input(
+        snapshot.model_copy(update={"case": persisted_case})
+    )
+    result = evaluate_planning_run(planning_input)
+
+    assert planning_input.case == persisted_case
+    assert planning_input.case != baseline_case
+    assert planning_input.costs == ()
+    assert planning_input.rankings == ()
+    assert tuple(route.country for route in result.routes) == (Country.JAPAN,)
+    assert any(
+        item.claim == "australia_program_fit"
+        and item.authority is EvidenceAuthority.EXTERNALLY_VERIFIED
+        for item in planning_input.evidence
     )
