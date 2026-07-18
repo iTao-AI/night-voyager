@@ -9,26 +9,28 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
+    uv run alembic current | grep '0008'
+    uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run python scripts/seed_demo.py
     uv run python scripts/seed_demo.py
     uv run python scripts/verify_release.py --check-db-roles
@@ -46,23 +48,23 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/decision/test_postgres_decision.py
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/integration/decision/test_http_decision.py
-    if uv run alembic downgrade 0006 >"$downgrade_output" 2>&1; then
-        echo "expected collaboration authority downgrade refusal" >&2
+    if uv run alembic downgrade 0007 >"$downgrade_output" 2>&1; then
+        echo "expected Skill authority downgrade refusal" >&2
         exit 1
     fi
-    grep -q 'refusing downgrade: collaboration authority history exists' "$downgrade_output"
-    uv run alembic current | grep '0007'
+    grep -q 'refusing downgrade: Skill governance or runtime pin history exists' "$downgrade_output"
+    uv run alembic current | grep '0008'
     uv run python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run python scripts/seed_demo.py --without-collaboration
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     exit 0
 fi
 

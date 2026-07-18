@@ -187,8 +187,13 @@ def test_collaboration_migration_retires_current_planning_run_only_after_confirm
 
 def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed() -> None:
     runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
-    upgrade_0007 = runner.index("uv run alembic upgrade head")
-    empty_downgrade = runner.index("uv run alembic downgrade 0006", upgrade_0007)
+    upgrade_0008 = runner.index("uv run alembic upgrade head")
+    skill_empty_downgrade = runner.index(
+        "uv run alembic downgrade 0007", upgrade_0008
+    )
+    empty_downgrade = runner.index(
+        "uv run alembic downgrade 0006", skill_empty_downgrade
+    )
     reupgrade_0007 = runner.index("uv run alembic upgrade head", empty_downgrade)
     mixed_downgrade = runner.index("uv run alembic downgrade 0005", reupgrade_0007)
     full_graph_downgrade = runner.index("uv run alembic downgrade 0001", mixed_downgrade)
@@ -201,9 +206,10 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
     )
     final_upgrade = runner.index("uv run alembic upgrade head", identity_seed)
     full_seed = runner.index("uv run python scripts/seed_demo.py\n", final_upgrade)
-    refusal = runner.rindex("uv run alembic downgrade 0006")
+    refusal = runner.rindex("uv run alembic downgrade 0007")
     assert (
-        upgrade_0007
+        upgrade_0008
+        < skill_empty_downgrade
         < empty_downgrade
         < reupgrade_0007
         < mixed_downgrade
@@ -215,7 +221,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         < full_seed
         < refusal
     )
-    assert "refusing downgrade: collaboration authority history exists" in runner
+    assert "refusing downgrade: Skill governance or runtime pin history exists" in runner
 
 
 def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_history() -> None:
