@@ -118,37 +118,67 @@ def test_dependabot_covers_approved_ecosystems() -> None:
         assert f"package-ecosystem: {ecosystem}" in config
 
 
-def test_dependabot_keeps_compatibility_surfaces_independently_reviewable() -> None:
+def _dependabot_block(config: str, ecosystem: str) -> str:
+    marker = f"  - package-ecosystem: {ecosystem}\n"
+    block = config.split(marker, 1)[1]
+    return block.split("  - package-ecosystem:", 1)[0]
+
+
+def test_dependabot_groups_only_routine_patch_updates() -> None:
     config = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
 
-    assert 'patterns: ["*"]' not in config
-    for group in (
-        "python-runtime-patches",
-        "python-test-patches",
-        "python-lint-patches",
-        "python-type-patches",
-        "python-build-patches",
-        "frontend-runtime-patches",
-        "frontend-types-patches",
-        "frontend-browser-proof-patches",
-        "frontend-lint-patches",
-        "frontend-dev-tooling-patches",
-    ):
-        assert f"      {group}:" in config
+    for ecosystem in ("uv", "npm", "github-actions", "docker", "docker-compose"):
+        assert "    schedule:\n      interval: weekly\n" in _dependabot_block(
+            config, ecosystem
+        )
 
-    assert config.count('update-types: ["patch"]') == 10
-    docker_updates = config.split("  - package-ecosystem: docker\n", 1)[1].split(
-        "  - package-ecosystem:", 1
-    )[0]
-    assert docker_updates.count("      - dependency-name: python") == 1
-    assert (
-        "      - dependency-name: python\n"
+    for ecosystem in ("uv", "npm"):
+        block = _dependabot_block(config, ecosystem)
+        assert "    versioning-strategy: increase-if-necessary\n" in block
+        assert "    open-pull-requests-limit: 1\n" in block
+        assert '        patterns: ["*"]\n' in block
+        assert '        update-types: ["patch"]\n' in block
+
+    actions = _dependabot_block(config, "github-actions")
+    assert "    open-pull-requests-limit: 1\n" in actions
+    assert '        patterns: ["*"]\n' in actions
+    assert '        update-types: ["patch"]\n' in actions
+
+
+def test_dependabot_suppresses_routine_major_and_minor_updates() -> None:
+    config = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    ignored_routine_lines = (
+        '      - dependency-name: "*"\n'
         "        update-types:\n"
         "          - version-update:semver-major\n"
         "          - version-update:semver-minor\n"
+    )
+
+    for ecosystem in ("uv", "npm", "github-actions"):
+        assert ignored_routine_lines in _dependabot_block(config, ecosystem)
+
+
+def test_dependabot_fails_closed_for_coordinated_patch_surfaces() -> None:
+    config = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+    uv_updates = _dependabot_block(config, "uv")
+    npm_updates = _dependabot_block(config, "npm")
+    patch_ignore = (
+        "        update-types:\n"
         "          - version-update:semver-patch\n"
-    ) in docker_updates
-    assert "python-bootstrap" not in config
-    assert "frontend-bootstrap" not in config
-    assert "docker-bootstrap" not in config
-    assert "compose-bootstrap" not in config
+    )
+
+    for dependency in ("httpx2", "mcp"):
+        assert f"      - dependency-name: {dependency}\n{patch_ignore}" in uv_updates
+    assert f"      - dependency-name: \"@playwright/test\"\n{patch_ignore}" in npm_updates
+
+
+def test_dependabot_disables_docker_version_updates_without_disabling_security_updates() -> None:
+    config = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+
+    for ecosystem in ("docker", "docker-compose"):
+        block = _dependabot_block(config, ecosystem)
+        assert "    open-pull-requests-limit: 0\n" in block
+        assert "    ignore:\n" not in block
+
+    assert "applies-to: security-updates" not in config
+    assert "cooldown:" not in config
