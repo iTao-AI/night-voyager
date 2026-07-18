@@ -4,74 +4,65 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    versioning-strategy: increase-if-necessary
+    open-pull-requests-limit: 1
     groups:
-      python-runtime-patches:
+      python-routine-patches:
         applies-to: version-updates
-        patterns:
-          - alembic
-          - asyncpg
-          - fastapi
-          - pydantic-settings
-          - sqlalchemy
-          - starlette
-          - "uvicorn[standard]"
+        patterns: ["*"]
         update-types: ["patch"]
-      python-test-patches:
-        applies-to: version-updates
-        patterns: [pytest, pytest-asyncio]
-        update-types: ["patch"]
-      python-lint-patches:
-        applies-to: version-updates
-        patterns: [ruff]
-        update-types: ["patch"]
-      python-type-patches:
-        applies-to: version-updates
-        patterns: [pyright]
-        update-types: ["patch"]
-      python-build-patches:
-        applies-to: version-updates
-        patterns: [build]
-        update-types: ["patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: httpx2
+        update-types:
+          - version-update:semver-patch
+      - dependency-name: mcp
+        update-types:
+          - version-update:semver-patch
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
+    versioning-strategy: increase-if-necessary
+    open-pull-requests-limit: 1
     groups:
-      frontend-runtime-patches:
+      frontend-routine-patches:
         applies-to: version-updates
-        patterns: [next, react, react-dom]
+        patterns: ["*"]
         update-types: ["patch"]
-      frontend-types-patches:
-        applies-to: version-updates
-        patterns: ["@types/*"]
-        update-types: ["patch"]
-      frontend-browser-proof-patches:
-        applies-to: version-updates
-        patterns: ["@playwright/test"]
-        update-types: ["patch"]
-      frontend-lint-patches:
-        applies-to: version-updates
-        patterns: [eslint, eslint-config-next]
-        update-types: ["patch"]
-      frontend-dev-tooling-patches:
-        applies-to: version-updates
-        patterns: ["@testing-library/*", jsdom, typescript, vitest]
-        update-types: ["patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+      - dependency-name: "@playwright/test"
+        update-types:
+          - version-update:semver-patch
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      actions-routine-patches:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
-    ignore:
-      - dependency-name: python
-        update-types:
-          - version-update:semver-major
-          - version-update:semver-minor
-          - version-update:semver-patch
+    open-pull-requests-limit: 0
   - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 0
