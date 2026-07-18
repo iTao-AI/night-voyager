@@ -292,6 +292,64 @@ def test_pull_request_template_matches_repository_contract() -> None:
     assert "默认使用简体中文填写正文" in template
 
 
+def final_pr_body_reconciliation_errors(agents: str, template: str) -> list[str]:
+    required_agent_semantics = {
+        "satisfied_gate_checkbox": (
+            "must update each corresponding checkbox to `[x]`",
+        ),
+        "final_reconciliation_timing": (
+            "After merge and before closeout",
+            "final PR body reconciliation",
+        ),
+        "terminal_facts": (
+            "hosted checks, authorization, mergeability, review or platform blockers, "
+            "and cleanup",
+            "actual terminal state",
+            "necessary links",
+        ),
+        "remaining_risk_and_non_claims": (
+            "remaining risk",
+            "true non-claims",
+        ),
+        "persisted_body_gate": (
+            "Read back the persisted PR body",
+            "must not claim that PR closeout is fully complete",
+        ),
+        "no_stale_merged_pr": (
+            "A merged PR must not permanently retain a satisfied gate as unchecked",
+            "authorization, CI, or cleanup is still pending",
+        ),
+    }
+    errors = [
+        name
+        for name, tokens in required_agent_semantics.items()
+        if not all(token in agents for token in tokens)
+    ]
+    template_tokens = (
+        "已满足的 merge gate 必须改为 `[x]`",
+        "merge 后、closeout 前必须回写并回读最终 PR body",
+        "不得保留过期 pending 或 risk 文案",
+    )
+    if not all(token in template for token in template_tokens):
+        errors.append("template_final_reconciliation")
+    return errors
+
+
+def test_pr_body_contract_requires_final_reconciliation() -> None:
+    agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
+    template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
+    assert final_pr_body_reconciliation_errors(agents, template) == []
+
+    counterfactual = agents.replace(
+        "must update each corresponding checkbox to `[x]`",
+        "may leave each corresponding checkbox unchecked",
+        1,
+    )
+    assert "satisfied_gate_checkbox" in final_pr_body_reconciliation_errors(
+        counterfactual, template
+    )
+
+
 def test_current_documentation_release_and_planning_boundaries_do_not_drift() -> None:
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
     assert "DRA closure was released in v0.1.1" in docs_index

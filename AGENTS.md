@@ -237,6 +237,10 @@ Report command success only when the command exists and has actually passed in t
 - Structure PR descriptions result-first with `Summary`, `Completion`, and `Verification`, followed when relevant by `Scope`, `Risk / Impact`, and `Documentation impact`.
 - After creating or updating a PR, read back its persisted title, body, base, head, and
   draft state. Use checkboxes only for genuine pending merge gates.
+- When a merge gate becomes satisfied, the PR body must update each corresponding checkbox to `[x]`.
+- After merge and before closeout, perform a final PR body reconciliation. Replace pending claims about hosted checks, authorization, mergeability, review or platform blockers, and cleanup with their actual terminal state and necessary links; update remaining risk while preserving true non-claims such as work that was intentionally not performed.
+- Read back the persisted PR body after final reconciliation. If that update or readback fails, you must not claim that PR closeout is fully complete.
+- A merged PR must not permanently retain a satisfied gate as unchecked or continue to claim that authorization, CI, or cleanup is still pending.
 - Query hosted CI at low frequency and for a bounded duration. If the wait times out,
   record the exact pending check or trigger and stop instead of polling indefinitely.
 - Before merge, bind the exact base, reviewed HEAD, current PR head, required approvals,
