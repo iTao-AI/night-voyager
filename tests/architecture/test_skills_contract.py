@@ -8,16 +8,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def test_skill_manifests_are_packaged_at_the_registry_resource_paths() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    dockerfile = (ROOT / "Dockerfile.api").read_text(encoding="utf-8")
 
     assert (
         '"fixtures/skills/runtime-manifest-v1.json" = '
-        '"src/night_voyager/skills/data/runtime-manifest-v1.json"'
+        '"night_voyager/skills/data/runtime-manifest-v1.json"'
     ) in pyproject
     assert (
         '"fixtures/skills/eval-manifest-v1.json" = '
-        '"src/night_voyager/skills/data/eval-manifest-v1.json"'
+        '"night_voyager/skills/data/eval-manifest-v1.json"'
     ) in pyproject
     assert not (ROOT / "src/night_voyager/skills/data").exists()
+    assert "COPY fixtures/skills ./fixtures/skills" in dockerfile
 
 
 def test_skills_database_runner_is_registered_and_isolated() -> None:
@@ -35,6 +37,7 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     assert "docker compose --profile db-test down --volumes --remove-orphans" in runner
     assert "trap cleanup EXIT INT TERM" in runner
     assert "night-voyager-skills-db-check" in runner
+    assert "uv run --no-editable python scripts/seed_demo.py" in runner
 
 
 def test_skills_database_runner_freezes_the_approved_suite_map() -> None:
