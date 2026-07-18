@@ -651,7 +651,7 @@ async def _capture_exact_0006_baseline() -> tuple[str, str, str]:
             run_guard_definition,
         )
     finally:
-        _run_alembic("upgrade", "head")
+        _run_alembic("upgrade", "0007")
     await _assert_empty_boundary_at_0007()
     return legacy_definition, planning_persistence_definition, run_guard_definition
 
@@ -671,7 +671,7 @@ async def _round_trip_empty_boundary(
         )
         await _exercise_legacy_api_writer_at_0006()
     finally:
-        _run_alembic("upgrade", "head")
+        _run_alembic("upgrade", "0007")
     assert await _migration_head() == "0007"
     assert await _collaboration_catalog() == {table: (True, True) for table in COLLABORATION_TABLES}
     assert frozenset(await _collaboration_function_catalog()) == COLLABORATION_FUNCTIONS
@@ -705,7 +705,7 @@ async def _round_trip_unrelated_history(
         assert await _pr_a_history_counts() == (0, 0)
         assert await _unrelated_history_counts() == unrelated
     finally:
-        _run_alembic("upgrade", "head")
+        _run_alembic("upgrade", "0007")
     assert await _migration_head() == "0007"
     assert await _pr_a_history_counts() == (0, 0)
     assert await _unrelated_history_counts() == unrelated

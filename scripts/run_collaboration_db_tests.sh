@@ -17,6 +17,8 @@ if [ "$mode" = "inside-downgrade" ]; then
         echo "collaboration downgrade scenario environment mismatch" >&2
         exit 2
     fi
+    uv run alembic downgrade 0007
+    uv run alembic current | grep '0007'
     PYTEST_ADDOPTS= uv run pytest -q -m database \
         tests/integration/collaboration/test_collaboration_downgrade.py
     exit 0

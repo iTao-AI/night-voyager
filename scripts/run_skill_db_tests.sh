@@ -14,7 +14,12 @@ esac
 
 if [ "$mode" = "inside" ]; then
     uv run alembic downgrade 0007
-    uv run --no-editable python scripts/seed_demo.py --without-skills
+    if [ "$suite" = "worker" ]; then
+        uv run --no-editable python scripts/seed_demo.py \
+            --without-skills --without-collaboration
+    else
+        uv run --no-editable python scripts/seed_demo.py --without-skills
+    fi
     uv run alembic upgrade head
     case "$suite" in
         catalog)
@@ -29,8 +34,13 @@ if [ "$mode" = "inside" ]; then
                 tests/integration/skills/test_persisted_planning_materialization.py
             ;;
         worker)
-            uv run --no-editable python scripts/seed_demo.py
+            uv run --no-editable python scripts/seed_demo.py --without-collaboration
             echo "Skill database suite: worker"
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+                tests/integration/tasks/test_mixed_downgrade.py
+            # The legacy downgrade proof removes the 0008 seed while round-tripping
+            # back to head. Restore the canonical registry before pinned task tests.
+            uv run --no-editable python scripts/seed_demo.py --without-collaboration
             PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
                 tests/integration/skills/test_task_pins.py \
                 tests/integration/skills/test_persisted_planning_materialization.py \
@@ -40,8 +50,7 @@ if [ "$mode" = "inside" ]; then
                 tests/integration/tasks/test_sse.py \
                 tests/integration/tasks/test_worker.py \
                 tests/integration/tasks/test_worker_authority.py \
-                tests/integration/tasks/test_worker_capacity.py \
-                tests/integration/tasks/test_mixed_downgrade.py
+                tests/integration/tasks/test_worker_capacity.py
             ;;
         lifecycle)
             uv run --no-editable python scripts/seed_demo.py

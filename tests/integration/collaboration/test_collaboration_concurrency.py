@@ -21,6 +21,8 @@ from sqlalchemy.ext.asyncio import (
 
 from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.skills.models import SkillKey
+from night_voyager.skills.registry import SkillRuntimeRegistry
 
 pytestmark = pytest.mark.database
 
@@ -29,6 +31,12 @@ ADVISOR_ID = UUID("20000000-0000-0000-0000-000000000001")
 STUDENT_ID = UUID("20000000-0000-0000-0000-000000000002")
 PARENT_ID = UUID("20000000-0000-0000-0000-000000000003")
 PACK_ID = UUID("50000000-0000-0000-0000-000000000001")
+
+
+def skill_manifest() -> str:
+    return SkillRuntimeRegistry.load_packaged().get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    ).model_dump_json(exclude_none=True)
 
 CREATE_THREAD_SQL = text(
     "SELECT * FROM app.create_collaboration_thread("
@@ -57,7 +65,7 @@ VERIFY_CANDIDATE_DECISION_SQL = text(
 CREATE_TASK_SQL = text(
     "SELECT * FROM app.create_agent_task("
     ":org,:actor,:case,:task,'generate_planning_run_v1',1,:pack,1,"
-    "'m3a-policy-v1',:request_sha256,:key_sha256)"
+    "'m3a-policy-v1',CAST(:skill_manifest AS jsonb),:request_sha256,:key_sha256)"
 )
 
 
@@ -358,6 +366,7 @@ async def create_task(
             "case": case_id,
             "task": task_id,
             "pack": PACK_ID,
+            "skill_manifest": skill_manifest(),
             "request_sha256": request_sha256,
             "key_sha256": key_sha256,
         },
