@@ -14,6 +14,10 @@ from night_voyager.config import Environment, Settings
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.interfaces.http.identity import SESSION_COOKIE
 from night_voyager.interfaces.http.skills import (
+    ActivateSkillCandidateRequest,
+    CreateSkillCandidateRequest,
+    EvaluateSkillCandidateRequest,
+    RollbackSkillRequest,
     create_skills_router,
     skills_request_validation_problem,
 )
@@ -205,6 +209,13 @@ def build_client(
 ) -> TestClient:
     from night_voyager.interfaces.http import skills as skill_http
 
+    class FakeIdentityService:
+        def __init__(self, *_args: object) -> None:
+            pass
+
+        async def resolve(self, raw_session: str) -> ActorContext | None:
+            return context() if raw_session == OPAQUE_SESSION else None
+
     async def resolve_read(
         raw_session: str | None, _identity: object
     ) -> ActorContext:
@@ -223,6 +234,7 @@ def build_client(
 
     monkeypatch.setattr(skill_http, "resolve_actor_context", resolve_read)
     monkeypatch.setattr(skill_http, "resolve_mutation_actor_context", resolve_mutation)
+    monkeypatch.setattr(skill_http, "IdentityService", FakeIdentityService)
     app = FastAPI()
 
     @app.exception_handler(RequestValidationError)
@@ -263,6 +275,12 @@ def auth_headers(*, mutation: bool = False) -> dict[str, str]:
     return headers
 
 
+def replace_session(client: TestClient, raw_session: str | None) -> None:
+    client.cookies.clear()
+    if raw_session is not None:
+        client.cookies.set(SESSION_COOKIE, raw_session)
+
+
 def test_router_freezes_exact_seven_path_method_contracts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -278,6 +296,98 @@ def test_router_freezes_exact_seven_path_method_contracts(
         "/api/v1/cases/{case_id}/planning-skill-inspector": {"get"},
     }
     assert {path: set(paths[path]) & {"get", "post"} for path in expected} == expected
+
+
+def test_openapi_preserves_exact_mutation_request_schemas(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app = cast(FastAPI, build_client(monkeypatch, FakeSkillService()).app)
+    openapi = app.openapi()
+    paths = cast(dict[str, dict[str, Any]], openapi["paths"])
+    components = cast(
+        dict[str, object], openapi["components"]["schemas"]
+    )
+    expected = {
+        "/api/v1/skills/{skill_key}/change-candidates": (
+            CreateSkillCandidateRequest
+        ),
+        "/api/v1/skill-change-candidates/{candidate_id}/evaluations": (
+            EvaluateSkillCandidateRequest
+        ),
+        "/api/v1/skill-change-candidates/{candidate_id}/activations": (
+            ActivateSkillCandidateRequest
+        ),
+        "/api/v1/skills/{skill_key}/rollbacks": RollbackSkillRequest,
+    }
+
+    def dereference(
+        value: object,
+        definitions: dict[str, object],
+        prefix: str,
+    ) -> object:
+        if isinstance(value, dict):
+            mapping = cast(dict[str, object], value)
+            reference = mapping.get("$ref")
+            if isinstance(reference, str) and reference.startswith(prefix):
+                return dereference(
+                    definitions[reference.removeprefix(prefix)], definitions, prefix
+                )
+            return {
+                key: dereference(item, definitions, prefix)
+                for key, item in mapping.items()
+                if key != "$defs" and not (key == "default" and item is None)
+            }
+        if isinstance(value, list):
+            return [
+                dereference(item, definitions, prefix)
+                for item in cast(list[object], value)
+            ]
+        return value
+
+    for path, model in expected.items():
+        operation = paths[path]["post"]
+        actual = operation["requestBody"]["content"]["application/json"]["schema"]
+        expected_schema = model.model_json_schema()
+        expected_definitions = cast(
+            dict[str, object], expected_schema.get("$defs", {})
+        )
+        assert dereference(actual, components, "#/components/schemas/") == dereference(
+            expected_schema, expected_definitions, "#/$defs/"
+        )
+
+
+@pytest.mark.parametrize(
+    ("path", "method", "parameter_name"),
+    [
+        (
+            "/api/v1/skill-change-candidates/{candidate_id}/evaluations",
+            "post",
+            "candidate_id",
+        ),
+        (
+            "/api/v1/skill-change-candidates/{candidate_id}/activations",
+            "post",
+            "candidate_id",
+        ),
+        (
+            "/api/v1/cases/{case_id}/planning-skill-inspector",
+            "get",
+            "case_id",
+        ),
+    ],
+)
+def test_openapi_preserves_uuid_resource_path_contracts(
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    method: str,
+    parameter_name: str,
+) -> None:
+    app = cast(FastAPI, build_client(monkeypatch, FakeSkillService()).app)
+    operation = cast(dict[str, Any], app.openapi()["paths"][path][method])
+    parameters = cast(list[dict[str, Any]], operation["parameters"])
+    parameter = next(item for item in parameters if item["name"] == parameter_name)
+    assert parameter["schema"]["type"] == "string"
+    assert parameter["schema"]["format"] == "uuid"
 
 
 def test_catalog_and_inspector_are_session_bound_and_no_store(
@@ -399,23 +509,49 @@ def test_browser_cannot_submit_manifest_or_evaluation_authority(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = build_client(monkeypatch, FakeSkillService())
-    candidate = client.post(
-        "/api/v1/skills/study-destination-compare/change-candidates",
-        json={
-            "schema_version": 1,
-            "proposed_version": "1.0.1",
-            "provenance": "maintainer_proposal",
-            "reason": "Attempt to smuggle runtime authority.",
-            "executor_id": "browser-controlled",
-        },
-        headers=auth_headers(mutation=True),
+    requests = (
+        (
+            "/api/v1/skills/study-destination-compare/change-candidates",
+            {
+                "schema_version": 1,
+                "proposed_version": "1.0.1",
+                "provenance": "maintainer_proposal",
+                "reason": "Attempt to smuggle runtime authority.",
+                "executor_id": "browser-controlled",
+            },
+        ),
+        (
+            f"/api/v1/skill-change-candidates/{CANDIDATE}/evaluations",
+            {"schema_version": 1, "status": "passed"},
+        ),
+        (
+            f"/api/v1/skill-change-candidates/{CANDIDATE}/activations",
+            {
+                "schema_version": 1,
+                "expected_active_version": "1.0.0",
+                "expected_activation_sequence": 1,
+                "reason": "Malformed activation.",
+                "status": "passed",
+            },
+        ),
+        (
+            "/api/v1/skills/study-destination-compare/rollbacks",
+            {
+                "schema_version": 1,
+                "target_version": "1.0.0",
+                "expected_active_version": "1.0.1",
+                "expected_activation_sequence": 2,
+                "reason": "Malformed rollback.",
+                "runtime_binding_sha256": "f" * 64,
+            },
+        ),
     )
-    evaluation = client.post(
-        f"/api/v1/skill-change-candidates/{CANDIDATE}/evaluations",
-        json={"schema_version": 1, "status": "passed"},
-        headers=auth_headers(mutation=True),
-    )
-    for response in (candidate, evaluation):
+    for path, body in requests:
+        response = client.post(
+            path,
+            json=body,
+            headers=auth_headers(mutation=True),
+        )
         assert response.status_code == 422
         assert response.headers["content-type"].startswith(
             "application/problem+json"
@@ -474,3 +610,150 @@ def test_invalid_skill_path_is_non_enumerating(
     unauthenticated = client.get("/api/v1/skills/not-a-skill")
     assert unauthenticated.status_code == 401
     assert unauthenticated.json()["code"] == "authentication_failed"
+
+
+@pytest.mark.parametrize("raw_session", [None, "wrong-session-token"])
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        (
+            "post",
+            "/api/v1/skill-change-candidates/not-a-uuid/evaluations",
+            {"schema_version": 1},
+        ),
+        (
+            "post",
+            "/api/v1/skill-change-candidates/not-a-uuid/activations",
+            {
+                "schema_version": 1,
+                "expected_active_version": "1.0.0",
+                "expected_activation_sequence": 1,
+                "reason": "Bounded review input.",
+            },
+        ),
+        (
+            "get",
+            "/api/v1/cases/not-a-uuid/planning-skill-inspector",
+            None,
+        ),
+    ],
+)
+def test_authentication_precedes_malformed_resource_uuid(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_session: str | None,
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> None:
+    client = build_client(monkeypatch, FakeSkillService())
+    replace_session(client, raw_session)
+    response = client.request(
+        method,
+        path,
+        json=body,
+        headers=auth_headers(mutation=method == "post"),
+    )
+    assert response.status_code == 401
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["code"] == "authentication_failed"
+
+
+@pytest.mark.parametrize("raw_session", [None, "wrong-session-token"])
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        (
+            "/api/v1/skills/study-destination-compare/change-candidates",
+            {
+                "schema_version": 1,
+                "proposed_version": "1.0.1",
+                "provenance": "maintainer_proposal",
+                "reason": "Malformed authority attempt.",
+                "executor_id": "browser-controlled",
+            },
+        ),
+        (
+            f"/api/v1/skill-change-candidates/{CANDIDATE}/evaluations",
+            {"schema_version": 1, "status": "passed"},
+        ),
+        (
+            f"/api/v1/skill-change-candidates/{CANDIDATE}/activations",
+            {
+                "schema_version": 1,
+                "expected_active_version": "1.0.0",
+                "expected_activation_sequence": 1,
+            },
+        ),
+        (
+            "/api/v1/skills/study-destination-compare/rollbacks",
+            {
+                "schema_version": 2,
+                "target_version": "1.0.0",
+                "expected_active_version": "1.0.1",
+                "expected_activation_sequence": 2,
+                "reason": "Malformed schema version.",
+            },
+        ),
+    ],
+)
+def test_authentication_precedes_strict_mutation_body_validation(
+    monkeypatch: pytest.MonkeyPatch,
+    raw_session: str | None,
+    path: str,
+    body: dict[str, object],
+) -> None:
+    client = build_client(monkeypatch, FakeSkillService())
+    replace_session(client, raw_session)
+    response = client.post(
+        path,
+        json=body,
+        headers=auth_headers(mutation=True),
+    )
+    assert response.status_code == 401
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["code"] == "authentication_failed"
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        (
+            "post",
+            "/api/v1/skill-change-candidates/not-a-uuid/evaluations",
+            {"schema_version": 1},
+        ),
+        (
+            "post",
+            "/api/v1/skill-change-candidates/not-a-uuid/activations",
+            {
+                "schema_version": 1,
+                "expected_active_version": "1.0.0",
+                "expected_activation_sequence": 1,
+                "reason": "Bounded review input.",
+            },
+        ),
+        (
+            "get",
+            "/api/v1/cases/not-a-uuid/planning-skill-inspector",
+            None,
+        ),
+    ],
+)
+def test_authenticated_malformed_resource_uuid_is_non_enumerating(
+    monkeypatch: pytest.MonkeyPatch,
+    method: str,
+    path: str,
+    body: dict[str, object] | None,
+) -> None:
+    response = build_client(monkeypatch, FakeSkillService()).request(
+        method,
+        path,
+        json=body,
+        headers=auth_headers(mutation=method == "post"),
+    )
+    assert response.status_code == 404
+    assert response.headers["content-type"].startswith("application/problem+json")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["code"] == "resource_unavailable"

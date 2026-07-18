@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from typing import Literal, Protocol
+from typing import Annotated, Literal, Protocol, cast
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Cookie, Header, HTTPException, Path, Request, Response, status
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
+from pydantic import BaseModel, ConfigDict, PositiveInt, ValidationError, field_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import JSONResponse
@@ -129,6 +129,67 @@ class _ExpiredSessionError(Exception):
     pass
 
 
+class _SkillRequestValidationError(Exception):
+    pass
+
+
+def _inline_request_schema(model: type[BaseModel]) -> dict[str, object]:
+    schema = cast(dict[str, object], model.model_json_schema())
+    raw_definitions = schema.pop("$defs", {})
+    definitions = cast(dict[str, object], raw_definitions)
+
+    def resolve(value: object) -> object:
+        if isinstance(value, dict):
+            mapping = cast(dict[str, object], value)
+            reference = mapping.get("$ref")
+            if isinstance(reference, str) and reference.startswith("#/$defs/"):
+                name = reference.removeprefix("#/$defs/")
+                definition = definitions.get(name)
+                if definition is None:
+                    raise ValueError("request schema reference is unavailable")
+                return resolve(definition)
+            return {key: resolve(item) for key, item in mapping.items()}
+        if isinstance(value, list):
+            return [resolve(item) for item in cast(list[object], value)]
+        return value
+
+    resolved = resolve(schema)
+    if not isinstance(resolved, dict):
+        raise ValueError("request schema must be an object")
+    return cast(dict[str, object], resolved)
+
+
+def _request_body_openapi(model: type[BaseModel]) -> dict[str, object]:
+    return {
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {"schema": _inline_request_schema(model)}
+            },
+        }
+    }
+
+
+async def _parse_request_body[RequestModelT: BaseModel](
+    request: Request,
+    model: type[RequestModelT],
+) -> RequestModelT:
+    body = await request.body()
+    if len(body) > 16_384:
+        raise _SkillRequestValidationError
+    try:
+        return model.model_validate_json(body)
+    except (ValidationError, ValueError) as error:
+        raise _SkillRequestValidationError from error
+
+
+def _require_uuid(raw: str) -> UUID:
+    try:
+        return UUID(raw)
+    except ValueError as error:
+        raise SkillAuthorizationError("resource_unavailable") from error
+
+
 def is_skills_http_path(path: str) -> bool:
     if path == "/api/v1/skills":
         return True
@@ -170,6 +231,12 @@ def _expired_session_problem() -> JSONResponse:
 def _runtime_problem(error: BaseException) -> JSONResponse:
     if isinstance(error, _ExpiredSessionError):
         return _expired_session_problem()
+    if isinstance(error, _SkillRequestValidationError):
+        return problem(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            "request_validation_failed",
+            "request validation failed",
+        )
     if isinstance(error, HTTPException):
         code = (
             "authentication_failed"
@@ -434,10 +501,10 @@ def create_skills_router(
         "/skills/{skill_key}/change-candidates",
         status_code=status.HTTP_201_CREATED,
         response_model=SkillCandidateCreatedV1,
+        openapi_extra=_request_body_openapi(CreateSkillCandidateRequest),
     )
     async def create_candidate(  # pyright: ignore[reportUnusedFunction]
         skill_key: str,
-        payload: CreateSkillCandidateRequest,
         request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -448,20 +515,26 @@ def create_skills_router(
         if guarded is not None:
             return guarded
         assert idempotency_key is not None
+
+        async def operation(
+            context: ActorContext,
+            service: SkillApplication,
+        ) -> SkillCandidateCreatedV1:
+            parsed_skill_key = require_skill_key(skill_key)
+            payload = await _parse_request_body(request, CreateSkillCandidateRequest)
+            command = CreateSkillCandidateCommand(
+                skill_key=parsed_skill_key,
+                proposed_version=payload.proposed_version,
+                provenance=payload.provenance,
+                reason=payload.reason,
+                reference=payload.reference,
+            )
+            return await service.create_candidate(context, command, idempotency_key)
+
         result = await run_mutation(
             raw_session,
             csrf,
-            lambda context, service: service.create_candidate(
-                context,
-                CreateSkillCandidateCommand(
-                    skill_key=require_skill_key(skill_key),
-                    proposed_version=payload.proposed_version,
-                    provenance=payload.provenance,
-                    reason=payload.reason,
-                    reference=payload.reference,
-                ),
-                idempotency_key,
-            ),
+            operation,
         )
         if isinstance(result, JSONResponse):
             return result
@@ -472,10 +545,10 @@ def create_skills_router(
         "/skill-change-candidates/{candidate_id}/evaluations",
         status_code=status.HTTP_201_CREATED,
         response_model=SkillEvaluationRecordedV1,
+        openapi_extra=_request_body_openapi(EvaluateSkillCandidateRequest),
     )
     async def evaluate_candidate(  # pyright: ignore[reportUnusedFunction]
-        candidate_id: UUID,
-        _payload: EvaluateSkillCandidateRequest,
+        candidate_id: Annotated[str, Path(json_schema_extra={"format": "uuid"})],
         request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -486,14 +559,23 @@ def create_skills_router(
         if guarded is not None:
             return guarded
         assert idempotency_key is not None
+
+        async def operation(
+            context: ActorContext,
+            service: SkillApplication,
+        ) -> SkillEvaluationRecordedV1:
+            parsed_candidate_id = _require_uuid(candidate_id)
+            await _parse_request_body(request, EvaluateSkillCandidateRequest)
+            return await service.evaluate_candidate(
+                context,
+                EvaluateSkillCandidateCommand(candidate_id=parsed_candidate_id),
+                idempotency_key,
+            )
+
         result = await run_mutation(
             raw_session,
             csrf,
-            lambda context, service: service.evaluate_candidate(
-                context,
-                EvaluateSkillCandidateCommand(candidate_id=candidate_id),
-                idempotency_key,
-            ),
+            operation,
         )
         if isinstance(result, JSONResponse):
             return result
@@ -504,10 +586,10 @@ def create_skills_router(
         "/skill-change-candidates/{candidate_id}/activations",
         status_code=status.HTTP_201_CREATED,
         response_model=SkillActivationRecordedV1,
+        openapi_extra=_request_body_openapi(ActivateSkillCandidateRequest),
     )
     async def activate_candidate(  # pyright: ignore[reportUnusedFunction]
-        candidate_id: UUID,
-        payload: ActivateSkillCandidateRequest,
+        candidate_id: Annotated[str, Path(json_schema_extra={"format": "uuid"})],
         request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -518,18 +600,25 @@ def create_skills_router(
         if guarded is not None:
             return guarded
         assert idempotency_key is not None
-        command = ActivateSkillCandidateCommand(
-            candidate_id=candidate_id,
-            expected_active_version=payload.expected_active_version,
-            expected_activation_sequence=payload.expected_activation_sequence,
-            reason=payload.reason,
-        )
+
+        async def operation(
+            context: ActorContext,
+            service: SkillApplication,
+        ) -> SkillActivationRecordedV1:
+            parsed_candidate_id = _require_uuid(candidate_id)
+            payload = await _parse_request_body(request, ActivateSkillCandidateRequest)
+            command = ActivateSkillCandidateCommand(
+                candidate_id=parsed_candidate_id,
+                expected_active_version=payload.expected_active_version,
+                expected_activation_sequence=payload.expected_activation_sequence,
+                reason=payload.reason,
+            )
+            return await service.activate_candidate(context, command, idempotency_key)
+
         result = await run_mutation(
             raw_session,
             csrf,
-            lambda context, service: service.activate_candidate(
-                context, command, idempotency_key
-            ),
+            operation,
         )
         if isinstance(result, JSONResponse):
             return result
@@ -540,10 +629,10 @@ def create_skills_router(
         "/skills/{skill_key}/rollbacks",
         status_code=status.HTTP_201_CREATED,
         response_model=SkillActivationRecordedV1,
+        openapi_extra=_request_body_openapi(RollbackSkillRequest),
     )
     async def rollback_skill(  # pyright: ignore[reportUnusedFunction]
         skill_key: str,
-        payload: RollbackSkillRequest,
         request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
@@ -554,20 +643,26 @@ def create_skills_router(
         if guarded is not None:
             return guarded
         assert idempotency_key is not None
+
+        async def operation(
+            context: ActorContext,
+            service: SkillApplication,
+        ) -> SkillActivationRecordedV1:
+            parsed_skill_key = require_skill_key(skill_key)
+            payload = await _parse_request_body(request, RollbackSkillRequest)
+            command = RollbackSkillCommand(
+                skill_key=parsed_skill_key,
+                target_version=payload.target_version,
+                expected_active_version=payload.expected_active_version,
+                expected_activation_sequence=payload.expected_activation_sequence,
+                reason=payload.reason,
+            )
+            return await service.rollback_skill(context, command, idempotency_key)
+
         result = await run_mutation(
             raw_session,
             csrf,
-            lambda context, service: service.rollback_skill(
-                context,
-                RollbackSkillCommand(
-                    skill_key=require_skill_key(skill_key),
-                    target_version=payload.target_version,
-                    expected_active_version=payload.expected_active_version,
-                    expected_activation_sequence=payload.expected_activation_sequence,
-                    reason=payload.reason,
-                ),
-                idempotency_key,
-            ),
+            operation,
         )
         if isinstance(result, JSONResponse):
             return result
@@ -579,13 +674,15 @@ def create_skills_router(
         response_model=PlanningSkillInspectorV1,
     )
     async def inspect_planning_skill(  # pyright: ignore[reportUnusedFunction]
-        case_id: UUID,
+        case_id: Annotated[str, Path(json_schema_extra={"format": "uuid"})],
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     ) -> PlanningSkillInspectorV1 | JSONResponse:
         result = await run_read(
             raw_session,
-            lambda context, service: service.inspect_planning_skill(context, case_id),
+            lambda context, service: service.inspect_planning_skill(
+                context, _require_uuid(case_id)
+            ),
         )
         if isinstance(result, JSONResponse):
             return result
