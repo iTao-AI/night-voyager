@@ -75,6 +75,21 @@ def test_governed_collaboration_http_matrix_is_exactly_registered() -> None:
         assert set(paths[path]) >= methods
 
 
+def test_governed_skill_http_matrix_is_exactly_registered() -> None:
+    paths = create_app().openapi()["paths"]
+    expected = {
+        "/api/v1/skills": {"get"},
+        "/api/v1/skills/{skill_key}": {"get"},
+        "/api/v1/skills/{skill_key}/change-candidates": {"post"},
+        "/api/v1/skill-change-candidates/{candidate_id}/evaluations": {"post"},
+        "/api/v1/skill-change-candidates/{candidate_id}/activations": {"post"},
+        "/api/v1/skills/{skill_key}/rollbacks": {"post"},
+        "/api/v1/cases/{case_id}/planning-skill-inspector": {"get"},
+    }
+    for path, methods in expected.items():
+        assert set(paths[path]) >= methods
+
+
 def test_collaboration_validation_uses_bounded_problem_json() -> None:
     response: Response = TestClient(create_app()).post(
         "/api/v1/collaboration-threads/"

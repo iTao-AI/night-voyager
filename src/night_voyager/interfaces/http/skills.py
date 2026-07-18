@@ -375,10 +375,14 @@ def create_skills_router(
     router = APIRouter(prefix="/api/v1")
 
     if service_factory is None:
-        registry = SkillRuntimeRegistry.load_packaged()
-        evaluator = SkillEvaluator.load_packaged(registry)
+        runtime: tuple[SkillRuntimeRegistry, SkillEvaluator] | None = None
 
         def default_service_factory(session: AsyncSession) -> SkillApplication:
+            nonlocal runtime
+            if runtime is None:
+                registry = SkillRuntimeRegistry.load_packaged()
+                runtime = (registry, SkillEvaluator.load_packaged(registry))
+            registry, evaluator = runtime
             return SkillService(
                 PostgresSkillRepository(session),
                 registry=registry,
