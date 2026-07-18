@@ -3,6 +3,7 @@ set -eu
 
 mode=${1:-outside}
 suite=${SUITE:-${2:-}}
+phase=${3:-all}
 
 case "$suite" in
     catalog|worker|lifecycle) ;;
@@ -53,14 +54,29 @@ if [ "$mode" = "inside" ]; then
                 tests/integration/tasks/test_worker_capacity.py
             ;;
         lifecycle)
-            uv run --no-editable python scripts/seed_demo.py
-            echo "Skill database suite: lifecycle"
-            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
-                tests/integration/skills/test_skill_lifecycle.py \
-                tests/integration/skills/test_http_skills.py \
-                tests/integration/skills/test_persisted_planning_materialization.py \
-                tests/integration/skills/test_postgres_skills.py \
-                tests/integration/skills/test_skill_downgrade.py
+            case "$phase" in
+                downgrade)
+                    uv run --no-editable python scripts/seed_demo.py \
+                        --without-collaboration
+                    echo "Skill database suite: lifecycle downgrade boundary"
+                    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' \
+                        -m database tests/integration/skills/test_skill_downgrade.py
+                    ;;
+                main)
+                    uv run --no-editable python scripts/seed_demo.py
+                    echo "Skill database suite: lifecycle"
+                    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' \
+                        -m database \
+                        tests/integration/skills/test_skill_lifecycle.py \
+                        tests/integration/skills/test_http_skills.py \
+                        tests/integration/skills/test_persisted_planning_materialization.py \
+                        tests/integration/skills/test_postgres_skills.py
+                    ;;
+                *)
+                    echo "unknown lifecycle phase: $phase" >&2
+                    exit 2
+                    ;;
+            esac
             ;;
     esac
     exit 0
@@ -94,10 +110,20 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-active_project="${base_project}-${suite}"
-export COMPOSE_PROJECT_NAME="$active_project"
-docker compose --profile db-test config --quiet
-docker compose --profile db-test run --rm --build db-test \
-    sh scripts/run_skill_db_tests.sh inside "$suite"
-cleanup
+run_suite() {
+    active_project=$1
+    run_phase=$2
+    export COMPOSE_PROJECT_NAME="$active_project"
+    docker compose --profile db-test config --quiet
+    docker compose --profile db-test run --rm --build db-test \
+        sh scripts/run_skill_db_tests.sh inside "$suite" "$run_phase"
+    cleanup
+}
+
+if [ "$suite" = "lifecycle" ]; then
+    run_suite "${base_project}-${suite}-downgrade" downgrade
+    run_suite "${base_project}-${suite}" main
+else
+    run_suite "${base_project}-${suite}" all
+fi
 trap - EXIT INT TERM
