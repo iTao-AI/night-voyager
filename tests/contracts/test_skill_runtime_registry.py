@@ -32,7 +32,9 @@ def test_checked_in_manifest_has_exact_runtime_and_catalog_boundaries() -> None:
 
 
 def test_registry_production_loader_uses_only_importlib_resources() -> None:
-    source = inspect.getsource(inspect.getmodule(SkillRuntimeRegistry))
+    module = inspect.getmodule(SkillRuntimeRegistry)
+    assert module is not None
+    source = inspect.getsource(module)
     loader = inspect.getsource(SkillRuntimeRegistry.load_packaged)
     assert "from importlib import resources" in source
     assert 'resources.files("night_voyager.skills")' in loader
