@@ -6,6 +6,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def test_skill_manifests_are_packaged_at_the_registry_resource_paths() -> None:
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert (
+        '"fixtures/skills/runtime-manifest-v1.json" = '
+        '"src/night_voyager/skills/data/runtime-manifest-v1.json"'
+    ) in pyproject
+    assert (
+        '"fixtures/skills/eval-manifest-v1.json" = '
+        '"src/night_voyager/skills/data/eval-manifest-v1.json"'
+    ) in pyproject
+    assert not (ROOT / "src/night_voyager/skills/data").exists()
+
+
 def test_skills_database_runner_is_registered_and_isolated() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     runner_path = ROOT / "scripts/run_skill_db_tests.sh"
