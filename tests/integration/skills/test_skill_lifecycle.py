@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 import subprocess
 from hashlib import sha256
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -56,6 +58,9 @@ RACE_EVENTS = (
     UUID("8f300000-0000-0000-0000-000000000020"),
     UUID("8f300000-0000-0000-0000-000000000021"),
 )
+FORGED_CANDIDATE = UUID("8f100000-0000-0000-0000-000000000099")
+FORGED_EVALUATION = UUID("8f200000-0000-0000-0000-000000000099")
+FORGED_PROMOTION = UUID("8f300000-0000-0000-0000-000000000099")
 
 
 def _key_sha256(value: str) -> str:
@@ -101,6 +106,62 @@ def _evaluation() -> dict[str, object]:
         .evaluate(SkillKey.STUDY_DESTINATION_COMPARE, "1.0.1")
         .model_dump(mode="json")
     )
+
+
+def _forged_evaluations() -> tuple[tuple[str, dict[str, object]], ...]:
+    canonical = _evaluation()
+    assertions = cast(list[dict[str, Any]], canonical["assertions"])
+    assert assertions
+
+    forged: list[tuple[str, dict[str, object]]] = []
+    for name in (
+        "empty_assertions",
+        "missing_assertion",
+        "extra_assertion",
+        "duplicate_assertion",
+        "reordered_assertions",
+        "random_observed_hash",
+        "random_output_hash",
+        "forged_version",
+        "forged_evaluator",
+        "forged_dataset",
+        "forged_status",
+    ):
+        result = copy.deepcopy(canonical)
+        result_assertions = cast(list[dict[str, Any]], result["assertions"])
+        if name == "empty_assertions":
+            result["assertions"] = []
+        elif name == "missing_assertion":
+            result["assertions"] = result_assertions[:-1]
+        elif name == "extra_assertion":
+            result_assertions.append(
+                {
+                    "assertion_id": "study-destination-compare.unregistered-assertion",
+                    "observed_sha256": "a" * 64,
+                    "passed": True,
+                }
+            )
+        elif name == "duplicate_assertion":
+            result_assertions.append(copy.deepcopy(result_assertions[-1]))
+        elif name == "reordered_assertions":
+            result["assertions"] = list(reversed(result_assertions))
+        elif name == "random_observed_hash":
+            first = result_assertions[0]
+            first["observed_sha256"] = "f" * 64
+        elif name == "random_output_hash":
+            result["output_sha256"] = "f" * 64
+        elif name == "forged_version":
+            result["version"] = "1.0.0"
+        elif name == "forged_evaluator":
+            result["evaluator_version"] = "v2"
+        elif name == "forged_dataset":
+            result["dataset_sha256"] = "f" * 64
+        else:
+            first = result_assertions[0]
+            result["status"] = "failed"
+            result["failed_assertion_ids"] = [first["assertion_id"]]
+        forged.append((name, result))
+    return tuple(forged)
 
 
 def registration_command(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -185,6 +246,120 @@ async def reset_nonseed_skill_history() -> None:
                 await connection.execute(text(f"ALTER TABLE app.{table} ENABLE TRIGGER {trigger}"))
     finally:
         await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_api_role_cannot_forge_passing_evaluation_authority() -> None:
+    await reset_nonseed_skill_history()
+    registered = registration_command(
+        "--skill-key",
+        "study-destination-compare",
+        "--version",
+        "1.0.1",
+    )
+    assert registered.returncode == 0, registered.stderr
+
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                await _set_advisor_context(connection)
+                await _create_candidate(
+                    connection,
+                    candidate_id=FORGED_CANDIDATE,
+                    suffix="forged-evaluation",
+                )
+
+                for index, (name, forged) in enumerate(_forged_evaluations(), start=1):
+                    savepoint = await connection.begin_nested()
+                    try:
+                        with pytest.raises(DBAPIError) as captured:
+                            await connection.execute(
+                                text(
+                                    "SELECT * FROM app.record_skill_candidate_evaluation("
+                                    ":org,:actor,:candidate,:evaluation,CAST(:result AS jsonb),"
+                                    ":request_hash,:key_hash)"
+                                ),
+                                {
+                                    "org": ORG,
+                                    "actor": ADVISOR,
+                                    "candidate": FORGED_CANDIDATE,
+                                    "evaluation": FORGED_EVALUATION,
+                                    "result": _json(forged),
+                                    "request_hash": canonical_sha256(forged),
+                                    "key_hash": _key_sha256(f"forged-evaluation-{name}"),
+                                },
+                            )
+                        assert getattr(captured.value.orig, "sqlstate", None) == "NV006"
+                    finally:
+                        await savepoint.rollback()
+
+                    savepoint = await connection.begin_nested()
+                    try:
+                        with pytest.raises(DBAPIError) as captured:
+                            await connection.execute(
+                                text(
+                                    "SELECT * FROM app.promote_skill_change_candidate("
+                                    ":org,:actor,:candidate,:event,'1.0.0',1,"
+                                    ":reason,CAST(:manifest AS jsonb),:request_hash,:key_hash)"
+                                ),
+                                {
+                                    "org": ORG,
+                                    "actor": ADVISOR,
+                                    "candidate": FORGED_CANDIDATE,
+                                    "event": FORGED_PROMOTION,
+                                    "reason": f"reject forged evaluation {name}",
+                                    "manifest": _json(_manifest("1.0.1")),
+                                    "request_hash": canonical_sha256(
+                                        {"forged_promotion": name, "index": index}
+                                    ),
+                                    "key_hash": _key_sha256(f"forged-promotion-{name}"),
+                                },
+                            )
+                        assert getattr(captured.value.orig, "sqlstate", None) == "NV018"
+                    finally:
+                        await savepoint.rollback()
+
+                await transaction.commit()
+            finally:
+                if transaction.is_active:
+                    await transaction.rollback()
+
+        async with migrator.connect() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            assert not await connection.scalar(
+                text(
+                    "SELECT EXISTS(SELECT 1 FROM app.skill_evaluation_results "
+                    "WHERE organization_id=:org AND candidate_id=:candidate)"
+                ),
+                {"org": ORG, "candidate": FORGED_CANDIDATE},
+            )
+            assert not await connection.scalar(
+                text(
+                    "SELECT EXISTS(SELECT 1 FROM app.skill_activation_events "
+                    "WHERE organization_id=:org AND candidate_id=:candidate)"
+                ),
+                {"org": ORG, "candidate": FORGED_CANDIDATE},
+            )
+            assert not await connection.scalar(
+                text(
+                    "SELECT EXISTS(SELECT 1 FROM app.idempotency_records "
+                    "WHERE organization_id=:org AND actor_id=:actor "
+                    "AND operation IN ('skill_candidate_evaluate',"
+                    "'skill_candidate_promote'))"
+                ),
+                {"org": ORG, "actor": ADVISOR},
+            )
+    finally:
+        await migrator.dispose()
+        await engine.dispose()
+        await reset_nonseed_skill_history()
 
 
 async def _create_candidate(

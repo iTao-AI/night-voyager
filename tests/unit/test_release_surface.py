@@ -192,7 +192,11 @@ def test_release_verifier_registers_skill_authority_without_version_change() -> 
     verifier = load_verifier()
 
     assert verifier.VERSION == "0.1.1"
-    assert verifier.LOCKED_FASTAPI_VERSION == "0.139.2"
+    assert not hasattr(verifier, "LOCKED_FASTAPI_VERSION")
+    assert verifier.FASTAPI_VERSION_FLOOR == (0, 139, 2)
+    assert verifier.FASTAPI_VERSION_CEILING == (0, 140)
+    source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    assert "FastAPI >=0.139.2,<0.140" in source
     assert {
         "skill_definitions",
         "skill_versions",

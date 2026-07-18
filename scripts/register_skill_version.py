@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
+from night_voyager.skills.evaluation import SkillEvaluator
 from night_voyager.skills.models import SkillKey, SkillRuntimeManifestEntryV1
 from night_voyager.skills.registry import (
     SkillRuntimeIncompatibility,
@@ -62,6 +63,7 @@ def _require_exact_row(
     entry: SkillRuntimeManifestEntryV1,
     registry: SkillRuntimeRegistry,
     supersedes_version_id: UUID,
+    expected_evaluation_projection: Mapping[str, Any],
 ) -> None:
     projection = entry.model_dump(mode="json", exclude_none=True)
     expected = {
@@ -74,6 +76,7 @@ def _require_exact_row(
         "runtime_manifest_version": registry.manifest.manifest_version,
         "runtime_manifest_sha256": registry.manifest.manifest_sha256,
         "manifest_projection": projection,
+        "expected_evaluation_projection": dict(expected_evaluation_projection),
         "supersedes_version_id": supersedes_version_id,
         "is_seed": False,
     }
@@ -150,6 +153,7 @@ async def _load_registered_row(
                     "SELECT id,definition_id,skill_key,semantic_version,binding_kind,"
                     "runtime_manifest_id,runtime_manifest_version,"
                     "runtime_manifest_sha256,manifest_projection,"
+                    "expected_evaluation_projection,"
                     "supersedes_version_id,is_seed "
                     "FROM app.skill_versions WHERE organization_id=:org "
                     "AND definition_id=:definition AND semantic_version=:version"
@@ -174,6 +178,7 @@ async def _insert_registered_version(
     supersedes_version_id: UUID,
     entry: SkillRuntimeManifestEntryV1,
     registry: SkillRuntimeRegistry,
+    expected_evaluation_projection: Mapping[str, Any],
 ) -> None:
     manifest = entry.model_dump(mode="json", exclude_none=True)
     await connection.execute(
@@ -185,6 +190,7 @@ async def _insert_registered_version(
             "tool_allowlist_sha256,data_scopes,data_scope_sha256,side_effect_level,"
             "approval_policy,policy_version,policy_sha256,evaluation_dataset_id,"
             "evaluation_dataset_version,evaluation_dataset_sha256,runtime_manifest_id,"
+            "expected_evaluation_projection,"
             "runtime_manifest_version,runtime_manifest_sha256,operation_bindings,"
             "runtime_binding_sha256,manifest_projection,supersedes_version_id,is_seed) "
             "VALUES(:org,:version_id,:definition,:skill_key,:semantic_version,"
@@ -194,7 +200,8 @@ async def _insert_registered_version(
             "CAST(:data_scopes AS jsonb),:data_scope_sha256,:side_effect_level,"
             ":approval_policy,:policy_version,:policy_sha256,:evaluation_dataset_id,"
             ":evaluation_dataset_version,:evaluation_dataset_sha256,"
-            ":runtime_manifest_id,:runtime_manifest_version,:runtime_manifest_sha256,"
+            ":runtime_manifest_id,CAST(:expected_evaluation_projection AS jsonb),"
+            ":runtime_manifest_version,:runtime_manifest_sha256,"
             "CAST(:operation_bindings AS jsonb),:runtime_binding_sha256,"
             "CAST(:manifest_projection AS jsonb),:supersedes_version_id,false) "
             "ON CONFLICT (organization_id,definition_id,semantic_version) DO NOTHING"
@@ -225,6 +232,9 @@ async def _insert_registered_version(
             "evaluation_dataset_version": entry.evaluation_dataset_version,
             "evaluation_dataset_sha256": entry.evaluation_dataset_sha256,
             "runtime_manifest_id": registry.manifest.manifest_id,
+            "expected_evaluation_projection": _canonical_json(
+                dict(expected_evaluation_projection)
+            ),
             "runtime_manifest_version": registry.manifest.manifest_version,
             "runtime_manifest_sha256": registry.manifest.manifest_sha256,
             "operation_bindings": _canonical_json(
@@ -247,10 +257,14 @@ async def register_skill_version(
     version: str,
 ) -> bool:
     registry = SkillRuntimeRegistry.load_packaged()
+    evaluator = SkillEvaluator.load_packaged(registry)
     try:
         entry = registry.get(skill_key, version)
     except SkillRuntimeIncompatibility as error:
         raise SkillVersionRegistrationError("unsupported Skill version") from error
+    expected_evaluation_projection = evaluator.evaluate(skill_key, version).model_dump(
+        mode="json"
+    )
 
     engine = create_async_engine(database_url)
     try:
@@ -281,6 +295,7 @@ async def register_skill_version(
                     entry=entry,
                     registry=registry,
                     supersedes_version_id=supersedes_version_id,
+                    expected_evaluation_projection=expected_evaluation_projection,
                 )
                 return False
 
@@ -291,6 +306,7 @@ async def register_skill_version(
                 supersedes_version_id,
                 entry,
                 registry,
+                expected_evaluation_projection,
             )
             registered = await _load_registered_row(
                 connection,
@@ -307,6 +323,7 @@ async def register_skill_version(
                 entry=entry,
                 registry=registry,
                 supersedes_version_id=supersedes_version_id,
+                expected_evaluation_projection=expected_evaluation_projection,
             )
             return True
     except SQLAlchemyError as error:

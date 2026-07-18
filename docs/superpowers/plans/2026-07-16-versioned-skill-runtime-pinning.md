@@ -78,8 +78,11 @@ AgentTask/worker/opaque-session boundary.
   current active version for the runtime Skill or the latest registered version for a
   catalog-only Skill.
 - Activation/evaluation evidence is not browser authority. Evaluation is computed by
-  the checked-in deterministic evaluator. Activation and rollback require the
-  designated owner advisor and append immutable events.
+  the checked-in deterministic evaluator. Seed and explicit registration store its
+  trusted expected canonical projection on the immutable SkillVersion; the API-role
+  mutation requires complete projection equality before persisting evaluation
+  evidence. Activation and rollback require the designated owner advisor and append
+  immutable events.
 - A new planning task resolves the active Skill under the same transaction that owns
   idempotency replay, effective-task uniqueness, task insert, and dispatch insert.
   Activation/rollback affects only tasks created after the new event.
@@ -538,6 +541,11 @@ branch review.
   equals the immutable version. Add the same five fields to executions with a
   composite FK/equality guard to the parent task. New tasks require all fields;
   pre-`0008` history may be all-null only under the migration rule.
+
+  Each version also stores the migrator-owned expected canonical evaluation
+  projection produced by the packaged evaluator. Candidate evaluation persists only
+  an exact full-projection match; partial assertion-shape checks cannot grant passing
+  authority.
 
   `skill_definitions.owner_actor_id` has an exact composite FK to an organization
   advisor membership. Activation sequence is unique and monotonic per definition;

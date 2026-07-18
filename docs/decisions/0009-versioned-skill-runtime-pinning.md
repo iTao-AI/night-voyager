@@ -47,8 +47,12 @@ entry. Database rows contain immutable identities and hashes, never executable c
 prompt text, import paths, shell commands, package URLs, or arbitrary tool names.
 
 Deterministic evaluation invokes checked-in pure product policies. The browser submits
-neither result status nor assertion output. A passing evaluation is immutable evidence;
-promotion still requires the designated owner and expected active version/sequence.
+neither result status nor assertion output. Each registered version also stores the
+migrator-owned expected evaluation projection produced by the packaged evaluator.
+The API mutation persists a result only when its complete canonical projection is
+identical, so an API-role caller cannot invent assertion IDs, observations, status,
+failed IDs, or an output hash. A passing evaluation is immutable evidence; promotion
+still requires the designated owner and expected active version/sequence.
 Activation and rollback append events and never rewrite version or evaluation history.
 
 Every new planning AgentTask resolves the current runtime Skill inside the same

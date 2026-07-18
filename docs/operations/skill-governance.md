@@ -63,9 +63,10 @@ uv run --no-editable python scripts/register_skill_version.py \
   --skill-key study-destination-compare --version 1.0.1
 ```
 
-The command loads the packaged registry, inserts only the exact supported immutable
-tuple, is idempotent for an exact match, and fails closed on mismatch. It is not run
-by Alembic, the default seed, Compose bootstrap, FastAPI, or the browser.
+The command loads the packaged registry and evaluator, inserts only the exact supported
+immutable runtime tuple and trusted expected evaluation projection, is idempotent for
+an exact match, and fails closed on mismatch. It is not run by Alembic, the default
+seed, Compose bootstrap, FastAPI, or the browser.
 
 ## Runtime lifecycle
 

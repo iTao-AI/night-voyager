@@ -63,6 +63,8 @@ CREATE TABLE app.skill_versions (
   evaluation_dataset_id text NOT NULL,
   evaluation_dataset_version text NOT NULL,
   evaluation_dataset_sha256 text NOT NULL CHECK (evaluation_dataset_sha256 ~ '^[0-9a-f]{64}$'),
+  expected_evaluation_projection jsonb NOT NULL
+    CHECK (jsonb_typeof(expected_evaluation_projection)='object'),
   runtime_manifest_id text NOT NULL,
   runtime_manifest_version text NOT NULL,
   runtime_manifest_sha256 text NOT NULL CHECK (runtime_manifest_sha256 ~ '^[0-9a-f]{64}$'),
@@ -108,6 +110,22 @@ CREATE TABLE app.skill_versions (
       'operation_bindings',operation_bindings,
       'runtime_binding_sha256',runtime_binding_sha256
     ))
+  ),
+  CHECK (
+    expected_evaluation_projection->>'schema_version'='1'
+    AND expected_evaluation_projection->>'skill_key'=skill_key
+    AND expected_evaluation_projection->>'version'=semantic_version
+    AND expected_evaluation_projection->>'evaluator_id'=
+      'night-voyager.deterministic-skill-evaluator'
+    AND expected_evaluation_projection->>'evaluator_version'='v1'
+    AND expected_evaluation_projection->>'dataset_id'=evaluation_dataset_id
+    AND expected_evaluation_projection->>'dataset_version'=evaluation_dataset_version
+    AND expected_evaluation_projection->>'dataset_sha256'=evaluation_dataset_sha256
+    AND jsonb_typeof(expected_evaluation_projection->'assertions')='array'
+    AND jsonb_array_length(expected_evaluation_projection->'assertions')>0
+    AND jsonb_typeof(expected_evaluation_projection->'failed_assertion_ids')='array'
+    AND expected_evaluation_projection->>'status' IN ('passed','failed')
+    AND expected_evaluation_projection->>'output_sha256' ~ '^[0-9a-f]{64}$'
   ),
   FOREIGN KEY (organization_id,definition_id,skill_key,binding_kind)
     REFERENCES app.skill_definitions(organization_id,id,skill_key,binding_kind),
@@ -693,30 +711,7 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='NV017', MESSAGE='Skill candidate is terminal';
   END IF;
   SELECT * INTO version FROM app.skill_versions WHERE organization_id=p_org AND id=candidate.proposed_version_id;
-  IF jsonb_typeof(p_result)<>'object'
-     OR p_result->>'schema_version'<>'1'
-     OR p_result->>'skill_key'<>definition.skill_key
-     OR p_result->>'version'<>version.semantic_version
-     OR p_result->>'evaluator_id'<>'night-voyager.deterministic-skill-evaluator'
-     OR p_result->>'evaluator_version'<>'v1'
-     OR p_result->>'dataset_id'<>version.evaluation_dataset_id
-     OR p_result->>'dataset_version'<>version.evaluation_dataset_version
-     OR p_result->>'dataset_sha256'<>version.evaluation_dataset_sha256
-     OR p_result->>'output_sha256' !~ '^[0-9a-f]{64}$'
-     OR p_result->>'status' NOT IN ('passed','failed')
-     OR jsonb_typeof(p_result->'assertions')<>'array'
-     OR jsonb_typeof(p_result->'failed_assertion_ids')<>'array'
-     OR (
-       p_result->>'status'='passed'
-       AND (
-         p_result->'failed_assertion_ids'<>'[]'::jsonb
-         OR EXISTS (
-           SELECT 1 FROM jsonb_array_elements(p_result->'assertions') assertion
-           WHERE assertion->>'passed'<>'true'
-              OR assertion->>'observed_sha256' !~ '^[0-9a-f]{64}$'
-         )
-       )
-     ) THEN
+  IF p_result IS DISTINCT FROM version.expected_evaluation_projection THEN
     RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='invalid Skill evaluation result';
   END IF;
   INSERT INTO app.skill_evaluation_results(
@@ -859,6 +854,7 @@ BEGIN
       output_contract_id,output_schema_sha256,content_sha256,tool_ids,tool_allowlist_sha256,
       data_scopes,data_scope_sha256,side_effect_level,approval_policy,policy_version,policy_sha256,
       evaluation_dataset_id,evaluation_dataset_version,evaluation_dataset_sha256,
+      expected_evaluation_projection,
       runtime_manifest_id,runtime_manifest_version,runtime_manifest_sha256,
       operation_bindings,runtime_binding_sha256,manifest_projection,supersedes_version_id,is_seed
     ) VALUES(
@@ -872,6 +868,7 @@ BEGIN
       manifest->>'data_scope_sha256',manifest->>'side_effect_level',manifest->>'approval_policy',
       manifest->>'policy_version',manifest->>'policy_sha256',manifest->>'evaluation_dataset_id',
       manifest->>'evaluation_dataset_version',manifest->>'evaluation_dataset_sha256',
+      evaluation,
       p_seed->>'runtime_manifest_id',p_seed->>'runtime_manifest_version',
       p_seed->>'runtime_manifest_sha256',manifest->'operation_bindings',
       NULLIF(manifest->>'runtime_binding_sha256',''),manifest,
@@ -881,6 +878,7 @@ BEGIN
      WHERE organization_id=p_org AND definition_id=definition.id
        AND semantic_version=manifest->>'version';
     IF version.id<>(item->>'version_id')::uuid OR version.manifest_projection<>manifest
+       OR version.expected_evaluation_projection<>evaluation
        OR version.is_seed<>COALESCE((item->>'is_seed')::boolean,false) THEN
       RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='Skill seed version mismatch';
     END IF;

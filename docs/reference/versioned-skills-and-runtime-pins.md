@@ -57,7 +57,8 @@ Migration `0008` adds exactly five forced-RLS, tenant-keyed, immutable tables:
 1. `app.skill_definitions` owns the stable key, designated owner advisor, and binding
    kind.
 2. `app.skill_versions` owns immutable contracts, digests, tools, data scopes,
-   policies, dataset identity, packaged manifest identity, and optional supersession.
+   policies, dataset identity, packaged manifest identity, the migrator-owned trusted
+   expected evaluation projection, and optional supersession.
 3. `app.skill_change_candidates` records a base/proposed version and bounded
    provenance.
 4. `app.skill_evaluation_results` records one server-produced deterministic result
@@ -78,9 +79,13 @@ reference. It does not accept executable bindings, contracts, tools, scopes, has
 evaluator output, or activation identity.
 
 Evaluation runs the checked-in deterministic evaluator and persists its canonical
-assertions and output hash. A passing result is evidence, not activation authority.
-Promotion requires the designated owner, `planning_runtime`, a passing exact result,
-the expected active semantic version and activation sequence, and no scope expansion.
+assertions and output hash only when the entire result equals the immutable trusted
+projection registered for that exact version. Missing, empty, extra, duplicate, or
+reordered assertions; changed observations; forged status/failed IDs; and changed
+canonical output hashes fail before any evaluation or activation side effect. A
+passing result is evidence, not activation authority. Promotion requires the
+designated owner, `planning_runtime`, a passing exact result, the expected active
+semantic version and activation sequence, and no scope expansion.
 
 Rollback appends a new event. Its target must be a previously activated version that
 is still supported by packaged runtime, and its expected active version/sequence must
@@ -97,8 +102,9 @@ The explicit default seed creates exactly:
 - one `study-destination-compare@1.0.0` seed activation.
 
 `1.0.1` is packaged but is absent from the default database seed. The separate
-migrator-owned registration command loads its exact packaged tuple before a lifecycle
-candidate can reference it. Migration `0008` itself inserts no seed data.
+migrator-owned registration command loads its exact packaged runtime tuple and trusted
+packaged-evaluator projection before a lifecycle candidate can reference it. Migration
+`0008` itself inserts no seed data.
 
 ## AgentTask and AgentExecution pin
 

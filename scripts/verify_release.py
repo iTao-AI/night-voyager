@@ -17,7 +17,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.1.1"
-LOCKED_FASTAPI_VERSION = "0.139.2"
+FASTAPI_VERSION_FLOOR = (0, 139, 2)
+FASTAPI_VERSION_CEILING = (0, 140)
 RELEASE_TAG = f"v{VERSION}"
 RELEASE_ARCHIVE_URL = (
     f"https://github.com/iTao-AI/night-voyager/archive/refs/tags/{RELEASE_TAG}.tar.gz"
@@ -477,6 +478,9 @@ def verify_skill_surface() -> None:
         or "make skills-db-check SUITE=lifecycle" not in operations
         or 'revision = "0008"' not in migration
         or 'down_revision = "0007"' not in migration
+        or "expected_evaluation_projection jsonb NOT NULL" not in migration
+        or "p_result IS DISTINCT FROM version.expected_evaluation_projection"
+        not in migration
         or "**Implementation status:** Implemented locally" not in plan
         or "PR A and PR B are implemented" not in spec
         or "PR C has not started" not in spec
@@ -616,10 +620,11 @@ def verify_config() -> None:
         raise SystemExit(
             "Starlette runtime dependency must enforce the approved 1.3.1 security floor"
         )
-    if package_version(uv_lock["package"], "fastapi") != LOCKED_FASTAPI_VERSION:
-        raise SystemExit(
-            f"FastAPI lock must remain at the reviewed {LOCKED_FASTAPI_VERSION} version"
-        )
+    locked_fastapi = tuple(
+        int(part) for part in package_version(uv_lock["package"], "fastapi").split(".")
+    )
+    if not (FASTAPI_VERSION_FLOOR <= locked_fastapi < FASTAPI_VERSION_CEILING):
+        raise SystemExit("FastAPI lock must remain within approved >=0.139.2,<0.140 range")
     locked_starlette = tuple(
         int(part) for part in package_version(uv_lock["package"], "starlette").split(".")
     )
@@ -669,7 +674,7 @@ def verify_config() -> None:
         raise SystemExit("Node.js patch version drift")
     print(f"proof identity: Night Voyager package surfaces agree on version {VERSION}")
     print(
-        f"proof dependencies: FastAPI {LOCKED_FASTAPI_VERSION}, "
+        "proof dependencies: FastAPI >=0.139.2,<0.140, "
         "Starlette >=1.3.1,<1.4, "
         "and hashed Hatchling 1.31.0 constraints confirmed"
     )

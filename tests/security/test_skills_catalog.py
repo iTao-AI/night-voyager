@@ -119,6 +119,8 @@ def test_supported_version_registration_is_explicit_migrator_only_and_not_seeded
     assert "SkillRuntimeRegistry.load_packaged()" in registration
     assert "INSERT INTO app.skill_versions(" in registration
     assert "manifest_projection" in registration
+    assert "expected_evaluation_projection" in registration
+    assert "SkillEvaluator.load_packaged" in registration
     assert "ON CONFLICT (organization_id,definition_id,semantic_version) DO NOTHING" in (
         registration
     )
@@ -133,6 +135,17 @@ def test_supported_version_registration_is_explicit_migrator_only_and_not_seeded
     assert 'registry.get(key, "1.0.1")' not in (
         ROOT / "src/night_voyager/identity/demo_seed.py"
     ).read_text(encoding="utf-8")
+
+
+def test_candidate_evaluation_is_bound_to_trusted_registered_projection() -> None:
+    source = migration_source()
+    mutation = source.split(
+        "CREATE FUNCTION app.record_skill_candidate_evaluation", 1
+    )[1].split("CREATE FUNCTION app.promote_skill_change_candidate", 1)[0]
+
+    assert "expected_evaluation_projection jsonb NOT NULL" in source
+    assert "p_result IS DISTINCT FROM version.expected_evaluation_projection" in mutation
+    assert "jsonb_array_elements(p_result->'assertions')" not in mutation
 
 
 def test_default_seed_orders_skill_authority_before_every_task_ready_case() -> None:
