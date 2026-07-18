@@ -137,7 +137,17 @@ def test_dependabot_keeps_compatibility_surfaces_independently_reviewable() -> N
         assert f"      {group}:" in config
 
     assert config.count('update-types: ["patch"]') == 10
-    assert "      - dependency-name: python" in config
+    docker_updates = config.split("  - package-ecosystem: docker\n", 1)[1].split(
+        "  - package-ecosystem:", 1
+    )[0]
+    assert docker_updates.count("      - dependency-name: python") == 1
+    assert (
+        "      - dependency-name: python\n"
+        "        update-types:\n"
+        "          - version-update:semver-major\n"
+        "          - version-update:semver-minor\n"
+        "          - version-update:semver-patch\n"
+    ) in docker_updates
     assert "python-bootstrap" not in config
     assert "frontend-bootstrap" not in config
     assert "docker-bootstrap" not in config
