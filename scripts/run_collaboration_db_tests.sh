@@ -39,6 +39,9 @@ if [ "$mode" = "inside" ]; then
                 tests/integration/collaboration/test_postgres_collaboration.py
             ;;
         http)
+            uv run alembic downgrade 0007
+            uv run --no-editable python scripts/seed_demo.py --without-skills
+            uv run alembic upgrade head
             uv run --no-editable python scripts/seed_demo.py
             uv run --no-editable python scripts/seed_demo.py
             NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= \
@@ -50,6 +53,9 @@ if [ "$mode" = "inside" ]; then
                 tests/security/test_collaboration_catalog.py \
                 tests/security/test_database_catalog.py \
                 tests/architecture/test_collaboration_contract.py
+            uv run alembic downgrade 0007
+            uv run --no-editable python scripts/seed_demo.py --without-skills
+            uv run alembic upgrade head
             uv run --no-editable python scripts/seed_demo.py
             uv run --no-editable python scripts/seed_demo.py
             NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= \

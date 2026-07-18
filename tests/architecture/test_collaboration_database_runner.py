@@ -24,6 +24,9 @@ def test_collaboration_database_runner_is_disposable_and_suite_bounded() -> None
     assert "-m database" in source
     assert "uv run --no-editable python scripts/seed_demo.py" in source
     assert "PYTEST_ADDOPTS= uv run --no-editable pytest" in source
+    assert source.count(
+        "uv run --no-editable python scripts/seed_demo.py --without-skills"
+    ) == 2
     assert "down --volumes --remove-orphans" in source
 
 

@@ -270,8 +270,18 @@ def test_http_suite_crosses_the_real_identity_postgres_and_rls_boundary() -> Non
     assert "current_setting('night_voyager.actor_id',true)" in http_test
     assert "SELECT * FROM app.collaboration_threads" in http_test
     http_suite = runner[runner.index("        http)") : runner.index("        authority)")]
+    legacy_downgrade = http_suite.index("uv run alembic downgrade 0007")
+    legacy_seed = http_suite.index(
+        "uv run --no-editable python scripts/seed_demo.py --without-skills",
+        legacy_downgrade,
+    )
+    head = http_suite.index("uv run alembic upgrade head", legacy_seed)
+    full_seed = http_suite.index(
+        "uv run --no-editable python scripts/seed_demo.py\n", head
+    )
+    assert legacy_downgrade < legacy_seed < head < full_seed
     assert http_suite.count(
-        "uv run --no-editable python scripts/seed_demo.py"
+        "uv run --no-editable python scripts/seed_demo.py\n"
     ) == 2
     assert "NIGHT_VOYAGER_DEMO_SEED_READY=1" in http_suite
 
