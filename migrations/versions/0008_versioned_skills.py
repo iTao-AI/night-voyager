@@ -398,7 +398,7 @@ DECLARE definition app.skill_definitions%ROWTYPE; versions jsonb; events jsonb;
 BEGIN
   PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
   SELECT * INTO definition FROM app.skill_definitions
-   WHERE organization_id=p_org AND skill_key=p_skill_key;
+   WHERE organization_id=p_org AND skill_key=p_skill_key FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='Skill unavailable'; END IF;
   SELECT COALESCE(jsonb_agg(jsonb_build_object(
     'version_id',v.id,'semantic_version',v.semantic_version,'binding_kind',v.binding_kind,
@@ -555,10 +555,10 @@ BEGIN
   SELECT jsonb_build_object(
     'task_id',t.id,'operation',t.operation,'skill_key',d.skill_key,
     'semantic_version',v.semantic_version,'binding_kind',d.binding_kind,
-    'skill_definition_id',t.skill_definition_id,'skill_version_id',t.skill_version_id,
-    'skill_activation_event_id',t.skill_activation_event_id,
-    'skill_activation_sequence',t.skill_activation_sequence,
-    'runtime_binding_sha256',t.runtime_binding_sha256,
+    'skill_definition_id',e.skill_definition_id,'skill_version_id',e.skill_version_id,
+    'skill_activation_event_id',e.skill_activation_event_id,
+    'skill_activation_sequence',e.skill_activation_sequence,
+    'runtime_binding_sha256',e.runtime_binding_sha256,
     'runtime_manifest_id',v.runtime_manifest_id,
     'runtime_manifest_version',v.runtime_manifest_version,
     'runtime_manifest_sha256',v.runtime_manifest_sha256,
@@ -579,7 +579,12 @@ BEGIN
    AND a.activation_sequence=t.skill_activation_sequence
   WHERE t.organization_id=p_org AND t.id=p_task
     AND t.lease_generation=p_generation AND t.state='leased'
-    AND e.status='leased';
+    AND e.status='leased'
+    AND e.skill_definition_id=t.skill_definition_id
+    AND e.skill_version_id=t.skill_version_id
+    AND e.skill_activation_event_id=t.skill_activation_event_id
+    AND e.skill_activation_sequence=t.skill_activation_sequence
+    AND e.runtime_binding_sha256=t.runtime_binding_sha256;
   IF result IS NULL THEN RAISE EXCEPTION USING ERRCODE='NV022', MESSAGE='Skill runtime pin is invalid'; END IF;
   RETURN result;
 END; $$;
