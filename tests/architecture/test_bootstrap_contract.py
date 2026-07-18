@@ -11,7 +11,7 @@ from night_voyager.api import create_app
 ROOT = Path(__file__).resolve().parents[2]
 VERSION = "0.1.1"
 POSTGRES_IMAGE = (
-    "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
+    "postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
 )
 
 
@@ -116,3 +116,29 @@ def test_dependabot_covers_approved_ecosystems() -> None:
 
     for ecosystem in ("uv", "npm", "github-actions", "docker", "docker-compose"):
         assert f"package-ecosystem: {ecosystem}" in config
+
+
+def test_dependabot_keeps_compatibility_surfaces_independently_reviewable() -> None:
+    config = (ROOT / ".github/dependabot.yml").read_text(encoding="utf-8")
+
+    assert 'patterns: ["*"]' not in config
+    for group in (
+        "python-runtime-patches",
+        "python-test-patches",
+        "python-lint-patches",
+        "python-type-patches",
+        "python-build-patches",
+        "frontend-runtime-patches",
+        "frontend-types-patches",
+        "frontend-browser-proof-patches",
+        "frontend-lint-patches",
+        "frontend-dev-tooling-patches",
+    ):
+        assert f"      {group}:" in config
+
+    assert config.count('update-types: ["patch"]') == 10
+    assert "      - dependency-name: python" in config
+    assert "python-bootstrap" not in config
+    assert "frontend-bootstrap" not in config
+    assert "docker-bootstrap" not in config
+    assert "compose-bootstrap" not in config
