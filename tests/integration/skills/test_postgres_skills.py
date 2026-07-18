@@ -10,7 +10,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from night_voyager.identity.demo_seed import build_demo_skill_seed
+from night_voyager.identity.demo_seed import (
+    COLLABORATION_ACTIVE_CASE_ID,
+    COLLABORATION_ACTIVE_TASK_ID,
+    SKILL_ACTIVATION_EVENT_ID,
+    SKILL_DEFINITION_IDS,
+    SKILL_VERSION_IDS,
+    build_demo_active_task_pin,
+    build_demo_skill_seed,
+)
 from night_voyager.skills.evaluation import SkillEvaluator
 from night_voyager.skills.models import SkillKey
 from night_voyager.skills.registry import SkillRuntimeRegistry
@@ -104,6 +112,135 @@ async def test_exact_skill_catalog_is_migrator_owned_forced_rls() -> None:
         assert tuple(row["relname"] for row in rows) == tuple(sorted(TABLES))
         assert all(row["relrowsecurity"] and row["relforcerowsecurity"] for row in rows)
         assert all(row["owner"] == "night_voyager_migrator" for row in rows)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_fresh_head_seed_creates_exact_pinned_active_task_fixture() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the lifecycle main project")
+    registry = SkillRuntimeRegistry.load_packaged()
+    expected_binding = registry.get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    ).runtime_binding_sha256
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": "10000000-0000-0000-0000-000000000001"},
+            )
+            task = (
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT state,skill_definition_id,skill_version_id,"
+                            "skill_activation_event_id,skill_activation_sequence,"
+                            "runtime_binding_sha256 FROM app.agent_tasks "
+                            "WHERE organization_id=:org AND id=:task"
+                        ),
+                        {
+                            "org": "10000000-0000-0000-0000-000000000001",
+                            "task": COLLABORATION_ACTIVE_TASK_ID,
+                        },
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert dict(task) == {
+                "state": "waiting_review",
+                "skill_definition_id": SKILL_DEFINITION_IDS[
+                    SkillKey.STUDY_DESTINATION_COMPARE
+                ],
+                "skill_version_id": SKILL_VERSION_IDS[
+                    SkillKey.STUDY_DESTINATION_COMPARE
+                ],
+                "skill_activation_event_id": SKILL_ACTIVATION_EVENT_ID,
+                "skill_activation_sequence": 1,
+                "runtime_binding_sha256": expected_binding,
+            }
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.agent_task_events "
+                        "WHERE organization_id=:org AND task_id=:task "
+                        "AND event_sequence=1 AND event_code='waiting_review' "
+                        "AND public_code='review_required'"
+                    ),
+                    {
+                        "org": "10000000-0000-0000-0000-000000000001",
+                        "task": COLLABORATION_ACTIVE_TASK_ID,
+                    },
+                )
+                == 1
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_pinned_active_task_seed_mismatch_has_no_partial_task_or_event() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the lifecycle main project")
+    registry = SkillRuntimeRegistry.load_packaged()
+    pin = build_demo_active_task_pin(registry)
+    pin["runtime_binding_sha256"] = "f" * 64
+    mismatched_task_id = UUID("48000000-0000-0000-0000-000000000099")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": "10000000-0000-0000-0000-000000000001"},
+            )
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError):
+                await connection.execute(
+                    text(
+                        "SELECT app.seed_demo_pinned_collaboration_task("
+                        ":org,:case,:task,:advisor,CAST(:pin AS jsonb))"
+                    ),
+                    {
+                        "org": "10000000-0000-0000-0000-000000000001",
+                        "case": COLLABORATION_ACTIVE_CASE_ID,
+                        "task": mismatched_task_id,
+                        "advisor": "20000000-0000-0000-0000-000000000001",
+                        "pin": json.dumps(pin),
+                    },
+                )
+            await savepoint.rollback()
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.agent_tasks "
+                        "WHERE organization_id=:org AND id=:task"
+                    ),
+                    {
+                        "org": "10000000-0000-0000-0000-000000000001",
+                        "task": mismatched_task_id,
+                    },
+                )
+                == 0
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.agent_task_events "
+                        "WHERE organization_id=:org AND task_id=:task"
+                    ),
+                    {
+                        "org": "10000000-0000-0000-0000-000000000001",
+                        "task": mismatched_task_id,
+                    },
+                )
+                == 0
+            )
+            await transaction.rollback()
     finally:
         await engine.dispose()
 
@@ -258,9 +395,14 @@ async def test_catalog_detail_and_inspector_return_exact_public_safe_shapes() ->
         assert set(cast(list[dict[str, Any]], detail["versions"])[0]) == (
             CATALOG_VERSION_FIELDS
         )
+        active_status = (
+            "matched"
+            if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") == "fresh_head"
+            else "legacy_unpinned"
+        )
         for projection, status in (
             (not_created, "not_created"),
-            (legacy, "legacy_unpinned"),
+            (legacy, active_status),
         ):
             assert set(projection) == INSPECTOR_FIELDS
             assert projection["pin_status"] == status

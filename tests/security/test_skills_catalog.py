@@ -57,7 +57,11 @@ def test_skill_tables_are_forced_rls_immutable_and_migrator_owned() -> None:
 def test_skill_runtime_functions_have_fixed_search_path_and_least_privilege() -> None:
     source = migration_source()
 
-    for function in (*MUTATIONS, "seed_demo_skill_registry"):
+    for function in (
+        *MUTATIONS,
+        "seed_demo_skill_registry",
+        "seed_demo_pinned_collaboration_task",
+    ):
         line = next(
             item
             for item in source.splitlines()
@@ -76,6 +80,12 @@ def test_skill_runtime_functions_have_fixed_search_path_and_least_privilege() ->
         assert all("night_voyager_worker" not in line for line in grants)
     assert not any(
         line.startswith("GRANT EXECUTE ON FUNCTION app.seed_demo_skill_registry")
+        for line in source.splitlines()
+    )
+    assert not any(
+        line.startswith(
+            "GRANT EXECUTE ON FUNCTION app.seed_demo_pinned_collaboration_task"
+        )
         for line in source.splitlines()
     )
 
@@ -154,5 +164,5 @@ def test_default_seed_orders_skill_authority_before_every_task_ready_case() -> N
     skill_seed = seed.index("await _seed_skills(connection)")
     planning_seed = seed.index("await _seed_planning(connection, fixture)")
     task_case_seed = seed.index("await _seed_task_case(connection, fixture)")
-    collaboration_seed = seed.index("await _seed_collaboration(connection, fixture)")
+    collaboration_seed = seed.index("await _seed_collaboration(")
     assert skill_seed < planning_seed < task_case_seed < collaboration_seed

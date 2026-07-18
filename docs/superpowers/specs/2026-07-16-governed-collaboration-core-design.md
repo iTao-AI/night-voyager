@@ -729,6 +729,12 @@ this rule, only `queued|leased|running` are cancelled; `waiting_review` and term
 historical tasks remain intact and are explicitly projected as `legacy_unpinned`.
 New task creation fails closed if seed/activation is absent.
 
+That compatibility rule preserves existing upgrade history only. A fresh database
+seeded after direct upgrade to `0008` creates the fixed collaboration active-task
+negative fixture with the canonical `study-destination-compare@1.0.0` five-field pin;
+it never creates a new legacy-unpinned task. The migrator-only seed verifies the exact
+activation identity and fails atomically on task, event, or pin mismatch.
+
 The v1 proof includes checked-in supported versions
 `study-destination-compare@1.0.0` and `study-destination-compare@1.0.1`.
 `1.0.1` is a compatibility and evaluation revision that adds deterministic negative

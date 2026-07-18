@@ -943,6 +943,121 @@ SEED_SQL = SEED_SQL_TEMPLATE.replace(
     "__CANONICAL_DEMO_SKILL_SEED_B64__", CANONICAL_DEMO_SKILL_SEED_B64
 )
 
+PINNED_DEMO_TASK_SEED_SQL = r"""
+CREATE FUNCTION app.seed_demo_pinned_collaboration_task(p_org uuid,p_case uuid,p_task uuid,p_advisor uuid,p_expected_pin jsonb) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE definition app.skill_definitions%ROWTYPE; version app.skill_versions%ROWTYPE; activation app.skill_activation_events%ROWTYPE; source_pack app.source_packs%ROWTYPE; existing_task app.agent_tasks%ROWTYPE; existing_event app.agent_task_events%ROWTYPE; exact_pin jsonb;
+BEGIN
+  IF p_org IS NULL OR p_case IS NULL OR p_task IS NULL OR p_advisor IS NULL
+     OR p_expected_pin IS NULL OR jsonb_typeof(p_expected_pin)<>'object' THEN
+    RAISE EXCEPTION USING ERRCODE='NV022', MESSAGE='Skill runtime pin is invalid';
+  END IF;
+  PERFORM set_config('night_voyager.organization_id',p_org::text,true);
+  SELECT * INTO definition FROM app.skill_definitions
+   WHERE organization_id=p_org AND skill_key='study-destination-compare'
+     AND binding_kind='planning_runtime';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE='NV015', MESSAGE='active Skill version unavailable';
+  END IF;
+  SELECT * INTO version FROM app.skill_versions
+   WHERE organization_id=p_org AND definition_id=definition.id
+     AND semantic_version='1.0.0' AND binding_kind='planning_runtime' AND is_seed;
+  IF NOT FOUND OR version.runtime_binding_sha256 IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE='NV015', MESSAGE='active Skill version unavailable';
+  END IF;
+  SELECT * INTO activation FROM app.skill_activation_events
+   WHERE organization_id=p_org AND definition_id=definition.id
+     AND activated_version_id=version.id AND event_kind='seed'
+     AND activation_sequence=1;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE='NV015', MESSAGE='active Skill version unavailable';
+  END IF;
+  exact_pin := jsonb_build_object(
+    'skill_definition_id',definition.id,
+    'skill_version_id',version.id,
+    'skill_activation_event_id',activation.id,
+    'skill_activation_sequence',activation.activation_sequence,
+    'runtime_binding_sha256',version.runtime_binding_sha256
+  );
+  IF p_expected_pin IS DISTINCT FROM exact_pin THEN
+    RAISE EXCEPTION USING ERRCODE='NV022', MESSAGE='Skill runtime pin is invalid';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM app.student_cases selected_case
+     WHERE selected_case.organization_id=p_org AND selected_case.id=p_case
+       AND selected_case.state='planning' AND selected_case.current_revision=1
+  ) OR NOT EXISTS (
+    SELECT 1 FROM app.student_case_participants participant
+     WHERE participant.organization_id=p_org AND participant.case_id=p_case
+       AND participant.actor_id=p_advisor AND participant.role='advisor'
+  ) OR NOT EXISTS (
+    SELECT 1 FROM app.collaboration_threads thread
+     WHERE thread.organization_id=p_org AND thread.case_id=p_case
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='demo collaboration pinned task unavailable';
+  END IF;
+  SELECT * INTO source_pack FROM app.source_packs pack
+   WHERE pack.organization_id=p_org ORDER BY pack.id,pack.version LIMIT 1;
+  IF NOT FOUND OR source_pack.id IS NULL THEN
+    RAISE EXCEPTION USING ERRCODE='NV006', MESSAGE='demo collaboration source pack is unavailable';
+  END IF;
+  INSERT INTO app.agent_tasks(
+    organization_id,id,case_id,operation,case_revision,source_pack_id,
+    source_pack_version,policy_version,request_sha256,created_by_actor_id,
+    row_version,state,attempt_count,lease_generation,created_at,updated_at,
+    skill_definition_id,skill_version_id,skill_activation_event_id,
+    skill_activation_sequence,runtime_binding_sha256
+  ) VALUES(
+    p_org,p_task,p_case,'generate_planning_run_v1',1,source_pack.id,
+    source_pack.version,'m3a-policy-v1',repeat('e',64),p_advisor,
+    1,'waiting_review',0,0,timestamptz '2026-01-01 00:00:00+00',
+    timestamptz '2026-01-01 00:00:00+00',definition.id,version.id,activation.id,
+    activation.activation_sequence,version.runtime_binding_sha256
+  ) ON CONFLICT (organization_id,id) DO NOTHING;
+  SELECT * INTO existing_task FROM app.agent_tasks task
+   WHERE task.organization_id=p_org AND task.id=p_task;
+  IF NOT FOUND OR existing_task.case_id IS DISTINCT FROM p_case
+     OR existing_task.operation IS DISTINCT FROM 'generate_planning_run_v1'
+     OR existing_task.case_revision IS DISTINCT FROM 1
+     OR existing_task.source_pack_id IS DISTINCT FROM source_pack.id
+     OR existing_task.source_pack_version IS DISTINCT FROM source_pack.version
+     OR existing_task.policy_version IS DISTINCT FROM 'm3a-policy-v1'
+     OR existing_task.request_sha256 IS DISTINCT FROM repeat('e',64)
+     OR existing_task.created_by_actor_id IS DISTINCT FROM p_advisor
+     OR existing_task.row_version IS DISTINCT FROM 1
+     OR existing_task.state IS DISTINCT FROM 'waiting_review'
+     OR existing_task.attempt_count IS DISTINCT FROM 0
+     OR existing_task.lease_generation IS DISTINCT FROM 0
+     OR existing_task.result_planning_run_id IS NOT NULL
+     OR existing_task.skill_definition_id IS DISTINCT FROM definition.id
+     OR existing_task.skill_version_id IS DISTINCT FROM version.id
+     OR existing_task.skill_activation_event_id IS DISTINCT FROM activation.id
+     OR existing_task.skill_activation_sequence IS DISTINCT FROM activation.activation_sequence
+     OR existing_task.runtime_binding_sha256 IS DISTINCT FROM version.runtime_binding_sha256
+     OR existing_task.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00'
+     OR existing_task.updated_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
+    RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration pinned task mismatch';
+  END IF;
+  INSERT INTO app.agent_task_events(
+    organization_id,task_id,event_sequence,event_code,public_status,
+    public_code,attempt_no,result_planning_run_id,created_at
+  ) VALUES(
+    p_org,p_task,1,'waiting_review','needs_advisor_review',
+    'review_required',0,NULL,timestamptz '2026-01-01 00:00:00+00'
+  ) ON CONFLICT (organization_id,task_id,event_sequence) DO NOTHING;
+  SELECT * INTO existing_event FROM app.agent_task_events event
+   WHERE event.organization_id=p_org AND event.task_id=p_task
+     AND event.event_sequence=1;
+  IF NOT FOUND OR existing_event.event_code IS DISTINCT FROM 'waiting_review'
+     OR existing_event.public_status IS DISTINCT FROM 'needs_advisor_review'
+     OR existing_event.public_code IS DISTINCT FROM 'review_required'
+     OR existing_event.attempt_no IS DISTINCT FROM 0
+     OR existing_event.result_planning_run_id IS NOT NULL
+     OR existing_event.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
+    RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration pinned task event mismatch';
+  END IF;
+END; $$;
+"""
+
 DOWNGRADE_GUARD_SQL_TEMPLATE = r"""
 DO $$
 DECLARE
@@ -1245,6 +1360,9 @@ REVOKE ALL ON FUNCTION app.record_skill_candidate_evaluation(uuid,uuid,uuid,uuid
 REVOKE ALL ON FUNCTION app.promote_skill_change_candidate(uuid,uuid,uuid,uuid,text,bigint,text,jsonb,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.rollback_skill_activation(uuid,uuid,text,uuid,text,text,bigint,text,jsonb,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.seed_demo_skill_registry(uuid,uuid,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb) FROM night_voyager_api;
+REVOKE ALL ON FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb) FROM night_voyager_worker;
 REVOKE ALL ON FUNCTION app.list_skill_catalog(uuid,uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.get_skill_catalog_item(uuid,uuid,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.load_skill_candidate_context(uuid,uuid,uuid) FROM PUBLIC;
@@ -1352,6 +1470,7 @@ def upgrade() -> None:
     op.execute("DROP FUNCTION app.claim_agent_task(text)")
     _execute_statements(MUTATION_SQL)
     _execute_statements(SEED_SQL)
+    _execute_statements(PINNED_DEMO_TASK_SEED_SQL)
     _execute_statements(READ_SQL)
     _execute_statements(CREATE_TASK_SQL)
     _execute_statements(CLAIM_TASK_SQL)
@@ -1380,6 +1499,9 @@ def downgrade() -> None:
     op.execute("DROP FUNCTION app.get_skill_catalog_item(uuid,uuid,text)")
     op.execute("DROP FUNCTION app.list_skill_catalog(uuid,uuid)")
     op.execute("DROP FUNCTION app.seed_demo_skill_registry(uuid,uuid,jsonb)")
+    op.execute(
+        "DROP FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb)"
+    )
     op.execute(
         "DROP FUNCTION app.rollback_skill_activation(uuid,uuid,text,uuid,text,text,bigint,text,jsonb,text,text)"
     )

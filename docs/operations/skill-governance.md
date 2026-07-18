@@ -55,8 +55,14 @@ Do not run downgrade proof against a retained demo volume.
 ## Explicit supported-version registration
 
 The default seed inserts only the six canonical `1.0.0` versions. To exercise the
-reviewed compatibility lifecycle, use migration credentials and explicitly register
-the packaged tuple:
+Seed behavior is path-specific: a fresh `0008` database receives the fixed
+`waiting_review` collaboration negative fixture with the canonical planning Skill's
+five-field pin. A database upgraded from a seeded `0007` preserves the existing exact
+legacy-unpinned fixture without backfill. Repeated default seed is idempotent, and a
+pin/task/event mismatch aborts without partial fixture history.
+
+To exercise the reviewed compatibility lifecycle, use migration credentials and
+explicitly register the packaged tuple:
 
 ```bash
 uv run --no-editable python scripts/register_skill_version.py \
@@ -135,6 +141,10 @@ pin must refuse before data or provenance is removed. Use only the disposable
 Active legacy-unpinned `queued|leased|running` tasks encountered during upgrade are
 cancelled with `legacy_unpinned`. Existing `waiting_review` and terminal history is
 retained and remains inspector-visible as `legacy_unpinned`.
+
+Fresh-head bootstrap does not use this compatibility exception: it creates the fixed
+negative fixture only after canonical Skill activation is available and pins it
+completely.
 
 ## Full local closeout
 

@@ -101,6 +101,12 @@ The explicit default seed creates exactly:
 - six passing deterministic seed evaluations;
 - one `study-destination-compare@1.0.0` seed activation.
 
+On a fresh database already at migration `0008`, the default seed also creates the
+fixed collaboration active-task negative fixture in `waiting_review` with all five
+fields bound to that canonical activation. On the `0007 -> 0008` upgrade path, an
+existing exact PR A `waiting_review` fixture is retained as `legacy_unpinned`; the
+seed does not backfill or reinterpret its history.
+
 `1.0.1` is packaged but is absent from the default database seed. The separate
 migrator-owned registration command loads its exact packaged runtime tuple and trusted
 packaged-evaluator projection before a lifecycle candidate can reference it. Migration
@@ -132,6 +138,9 @@ Upgrade treats pre-`0008` history explicitly. Active `queued|leased|running` row
 without a pin are cancelled with `legacy_unpinned`. Historical `waiting_review` and
 terminal rows are retained and inspector-projected with
 `pin_status=legacy_unpinned`.
+
+This preservation rule applies only to an existing upgrade-path task. It does not
+authorize a fresh-head default seed to create new legacy-unpinned task history.
 
 ## Worker validation
 

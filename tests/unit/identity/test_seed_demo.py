@@ -20,10 +20,12 @@ from night_voyager.identity.demo_seed import (
     SKILL_DEFINITION_IDS,
     SKILL_EVALUATION_IDS,
     SKILL_VERSION_IDS,
+    build_demo_active_task_pin,
     build_demo_skill_seed,
     ensure_seed_allowed,
 )
 from night_voyager.skills.evaluation import SkillEvaluator
+from night_voyager.skills.models import SkillKey
 from night_voyager.skills.registry import SkillRuntimeRegistry
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -98,17 +100,25 @@ def test_skill_seed_is_exact_deterministic_and_excludes_compatibility_version() 
     assert {entry["evaluation_id"] for entry in entries} == {
         str(value) for value in SKILL_EVALUATION_IDS.values()
     }
+    planning_pin = build_demo_active_task_pin(registry)
+    planning_manifest = cast(dict[str, Any], planning["manifest"])
+    assert planning_pin == {
+        "skill_definition_id": str(
+            SKILL_DEFINITION_IDS[SkillKey.STUDY_DESTINATION_COMPARE]
+        ),
+        "skill_version_id": str(
+            SKILL_VERSION_IDS[SkillKey.STUDY_DESTINATION_COMPARE]
+        ),
+        "skill_activation_event_id": str(SKILL_ACTIVATION_EVENT_ID),
+        "skill_activation_sequence": 1,
+        "runtime_binding_sha256": planning_manifest["runtime_binding_sha256"],
+    }
 
 
-def test_head_seed_preserves_but_does_not_recreate_the_legacy_active_task() -> None:
+def test_head_seed_preserves_legacy_task_and_creates_a_pinned_fresh_head_fixture() -> None:
     source = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
-    seed_specs = source.index("seed_specs = (")
-    calls = source.index("SELECT app.seed_demo_collaboration(", seed_specs)
-
-    assert seed_specs < calls
-    assert 'if kind == "active_task" and skill_catalog_exists:' in source
+    assert "active_task_pin" in source
+    assert "SELECT app.seed_demo_pinned_collaboration_task(" in source
     assert "if legacy_active_task_exists:" in source
-    assert "continue" in source[seed_specs:calls]
-    assert "task_id = None" in source[seed_specs:calls]
-    assert 'kind = "primary"' in source[seed_specs:calls]
+    assert "await _seed_pinned_collaboration_task(" in source
     assert 'parser.add_argument("--without-skills", action="store_true")' in source

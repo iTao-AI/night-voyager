@@ -606,7 +606,11 @@ branch review.
   `legacy_unpinned`. The exact PR A active-task negative fixture is
   `waiting_review`; a migration/runtime regression proves it remains unchanged and
   continues to make candidate confirmation return `active_task_blocks_revision`
-  after `0008` upgrade.
+  after `0008` upgrade. A separate fresh-head regression proves that direct `0008`
+  bootstrap creates the same fixed negative fixture only after canonical activation,
+  with all five pin fields populated. Its migrator-only helper is idempotent and
+  refuses malformed or mismatched pin/task/event identity without partial writes;
+  it never backfills the preserved PR A fixture.
 
   Downgrade succeeds only with the exact six-definition/six-`1.0.0` canonical seed
   and no task/execution pin. It refuses any explicitly registered non-seed version
@@ -918,7 +922,8 @@ branch review.
   -> six canonical 1.0.0 candidates/evaluations
   -> study-destination-compare@1.0.0 seed activation
   -> task-ready Cases
-  -> preserve PR A waiting_review active-task negative fixture without re-seeding it
+  -> preserve an existing PR A waiting_review fixture without re-seeding it
+  -> or, on fresh head, create the fixed waiting_review fixture with the canonical pin
   ```
 
   Migration remains seed-free. The default seed function is migrator-only and

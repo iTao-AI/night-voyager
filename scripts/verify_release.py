@@ -884,7 +884,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'load_skill_candidate_context','inspect_planning_skill',
                            'load_agent_task_skill_pin',
                            'load_persisted_synthetic_planning_snapshot',
-                           'seed_demo_skill_registry'))
+                           'seed_demo_skill_registry',
+                           'seed_demo_pinned_collaboration_task'))
                         """)
                     )
                 )
@@ -911,6 +912,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "load_governed_mixed_planning_snapshot",
                 "seed_demo_collaboration",
                 "seed_demo_skill_registry",
+                "seed_demo_pinned_collaboration_task",
             } | (
                 COLLABORATION_API_FUNCTIONS
                 | SKILL_API_FUNCTIONS
@@ -1003,6 +1005,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 if row["proname"] in SKILL_API_FUNCTIONS
                 or row["proname"] in SKILL_WORKER_FUNCTIONS
                 or row["proname"] == "seed_demo_skill_registry"
+                or row["proname"] == "seed_demo_pinned_collaboration_task"
             }
             if skill_signatures != {
                 "create_skill_change_candidate": (
@@ -1024,6 +1027,9 @@ async def verify_database_catalog(database_url: str) -> None:
                     "uuid, uuid, integer, uuid, integer, text"
                 ),
                 "seed_demo_skill_registry": "uuid, uuid, jsonb",
+                "seed_demo_pinned_collaboration_task": (
+                    "uuid, uuid, uuid, uuid, jsonb"
+                ),
             }:
                 raise SystemExit("Skill authority signature drift")
             if any(
@@ -1033,6 +1039,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 if row["proname"] in SKILL_API_FUNCTIONS
                 or row["proname"] in SKILL_WORKER_FUNCTIONS
                 or row["proname"] == "seed_demo_skill_registry"
+                or row["proname"] == "seed_demo_pinned_collaboration_task"
             ):
                 raise SystemExit("Skill function grants violate API/worker separation")
             pin_columns = (

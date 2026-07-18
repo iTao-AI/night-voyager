@@ -22,6 +22,7 @@ from night_voyager.identity.demo_seed import (
     COLLABORATION_STALE_MESSAGE_ID,
     COLLABORATION_THREAD_IDS,
     CONNECTED_DEMO_CASE_ID,
+    build_demo_active_task_pin,
     build_demo_skill_seed,
     ensure_seed_allowed,
 )
@@ -57,8 +58,9 @@ async def seed_demo(
             )
             await _seed_identity(connection)
             if include_planning:
+                active_task_pin: dict[str, object] | None = None
                 if include_skills:
-                    await _seed_skills(connection)
+                    _, active_task_pin = await _seed_skills(connection)
                 await _seed_planning(connection, fixture)
                 await connection.execute(
                     text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
@@ -72,13 +74,19 @@ async def seed_demo(
                 )
                 await _seed_task_case(connection, fixture)
                 if include_collaboration:
-                    await _seed_collaboration(connection, fixture)
+                    await _seed_collaboration(
+                        connection,
+                        fixture,
+                        active_task_pin=active_task_pin,
+                    )
     finally:
         await engine.dispose()
     print("demo seed: canonical synthetic identity and planning snapshot ready")
 
 
-async def _seed_skills(connection: AsyncConnection) -> None:
+async def _seed_skills(
+    connection: AsyncConnection,
+) -> tuple[dict[str, object], dict[str, object]]:
     registry = SkillRuntimeRegistry.load_packaged()
     evaluator = SkillEvaluator.load_packaged(registry)
     projection = build_demo_skill_seed(registry, evaluator)
@@ -93,6 +101,7 @@ async def _seed_skills(connection: AsyncConnection) -> None:
             "projection": json.dumps(projection),
         },
     )
+    return projection, build_demo_active_task_pin(registry)
 
 
 async def _seed_identity(connection: AsyncConnection) -> None:
@@ -373,7 +382,10 @@ async def _seed_task_case(connection: AsyncConnection, fixture: ValidatedPlannin
 
 
 async def _seed_collaboration(
-    connection: AsyncConnection, fixture: ValidatedPlanningFixture
+    connection: AsyncConnection,
+    fixture: ValidatedPlanningFixture,
+    *,
+    active_task_pin: object | None,
 ) -> None:
     source_case = fixture.planning_input.case
     default_before = (
@@ -511,11 +523,13 @@ async def _seed_collaboration(
         ),
     )
     for case_id, thread_id, subject_id, message_id, candidate_id, task_id, kind in seed_specs:
+        seed_pinned_task = False
         if kind == "active_task" and skill_catalog_exists:
             if legacy_active_task_exists:
                 continue
             task_id = None
             kind = "primary"
+            seed_pinned_task = active_task_pin is not None
         await connection.execute(
             text(
                 "SELECT app.seed_demo_collaboration("
@@ -533,6 +547,13 @@ async def _seed_collaboration(
                 "kind": kind,
             },
         )
+        if seed_pinned_task:
+            await _seed_pinned_collaboration_task(
+                connection,
+                case_id=case_id,
+                task_id=COLLABORATION_ACTIVE_TASK_ID,
+                active_task_pin=active_task_pin,
+            )
 
     stale_revision = await connection.scalar(
         text(
@@ -577,6 +598,28 @@ async def _seed_collaboration(
     )
     if dict(default_after) != dict(default_before):
         raise RuntimeError("demo collaboration seed changed the default Case")
+
+
+async def _seed_pinned_collaboration_task(
+    connection: AsyncConnection,
+    *,
+    case_id: UUID,
+    task_id: UUID,
+    active_task_pin: object,
+) -> None:
+    await connection.execute(
+        text(
+            "SELECT app.seed_demo_pinned_collaboration_task("
+            ":org,:case,:task,:advisor,CAST(:pin AS jsonb))"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": case_id,
+            "task": task_id,
+            "advisor": ACTORS[0][1],
+            "pin": json.dumps(active_task_pin),
+        },
+    )
 
 
 def main(argv: list[str] | None = None) -> None:

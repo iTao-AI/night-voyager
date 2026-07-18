@@ -99,6 +99,13 @@ evaluations, and one `study-destination-compare@1.0.0` seed activation. Migratio
 maintenance action and is not part of migration, default seed, browser, or Compose
 bootstrap.
 
+The default seed distinguishes migration history from a fresh-head bootstrap. An
+existing PR A `waiting_review` active-task fixture remains legacy-unpinned and is not
+rewritten. When the database reaches `0008` without that fixture, the migrator-only
+seed creates the same fixed negative fixture with the canonical `1.0.0` activation's
+complete five-field pin. Exact replay is idempotent; a mismatched pin, task, or event
+refuses the seed transaction without partial history.
+
 Upgrade cancels only active legacy-unpinned `queued|leased|running` tasks with
 `legacy_unpinned`; `waiting_review` and terminal history remain visible as
 `legacy_unpinned`. Downgrade to `0007` is allowed only for the exact canonical seed

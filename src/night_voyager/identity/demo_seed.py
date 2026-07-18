@@ -85,6 +85,22 @@ def build_demo_skill_seed(
     }
 
 
+def build_demo_active_task_pin(
+    registry: SkillRuntimeRegistry,
+) -> dict[str, object]:
+    key = SkillKey.STUDY_DESTINATION_COMPARE
+    manifest_entry = registry.get(key, "1.0.0")
+    if manifest_entry.runtime_binding_sha256 is None:
+        raise ValueError("planning runtime seed omitted its binding hash")
+    return {
+        "skill_definition_id": str(SKILL_DEFINITION_IDS[key]),
+        "skill_version_id": str(SKILL_VERSION_IDS[key]),
+        "skill_activation_event_id": str(SKILL_ACTIVATION_EVENT_ID),
+        "skill_activation_sequence": 1,
+        "runtime_binding_sha256": manifest_entry.runtime_binding_sha256,
+    }
+
+
 def ensure_seed_allowed(environment: str, demo_mode: bool) -> None:
     if environment not in {"development", "test"}:
         raise ValueError("demo seed requires development or test environment")

@@ -14,6 +14,19 @@ case "$suite" in
 esac
 
 if [ "$mode" = "inside" ]; then
+    if [ "$suite" = "lifecycle" ] && [ "$phase" = "main" ]; then
+        export NIGHT_VOYAGER_SKILL_SEED_PATH=fresh_head
+        uv run --no-editable python scripts/seed_demo.py
+        uv run --no-editable python scripts/seed_demo.py
+        echo "Skill database suite: lifecycle fresh head"
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' \
+            -m database \
+            tests/integration/skills/test_skill_lifecycle.py \
+            tests/integration/skills/test_http_skills.py \
+            tests/integration/skills/test_persisted_planning_materialization.py \
+            tests/integration/skills/test_postgres_skills.py
+        exit 0
+    fi
     uv run alembic downgrade 0007
     if [ "$suite" = "worker" ]; then
         uv run --no-editable python scripts/seed_demo.py \
@@ -62,16 +75,7 @@ if [ "$mode" = "inside" ]; then
                     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' \
                         -m database tests/integration/skills/test_skill_downgrade.py
                     ;;
-                main)
-                    uv run --no-editable python scripts/seed_demo.py
-                    echo "Skill database suite: lifecycle"
-                    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' \
-                        -m database \
-                        tests/integration/skills/test_skill_lifecycle.py \
-                        tests/integration/skills/test_http_skills.py \
-                        tests/integration/skills/test_persisted_planning_materialization.py \
-                        tests/integration/skills/test_postgres_skills.py
-                    ;;
+                main) exit 2 ;;
                 *)
                     echo "unknown lifecycle phase: $phase" >&2
                     exit 2
