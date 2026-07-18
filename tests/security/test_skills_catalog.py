@@ -4,6 +4,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION = ROOT / "migrations/versions/0008_versioned_skills.py"
+REGISTRATION = ROOT / "scripts/register_skill_version.py"
+SEED = ROOT / "scripts/seed_demo.py"
 TABLES = (
     "skill_definitions",
     "skill_versions",
@@ -28,11 +30,14 @@ def test_migration_0008_adds_exactly_five_skill_tables() -> None:
 
     assert 'revision = "0008"' in source
     assert 'down_revision = "0007"' in source
-    assert tuple(
-        line.split("app.", 1)[1].split(" ", 1)[0]
-        for line in source.splitlines()
-        if line.startswith("CREATE TABLE app.skill_")
-    ) == TABLES
+    assert (
+        tuple(
+            line.split("app.", 1)[1].split(" ", 1)[0]
+            for line in source.splitlines()
+            if line.startswith("CREATE TABLE app.skill_")
+        )
+        == TABLES
+    )
     assert source.count("CREATE TABLE app.skill_") == 5
 
 
@@ -103,3 +108,38 @@ def test_upgrade_and_downgrade_freeze_legacy_task_authority() -> None:
     assert "0007_CLAIM_TASK_SQL" in source
     assert "DROP TABLE app.skill_activation_events" in downgrade
     assert "DROP TABLE app.skill_definitions" in downgrade
+
+
+def test_supported_version_registration_is_explicit_migrator_only_and_not_seeded() -> None:
+    registration = REGISTRATION.read_text(encoding="utf-8")
+    migration = migration_source()
+    seed = SEED.read_text(encoding="utf-8")
+
+    assert "NIGHT_VOYAGER_MIGRATION_DATABASE_URL" in registration
+    assert "SkillRuntimeRegistry.load_packaged()" in registration
+    assert "INSERT INTO app.skill_versions(" in registration
+    assert "manifest_projection" in registration
+    assert "ON CONFLICT (organization_id,definition_id,semantic_version) DO NOTHING" in (
+        registration
+    )
+    assert "Skill version registration failed closed" in registration
+    assert "NIGHT_VOYAGER_API_DATABASE_URL" not in registration
+    assert "NIGHT_VOYAGER_WORKER_DATABASE_URL" not in registration
+    assert "register_skill_version.py" not in migration
+    assert "register_skill_version.py" not in seed
+    assert 'registry.get(key, "1.0.0")' in (
+        ROOT / "src/night_voyager/identity/demo_seed.py"
+    ).read_text(encoding="utf-8")
+    assert 'registry.get(key, "1.0.1")' not in (
+        ROOT / "src/night_voyager/identity/demo_seed.py"
+    ).read_text(encoding="utf-8")
+
+
+def test_default_seed_orders_skill_authority_before_every_task_ready_case() -> None:
+    seed = SEED.read_text(encoding="utf-8")
+
+    skill_seed = seed.index("await _seed_skills(connection)")
+    planning_seed = seed.index("await _seed_planning(connection, fixture)")
+    task_case_seed = seed.index("await _seed_task_case(connection, fixture)")
+    collaboration_seed = seed.index("await _seed_collaboration(connection, fixture)")
+    assert skill_seed < planning_seed < task_case_seed < collaboration_seed

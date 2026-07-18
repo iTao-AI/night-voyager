@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from typing import Any, cast
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
@@ -11,7 +12,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from night_voyager.identity.demo_seed import build_demo_skill_seed
 from night_voyager.skills.evaluation import SkillEvaluator
+from night_voyager.skills.models import SkillKey
 from night_voyager.skills.registry import SkillRuntimeRegistry
+from tests.integration.skills.test_skill_lifecycle import (
+    registration_command,
+    reset_nonseed_skill_history,
+)
 
 TABLES = (
     "skill_definitions",
@@ -69,6 +75,12 @@ INSPECTOR_FIELDS = {
     "adapter_version",
     "pin_status",
 }
+
+SECOND_ORG = UUID("19000000-0000-0000-0000-000000000001")
+SECOND_OWNER = UUID("29000000-0000-0000-0000-000000000001")
+SECOND_MEMBERSHIP = UUID("39000000-0000-0000-0000-000000000001")
+NON_OWNER = UUID("29000000-0000-0000-0000-000000000002")
+NON_OWNER_MEMBERSHIP = UUID("39000000-0000-0000-0000-000000000002")
 
 
 @pytest.mark.database
@@ -531,3 +543,227 @@ async def test_catalog_only_version_cannot_satisfy_activation_foreign_key_path()
                     await savepoint.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_designated_owner_is_enforced_for_registered_version_candidates() -> None:
+    await reset_nonseed_skill_history()
+    registered = registration_command(
+        "--skill-key",
+        "study-destination-compare",
+        "--version",
+        "1.0.1",
+    )
+    assert registered.returncode == 0, registered.stderr
+    registry = SkillRuntimeRegistry.load_packaged()
+    manifest = registry.get(SkillKey.STUDY_DESTINATION_COMPARE, "1.0.1").model_dump(
+        mode="json", exclude_none=True
+    )
+
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": "10000000-0000-0000-0000-000000000001"},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.actors("
+                    "id,organization_id,display_name,is_synthetic) "
+                    "VALUES(:actor,:org,'Synthetic non-owner advisor',true) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {
+                    "actor": NON_OWNER,
+                    "org": "10000000-0000-0000-0000-000000000001",
+                },
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.memberships("
+                    "id,organization_id,actor_id,role) "
+                    "VALUES(:membership,:org,:actor,'advisor') "
+                    "ON CONFLICT (organization_id,actor_id,role) DO NOTHING"
+                ),
+                {
+                    "membership": NON_OWNER_MEMBERSHIP,
+                    "org": "10000000-0000-0000-0000-000000000001",
+                    "actor": NON_OWNER,
+                },
+            )
+
+        async with api.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                for setting, value in (
+                    (
+                        "night_voyager.organization_id",
+                        "10000000-0000-0000-0000-000000000001",
+                    ),
+                    ("night_voyager.actor_id", str(NON_OWNER)),
+                    ("night_voyager.role", "advisor"),
+                ):
+                    await connection.execute(
+                        text("SELECT set_config(:setting,:value,true)"),
+                        {"setting": setting, "value": value},
+                    )
+                with pytest.raises(DBAPIError) as captured:
+                    await connection.execute(
+                        text(
+                            "SELECT * FROM app.create_skill_change_candidate("
+                            ":org,:actor,'study-destination-compare',"
+                            "'89000000-0000-0000-0000-000000000020',"
+                            "'1.0.1','maintainer_proposal','wrong owner',NULL,"
+                            "CAST(:manifest AS jsonb),repeat('a',64),repeat('b',64))"
+                        ),
+                        {
+                            "org": "10000000-0000-0000-0000-000000000001",
+                            "actor": NON_OWNER,
+                            "manifest": json.dumps(manifest),
+                        },
+                    )
+                assert getattr(captured.value.orig, "sqlstate", None) == "NV007"
+            finally:
+                await transaction.rollback()
+    finally:
+        await api.dispose()
+        await migrator.dispose()
+        await reset_nonseed_skill_history()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_dual_tenant_catalog_isolation_and_size_one_pool_context_cleanup() -> None:
+    registry = SkillRuntimeRegistry.load_packaged()
+    evaluator = SkillEvaluator.load_packaged(registry)
+    canonical = build_demo_skill_seed(registry, evaluator)
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(
+        os.environ["NIGHT_VOYAGER_API_DATABASE_URL"],
+        pool_size=1,
+        max_overflow=0,
+    )
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(SECOND_ORG)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.organizations(id,name,is_synthetic) "
+                    "VALUES(:org,'Second synthetic Skill tenant',true) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {"org": SECOND_ORG},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.actors("
+                    "id,organization_id,display_name,is_synthetic) "
+                    "VALUES(:actor,:org,'Second synthetic owner',true) "
+                    "ON CONFLICT (id) DO NOTHING"
+                ),
+                {"actor": SECOND_OWNER, "org": SECOND_ORG},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.memberships("
+                    "id,organization_id,actor_id,role) "
+                    "VALUES(:membership,:org,:actor,'advisor') "
+                    "ON CONFLICT (organization_id,actor_id,role) DO NOTHING"
+                ),
+                {
+                    "membership": SECOND_MEMBERSHIP,
+                    "org": SECOND_ORG,
+                    "actor": SECOND_OWNER,
+                },
+            )
+            await connection.execute(
+                text("SELECT app.seed_demo_skill_registry(:org,:owner,CAST(:seed AS jsonb))"),
+                {
+                    "org": SECOND_ORG,
+                    "owner": SECOND_OWNER,
+                    "seed": json.dumps(canonical),
+                },
+            )
+            counts: list[int] = []
+            for organization_id in (
+                UUID("10000000-0000-0000-0000-000000000001"),
+                SECOND_ORG,
+            ):
+                await connection.execute(
+                    text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                    {"org": str(organization_id)},
+                )
+                count = await connection.scalar(text("SELECT count(*) FROM app.skill_definitions"))
+                assert isinstance(count, int)
+                counts.append(count)
+            assert counts == [6, 6]
+
+        async with api.begin() as connection:
+            assert (
+                await connection.scalar(
+                    text("SELECT NULLIF(current_setting('night_voyager.organization_id',true),'')")
+                )
+                is None
+            )
+            for setting, value in (
+                ("night_voyager.organization_id", str(SECOND_ORG)),
+                ("night_voyager.actor_id", str(SECOND_OWNER)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:setting,:value,true)"),
+                    {"setting": setting, "value": value},
+                )
+            projection = cast(
+                list[object],
+                await connection.scalar(
+                    text("SELECT app.list_skill_catalog(:org,:actor)"),
+                    {"org": SECOND_ORG, "actor": SECOND_OWNER},
+                ),
+            )
+            assert len(projection) == 6
+
+        async with api.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                assert (
+                    await connection.scalar(
+                        text(
+                            "SELECT NULLIF(current_setting("
+                            "'night_voyager.organization_id',true),'')"
+                        )
+                    )
+                    is None
+                )
+                for setting, value in (
+                    (
+                        "night_voyager.organization_id",
+                        "10000000-0000-0000-0000-000000000001",
+                    ),
+                    (
+                        "night_voyager.actor_id",
+                        "20000000-0000-0000-0000-000000000001",
+                    ),
+                    ("night_voyager.role", "advisor"),
+                ):
+                    await connection.execute(
+                        text("SELECT set_config(:setting,:value,true)"),
+                        {"setting": setting, "value": value},
+                    )
+                with pytest.raises(DBAPIError) as captured:
+                    await connection.execute(
+                        text("SELECT app.list_skill_catalog(:org,:actor)"),
+                        {"org": SECOND_ORG, "actor": SECOND_OWNER},
+                    )
+                assert getattr(captured.value.orig, "sqlstate", None) == "NV007"
+            finally:
+                await transaction.rollback()
+    finally:
+        await api.dispose()
+        await migrator.dispose()

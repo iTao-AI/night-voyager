@@ -9,6 +9,11 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from tests.integration.skills.test_skill_lifecycle import (
+    registration_command,
+    reset_nonseed_skill_history,
+)
+
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 CASE = UUID("40000000-0000-0000-0000-000000000002")
@@ -334,3 +339,26 @@ def test_downgrade_refuses_seed_rows_with_noncanonical_digest() -> None:
             _seed_demo()
         else:
             asyncio.run(_replace_seed_content_digest(canonical_digest))
+
+
+@pytest.mark.database
+def test_downgrade_refuses_explicitly_registered_supported_version() -> None:
+    asyncio.run(reset_nonseed_skill_history())
+    registered = registration_command(
+        "--skill-key",
+        "study-destination-compare",
+        "--version",
+        "1.0.1",
+    )
+    assert registered.returncode == 0, registered.stderr
+    result = _alembic_result("downgrade", "0007")
+    try:
+        assert result.returncode != 0
+        assert "refusing downgrade: Skill governance or runtime pin history exists" in result.stderr
+        assert "0008" in _alembic("current").stdout
+    finally:
+        if "0007" in _alembic("current").stdout:
+            _alembic("upgrade", "head")
+            _seed_demo()
+        else:
+            asyncio.run(reset_nonseed_skill_history())
