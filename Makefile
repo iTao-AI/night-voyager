@@ -2,7 +2,7 @@
 export UV_BUILD_CONSTRAINT := build-constraints.txt
 export UV_REQUIRE_HASHES := 1
 
-.PHONY: help doctor demo proof compose-proof db-check collaboration-db-check collaboration-check check dra-check dra-consumer-proof \
+.PHONY: help doctor demo proof compose-proof db-check collaboration-db-check collaboration-check skills-db-check check dra-check dra-consumer-proof \
 	mke-doctor mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
 
 help: ## Show available commands
@@ -32,6 +32,9 @@ collaboration-check: ## Run the deterministic offline collaboration contract lan
 	  tests/security/test_collaboration_catalog.py tests/security/test_database_catalog.py
 	uv run pytest -o addopts= -q -m "not database" \
 	  tests/integration/collaboration/test_http_collaboration.py
+
+skills-db-check: ## Run one disposable versioned-Skill database suite
+	@SUITE="$(SUITE)" sh scripts/run_skill_db_tests.sh
 
 mke-doctor: ## Verify an operator-supplied MKE candidate without installing it
 	@uv run python scripts/verify_mke_consumer.py doctor --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)"
