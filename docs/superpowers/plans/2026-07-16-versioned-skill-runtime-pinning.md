@@ -1,5 +1,8 @@
 # Versioned Skill Governance and Runtime Pinning Implementation Plan
 
+**Implementation status:** Approved but not implemented. The tasks below remain the
+approved execution recipe.
+
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:dispatching-parallel-agents` only for the isolated lanes declared
 > below; otherwise use `superpowers:executing-plans`. Use exactly one primary

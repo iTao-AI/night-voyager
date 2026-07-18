@@ -45,7 +45,7 @@ connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connec
 - [v0.1.0 历史 release notes](docs/releases/v0.1.0.md)
 - [架构与 milestone 历史](DESIGN.md)
 - [文档索引](docs/README.md)
-- [历史 M1 fixture-only visual contract](docs/superpowers/specs/2026-07-11-m1-demo-design.md)
+- [Connected demo storyboard](docs/design/demo-storyboard.md)
 - M5 connected advisor-to-family demo 已实现为 [runbook](docs/operations/connected-demo.md)所述的 local synthetic walkthrough。
 - [M4B optional read-only MKE candidate proof](docs/operations/mke-candidate-proof.md)；输出保持 `UNTRUSTED_CANDIDATE`。
 - [Governed DRA mixed-evidence proof](docs/operations/dra-consumer-proof.md)；candidate import、atomic human promotion 与 governed mixed PlanningRun generation 已形成 deterministic local closure，connected synthetic `/demo` 保持不变。

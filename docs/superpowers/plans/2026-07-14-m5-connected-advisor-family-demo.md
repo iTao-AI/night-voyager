@@ -1,5 +1,8 @@
 # M5 Connected Advisor-to-Family Demo Implementation Plan
 
+**Implementation status:** Complete. The unchecked tasks below preserve the historical
+implementation recipe rather than current progress.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans`
 > to implement this plan task-by-task in an isolated worktree. Every behavioral,
 > security, transport, and UI slice follows test-first RED -> GREEN. Steps use

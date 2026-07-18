@@ -61,6 +61,9 @@ def test_governed_mixed_planning_public_contract_is_closed() -> None:
     ):
         assert required in reference
     assert "governed mixed PlanningRun generation is implemented" in readme
-    assert "existing v0.1.0 synthetic `/demo` remains unchanged" in docs_index
+    assert (
+        "existing connected synthetic `/demo` remains unchanged by DRA integration"
+        in docs_index
+    )
     assert "make compose-proof" in operations
     assert "Live provider proof was not run" in operations

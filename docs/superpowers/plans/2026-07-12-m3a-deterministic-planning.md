@@ -1,5 +1,8 @@
 # M3A Deterministic Planning Implementation Plan
 
+**Implementation status:** Complete. The tasks below preserve the historical
+implementation recipe.
+
 **Goal:** Add the deterministic Case, source-pack, Evidence, and PlanningRun foundation.
 
 **Architecture:** Keep versioned schemas, state transitions, and aggregation pure. Persist

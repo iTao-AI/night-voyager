@@ -77,8 +77,8 @@ def test_local_demo_runs_explicit_seed_and_identity_probe() -> None:
     assert "verify_demo_identity.py" in proof
 
 
-def test_public_docs_preserve_fixture_only_demo_boundary() -> None:
+def test_public_docs_preserve_connected_demo_boundary() -> None:
     for relative in ("README.md", "README_CN.md", "CONTRIBUTING.md", "docs/README.md"):
         content = (ROOT / relative).read_text(encoding="utf-8")
         assert "db-check" in content, relative
-        assert "fixture-only" in content, relative
+        assert "connected" in content, relative

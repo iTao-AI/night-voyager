@@ -19,6 +19,15 @@ behavior is the connected M5 local synthetic walkthrough.
 | Governed collaboration, confirmed fact, or revision authority | `make collaboration-check`, the focused `collaboration-db-check` suite, `make db-check`, and `make compose-proof` |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
+## Documentation action matrix
+
+| Change | Documentation action |
+| --- | --- |
+| Public contract | Update the authoritative reference |
+| Architecture or domain lifecycle | Record the decision in an ADR and update the relevant explanation |
+| Setup or demo workflow | Add or update a how-to or tutorial according to actual user need |
+| Internal change with no documentation effect | Record `No documentation impact` in the PR |
+
 Plain `uv run pytest -q` and the required hosted `python` job run the
 non-database suite. The required hosted `compose` job and local `make check`
 both force the real PostgreSQL suite through `make db-check`. MKE/MCP process tests are

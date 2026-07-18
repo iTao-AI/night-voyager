@@ -1,6 +1,7 @@
 # M4B MKE Read-Only Consumer Implementation Plan
 
-**Implementation status:** Complete
+**Implementation status:** Complete. The unchecked tasks below preserve the historical
+implementation recipe rather than current progress.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` to implement this plan task-by-task. Do not use

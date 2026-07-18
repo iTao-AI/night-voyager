@@ -1,5 +1,8 @@
 # Collaboration Walkthrough and Skill Inspector Implementation Plan
 
+**Implementation status:** Approved but not implemented. The tasks below remain the
+approved execution recipe.
+
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:dispatching-parallel-agents` only for the isolated frontend/BFF lanes
 > declared below; otherwise use `superpowers:executing-plans`. Use exactly one
@@ -660,7 +663,6 @@ Both lanes stop before editing shared files.
 - Modify: `DESIGN.md`
 - Modify: `CONTRIBUTING.md`
 - Modify: `docs/README.md`
-- Modify: `docs/decisions/0006-connected-demo-bff-authority.md`
 - Modify: `docs/reference/http-api-v1.md`
 - Modify: `docs/design/route-map.md`
 - Modify: `docs/design/state-and-interaction-matrix.md`
@@ -697,9 +699,10 @@ Both lanes stop before editing shared files.
 - [ ] **Step 4: Update public docs**
 
   Explain `/demo` as the primary advisor-family flow and `/demo/collaboration` as the
-  governed memory walkthrough. Update ADR 0006's stale implementation wording,
-  route/state/storyboard docs, runbooks, HTTP surface, spec/plan status, and reviewer
-  index. Do not claim deployment, real users, external routing, or v0.1.2 release.
+  governed memory walkthrough. ADR 0006 already records M5 as implemented; preserve that
+  status while updating route/state/storyboard docs, runbooks, HTTP surface, spec/plan
+  status, and reviewer index. Do not claim deployment, real users, external routing, or
+  v0.1.2 release.
 
 - [ ] **Step 5: Run fresh final verification**
 
