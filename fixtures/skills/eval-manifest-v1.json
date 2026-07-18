@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "manifest_id": "night-voyager.skill-eval-manifest",
+  "manifest_version": "1.0.0",
+  "evaluator_id": "night-voyager.deterministic-skill-evaluator",
+  "evaluator_version": "v1",
+  "datasets": [
+    {
+      "skill_key": "student-profile-intake",
+      "version": "1.0.0",
+      "dataset_id": "night-voyager.student-profile-intake.eval",
+      "dataset_version": "1.0.0",
+      "assertions": [
+        {
+          "assertion_id": "student-profile-intake.cross-role-fact-rejected",
+          "expected_sha256": "3a60061947d350e063c1e5f3255de367587628dcd0a355766ec128b5b36c4d14"
+        },
+        {
+          "assertion_id": "student-profile-intake.unconfirmed-remains-unconfirmed",
+          "expected_sha256": "e08ff4aec917544328b4ca2be4a23ce025a53e3083cb259f6aa696c0c5b616c1"
+        },
+        {
+          "assertion_id": "student-profile-intake.unsafe-value-rejected",
+          "expected_sha256": "767b636f0f2b4aa07ff741ca1cbdd022b4422d1cdc53174eb9bb4c4f8e39dde7"
+        }
+      ],
+      "dataset_sha256": "7e21b3f465c94566fe123aa37ba677dc057dfbc19aacbf69ba4fb6d4554c9e1d"
+    },
+    {
+      "skill_key": "study-destination-compare",
+      "version": "1.0.0",
+      "dataset_id": "night-voyager.study-destination-compare.eval",
+      "dataset_version": "1.0.0",
+      "assertions": [
+        {
+          "assertion_id": "study-destination-compare.australia-conditional",
+          "expected_sha256": "6ef6a247b582ca5a927d354a65b5e2a147239987e53decf44371c894bbb1778f"
+        },
+        {
+          "assertion_id": "study-destination-compare.baseline-hash-drift-failed",
+          "expected_sha256": "858deb262632750672bc90012ec863bf365a90144b3e36f19d6289a49f143607"
+        },
+        {
+          "assertion_id": "study-destination-compare.budget-refusal-blocked",
+          "expected_sha256": "79ed3e370d74e2ad60877d9cea2b6ab6d90200dbac4f964e463e0959649ffb2f"
+        },
+        {
+          "assertion_id": "study-destination-compare.malaysia-blocked",
+          "expected_sha256": "7ac04f1324f999fb4843f90aa78025667e49f89c59166b3705377f888bff8b4c"
+        }
+      ],
+      "dataset_sha256": "820e6730d5bf5a01edb6dd83273fa6b147dd2d284a7b397dcd783f874b81fd54"
+    },
+    {
+      "skill_key": "study-destination-compare",
+      "version": "1.0.1",
+      "dataset_id": "night-voyager.study-destination-compare.eval",
+      "dataset_version": "1.0.1",
+      "assertions": [
+        {
+          "assertion_id": "study-destination-compare.australia-conditional",
+          "expected_sha256": "6ef6a247b582ca5a927d354a65b5e2a147239987e53decf44371c894bbb1778f"
+        },
+        {
+          "assertion_id": "study-destination-compare.baseline-hash-drift-failed",
+          "expected_sha256": "858deb262632750672bc90012ec863bf365a90144b3e36f19d6289a49f143607"
+        },
+        {
+          "assertion_id": "study-destination-compare.budget-refusal-blocked",
+          "expected_sha256": "79ed3e370d74e2ad60877d9cea2b6ab6d90200dbac4f964e463e0959649ffb2f"
+        },
+        {
+          "assertion_id": "study-destination-compare.duplicate-claim-failed",
+          "expected_sha256": "858deb262632750672bc90012ec863bf365a90144b3e36f19d6289a49f143607"
+        },
+        {
+          "assertion_id": "study-destination-compare.malaysia-blocked",
+          "expected_sha256": "7ac04f1324f999fb4843f90aa78025667e49f89c59166b3705377f888bff8b4c"
+        },
+        {
+          "assertion_id": "study-destination-compare.untrusted-evidence-failed",
+          "expected_sha256": "6c3a43fbc17bbe734546534ba4cadc026d3619323dfb2c936304989966158428"
+        }
+      ],
+      "dataset_sha256": "aa7da9b0e91fe11807a6c0508c09d16f79907527253e269faa721ce4e4d6b78c"
+    },
+    {
+      "skill_key": "evidence-research",
+      "version": "1.0.0",
+      "dataset_id": "night-voyager.evidence-research.eval",
+      "dataset_version": "1.0.0",
+      "assertions": [
+        {
+          "assertion_id": "evidence-research.fallback-remains-untrusted",
+          "expected_sha256": "47bbda6ae3fbb948edf5264608e544c0b7f1ecd5e06ebf6fd2d40fc5fa21e386"
+        },
+        {
+          "assertion_id": "evidence-research.terminal-invalid-not-promotable",
+          "expected_sha256": "c2dc6e9ce76280396ddd7c552ed44711deef802780accfab4f1933fd25205093"
+        }
+      ],
+      "dataset_sha256": "6fbcf98e66d33c6366b34e69220758e4ab50f09d45dc0db43bc22cdbdc1fb703"
+    },
+    {
+      "skill_key": "document-evidence-retrieval",
+      "version": "1.0.0",
+      "dataset_id": "night-voyager.document-evidence-retrieval.eval",
+      "dataset_version": "1.0.0",
+      "assertions": [
+        {
+          "assertion_id": "document-evidence-retrieval.active-no-match-not-evidence",
+          "expected_sha256": "7d1cc8108b0273cc3d48096bfbcb88852405cd28d944d1e581c383d6d742b12c"
+        },
+        {
+          "assertion_id": "document-evidence-retrieval.no-match-not-sufficient",
+          "expected_sha256": "95b8de76812c625889a4bd6516af2222f7a02354f3897dd6e5ddca4fe038c124"
+        }
+      ],
+      "dataset_sha256": "2a562e9383f08b0df16e8aa206ec22042c8cac5bbd523290bec564db400f867d"
+    },
+    {
+      "skill_key": "family-decision-brief",
+      "version": "1.0.0",
+      "dataset_id": "night-voyager.family-decision-brief.eval",
+      "dataset_version": "1.0.0",
+      "assertions": [
+        {
+          "assertion_id": "family-decision-brief.blocked-route-ineligible",
+          "expected_sha256": "d82b80927f6120a063c7a699ce4dfb8d469992479756e5554af7ee6167632353"
+        },
+        {
+          "assertion_id": "family-decision-brief.unreviewed-run-rejected",
+          "expected_sha256": "6b891bc56d6aeb8940859d4945449ad18e6a6dc208f1f9dbf0f13fd91a7d7a20"
+        }
+      ],
+      "dataset_sha256": "c02721844a57bd3c056ac1bed0e751dede13f86dcba3781cf42133fe315a6282"
+    },
+    {
+      "skill_key": "application-timeline-guard",
+      "version": "1.0.0",
+      "dataset_id": "night-voyager.application-timeline-guard.eval",
+      "dataset_version": "1.0.0",
+      "assertions": [
+        {
+          "assertion_id": "application-timeline-guard.dates-deterministic",
+          "expected_sha256": "d4a663aeaba441b3d5613b8d7423a1ec2d2f732917e6debac2c6ba40d3df55d1"
+        },
+        {
+          "assertion_id": "application-timeline-guard.no-decision-no-timeline",
+          "expected_sha256": "72b94cf8c22c06f023c800028890b0ba2fd107e26a41b5803a5d9d2fd9132eeb"
+        }
+      ],
+      "dataset_sha256": "5082ef71a8e48873d4fc712d1d83cecc3d5d980cff0b1e8f7ea50c6afb442d59"
+    }
+  ],
+  "manifest_sha256": "280d68971e864fc5925cf0daafa489e3b274fe7263a0157afbaeb8aabcb7a393"
+}
