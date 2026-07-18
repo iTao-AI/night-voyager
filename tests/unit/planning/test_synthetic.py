@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from night_voyager.adapters.protocols import PlanningAdapterRequest
 from night_voyager.planning.fixtures import validate_planning_fixture
 from night_voyager.planning.hashing import canonical_sha256
-from night_voyager.planning.models import Country, StudentPreferences
+from night_voyager.planning.models import Country, RouteOutcome, StudentPreferences
 from night_voyager.planning.policy import evaluate_planning_run
 from night_voyager.planning.synthetic import (
     PersistedSyntheticSnapshotV1,
@@ -81,8 +81,16 @@ def test_persisted_country_subset_filters_product_projection(
     result = evaluate_planning_run(planning_input)
 
     assert tuple(route.country for route in result.routes) == expected
-    assert {row.country for row in planning_input.costs} <= set(expected)
-    assert {row.country for row in planning_input.rankings} <= set(expected)
+    expected_product_countries: set[Country] = (
+        {Country.AUSTRALIA} if Country.AUSTRALIA in expected else set()
+    )
+    assert {row.country for row in planning_input.costs} == expected_product_countries
+    assert {row.country for row in planning_input.rankings} == expected_product_countries
+    if Country.AUSTRALIA in expected:
+        australia = next(
+            route for route in result.routes if route.country is Country.AUSTRALIA
+        )
+        assert australia.outcome is RouteOutcome.RECOMMENDED_WITH_CONDITION
     assert planning_input.evidence == baseline.evidence
 
     evidence_claims = {item.evidence_id: item.claim for item in planning_input.evidence}
@@ -250,6 +258,35 @@ async def test_postgres_repository_loads_the_exact_worker_snapshot_projection() 
 @pytest.mark.asyncio
 async def test_postgres_repository_rejects_malformed_snapshot_projection() -> None:
     payload = persisted_snapshot().model_dump(mode="json") | {"unexpected": True}
+    session = _FakeSession(payload)
+    factory = cast(
+        async_sessionmaker[AsyncSession],
+        cast(Any, _FakeSessionFactory(session)),
+    )
+
+    with pytest.raises(SyntheticSnapshotLoadError) as captured:
+        await PersistedSyntheticSnapshotRepository(factory).load(adapter_request())
+
+    assert captured.value.retryable is False
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    (
+        (("case", "revision"), "1"),
+        (("case", "family", "japan_risk_accepted"), "false"),
+        (("case", "family", "budget", "preferred_minor"), "18000000"),
+    ),
+)
+@pytest.mark.asyncio
+async def test_postgres_repository_rejects_coercible_nested_case_scalars(
+    path: tuple[str, ...], value: object
+) -> None:
+    payload = persisted_snapshot().model_dump(mode="json")
+    cursor = payload
+    for key in path[:-1]:
+        cursor = cursor[key]
+    cursor[path[-1]] = value
     session = _FakeSession(payload)
     factory = cast(
         async_sessionmaker[AsyncSession],

@@ -60,7 +60,7 @@ class PersistedSyntheticSnapshotRepository:
             raise SyntheticSnapshotLoadError(retryable=False)
         try:
             snapshot = PersistedSyntheticSnapshotV1.model_validate_json(
-                json.dumps(payload)
+                json.dumps(payload), strict=True
             )
         except ValueError as error:
             raise SyntheticSnapshotLoadError(retryable=False) from error
