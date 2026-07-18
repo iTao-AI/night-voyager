@@ -5,15 +5,58 @@ updates:
     schedule:
       interval: weekly
     groups:
-      python-bootstrap:
-        patterns: ["*"]
+      python-runtime-patches:
+        applies-to: version-updates
+        patterns:
+          - alembic
+          - asyncpg
+          - fastapi
+          - pydantic-settings
+          - sqlalchemy
+          - starlette
+          - "uvicorn[standard]"
+        update-types: ["patch"]
+      python-test-patches:
+        applies-to: version-updates
+        patterns: [pytest, pytest-asyncio]
+        update-types: ["patch"]
+      python-lint-patches:
+        applies-to: version-updates
+        patterns: [ruff]
+        update-types: ["patch"]
+      python-type-patches:
+        applies-to: version-updates
+        patterns: [pyright]
+        update-types: ["patch"]
+      python-build-patches:
+        applies-to: version-updates
+        patterns: [build]
+        update-types: ["patch"]
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: weekly
     groups:
-      frontend-bootstrap:
-        patterns: ["*"]
+      frontend-runtime-patches:
+        applies-to: version-updates
+        patterns: [next, react, react-dom]
+        update-types: ["patch"]
+      frontend-types-patches:
+        applies-to: version-updates
+        patterns: ["@types/*"]
+        update-types: ["patch"]
+      frontend-browser-proof-patches:
+        applies-to: version-updates
+        patterns: ["@playwright/test"]
+        update-types: ["patch"]
+      frontend-lint-patches:
+        applies-to: version-updates
+        patterns: [eslint, eslint-config-next]
+        update-types: ["patch"]
+      frontend-dev-tooling-patches:
+        applies-to: version-updates
+        patterns: ["@testing-library/*", jsdom, typescript, vitest]
+        update-types: ["patch"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -22,13 +65,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
-    groups:
-      docker-bootstrap:
-        patterns: ["*"]
+    ignore:
+      - dependency-name: python
+        update-types:
+          - version-update:semver-major
+          - version-update:semver-minor
+          - version-update:semver-patch
   - package-ecosystem: docker-compose
     directory: /
     schedule:
       interval: weekly
-    groups:
-      compose-bootstrap:
-        patterns: ["*"]

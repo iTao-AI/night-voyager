@@ -23,7 +23,7 @@ RELEASE_ARCHIVE_URL = (
 RELEASE_ARCHIVE_ROOT = f"night-voyager-{VERSION}"
 DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 POSTGRES_IMAGE = (
-    "postgres:18.4-alpine@sha256:96d56f7f57c6aacd1fcb908bc83b345ec5f83231ee486dd66a1baadce274db88"
+    "postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
 )
 M3A_TABLES = {
     "student_cases",
