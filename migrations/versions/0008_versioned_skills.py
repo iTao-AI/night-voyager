@@ -1026,8 +1026,11 @@ BEGIN
      OR existing_task.row_version IS DISTINCT FROM 1
      OR existing_task.state IS DISTINCT FROM 'waiting_review'
      OR existing_task.attempt_count IS DISTINCT FROM 0
+     OR existing_task.lease_owner IS NOT NULL
      OR existing_task.lease_generation IS DISTINCT FROM 0
+     OR existing_task.lease_expires_at IS NOT NULL
      OR existing_task.result_planning_run_id IS NOT NULL
+     OR existing_task.terminal_code IS NOT NULL
      OR existing_task.skill_definition_id IS DISTINCT FROM definition.id
      OR existing_task.skill_version_id IS DISTINCT FROM version.id
      OR existing_task.skill_activation_event_id IS DISTINCT FROM activation.id
@@ -1052,7 +1055,20 @@ BEGIN
      OR existing_event.public_code IS DISTINCT FROM 'review_required'
      OR existing_event.attempt_no IS DISTINCT FROM 0
      OR existing_event.result_planning_run_id IS NOT NULL
-     OR existing_event.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
+     OR existing_event.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00'
+     OR EXISTS (
+       SELECT 1 FROM app.agent_task_events event
+        WHERE event.organization_id=p_org AND event.task_id=p_task
+          AND event.event_sequence<>1
+     )
+     OR EXISTS (
+       SELECT 1 FROM app.agent_executions execution
+        WHERE execution.organization_id=p_org AND execution.task_id=p_task
+     )
+     OR EXISTS (
+       SELECT 1 FROM internal.agent_task_dispatch dispatch
+        WHERE dispatch.organization_id=p_org AND dispatch.task_id=p_task
+     ) THEN
     RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration pinned task event mismatch';
   END IF;
 END; $$;

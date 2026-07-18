@@ -54,7 +54,8 @@ Do not run downgrade proof against a retained demo volume.
 
 ## Explicit supported-version registration
 
-The default seed inserts only the six canonical `1.0.0` versions. To exercise the
+The default seed inserts only the six canonical `1.0.0` versions.
+
 Seed behavior is path-specific: a fresh `0008` database receives the fixed
 `waiting_review` collaboration negative fixture with the canonical planning Skill's
 five-field pin. A database upgraded from a seeded `0007` preserves the existing exact

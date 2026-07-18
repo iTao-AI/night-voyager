@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import json
 import os
+from typing import cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -476,13 +477,9 @@ async def _seed_collaboration(
     skill_catalog_exists = await connection.scalar(
         text("SELECT to_regclass('app.skill_definitions') IS NOT NULL")
     )
-    legacy_active_task_exists = await connection.scalar(
-        text(
-            "SELECT EXISTS(SELECT 1 FROM app.agent_tasks "
-            "WHERE organization_id=:org AND id=:task)"
-        ),
-        {"org": DEMO_ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
-    )
+    active_task_pin_state = "unavailable"
+    if skill_catalog_exists:
+        active_task_pin_state = await _classify_active_task_pin(connection)
 
     seed_specs = (
         (
@@ -525,11 +522,14 @@ async def _seed_collaboration(
     for case_id, thread_id, subject_id, message_id, candidate_id, task_id, kind in seed_specs:
         seed_pinned_task = False
         if kind == "active_task" and skill_catalog_exists:
-            if legacy_active_task_exists:
-                continue
-            task_id = None
-            kind = "primary"
-            seed_pinned_task = active_task_pin is not None
+            if active_task_pin_state == "legacy_unpinned":
+                pass
+            else:
+                if active_task_pin is None:
+                    raise RuntimeError("demo collaboration pinned task seed is unavailable")
+                task_id = None
+                kind = "primary"
+                seed_pinned_task = True
         await connection.execute(
             text(
                 "SELECT app.seed_demo_collaboration("
@@ -554,6 +554,8 @@ async def _seed_collaboration(
                 task_id=COLLABORATION_ACTIVE_TASK_ID,
                 active_task_pin=active_task_pin,
             )
+        elif kind == "active_task" and skill_catalog_exists:
+            await _assert_exact_legacy_active_task(connection)
 
     stale_revision = await connection.scalar(
         text(
@@ -620,6 +622,54 @@ async def _seed_pinned_collaboration_task(
             "pin": json.dumps(active_task_pin),
         },
     )
+
+
+async def _classify_active_task_pin(connection: AsyncConnection) -> str:
+    row = (
+        (
+            await connection.execute(
+                text(
+                    "SELECT skill_definition_id,skill_version_id,"
+                    "skill_activation_event_id,skill_activation_sequence,"
+                    "runtime_binding_sha256 FROM app.agent_tasks "
+                    "WHERE organization_id=:org AND id=:task FOR UPDATE"
+                ),
+                {"org": DEMO_ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if row is None:
+        return "not_created"
+    pins = cast(tuple[object | None, ...], tuple(row.values()))
+    if all(value is None for value in pins):
+        return "legacy_unpinned"
+    if all(value is not None for value in pins):
+        return "pinned"
+    raise RuntimeError("demo collaboration active task has a partial Skill runtime pin")
+
+
+async def _assert_exact_legacy_active_task(connection: AsyncConnection) -> None:
+    exact = await connection.scalar(
+        text(
+            "SELECT t.lease_owner IS NULL AND t.lease_expires_at IS NULL "
+            "AND t.terminal_code IS NULL "
+            "AND NOT EXISTS(SELECT 1 FROM app.agent_executions execution "
+            " WHERE execution.organization_id=t.organization_id "
+            " AND execution.task_id=t.id) "
+            "AND NOT EXISTS(SELECT 1 FROM internal.agent_task_dispatch dispatch "
+            " WHERE dispatch.organization_id=t.organization_id "
+            " AND dispatch.task_id=t.id) "
+            "AND (SELECT count(*) FROM app.agent_task_events event "
+            " WHERE event.organization_id=t.organization_id "
+            " AND event.task_id=t.id)=1 "
+            "FROM app.agent_tasks t WHERE t.organization_id=:org AND t.id=:task"
+        ),
+        {"org": DEMO_ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+    )
+    if exact is not True:
+        raise RuntimeError("demo collaboration legacy active task mismatch")
 
 
 def main(argv: list[str] | None = None) -> None:

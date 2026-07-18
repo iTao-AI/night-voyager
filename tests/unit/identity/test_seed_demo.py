@@ -119,6 +119,9 @@ def test_head_seed_preserves_legacy_task_and_creates_a_pinned_fresh_head_fixture
     source = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
     assert "active_task_pin" in source
     assert "SELECT app.seed_demo_pinned_collaboration_task(" in source
-    assert "if legacy_active_task_exists:" in source
+    assert "await _classify_active_task_pin(connection)" in source
+    assert 'active_task_pin_state == "legacy_unpinned"' in source
+    assert "await _assert_exact_legacy_active_task(connection)" in source
+    assert "partial Skill runtime pin" in source
     assert "await _seed_pinned_collaboration_task(" in source
     assert 'parser.add_argument("--without-skills", action="store_true")' in source

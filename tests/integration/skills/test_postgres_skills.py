@@ -8,7 +8,7 @@ from uuid import UUID
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from night_voyager.identity.demo_seed import (
     COLLABORATION_ACTIVE_CASE_ID,
@@ -19,9 +19,11 @@ from night_voyager.identity.demo_seed import (
     build_demo_active_task_pin,
     build_demo_skill_seed,
 )
+from night_voyager.planning.fixtures import validate_planning_fixture
 from night_voyager.skills.evaluation import SkillEvaluator
 from night_voyager.skills.models import SkillKey
 from night_voyager.skills.registry import SkillRuntimeRegistry
+from scripts.seed_demo import _seed_collaboration  # pyright: ignore[reportPrivateUsage]
 from tests.integration.skills.test_skill_lifecycle import (
     registration_command,
     reset_nonseed_skill_history,
@@ -89,6 +91,51 @@ SECOND_OWNER = UUID("29000000-0000-0000-0000-000000000001")
 SECOND_MEMBERSHIP = UUID("39000000-0000-0000-0000-000000000001")
 NON_OWNER = UUID("29000000-0000-0000-0000-000000000002")
 NON_OWNER_MEMBERSHIP = UUID("39000000-0000-0000-0000-000000000002")
+
+ORG = UUID("10000000-0000-0000-0000-000000000001")
+ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
+
+
+async def _replay_collaboration_seed(connection: AsyncConnection) -> None:
+    registry = SkillRuntimeRegistry.load_packaged()
+    await _seed_collaboration(
+        connection,
+        validate_planning_fixture(),
+        active_task_pin=build_demo_active_task_pin(registry),
+    )
+
+
+async def _call_pinned_demo_task_helper(connection: AsyncConnection) -> None:
+    registry = SkillRuntimeRegistry.load_packaged()
+    await connection.execute(
+        text(
+            "SELECT app.seed_demo_pinned_collaboration_task("
+            ":org,:case,:task,:advisor,CAST(:pin AS jsonb))"
+        ),
+        {
+            "org": ORG,
+            "case": COLLABORATION_ACTIVE_CASE_ID,
+            "task": COLLABORATION_ACTIVE_TASK_ID,
+            "advisor": ADVISOR,
+            "pin": json.dumps(build_demo_active_task_pin(registry)),
+        },
+    )
+
+
+async def _task_history_counts(connection: AsyncConnection) -> tuple[int, int]:
+    row = (
+        await connection.execute(
+            text(
+                "SELECT "
+                "(SELECT count(*) FROM app.agent_tasks "
+                " WHERE organization_id=:org AND id=:task) AS tasks,"
+                "(SELECT count(*) FROM app.agent_task_events "
+                " WHERE organization_id=:org AND task_id=:task) AS events"
+            ),
+            {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+        )
+    ).one()
+    return cast(tuple[int, int], tuple(row))
 
 
 @pytest.mark.database
@@ -177,6 +224,197 @@ async def test_fresh_head_seed_creates_exact_pinned_active_task_fixture() -> Non
                 )
                 == 1
             )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_pinned_seed_replay_rejects_task_projection_drift_atomically() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.agent_tasks SET terminal_code='seed_projection_drift' "
+                    "WHERE organization_id=:org AND id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError):
+                await _replay_collaboration_seed(connection)
+            await savepoint.rollback()
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_pinned_helper_rejects_extra_event_without_partial_history() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.agent_task_events("
+                    "organization_id,task_id,event_sequence,event_code,public_status,"
+                    "public_code,attempt_no,result_planning_run_id,created_at) "
+                    "VALUES(:org,:task,2,'queued','preparing','event_drift',0,NULL,"
+                    "timestamptz '2026-01-01 00:00:01+00')"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError):
+                await _call_pinned_demo_task_helper(connection)
+            await savepoint.rollback()
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_seed_replay_preserves_only_exact_all_null_legacy_task() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_tasks DISABLE TRIGGER "
+                    "agent_tasks_skill_pin_immutable"
+                )
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.agent_tasks SET "
+                    "skill_definition_id=NULL,skill_version_id=NULL,"
+                    "skill_activation_event_id=NULL,skill_activation_sequence=NULL,"
+                    "runtime_binding_sha256=NULL "
+                    "WHERE organization_id=:org AND id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            await _replay_collaboration_seed(connection)
+            pins = (
+                await connection.execute(
+                    text(
+                        "SELECT skill_definition_id,skill_version_id,"
+                        "skill_activation_event_id,skill_activation_sequence,"
+                        "runtime_binding_sha256 FROM app.agent_tasks "
+                        "WHERE organization_id=:org AND id=:task"
+                    ),
+                    {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+                )
+            ).one()
+            assert tuple(pins) == (None, None, None, None, None)
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_seed_replay_rejects_all_null_legacy_projection_drift() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_tasks DISABLE TRIGGER "
+                    "agent_tasks_skill_pin_immutable"
+                )
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.agent_tasks SET "
+                    "skill_definition_id=NULL,skill_version_id=NULL,"
+                    "skill_activation_event_id=NULL,skill_activation_sequence=NULL,"
+                    "runtime_binding_sha256=NULL,terminal_code='legacy_drift' "
+                    "WHERE organization_id=:org AND id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            with pytest.raises((DBAPIError, RuntimeError)):
+                await _replay_collaboration_seed(connection)
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_seed_replay_rejects_partial_pin_classification() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_tasks DISABLE TRIGGER "
+                    "agent_tasks_skill_pin_immutable"
+                )
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_tasks DROP CONSTRAINT "
+                    "agent_tasks_skill_pin_all_or_none"
+                )
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.agent_tasks SET skill_activation_sequence=NULL "
+                    "WHERE organization_id=:org AND id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            with pytest.raises(RuntimeError, match="partial Skill runtime pin"):
+                await _replay_collaboration_seed(connection)
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
     finally:
         await engine.dispose()
 

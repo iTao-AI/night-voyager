@@ -72,6 +72,20 @@ if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-skill-seed-replay" ]; then
+    export NIGHT_VOYAGER_SKILL_SEED_PATH=fresh_head
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/skills/test_postgres_skills.py::test_fresh_head_seed_creates_exact_pinned_active_task_fixture \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_seed_replay_rejects_task_projection_drift_atomically \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_extra_event_without_partial_history \
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_preserves_only_exact_all_null_legacy_task \
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_all_null_legacy_projection_drift \
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_partial_pin_classification
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -93,5 +107,6 @@ run_lane() {
     ACTIVE_PROJECT_NAME=
 }
 
+run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-main" inside
 run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade

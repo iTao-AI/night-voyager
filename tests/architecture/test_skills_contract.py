@@ -89,6 +89,25 @@ def test_skills_database_runner_freezes_the_approved_suite_map() -> None:
             assert path in runner, (suite_name, path)
 
 
+def test_required_db_gate_runs_fresh_head_seed_replay_regressions() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    compose_job = workflow.split("  compose:", maxsplit=1)[1]
+    assert "make db-check" in compose_job
+
+    runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    assert "inside-skill-seed-replay" in runner
+    assert "NIGHT_VOYAGER_SKILL_SEED_PATH=fresh_head" in runner
+    for test_name in (
+        "test_fresh_head_seed_creates_exact_pinned_active_task_fixture",
+        "test_pinned_seed_replay_rejects_task_projection_drift_atomically",
+        "test_pinned_helper_rejects_extra_event_without_partial_history",
+        "test_seed_replay_preserves_only_exact_all_null_legacy_task",
+        "test_seed_replay_rejects_all_null_legacy_projection_drift",
+        "test_seed_replay_rejects_partial_pin_classification",
+    ):
+        assert test_name in runner
+
+
 def test_skills_database_runner_rejects_unknown_suite_before_docker() -> None:
     runner = (ROOT / "scripts/run_skill_db_tests.sh").read_text(encoding="utf-8")
 
