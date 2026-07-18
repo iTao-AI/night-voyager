@@ -1,7 +1,9 @@
 # Versioned Skill Governance and Runtime Pinning Implementation Plan
 
-**Implementation status:** Approved but not implemented. The tasks below remain the
-approved execution recipe.
+**Implementation status:** Implemented locally as the unreleased PR B backend
+boundary. Parent-owned database/Compose/full verification and authority review remain
+pending. The tasks below remain the approved execution record; push, PR, merge,
+release, deployment, live-provider proof, and PR C remain separately gated.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:dispatching-parallel-agents` only for the isolated lanes declared
@@ -23,9 +25,10 @@ The same PR closes the synthetic adapter's fixture-Case seam by materializing th
 exact persisted Case revision and filtering product projections to the selected
 country subset.
 
-**Tech Stack:** Python 3.12.13, Pydantic 2.13.4, FastAPI 0.139.0, SQLAlchemy
-2.0.51 async, asyncpg 0.31.0, PostgreSQL 18.4, Alembic, pytest 9, Hatch/uv,
-Docker Compose, and the existing fenced AgentTask/worker/opaque-session boundary.
+**Tech Stack:** Python 3.12.13, Pydantic 2.13.4, FastAPI 0.139.2 lock with
+`fastapi>=0.139,<0.140` runtime constraint, SQLAlchemy 2.0.51 async, asyncpg 0.31.0,
+PostgreSQL 18.4, Alembic, pytest 9, Hatch/uv, Docker Compose, and the existing fenced
+AgentTask/worker/opaque-session boundary.
 
 ## Global Constraints
 
@@ -179,7 +182,7 @@ branch review.
 - The registry exposes `load_packaged()`, `get()`,
   `supported_planning_bindings()`, and `validate_pin()`.
 
-- [ ] **Step 1: Write RED contract tests**
+- [x] **Step 1: Write RED contract tests**
 
   Test exact six keys, strict semantic-version regex, `extra="forbid"`, lowercase
   SHA-256, sorted unique tools/scopes, catalog-only absence of executable fields,
@@ -201,7 +204,7 @@ branch review.
           SkillRuntimeManifestEntryV1.model_validate(payload)
   ```
 
-- [ ] **Step 2: Run focused RED**
+- [x] **Step 2: Run focused RED**
 
   ```bash
   uv run pytest tests/unit/skills/test_models.py tests/unit/skills/test_registry.py \
@@ -212,7 +215,7 @@ branch review.
   Expected: collection fails because the Skill package and packaged manifest do not
   exist.
 
-- [ ] **Step 3: Implement strict models and registry**
+- [x] **Step 3: Implement strict models and registry**
 
   Use strict frozen Pydantic models. `SkillRuntimeRegistry.validate_pin()` accepts
   the persisted five-field pin, trusted worker-resolved `skill_key` and semantic
@@ -250,7 +253,7 @@ branch review.
   Tests must cover editable execution, sdist-to-wheel build, and an isolated installed
   wheel; production code has no repository-path fallback.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   uv run pytest tests/unit/skills tests/contracts/test_skill_runtime_registry.py \
@@ -287,7 +290,7 @@ branch review.
   evaluator that invokes existing pure product policies without provider, model,
   shell, database, or browser-supplied pass/fail authority.
 
-- [ ] **Step 1: Write evaluator RED tests**
+- [x] **Step 1: Write evaluator RED tests**
 
   Freeze stable assertion IDs and exact dataset identity for all six Skills. Include
   pass and mutation counterfactuals for typed profile facts, destination comparison,
@@ -297,7 +300,7 @@ branch review.
   missing/extra/duplicate assertion IDs, forged result status,
   dataset hash drift, and unknown Skill/version.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   uv run pytest tests/unit/skills/test_evaluation.py \
@@ -306,7 +309,7 @@ branch review.
 
   Expected: evaluator and eval manifest are absent.
 
-- [ ] **Step 3: Implement deterministic evaluation**
+- [x] **Step 3: Implement deterministic evaluation**
 
   The evaluator loads only the packaged, checked-in manifest and pure policies. It
   returns the complete canonical assertion projection, failed assertion IDs, status,
@@ -321,7 +324,7 @@ branch review.
   Load it through the same `importlib.resources` package-data path and add editable,
   sdist-to-wheel, and isolated-wheel assertions; no repository-path fallback exists.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   uv run pytest tests/unit/skills/test_evaluation.py \
@@ -360,7 +363,7 @@ branch review.
   organization/Case/revision materialization, and selected-country product
   projection for both synthetic and governed mixed operations.
 
-- [ ] **Step 1: Write RED tests**
+- [x] **Step 1: Write RED tests**
 
   Cover Australia-only, Japan-only, Australia+Japan, all-three canonical seed, and
   empty/duplicate/unsorted/unsupported rejection. Prove confirmed budget, intake,
@@ -376,7 +379,7 @@ branch review.
       assert {row.country for row in result.rankings} == {Country.JAPAN}
   ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   uv run pytest tests/unit/planning/test_synthetic.py \
@@ -387,7 +390,7 @@ branch review.
   Expected: persisted materializer is absent and existing policy emits all three
   routes regardless of the stored preference.
 
-- [ ] **Step 3: Implement the bounded materializer and projection**
+- [x] **Step 3: Implement the bounded materializer and projection**
 
   Validate `preferred_countries` at the model edge. Load the exact revision using a
   worker-only SQL projection. Combine those facts with the existing fixed synthetic
@@ -395,7 +398,7 @@ branch review.
   countries. Preserve current policy decisions and all-three golden hashes where the
   input is unchanged.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   uv run pytest tests/unit/planning/test_synthetic.py \
@@ -453,7 +456,7 @@ branch review.
   seed, narrow reads, five-field pin columns/FKs/index, task/worker signature
   extensions, and exact `0008 -> 0007` downgrade.
 
-- [ ] **Step 1: Build and self-test the isolated database runner**
+- [x] **Step 1: Build and self-test the isolated database runner**
 
   First add architecture assertions that require the exact `skills-db-check` target,
   script path, suite names, `-o addopts='' -m database`, isolated project/volume, and
@@ -469,7 +472,7 @@ branch review.
   Expected: the first command is GREEN after runner wiring; the second exits nonzero
   with a bounded usage message and leaves no Compose project.
 
-- [ ] **Step 2: Write migration/catalog/materializer RED tests**
+- [x] **Step 2: Write migration/catalog/materializer RED tests**
 
   Freeze exact tables, migrator ownership, forced RLS, tenant policies, immutable
   triggers, function signatures, fixed `search_path`, PUBLIC revocation, runtime
@@ -479,7 +482,7 @@ branch review.
   current budget/intake/Japan risk/country facts, including missing, stale,
   cross-tenant, malformed, unsupported-country, and pin-mismatch failures.
 
-- [ ] **Step 3: Run product RED**
+- [x] **Step 3: Run product RED**
 
   ```bash
   make skills-db-check SUITE=catalog
@@ -516,7 +519,7 @@ branch review.
   Unknown or empty `SUITE` values fail before Docker starts. Each suite logs the
   selected files and proves its owned Compose project is empty after teardown.
 
-- [ ] **Step 4: Implement exact schema and relational pin proof**
+- [x] **Step 4: Implement exact schema and relational pin proof**
 
   Create:
 
@@ -539,7 +542,7 @@ branch review.
   current activation is derived only from the latest append-only event. Catalog-only
   definitions cannot satisfy any activation or pin FK path.
 
-- [ ] **Step 5: Implement narrow mutation/read functions**
+- [x] **Step 5: Implement narrow mutation/read functions**
 
   Runtime mutations are exactly:
 
@@ -566,7 +569,7 @@ branch review.
   seed evaluation records, and one `study-destination-compare@1.0.0` seed activation.
   Default seed does not register `1.0.1` and remains idempotent.
 
-- [ ] **Step 6: Extend task creation and claim under one lock protocol**
+- [x] **Step 6: Extend task creation and claim under one lock protocol**
 
   For a new task, the SQL order is:
 
@@ -585,7 +588,7 @@ branch review.
   Activation/rollback uses `FOR UPDATE` on the same definition. Claim validates the
   relational pin and copies it to the execution before returning worker input.
 
-- [ ] **Step 7: Implement exact upgrade/downgrade behavior**
+- [x] **Step 7: Implement exact upgrade/downgrade behavior**
 
   Upgrade cancels only active legacy-unpinned `queued|leased|running` tasks with
   bounded code `legacy_unpinned`, closes active executions, clears lease/dispatch,
@@ -602,7 +605,7 @@ branch review.
   function signatures, effective index, grants, and verifier contract before
   dropping Skill structures.
 
-- [ ] **Step 8: Run focused GREEN and commit**
+- [x] **Step 8: Run focused GREEN and commit**
 
   ```bash
   make skills-db-check SUITE=catalog
@@ -664,7 +667,7 @@ branch review.
   unknown Skill/version/candidate/Case, and catalog-only activation are
   non-enumerating where applicable.
 
-- [ ] **Step 1: Write service/HTTP RED tests**
+- [x] **Step 1: Write service/HTTP RED tests**
 
   Cover owner/non-owner, catalog-only behavior, exact DTO fields, registered-version
   requirement, server-computed evaluation, failed evaluation, scope expansion,
@@ -685,7 +688,7 @@ branch review.
     expected_activation_sequence, reason
   ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   uv run pytest tests/unit/skills/test_application.py \
@@ -694,7 +697,7 @@ branch review.
 
   Expected: services, adapter, router, and OpenAPI paths are absent.
 
-- [ ] **Step 3: Implement ports, adapter, and router**
+- [x] **Step 3: Implement ports, adapter, and router**
 
   Service IDs and canonical request hashes are product-owned. PostgreSQL owns actor,
   owner, version, evaluation, activation, CAS, and replay authority. Map expected
@@ -707,7 +710,7 @@ branch review.
   skill_scope_expansion`, `NV021 -> skill_rollback_unsupported`, and `NV022 ->
   skill_pin_invalid`.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   uv run pytest tests/unit/skills/test_application.py \
@@ -766,7 +769,7 @@ branch review.
   packaged manifest entry; these values are not accepted from the browser or task
   request.
 
-- [ ] **Step 1: Write task/worker RED tests**
+- [x] **Step 1: Write task/worker RED tests**
 
   Cover task create/replay around activation, complete pin equality, claim copy,
   actual leaf validation, input hash, old task preservation, missing/mismatched/
@@ -782,7 +785,7 @@ branch review.
   real pinned application/API path and registry-aware worker, and must distinguish
   exact `1.0.0` from `1.0.1` even when their runtime-binding digests are equal.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   uv run pytest tests/unit/tasks tests/unit/adapters/test_router.py -q
@@ -793,7 +796,7 @@ branch review.
   both legacy direct-SQL/adapter-only integration paths fail until converted to the
   pinned authority path.
 
-- [ ] **Step 3: Implement worker order and input hash**
+- [x] **Step 3: Implement worker order and input hash**
 
   Add `PlanningAdapterRouter.resolve(operation)` returning the actual configured
   immutable adapter identity and adapter object. Treat the execution row's existing
@@ -824,7 +827,7 @@ branch review.
   `validate_adapter_payload()` receives the registry-resolved leaf rather than
   maintaining a second hard-coded operation map.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   uv run pytest tests/unit/tasks tests/unit/adapters/test_router.py -q
@@ -871,7 +874,7 @@ branch review.
 - Modify: `tests/integration/skills/test_skill_downgrade.py`
 - Modify: `tests/security/test_skills_catalog.py`
 
-- [ ] **Step 1: Write lifecycle/runtime RED tests**
+- [x] **Step 1: Write lifecycle/runtime RED tests**
 
   Prove repeated exact seed, dual tenant isolation, designated-owner enforcement,
   catalog-only activation denial, candidate/evaluation immutability, one-winner
@@ -887,7 +890,7 @@ branch review.
   unsupported countries, pin mismatch, strict DTOs, owner/assignment matrix,
   no-store/non-enumeration, and worker/API/PUBLIC projection grants.
 
-- [ ] **Step 2: Run lifecycle RED on real PostgreSQL**
+- [x] **Step 2: Run lifecycle RED on real PostgreSQL**
 
   ```bash
   make skills-db-check SUITE=lifecycle
@@ -897,7 +900,7 @@ branch review.
   real HTTP, worker persistence, or non-seed downgrade refusal fail before this task
   changes implementation.
 
-- [ ] **Step 3: Verify canonical seed and add explicit supported-version registration**
+- [x] **Step 3: Verify canonical seed and add explicit supported-version registration**
 
   ```text
   identity and participants
@@ -922,7 +925,7 @@ branch review.
   it. Unit/architecture tests scan both paths to prove that absence. The lifecycle
   test invokes it explicitly before creating the `1.0.1` candidate.
 
-- [ ] **Step 4: Run GREEN on real PostgreSQL**
+- [x] **Step 4: Run GREEN on real PostgreSQL**
 
   ```bash
   make skills-db-check SUITE=lifecycle
@@ -932,7 +935,7 @@ branch review.
   Expected: all runtime-role, lifecycle, concurrency, rollback, and migration graph
   tests pass.
 
-- [ ] **Step 5: Commit runtime proof**
+- [x] **Step 5: Commit runtime proof**
 
   ```bash
   git add src/night_voyager/identity/demo_seed.py scripts/seed_demo.py \
@@ -974,13 +977,13 @@ branch review.
 - Modify: `tests/architecture/test_m4a_contract.py`
 - Modify: `tests/architecture/test_m5_contract.py`
 
-- [ ] **Step 1: Write docs/tooling RED tests**
+- [x] **Step 1: Write docs/tooling RED tests**
 
   Assert accepted ADR, installed manifest, exact seed/version counts, pin/grant
   contract, `skills-check` target, CI routing under existing context names, docs links
   and status, inspector projection, and unchanged v0.1.1 identity.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   uv run pytest tests/unit/test_release_surface.py \
@@ -989,7 +992,7 @@ branch review.
 
   Expected: ADR/docs/target/release-verifier assertions fail.
 
-- [ ] **Step 3: Implement public docs and proof routing**
+- [x] **Step 3: Implement public docs and proof routing**
 
   `make skills-check` runs pure/contract/architecture Skill tests. Add it to the
   existing `python` job without renaming required checks. Document catalog-only vs
@@ -1019,7 +1022,7 @@ branch review.
   registry loading passes, and existing collaboration/DRA/M5/browser flows remain
   green without frontend changes.
 
-- [ ] **Step 5: Review and commit**
+- [x] **Step 5: Review and commit**
 
   Review full base-to-HEAD diff for exact five tables, pin FKs, grants, migration
   restore signatures, manifest packaging, code/DB hash equality, country projection,
@@ -1048,7 +1051,7 @@ branch review.
   git commit -m "docs: complete versioned Skill runtime proof"
   ```
 
-- [ ] **Step 6: Stop at local authority-review handoff**
+- [x] **Step 6: Stop at local authority-review handoff**
 
   Report exact base/branch/worktree/HEAD/ordered commits, diff, RED -> GREEN evidence,
   registry and installed-wheel identity, catalog/grants, seed/lifecycle/concurrency/

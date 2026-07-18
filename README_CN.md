@@ -8,11 +8,12 @@ Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family
 
 ## 工程证据
 
-- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写，migration graph 固定为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007`。
+- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写，migration graph 固定为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008`。
 - **Durable task 与 SSE：** `AgentTask` 可跨 worker/API restart 保持，使用 bounded lease 与 generation fencing，并恢复授权 event stream。
 - **Human gates：** deterministic evidence policy、advisor review 与显式 family confirmation 相互分离；模型或 adapter 输出不能自行获得 promotion authority。
 - **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。
 - **Governed collaboration authority：** unreleased backend boundary 将共享 `MessageEvent` communication、typed `MemoryCandidate` proposal、assigned-advisor verification 与 atomic versioned `ConfirmedFact` publication 分离。
+- **Versioned Skill runtime：** unreleased backend boundary 治理 exact six-key catalog、deterministic evaluation、owner activation/rollback、five-field task/execution pin，以及 start 前的 packaged-registry validation。
 - **Browser to database：** connected `/demo` 在 Chromium 中执行真实 Next.js BFF、FastAPI、worker、SSE 与 PostgreSQL synthetic flow。
 
 ## 验证 release
@@ -37,7 +38,7 @@ connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connec
 - 仓库不包含真实学生记录，也不宣称录取结果、真实用户、SLA、可用性或业务收益。
 - worker 与 SSE 仅提供 deterministic local proof，不代表 distributed high availability。
 - Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。Deterministic offline DRA candidate import、atomic promotion 与 governed mixed PlanningRun generation 已在本地实现；live provider proof 未运行，仍需单独授权。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
-- Governed collaboration PR A 是 unreleased local synthetic backend capability。PR B Skill governance 与 PR C `/demo/collaboration` browser walkthrough 尚未实现；既有 `/demo` route 与 frontend 保持不变。
+- Governed collaboration PR A 与 versioned Skill governance PR B 均已实现为 unreleased local synthetic backend capability。PR C 及其 `/demo/collaboration` browser walkthrough 仍 deferred；既有 `/demo` route 与 frontend 保持不变。
 
 ## Milestone 与历史
 
@@ -49,7 +50,8 @@ connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`。按 [connec
 - M5 connected advisor-to-family demo 已实现为 [runbook](docs/operations/connected-demo.md)所述的 local synthetic walkthrough。
 - [M4B optional read-only MKE candidate proof](docs/operations/mke-candidate-proof.md)；输出保持 `UNTRUSTED_CANDIDATE`。
 - [Governed DRA mixed-evidence proof](docs/operations/dra-consumer-proof.md)；candidate import、atomic human promotion 与 governed mixed PlanningRun generation 已形成 deterministic local closure，connected synthetic `/demo` 保持不变。
-- [Governed collaboration 与 confirmed-fact reference](docs/reference/collaboration-and-confirmed-facts.md)及 [authority runbook](docs/operations/collaboration-authority.md)；PR A 已实现为 unreleased backend boundary，PR B 与 PR C 仍 deferred。
+- [Governed collaboration 与 confirmed-fact reference](docs/reference/collaboration-and-confirmed-facts.md)及 [authority runbook](docs/operations/collaboration-authority.md)；PR A 已实现为 unreleased backend boundary。
+- [Versioned Skills 与 runtime pins](docs/reference/versioned-skills-and-runtime-pins.md)及 [Skill governance runbook](docs/operations/skill-governance.md)；PR B 已实现为 unreleased backend boundary，PR C 仍 deferred。
 
 ## Contributor 路径
 
@@ -60,6 +62,7 @@ make doctor MODE=dev
 make check
 make db-check
 make collaboration-check
+make skills-check
 make dra-check
 make mke-check
 ```

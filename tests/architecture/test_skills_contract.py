@@ -35,7 +35,7 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     assert "docker compose --profile db-test run --rm --build" in runner
     assert "docker compose --profile db-test \\" in runner
     assert "down --volumes --remove-orphans" in runner
-    assert 'label=com.docker.compose.project=$active_project' in runner
+    assert "label=com.docker.compose.project=$active_project" in runner
     assert "docker volume ls --quiet" in runner
     assert "docker network ls --quiet" in runner
     assert "Skill database project was not empty after teardown" in runner
@@ -43,9 +43,7 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     assert "night-voyager-skills-db-check" in runner
     assert "uv run --no-editable python scripts/seed_demo.py" in runner
     legacy = runner.index("uv run alembic downgrade 0007")
-    legacy_seed = runner.index(
-        "uv run --no-editable python scripts/seed_demo.py --without-skills"
-    )
+    legacy_seed = runner.index("uv run --no-editable python scripts/seed_demo.py --without-skills")
     head = runner.index("uv run alembic upgrade head")
     assert legacy < legacy_seed < head
 
@@ -98,3 +96,103 @@ def test_skills_database_runner_rejects_unknown_suite_before_docker() -> None:
     docker = runner.index("docker compose")
     assert validation < docker
     assert "unknown Skill database suite" in runner
+
+
+def test_skills_offline_lane_and_ci_routing_are_registered() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "skills-check:" in makefile
+    lane = makefile[makefile.index("skills-check:") : makefile.index("mke-doctor:")]
+    for path in (
+        "tests/unit/skills",
+        "tests/unit/identity/test_seed_demo.py",
+        "tests/contracts/test_skill_runtime_registry.py",
+        "tests/architecture/test_skills_contract.py",
+        "tests/unit/test_release_surface.py",
+        "tests/security/test_database_catalog.py",
+    ):
+        assert path in lane
+    assert "-m database" not in lane
+    assert workflow.count("make skills-check") == 1
+    python_job = workflow[workflow.index("  python:") : workflow.index("  frontend:")]
+    assert "make skills-check" in python_job
+
+
+def test_versioned_skill_public_contract_is_accepted_and_discoverable() -> None:
+    required = (
+        "docs/decisions/0009-versioned-skill-runtime-pinning.md",
+        "docs/reference/versioned-skills-and-runtime-pins.md",
+        "docs/operations/skill-governance.md",
+    )
+    assert all((ROOT / relative).is_file() for relative in required)
+
+    adr = (ROOT / required[0]).read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    readmes = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8") for relative in ("README.md", "README_CN.md")
+    )
+    assert "- Status: Accepted" in adr
+    assert "Implementation status: Implemented by migration `0008`" in adr
+    assert "versioned-skills-and-runtime-pins.md" in docs_index
+    assert "skill-governance.md" in docs_index
+    assert "0009-versioned-skill-runtime-pinning.md" in docs_index
+    assert "PR B" in readmes and "implemented" in readmes and "已实现" in readmes
+    assert "PR C" in readmes and "deferred" in readmes
+
+
+def test_versioned_skill_reference_freezes_runtime_and_pin_boundaries() -> None:
+    reference = (ROOT / "docs/reference/versioned-skills-and-runtime-pins.md").read_text(
+        encoding="utf-8"
+    )
+    http = (ROOT / "docs/reference/http-api-v1.md").read_text(encoding="utf-8")
+    tasks = (ROOT / "docs/reference/agent-tasks-and-events.md").read_text(encoding="utf-8")
+
+    for token in (
+        "student-profile-intake",
+        "study-destination-compare",
+        "evidence-research",
+        "document-evidence-retrieval",
+        "family-decision-brief",
+        "application-timeline-guard",
+        "five-field pin",
+        "catalog_only",
+        "planning_runtime",
+        "legacy_unpinned",
+    ):
+        assert token in reference
+    for path in (
+        "/api/v1/skills",
+        "/api/v1/skills/{skill_key}",
+        "/api/v1/skills/{skill_key}/change-candidates",
+        "/api/v1/skill-change-candidates/{candidate_id}/evaluations",
+        "/api/v1/skill-change-candidates/{candidate_id}/activations",
+        "/api/v1/skills/{skill_key}/rollbacks",
+        "/api/v1/cases/{case_id}/planning-skill-inspector",
+    ):
+        assert path in http
+    for field in (
+        "skill_definition_id",
+        "skill_version_id",
+        "skill_activation_event_id",
+        "skill_activation_sequence",
+        "runtime_binding_sha256",
+        "{request, five_field_pin}",
+        "skill_pin_invalid",
+    ):
+        assert field in tasks
+
+
+def test_versioned_skill_plan_and_design_status_match_implementation() -> None:
+    spec = (
+        ROOT / "docs/superpowers/specs/2026-07-16-governed-collaboration-core-design.md"
+    ).read_text(encoding="utf-8")
+    plan = (
+        ROOT / "docs/superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md"
+    ).read_text(encoding="utf-8")
+
+    assert "PR A and PR B are implemented" in spec
+    assert "PR C has not started" in spec
+    assert "**Implementation status:** Implemented locally" in plan
+    assert "FastAPI 0.139.2" in plan
+    assert "fastapi>=0.139,<0.140" in plan

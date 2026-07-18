@@ -4,7 +4,8 @@ The backend supports two operations through the same durable task authority:
 `generate_planning_run_v1` preserves the all-synthetic M4A behavior, while
 `generate_governed_mixed_planning_run_v1` consumes an exact approved promoted
 source pack. An assigned advisor creates either task against an exact Case
-revision, source-pack version, and `m3a-policy-v1`. The mixed operation is
+revision, source-pack version, `m3a-policy-v1`, and the current active
+`study-destination-compare` SkillVersion. The mixed operation is
 accepted only after the atomic human verification/promotion gate and can use
 external authority only for `australia_program_fit`; every other accepted fact
 must match the synthetic baseline. Both paths end at `review_required` and
@@ -15,11 +16,13 @@ flow.
 
 ## Durable records
 
-- `app.agent_tasks` is the current task authority. It stores pins, state,
+- `app.agent_tasks` is the current task authority. It stores Case/source/policy
+  pins, the exact five-field Skill runtime pin, state,
   attempt count, lease generation, sanitized terminal code, and an optional
   result `PlanningRun` reference.
-- `app.agent_executions` records normalized attempts and generation-fenced
-  outcomes. A started attempt stores the SHA-256 of its canonical pinned adapter
+- `app.agent_executions` records normalized attempts, an immutable claim-time copy
+  of the task's five-field Skill pin, the actual selected adapter leaf, and
+  generation-fenced outcomes. A started attempt stores the SHA-256 of its canonical
   request; completion stores a non-negative duration, retry/fallback facts,
   `not_applicable` cost status for the deterministic adapter, and an output hash
   plus result reference when a result is accepted. It does not store prompts,
@@ -33,6 +36,49 @@ flow.
 The three application tables are migrator-owned and forced-RLS protected.
 Runtime roles have no direct task write authority. Narrow functions perform
 assigned-advisor creation/cancellation and worker lease transitions.
+
+## Versioned Skill pin
+
+Every planning task created after migration `0008` stores exactly:
+
+```text
+skill_definition_id
+skill_version_id
+skill_activation_event_id
+skill_activation_sequence
+runtime_binding_sha256
+```
+
+The complete five-field pin participates in effective-task identity. Task creation
+resolves it in the same transaction as idempotency replay, effective uniqueness, task
+insert, and dispatch insert. Replay returns the original task and pin even if a newer
+version becomes active. Activation or rollback affects only later task creation.
+
+Claim validates the relational pin and copies all five fields to AgentExecution.
+Composite foreign keys and immutable guards require exact task/execution equality.
+The execution separately retains `adapter_id` and `adapter_version` as the actual leaf
+audit fact.
+
+The worker loads the copied pin plus trusted joined Skill key/version, resolves the
+configured router leaf, and requires equality with the packaged manifest operation
+binding before start. The successful canonical execution input hash is exactly
+`sha256({request, five_field_pin})`. Missing, mismatched, unsupported, catalog-only,
+or malformed pins fail through the fenced non-retryable `skill_pin_invalid` path
+without start, adapter invocation, or reclaim/retry.
+
+Pre-`0008` active `queued|leased|running` tasks without a pin are cancelled during
+upgrade with `legacy_unpinned`. Existing `waiting_review` and terminal history is
+retained and projects `pin_status=legacy_unpinned`; new task creation never produces
+an unpinned row.
+
+## Persisted revision input
+
+Both planning operations materialize the exact persisted organization, Case,
+revision, source pack, source-pack version, and policy. Persisted budget, intake,
+Japan-risk acceptance, and preferred countries reach the adapter; fixture Case values
+cannot replace them. Preferred countries are a non-empty sorted unique subset of
+Australia, Japan, and Malaysia. Route, cost, ranking, route-to-Evidence, and eligible
+advisor-review product projections contain selected countries only.
 
 ## State projection
 

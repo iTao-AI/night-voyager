@@ -2,8 +2,9 @@
 
 ## Status
 
-Approved design. PR A is implemented as an unreleased backend boundary; PR B and
-PR C have not started.
+Approved design. PR A and PR B are implemented as unreleased backend boundaries;
+PR C has not started. The inspected baseline below remains the historical design
+snapshot rather than a statement about the current migration head.
 
 This document defines the bounded Night Voyager product increment after the
 governed mixed-planning closure. It is a public-neutral design source intended to be
@@ -71,7 +72,8 @@ remain serialized under that PR's integration owner.
 - The inspected baseline had no implemented conversation, external binding,
   MessageEvent, MemoryCandidate, ConfirmedFact, Skill registry, SkillVersion, or
   Skill evaluation implementation. PR A now supplies the conversation/candidate/fact
-  backend boundary; the external binding and Skill surfaces remain absent.
+  backend boundary, and PR B now supplies the versioned Skill governance and runtime
+  pinning boundary. External transport binding remains absent.
 - The runtime has no LangChain, LangGraph, DeepAgents, dynamic prompt registry, or
   policy-engine dependency.
 
@@ -231,7 +233,7 @@ governed mixed-evidence decision and is not renumbered or rewritten.
 
 ### PR B — Versioned Skill governance and runtime pinning
 
-PR B introduces migration `0008_versioned_skills.py`, the Skill catalog,
+PR B implements migration `0008_versioned_skills.py`, the Skill catalog,
 deterministic evaluation, owner-controlled activation and rollback for the one
 runtime-bound Skill, task-time pins, worker-side pin validation, focused HTTP
 endpoints, explicit demo seed data, tests, operations documentation, and

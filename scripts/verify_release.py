@@ -10,12 +10,14 @@ import subprocess
 import tempfile
 import tomllib
 from pathlib import Path
+from typing import cast
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.1.1"
+LOCKED_FASTAPI_VERSION = "0.139.2"
 RELEASE_TAG = f"v{VERSION}"
 RELEASE_ARCHIVE_URL = (
     f"https://github.com/iTao-AI/night-voyager/archive/refs/tags/{RELEASE_TAG}.tar.gz"
@@ -23,7 +25,8 @@ RELEASE_ARCHIVE_URL = (
 RELEASE_ARCHIVE_ROOT = f"night-voyager-{VERSION}"
 DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 POSTGRES_IMAGE = (
-    "postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
+    "postgres:18.4-alpine3.24@sha256:"
+    "9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15"
 )
 M3A_TABLES = {
     "student_cases",
@@ -67,6 +70,27 @@ COLLABORATION_API_FUNCTIONS = {
     "read_collaboration_messages",
     "read_memory_candidates",
     "read_confirmed_facts",
+}
+SKILL_TABLES = {
+    "skill_definitions",
+    "skill_versions",
+    "skill_change_candidates",
+    "skill_evaluation_results",
+    "skill_activation_events",
+}
+SKILL_API_FUNCTIONS = {
+    "create_skill_change_candidate",
+    "record_skill_candidate_evaluation",
+    "promote_skill_change_candidate",
+    "rollback_skill_activation",
+    "list_skill_catalog",
+    "get_skill_catalog_item",
+    "load_skill_candidate_context",
+    "inspect_planning_skill",
+}
+SKILL_WORKER_FUNCTIONS = {
+    "load_agent_task_skill_pin",
+    "load_persisted_synthetic_planning_snapshot",
 }
 IGNORED_DIRECTORIES = {
     ".git",
@@ -165,6 +189,16 @@ COLLABORATION_SURFACE = (
     "docs/decisions/0008-governed-collaboration-and-memory-authority.md",
     "docs/reference/collaboration-and-confirmed-facts.md",
     "docs/operations/collaboration-authority.md",
+)
+SKILL_SURFACE = (
+    "migrations/versions/0008_versioned_skills.py",
+    "fixtures/skills/runtime-manifest-v1.json",
+    "fixtures/skills/eval-manifest-v1.json",
+    "src/night_voyager/skills/registry.py",
+    "src/night_voyager/skills/evaluation.py",
+    "docs/decisions/0009-versioned-skill-runtime-pinning.md",
+    "docs/reference/versioned-skills-and-runtime-pins.md",
+    "docs/operations/skill-governance.md",
 )
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
@@ -324,6 +358,136 @@ def verify_collaboration_surface() -> None:
     print("proof collaboration surface: governed conversation and memory authority confirmed")
 
 
+def _canonical_json_sha256(value: object) -> str:
+    payload = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def verify_skill_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in SKILL_SURFACE):
+        raise SystemExit("versioned Skill governance surface incomplete")
+
+    from night_voyager.identity.demo_seed import build_demo_skill_seed
+    from night_voyager.skills.evaluation import SkillEvaluator
+    from night_voyager.skills.registry import SkillRuntimeRegistry
+
+    runtime_manifest = json.loads((ROOT / SKILL_SURFACE[1]).read_text(encoding="utf-8"))
+    evaluation_manifest = json.loads((ROOT / SKILL_SURFACE[2]).read_text(encoding="utf-8"))
+    runtime_content = {
+        key: value for key, value in runtime_manifest.items() if key != "manifest_sha256"
+    }
+    evaluation_content = {
+        key: value for key, value in evaluation_manifest.items() if key != "manifest_sha256"
+    }
+    runtime_identities = tuple(
+        (entry["skill_key"], entry["version"], entry["binding_kind"])
+        for entry in runtime_manifest.get("entries", ())
+    )
+    expected_runtime_identities = (
+        ("student-profile-intake", "1.0.0", "catalog_only"),
+        ("study-destination-compare", "1.0.0", "planning_runtime"),
+        ("study-destination-compare", "1.0.1", "planning_runtime"),
+        ("evidence-research", "1.0.0", "catalog_only"),
+        ("document-evidence-retrieval", "1.0.0", "catalog_only"),
+        ("family-decision-brief", "1.0.0", "catalog_only"),
+        ("application-timeline-guard", "1.0.0", "catalog_only"),
+    )
+    evaluation_identities = tuple(
+        (dataset["skill_key"], dataset["version"])
+        for dataset in evaluation_manifest.get("datasets", ())
+    )
+    packaged_registry = SkillRuntimeRegistry.from_json(
+        (ROOT / SKILL_SURFACE[1]).read_bytes()
+    )
+    packaged_evaluator = SkillEvaluator.from_json(
+        (ROOT / SKILL_SURFACE[2]).read_bytes(), packaged_registry
+    )
+    seed = build_demo_skill_seed(packaged_registry, packaged_evaluator)
+    seed_entries = seed.get("entries")
+    seed_identities_list: list[tuple[str, str]] = []
+    seed_activation_count = 0
+    if isinstance(seed_entries, list):
+        for raw_entry in cast(list[object], seed_entries):
+            if not isinstance(raw_entry, dict):
+                break
+            entry = cast(dict[str, object], raw_entry)
+            raw_manifest = entry.get("manifest")
+            if not isinstance(raw_manifest, dict):
+                break
+            manifest = cast(dict[str, object], raw_manifest)
+            skill_key = manifest.get("skill_key")
+            version = manifest.get("version")
+            if not isinstance(skill_key, str) or not isinstance(version, str):
+                break
+            seed_identities_list.append((skill_key, version))
+            seed_activation_count += int("activation_event_id" in entry)
+    seed_identities = tuple(seed_identities_list)
+    if (
+        runtime_manifest.get("manifest_id") != "night-voyager.skill-runtime-manifest"
+        or runtime_manifest.get("manifest_version") != "1.0.0"
+        or runtime_manifest.get("manifest_sha256") != _canonical_json_sha256(runtime_content)
+        or runtime_identities != expected_runtime_identities
+        or evaluation_manifest.get("manifest_id") != "night-voyager.skill-eval-manifest"
+        or evaluation_manifest.get("manifest_version") != "1.0.0"
+        or evaluation_manifest.get("manifest_sha256") != _canonical_json_sha256(evaluation_content)
+        or evaluation_identities
+        != tuple((key, version) for key, version, _ in expected_runtime_identities)
+        or seed_identities
+        != tuple(
+            (key, "1.0.0")
+            for key, version, _ in expected_runtime_identities
+            if version == "1.0.0"
+        )
+        or seed_activation_count != 1
+    ):
+        raise SystemExit("versioned Skill packaged manifest contract drift")
+
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    adr = (ROOT / SKILL_SURFACE[5]).read_text(encoding="utf-8")
+    reference = (ROOT / SKILL_SURFACE[6]).read_text(encoding="utf-8")
+    operations = (ROOT / SKILL_SURFACE[7]).read_text(encoding="utf-8")
+    migration = (ROOT / SKILL_SURFACE[0]).read_text(encoding="utf-8")
+    plan = (
+        ROOT / "docs/superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md"
+    ).read_text(encoding="utf-8")
+    spec = (
+        ROOT / "docs/superpowers/specs/2026-07-16-governed-collaboration-core-design.md"
+    ).read_text(encoding="utf-8")
+    if (
+        "skills-check:" not in makefile
+        or workflow.count("make skills-check") != 1
+        or "versioned-skills-and-runtime-pins.md" not in docs_index
+        or "skill-governance.md" not in docs_index
+        or "0009-versioned-skill-runtime-pinning.md" not in docs_index
+        or "- Status: Accepted" not in adr
+        or "Implementation status: Implemented by migration `0008`" not in adr
+        or "exactly five" not in adr
+        or "five-field pin" not in adr
+        or "catalog_only" not in reference
+        or "planning_runtime" not in reference
+        or "legacy_unpinned" not in reference
+        or "make skills-check" not in operations
+        or "make skills-db-check SUITE=lifecycle" not in operations
+        or 'revision = "0008"' not in migration
+        or 'down_revision = "0007"' not in migration
+        or "**Implementation status:** Implemented locally" not in plan
+        or "PR A and PR B are implemented" not in spec
+        or "PR C has not started" not in spec
+    ):
+        raise SystemExit("versioned Skill command, status, or documentation drift")
+    print(
+        "proof Skill surface: six governed definitions, packaged runtime pins, "
+        "and deferred PR C confirmed"
+    )
+
+
 def verify_release_surface() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     if pyproject["project"]["description"] != DESCRIPTION:
@@ -452,8 +616,10 @@ def verify_config() -> None:
         raise SystemExit(
             "Starlette runtime dependency must enforce the approved 1.3.1 security floor"
         )
-    if package_version(uv_lock["package"], "fastapi").split(".")[:2] != ["0", "139"]:
-        raise SystemExit("FastAPI lock must remain on approved 0.139.x")
+    if package_version(uv_lock["package"], "fastapi") != LOCKED_FASTAPI_VERSION:
+        raise SystemExit(
+            f"FastAPI lock must remain at the reviewed {LOCKED_FASTAPI_VERSION} version"
+        )
     locked_starlette = tuple(
         int(part) for part in package_version(uv_lock["package"], "starlette").split(".")
     )
@@ -503,7 +669,8 @@ def verify_config() -> None:
         raise SystemExit("Node.js patch version drift")
     print(f"proof identity: Night Voyager package surfaces agree on version {VERSION}")
     print(
-        "proof dependencies: FastAPI 0.139.x, Starlette >=1.3.1,<1.4, "
+        f"proof dependencies: FastAPI {LOCKED_FASTAPI_VERSION}, "
+        "Starlette >=1.3.1,<1.4, "
         "and hashed Hatchling 1.31.0 constraints confirmed"
     )
     print(f"proof compose: exact PostgreSQL reference confirmed ({POSTGRES_IMAGE})")
@@ -539,6 +706,12 @@ def verify_wheel() -> None:
             python,
             "-c",
             "import sys; from night_voyager.api import create_app; "
+            "from night_voyager.skills.registry import SkillRuntimeRegistry; "
+            "from night_voyager.skills.evaluation import SkillEvaluator; "
+            "registry = SkillRuntimeRegistry.load_packaged(); "
+            "evaluator = SkillEvaluator.load_packaged(registry); "
+            "assert len(registry.entries) == 7; "
+            "assert len(evaluator.manifest.datasets) == 7; "
             f"assert create_app().version == {VERSION!r}; "
             "assert \"httpx2\" not in sys.modules",
         )
@@ -593,11 +766,19 @@ async def verify_database_catalog(database_url: str) -> None:
                 .mappings()
                 .all()
             )
-            if {row["relname"] for row in tenant_tables} != {
+            expected_tenant_tables = {
                 "organizations",
                 "actors",
                 "memberships",
-            } | M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES | COLLABORATION_TABLES or any(
+            } | (
+                M3A_TABLES
+                | M3B_TABLES
+                | M4A_TABLES
+                | DRA_TABLES
+                | COLLABORATION_TABLES
+                | SKILL_TABLES
+            )
+            if {row["relname"] for row in tenant_tables} != expected_tenant_tables or any(
                 not row["relrowsecurity"]
                 or not row["relforcerowsecurity"]
                 or row["owner"] != "night_voyager_migrator"
@@ -610,7 +791,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 33:
+            if policy_count != 38:
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -623,7 +804,12 @@ async def verify_database_catalog(database_url: str) -> None:
                     """),
                     {
                         "tables": sorted(
-                            M3A_TABLES | M3B_TABLES | M4A_TABLES | DRA_TABLES | COLLABORATION_TABLES
+                            M3A_TABLES
+                            | M3B_TABLES
+                            | M4A_TABLES
+                            | DRA_TABLES
+                            | COLLABORATION_TABLES
+                            | SKILL_TABLES
                         )
                     },
                 )
@@ -643,6 +829,19 @@ async def verify_database_catalog(database_url: str) -> None:
             ).scalar_one()
             if collaboration_runtime_grants:
                 raise SystemExit("runtime roles must not access collaboration authority tables")
+
+            skill_runtime_grants = (
+                await connection.execute(
+                    text("""
+                    SELECT count(*) FROM information_schema.role_table_grants
+                    WHERE table_schema = 'app' AND table_name = ANY(:tables)
+                      AND grantee IN ('night_voyager_api','night_voyager_worker')
+                    """),
+                    {"tables": sorted(SKILL_TABLES)},
+                )
+            ).scalar_one()
+            if skill_runtime_grants:
+                raise SystemExit("runtime roles must not access Skill authority tables")
 
             app_functions = (
                 (
@@ -672,14 +871,22 @@ async def verify_database_catalog(database_url: str) -> None:
                            'propose_memory_candidate','verify_memory_candidate',
                            'read_collaboration_thread','read_collaboration_messages',
                            'read_memory_candidates','read_confirmed_facts',
-                           'seed_demo_collaboration'))
+                           'seed_demo_collaboration')
+                           OR p.proname IN
+                          ('create_skill_change_candidate','record_skill_candidate_evaluation',
+                           'promote_skill_change_candidate','rollback_skill_activation',
+                           'list_skill_catalog','get_skill_catalog_item',
+                           'load_skill_candidate_context','inspect_planning_skill',
+                           'load_agent_task_skill_pin',
+                           'load_persisted_synthetic_planning_snapshot',
+                           'seed_demo_skill_registry'))
                         """)
                     )
                 )
                 .mappings()
                 .all()
             )
-            if {row["proname"] for row in app_functions} != {
+            expected_app_functions = {
                 "publish_case_revision",
                 "transition_case",
                 "persist_source_pack",
@@ -698,25 +905,35 @@ async def verify_database_catalog(database_url: str) -> None:
                 "verify_and_promote_dra_candidate",
                 "load_governed_mixed_planning_snapshot",
                 "seed_demo_collaboration",
-            } | COLLABORATION_API_FUNCTIONS or any(
+                "seed_demo_skill_registry",
+            } | (
+                COLLABORATION_API_FUNCTIONS
+                | SKILL_API_FUNCTIONS
+                | SKILL_WORKER_FUNCTIONS
+            )
+            if {row["proname"] for row in app_functions} != expected_app_functions or any(
                 not row["prosecdef"]
                 or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
                 or row["public_execute"]
                 for row in app_functions
             ):
                 raise SystemExit("app functions violate narrow SECURITY DEFINER contract")
-            api_functions = {
-                "transition_case",
-                "persist_source_pack",
-                "persist_evidence_ref",
-                "persist_planning_result",
-                "review_planning_run",
-                "decide_family_brief",
-                "create_agent_task",
-                "cancel_agent_task",
-                "import_dra_research_candidate",
-                "verify_and_promote_dra_candidate",
-            } | COLLABORATION_API_FUNCTIONS
+            api_functions = (
+                {
+                    "transition_case",
+                    "persist_source_pack",
+                    "persist_evidence_ref",
+                    "persist_planning_result",
+                    "review_planning_run",
+                    "decide_family_brief",
+                    "create_agent_task",
+                    "cancel_agent_task",
+                    "import_dra_research_candidate",
+                    "verify_and_promote_dra_candidate",
+                }
+                | COLLABORATION_API_FUNCTIONS
+                | SKILL_API_FUNCTIONS
+            )
             worker_functions = {
                 "claim_agent_task",
                 "start_agent_task",
@@ -724,7 +941,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 "fail_agent_task",
                 "finalize_agent_task_result",
                 "load_governed_mixed_planning_snapshot",
-            }
+            } | SKILL_WORKER_FUNCTIONS
             worker_signatures = {
                 row["proname"]: row["identity_arguments"]
                 for row in app_functions
@@ -746,7 +963,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 if row["proname"] == "create_agent_task"
             )
             if create_signature != (
-                "uuid, uuid, uuid, uuid, text, integer, uuid, integer, text, text, text"
+                "uuid, uuid, uuid, uuid, text, integer, uuid, integer, text, jsonb, text, text"
             ):
                 raise SystemExit("mixed task creation signature drift")
             collaboration_signatures = {
@@ -775,6 +992,107 @@ async def verify_database_catalog(database_url: str) -> None:
                 "seed_demo_collaboration": ("uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, text"),
             }:
                 raise SystemExit("collaboration authority signature drift")
+            skill_signatures = {
+                row["proname"]: row["identity_arguments"]
+                for row in app_functions
+                if row["proname"] in SKILL_API_FUNCTIONS
+                or row["proname"] in SKILL_WORKER_FUNCTIONS
+                or row["proname"] == "seed_demo_skill_registry"
+            }
+            if skill_signatures != {
+                "create_skill_change_candidate": (
+                    "uuid, uuid, text, uuid, text, text, text, text, jsonb, text, text"
+                ),
+                "record_skill_candidate_evaluation": ("uuid, uuid, uuid, uuid, jsonb, text, text"),
+                "promote_skill_change_candidate": (
+                    "uuid, uuid, uuid, uuid, text, bigint, text, jsonb, text, text"
+                ),
+                "rollback_skill_activation": (
+                    "uuid, uuid, text, uuid, text, text, bigint, text, jsonb, text, text"
+                ),
+                "list_skill_catalog": "uuid, uuid",
+                "get_skill_catalog_item": "uuid, uuid, text",
+                "load_skill_candidate_context": "uuid, uuid, uuid",
+                "inspect_planning_skill": "uuid, uuid, uuid",
+                "load_agent_task_skill_pin": "uuid, uuid, bigint",
+                "load_persisted_synthetic_planning_snapshot": (
+                    "uuid, uuid, integer, uuid, integer, text"
+                ),
+                "seed_demo_skill_registry": "uuid, uuid, jsonb",
+            }:
+                raise SystemExit("Skill authority signature drift")
+            if any(
+                (row["proname"] in SKILL_API_FUNCTIONS) != row["api_execute"]
+                or (row["proname"] in SKILL_WORKER_FUNCTIONS) != row["worker_execute"]
+                for row in app_functions
+                if row["proname"] in SKILL_API_FUNCTIONS
+                or row["proname"] in SKILL_WORKER_FUNCTIONS
+                or row["proname"] == "seed_demo_skill_registry"
+            ):
+                raise SystemExit("Skill function grants violate API/worker separation")
+            pin_columns = (
+                (
+                    await connection.execute(
+                        text("""
+                    SELECT table_name,column_name,data_type,is_nullable
+                    FROM information_schema.columns
+                    WHERE table_schema='app'
+                      AND table_name IN ('agent_tasks','agent_executions')
+                      AND column_name IN (
+                        'skill_definition_id','skill_version_id',
+                        'skill_activation_event_id','skill_activation_sequence',
+                        'runtime_binding_sha256'
+                      )
+                    ORDER BY table_name,column_name
+                    """)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            expected_pin_types = {
+                "skill_definition_id": "uuid",
+                "skill_version_id": "uuid",
+                "skill_activation_event_id": "uuid",
+                "skill_activation_sequence": "bigint",
+                "runtime_binding_sha256": "text",
+            }
+            if len(pin_columns) != 10 or any(
+                row["data_type"] != expected_pin_types[row["column_name"]]
+                or row["is_nullable"] != "YES"
+                for row in pin_columns
+            ):
+                raise SystemExit("five-field task pin catalog drift")
+            pin_constraints = (
+                (
+                    await connection.execute(
+                        text("""
+                    SELECT conname
+                    FROM pg_constraint
+                    WHERE conrelid IN ('app.agent_tasks'::regclass,'app.agent_executions'::regclass)
+                      AND conname LIKE '%skill%'
+                    """)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            if set(pin_constraints) != {
+                "agent_tasks_skill_pin_all_or_none",
+                "agent_tasks_skill_version_fk",
+                "agent_tasks_skill_activation_fk",
+                "agent_tasks_skill_pin_identity_unique",
+                "agent_executions_skill_pin_all_or_none",
+                "agent_executions_task_skill_pin_fk",
+            }:
+                raise SystemExit("five-field task pin catalog drift")
+            effective_index = await connection.scalar(
+                text("SELECT pg_get_indexdef('app.agent_tasks_one_effective_operation'::regclass)")
+            )
+            if not isinstance(effective_index, str) or any(
+                field not in effective_index for field in expected_pin_types
+            ):
+                raise SystemExit("five-field task pin catalog drift")
             planning_persistence = await connection.scalar(
                 text("SELECT pg_get_functiondef(to_regprocedure(:signature))"),
                 {
@@ -786,9 +1104,7 @@ async def verify_database_catalog(database_url: str) -> None:
             )
             if not isinstance(planning_persistence, str):
                 raise SystemExit("planning result lock order drift")
-            case_lock = planning_persistence.find(
-                "FROM app.student_cases selected_case_row"
-            )
+            case_lock = planning_persistence.find("FROM app.student_cases selected_case_row")
             case_for_update = planning_persistence.find("FOR UPDATE", case_lock)
             planning_run_update = planning_persistence.find(
                 "UPDATE app.planning_runs", case_for_update
@@ -808,26 +1124,34 @@ async def verify_database_catalog(database_url: str) -> None:
                 raise SystemExit("app function grants violate API/worker separation")
 
             internal_columns = (
-                await connection.execute(
-                    text(
-                        "SELECT column_name FROM information_schema.columns "
-                        "WHERE table_schema='internal' AND table_name='agent_task_dispatch' "
-                        "ORDER BY ordinal_position"
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT column_name FROM information_schema.columns "
+                            "WHERE table_schema='internal' AND table_name='agent_task_dispatch' "
+                            "ORDER BY ordinal_position"
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             if internal_columns != ["task_id", "organization_id", "available_at"]:
                 raise SystemExit("internal dispatch column allowlist drift")
             internal_ownership = (
-                await connection.execute(
-                    text(
-                        "SELECT pg_get_userbyid(c.relowner) AS table_owner, "
-                        "pg_get_userbyid(n.nspowner) AS schema_owner "
-                        "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
-                        "WHERE n.nspname='internal' AND c.relname='agent_task_dispatch'"
+                (
+                    await connection.execute(
+                        text(
+                            "SELECT pg_get_userbyid(c.relowner) AS table_owner, "
+                            "pg_get_userbyid(n.nspowner) AS schema_owner "
+                            "FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "
+                            "WHERE n.nspname='internal' AND c.relname='agent_task_dispatch'"
+                        )
                     )
                 )
-            ).mappings().one()
+                .mappings()
+                .one()
+            )
             if dict(internal_ownership) != {
                 "table_owner": "night_voyager_migrator",
                 "schema_owner": "night_voyager_migrator",
@@ -933,6 +1257,7 @@ def main() -> None:
     verify_m5_public_evidence()
     verify_dra_surface()
     verify_collaboration_surface()
+    verify_skill_surface()
     verify_release_surface()
     verify_config()
     verify_wheel()

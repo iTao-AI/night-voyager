@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -60,8 +60,7 @@ function; the API and `PUBLIC` cannot execute it. Downgrade to `0005` preserves
 terminal mixed audit rows, atomically cancels queued, leased, or running mixed
 tasks with the public code `migration_downgrade`, removes their dispatch rows,
 and prevents the restored `0005` claim function from selecting mixed
-operations. The restored constraints prevent new mixed writes. The current fresh
-data-free graph proves `0007 -> 0001 -> 0007`, including all earlier migrations.
+operations. The restored constraints prevent new mixed writes.
 
 Migration `0007` adds exactly six migrator-owned, tenant-keyed, forced-RLS,
 immutable collaboration tables. Neither runtime role has direct table access.
@@ -75,6 +74,30 @@ Planning-result persistence takes the compatible Case-before-PlanningRun lock
 order; an allowed downgrade restores the exact `0006` function body as well as the
 legacy writer grant and PlanningRun guard.
 
+Migration `0008` adds exactly five migrator-owned, tenant-keyed, forced-RLS,
+immutable Skill tables: `skill_definitions`, `skill_versions`,
+`skill_change_candidates`, `skill_evaluation_results`, and
+`skill_activation_events`. Neither runtime role has direct table access or DML.
+`night_voyager_api` may execute the four lifecycle mutations and four advisor/owner
+read projections. `night_voyager_worker` may execute only the existing task lifecycle
+functions plus `load_agent_task_skill_pin(...)` and
+`load_persisted_synthetic_planning_snapshot(...)`; it has no candidate, evaluation,
+activation, rollback, or catalog authority. `PUBLIC` receives no Skill function
+authority.
+
+`agent_tasks` and `agent_executions` each retain the immutable five-field Skill pin.
+Composite foreign keys prove definition/version/activation/digest equality and claim
+copies the exact task pin into the execution. The API resolves a new task's active pin
+inside the task creation transaction. The worker validates the execution pin through
+its narrow projection before start.
+
+Migration `0008` is seed-free. The explicit demo seed creates exactly six
+definitions, six `1.0.0` versions, six seed evaluations, and one runtime activation
+before any task-ready Case seed. An allowed downgrade requires that exact canonical
+seed and no task/execution pin; registered non-seed versions, governance history, or
+active/terminal pins refuse before history is removed. The current fresh data-free
+graph proves `0008 -> 0001 -> 0008`, including all earlier migrations.
+
 Use `make collaboration-check` for the deterministic offline contracts and
 `make collaboration-db-check SUITE=repository|http|authority` for focused disposable
 PostgreSQL proof. The `authority` suite runs empty, unrelated-history, table-history,
@@ -82,8 +105,14 @@ audit-history, and idempotency-history downgrade scenarios in separate projects.
 An empty or unrelated boundary may restore `0006`; any exact PR A authority history
 must refuse before removing data. See [collaboration authority operations](collaboration-authority.md).
 
+Use `make skills-check` for deterministic offline contracts and
+`make skills-db-check SUITE=catalog|worker|lifecycle` for focused disposable Skill
+proof. The suites cover catalog/grants/downgrade, task/execution/worker pins, and the
+owner-controlled lifecycle respectively. See [Skill governance operations](skill-governance.md).
+
 The normal `make demo` path applies migrations, then runs the separate
-`demo-seed` one-shot service before API/worker readiness. The schema migration
+`demo-seed` one-shot service before API/worker readiness. Skill registry/evaluation
+seed and runtime activation precede task-ready Case seed. The schema migration
 remains seed-free. To re-run only the explicit idempotent seed against a running
 development stack, use `docker compose run --rm demo-seed`; it fails closed
 unless demo mode is enabled outside production. `make compose-proof` uses a

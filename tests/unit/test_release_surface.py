@@ -56,10 +56,7 @@ def test_release_verifier_checks_the_governed_mixed_planning_surface(
     verifier.verify_dra_surface()
 
     output = capsys.readouterr().out
-    assert (
-        "proof DRA surface: offline governed mixed decision closure confirmed"
-        in output
-    )
+    assert "proof DRA surface: offline governed mixed decision closure confirmed" in output
 
 
 @pytest.mark.parametrize(
@@ -166,10 +163,7 @@ def test_release_verifier_registers_collaboration_authority_without_version_chan
     } == verifier.COLLABORATION_API_FUNCTIONS
     source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
     assert '"read_confirmed_facts": (' in source
-    assert (
-        '"uuid, uuid, text, uuid, integer, text, integer, integer"'
-        in source
-    )
+    assert '"uuid, uuid, text, uuid, integer, text, integer, integer"' in source
 
 
 def test_release_verifier_checks_the_collaboration_authority_surface(
@@ -192,3 +186,57 @@ def test_release_verifier_freezes_the_cross_runtime_lock_order() -> None:
     assert '"LEGACY_PLANNING_PERSISTENCE_SQL"' in source
     assert '"Case FOR UPDATE -> superseded PlanningRun update"' in source
     assert '"planning result lock order drift"' in source
+
+
+def test_release_verifier_registers_skill_authority_without_version_change() -> None:
+    verifier = load_verifier()
+
+    assert verifier.VERSION == "0.1.1"
+    assert verifier.LOCKED_FASTAPI_VERSION == "0.139.2"
+    assert {
+        "skill_definitions",
+        "skill_versions",
+        "skill_change_candidates",
+        "skill_evaluation_results",
+        "skill_activation_events",
+    } == verifier.SKILL_TABLES
+    assert {
+        "create_skill_change_candidate",
+        "record_skill_candidate_evaluation",
+        "promote_skill_change_candidate",
+        "rollback_skill_activation",
+        "list_skill_catalog",
+        "get_skill_catalog_item",
+        "load_skill_candidate_context",
+        "inspect_planning_skill",
+    } == verifier.SKILL_API_FUNCTIONS
+    assert {
+        "load_agent_task_skill_pin",
+        "load_persisted_synthetic_planning_snapshot",
+    } == verifier.SKILL_WORKER_FUNCTIONS
+
+
+def test_release_verifier_checks_the_versioned_skill_surface(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_skill_surface()
+
+    output = capsys.readouterr().out
+    assert (
+        "proof Skill surface: six governed definitions, packaged runtime pins, "
+        "and deferred PR C confirmed"
+    ) in output
+
+
+def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:
+    source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+
+    for token in (
+        "SkillRuntimeRegistry.load_packaged()",
+        "SkillEvaluator.load_packaged(registry)",
+        "len(registry.entries) == 7",
+        "len(evaluator.manifest.datasets) == 7",
+    ):
+        assert token in source
