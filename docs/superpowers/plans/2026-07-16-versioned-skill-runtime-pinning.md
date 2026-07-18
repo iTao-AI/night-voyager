@@ -1,9 +1,11 @@
 # Versioned Skill Governance and Runtime Pinning Implementation Plan
 
-**Implementation status:** Implemented locally as the unreleased PR B backend
-boundary. Parent-owned database/Compose/full verification and authority review remain
-pending. The tasks below remain the approved execution record; push, PR, merge,
-release, deployment, live-provider proof, and PR C remain separately gated.
+**Implementation status:** Implemented locally and verified as the unreleased PR B
+backend boundary. All non-Compose gates below pass. `make compose-proof` remains
+blocked on Alpine/ARM64 because the native Next.js SWC binding is unavailable;
+authority review and an integration decision remain pending. The tasks below remain
+the approved execution record; push, PR, merge, release, deployment, live-provider
+proof, and PR C remain separately gated.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:dispatching-parallel-agents` only for the isolated lanes declared
@@ -915,7 +917,7 @@ branch review.
   idempotent. Add a separate maintenance command:
 
   ```bash
-  uv run python scripts/register_skill_version.py \
+  uv run --no-editable python scripts/register_skill_version.py \
     --skill-key study-destination-compare --version 1.0.1
   ```
 
@@ -1015,12 +1017,18 @@ branch review.
   make compose-proof
   make down
   docker compose ps --all
-  git diff --check "$(git merge-base HEAD origin/main)"..HEAD
+  git diff --check 69e08dd80723e8e1244fd8d6a66cc5c1de0fbc42..HEAD
   ```
 
   Expected: all commands exit 0, Compose has no project containers, installed-wheel
   registry loading passes, and existing collaboration/DRA/M5/browser flows remain
   green without frontend changes.
+
+  Latest result: every listed gate except `make compose-proof` passes. The Compose
+  build exits non-zero on Alpine/ARM64 after `@next/swc-linux-arm64-gnu` fails to load,
+  `@next/swc-linux-arm64-musl` is unavailable, and Turbopack rejects the WASM-only
+  fallback. No frontend, Compose, Dockerfile, or package-file workaround was applied.
+  `make down` succeeds and `docker compose ps --all` reports no project containers.
 
 - [x] **Step 5: Review and commit**
 
@@ -1061,21 +1069,21 @@ branch review.
 
 ## PR B Acceptance Checklist
 
-- [ ] Default seed creates exactly six definitions and six `1.0.0` versions; only
+- [x] Default seed creates exactly six definitions and six `1.0.0` versions; only
   the runtime-bound Skill has one seed activation. `1.0.1` enters PostgreSQL only
   through the explicit migrator-owned registration proof and begins unactivated.
-- [ ] Browser/API cannot invent a version, evaluator output, executable binding,
+- [x] Browser/API cannot invent a version, evaluator output, executable binding,
   scope, tool, hash, or activation authority.
-- [ ] Five Skill tables and all pin relationships are tenant-safe, immutable,
+- [x] Five Skill tables and all pin relationships are tenant-safe, immutable,
   forced-RLS, migrator-owned, and inaccessible by runtime direct DML/TRUNCATE.
-- [ ] Candidate/evaluation/activation/rollback is deterministic, owner-controlled,
+- [x] Candidate/evaluation/activation/rollback is deterministic, owner-controlled,
   replay-safe, CAS-protected, and concurrency/rollback proven.
-- [ ] Every new task has a complete relational pin; every execution copies it;
+- [x] Every new task has a complete relational pin; every execution copies it;
   worker validates it before start; invalid pin never reaches an adapter or retry.
-- [ ] Persisted Case facts, not fixture Case facts, feed both planning operations;
+- [x] Persisted Case facts, not fixture Case facts, feed both planning operations;
   selected countries bound routes/cost/ranking/eligible projections.
 - [ ] Canonical seed behavior, PR A collaboration, M1-M5, DRA, MKE, task/SSE,
   frontend, Compose, and v0.1.1 release contracts remain green.
-- [ ] Canonical-seed/no-pin downgrade succeeds and restores exact `0007`; explicitly
+- [x] Canonical-seed/no-pin downgrade succeeds and restores exact `0007`; explicitly
   registered `1.0.1`, any other non-seed governance, or active/terminal pin refuses
   without deleting history.

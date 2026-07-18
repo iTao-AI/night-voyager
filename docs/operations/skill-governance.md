@@ -59,7 +59,7 @@ reviewed compatibility lifecycle, use migration credentials and explicitly regis
 the packaged tuple:
 
 ```bash
-uv run python scripts/register_skill_version.py \
+uv run --no-editable python scripts/register_skill_version.py \
   --skill-key study-destination-compare --version 1.0.1
 ```
 
