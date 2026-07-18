@@ -29,12 +29,16 @@ if [ "${1:-}" = "inside" ]; then
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
+    uv run alembic upgrade 0007
+    uv run alembic current | grep '0007'
+    uv run --no-editable python scripts/seed_demo.py --without-skills
     uv run alembic upgrade head
     uv run alembic current | grep '0008'
-    uv run python scripts/seed_demo.py
-    uv run python scripts/seed_demo.py
-    uv run python scripts/verify_release.py --check-db-roles
-    NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run pytest -q -m database \
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
+    NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run --no-editable pytest \
+        -q -m database \
         tests/security tests/integration/identity tests/integration/planning \
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
         tests/integration/connected_demo tests/integration/dra \
@@ -42,11 +46,11 @@ if [ "${1:-}" = "inside" ]; then
         --ignore=tests/integration/tasks/test_mixed_downgrade.py \
         --ignore=tests/integration/collaboration/test_collaboration_downgrade.py \
         --ignore=tests/integration/dra/test_governed_closure.py
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/dra/test_governed_closure.py
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_postgres_decision.py
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_http_decision.py
     if uv run alembic downgrade 0007 >"$downgrade_output" 2>&1; then
         echo "expected Skill authority downgrade refusal" >&2
@@ -54,15 +58,15 @@ if [ "${1:-}" = "inside" ]; then
     fi
     grep -q 'refusing downgrade: Skill governance or runtime pin history exists' "$downgrade_output"
     uv run alembic current | grep '0008'
-    uv run python scripts/verify_release.py --check-db-roles
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
     uv run alembic current | grep '0008'
-    uv run python scripts/seed_demo.py --without-collaboration
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    uv run --no-editable python scripts/seed_demo.py --without-collaboration
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
     uv run alembic current | grep '0008'
     exit 0

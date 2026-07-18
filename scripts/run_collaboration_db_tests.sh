@@ -19,7 +19,7 @@ if [ "$mode" = "inside-downgrade" ]; then
     fi
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/collaboration/test_collaboration_downgrade.py
     exit 0
 fi
@@ -35,23 +35,25 @@ esac
 if [ "$mode" = "inside" ]; then
     case "$suite" in
         repository)
-            PYTEST_ADDOPTS= uv run pytest -q -m database \
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
                 tests/integration/collaboration/test_postgres_collaboration.py
             ;;
         http)
-            uv run python scripts/seed_demo.py
-            uv run python scripts/seed_demo.py
-            NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run pytest -q -m database \
+            uv run --no-editable python scripts/seed_demo.py
+            uv run --no-editable python scripts/seed_demo.py
+            NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= \
+                uv run --no-editable pytest -q -m database \
                 tests/integration/collaboration/test_http_collaboration.py
             ;;
         authority)
-            PYTEST_ADDOPTS= uv run pytest -q \
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q \
                 tests/security/test_collaboration_catalog.py \
                 tests/security/test_database_catalog.py \
                 tests/architecture/test_collaboration_contract.py
-            uv run python scripts/seed_demo.py
-            uv run python scripts/seed_demo.py
-            NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run pytest -q -m database \
+            uv run --no-editable python scripts/seed_demo.py
+            uv run --no-editable python scripts/seed_demo.py
+            NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= \
+                uv run --no-editable pytest -q -m database \
                 tests/integration/collaboration/test_postgres_collaboration.py \
                 tests/integration/collaboration/test_collaboration_concurrency.py \
                 tests/integration/collaboration/test_collaboration_rollback.py \

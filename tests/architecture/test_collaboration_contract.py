@@ -204,8 +204,15 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
     identity_seed = runner.index(
         "uv run python scripts/seed_demo.py --identity-only", seeded_graph_downgrade
     )
-    final_upgrade = runner.index("uv run alembic upgrade head", identity_seed)
-    full_seed = runner.index("uv run python scripts/seed_demo.py\n", final_upgrade)
+    legacy_upgrade = runner.index("uv run alembic upgrade 0007", identity_seed)
+    legacy_seed = runner.index(
+        "uv run --no-editable python scripts/seed_demo.py --without-skills",
+        legacy_upgrade,
+    )
+    final_upgrade = runner.index("uv run alembic upgrade head", legacy_seed)
+    full_seed = runner.index(
+        "uv run --no-editable python scripts/seed_demo.py\n", final_upgrade
+    )
     refusal = runner.rindex("uv run alembic downgrade 0007")
     assert (
         upgrade_0008
@@ -217,6 +224,8 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         < full_graph_reupgrade
         < seeded_graph_downgrade
         < identity_seed
+        < legacy_upgrade
+        < legacy_seed
         < final_upgrade
         < full_seed
         < refusal
@@ -234,7 +243,10 @@ def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_hist
     ]
 
     assert "--ignore=tests/integration/tasks/test_mixed_downgrade.py" in main_lane
-    assert "uv run python scripts/seed_demo.py --without-collaboration" in isolated_lane
+    assert (
+        "uv run --no-editable python scripts/seed_demo.py --without-collaboration"
+        in isolated_lane
+    )
     assert "tests/integration/tasks/test_mixed_downgrade.py" in isolated_lane
     assert 'run_lane "${BASE_PROJECT_NAME}-main" inside' in runner
     assert (
@@ -258,7 +270,9 @@ def test_http_suite_crosses_the_real_identity_postgres_and_rls_boundary() -> Non
     assert "current_setting('night_voyager.actor_id',true)" in http_test
     assert "SELECT * FROM app.collaboration_threads" in http_test
     http_suite = runner[runner.index("        http)") : runner.index("        authority)")]
-    assert http_suite.count("uv run python scripts/seed_demo.py") == 2
+    assert http_suite.count(
+        "uv run --no-editable python scripts/seed_demo.py"
+    ) == 2
     assert "NIGHT_VOYAGER_DEMO_SEED_READY=1" in http_suite
 
 
