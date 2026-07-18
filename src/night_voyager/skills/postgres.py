@@ -317,6 +317,7 @@ class PostgresSkillRepository:
             "binding_kind": SkillBindingKind,
             "kind": SkillActivationKind,
             "status": SkillEvaluationStatus,
+            "evaluation_status": SkillEvaluationStatus,
             "side_effect_level": SkillSideEffectLevel,
             "approval_policy": SkillApprovalPolicy,
         }
