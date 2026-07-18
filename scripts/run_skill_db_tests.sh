@@ -13,20 +13,25 @@ case "$suite" in
 esac
 
 if [ "$mode" = "inside" ]; then
+    uv run alembic downgrade 0007
+    uv run --no-editable python scripts/seed_demo.py --without-skills
+    uv run alembic upgrade head
     case "$suite" in
         catalog)
+            uv run --no-editable python scripts/seed_demo.py --without-collaboration
             echo "Skill database suite: catalog"
-            PYTEST_ADDOPTS= uv run pytest -q \
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q \
                 tests/security/test_skills_catalog.py \
                 tests/unit/identity/test_seed_demo.py
-            PYTEST_ADDOPTS= uv run pytest -q -o addopts='' -m database \
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
                 tests/integration/skills/test_postgres_skills.py \
                 tests/integration/skills/test_skill_downgrade.py \
                 tests/integration/skills/test_persisted_planning_materialization.py
             ;;
         worker)
+            uv run --no-editable python scripts/seed_demo.py
             echo "Skill database suite: worker"
-            PYTEST_ADDOPTS= uv run pytest -q -o addopts='' -m database \
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
                 tests/integration/skills/test_task_pins.py \
                 tests/integration/skills/test_persisted_planning_materialization.py \
                 tests/integration/connected_demo/test_postgres_read_models.py \
@@ -39,8 +44,9 @@ if [ "$mode" = "inside" ]; then
                 tests/integration/tasks/test_mixed_downgrade.py
             ;;
         lifecycle)
+            uv run --no-editable python scripts/seed_demo.py
             echo "Skill database suite: lifecycle"
-            PYTEST_ADDOPTS= uv run pytest -q -o addopts='' -m database \
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
                 tests/integration/skills/test_skill_lifecycle.py \
                 tests/integration/skills/test_http_skills.py \
                 tests/integration/skills/test_persisted_planning_materialization.py \
@@ -56,8 +62,25 @@ active_project=
 
 cleanup() {
     if [ -n "$active_project" ]; then
+        cleanup_status=0
         COMPOSE_PROJECT_NAME="$active_project" docker compose --profile db-test \
-            down --volumes --remove-orphans
+            down --volumes --remove-orphans || cleanup_status=$?
+        resource_ids=$(
+            {
+                docker ps --all --quiet \
+                    --filter "label=com.docker.compose.project=$active_project"
+                docker volume ls --quiet \
+                    --filter "label=com.docker.compose.project=$active_project"
+                docker network ls --quiet \
+                    --filter "label=com.docker.compose.project=$active_project"
+            } | sed '/^$/d'
+        )
+        if [ -n "$resource_ids" ]; then
+            echo "Skill database project was not empty after teardown: $active_project" >&2
+            return 1
+        fi
+        active_project=
+        return "$cleanup_status"
     fi
 }
 trap cleanup EXIT INT TERM
@@ -67,5 +90,5 @@ export COMPOSE_PROJECT_NAME="$active_project"
 docker compose --profile db-test config --quiet
 docker compose --profile db-test run --rm --build db-test \
     sh scripts/run_skill_db_tests.sh inside "$suite"
-docker compose --profile db-test down --volumes --remove-orphans
-active_project=
+cleanup
+trap - EXIT INT TERM

@@ -22,10 +22,13 @@ from night_voyager.identity.demo_seed import (
     COLLABORATION_STALE_MESSAGE_ID,
     COLLABORATION_THREAD_IDS,
     CONNECTED_DEMO_CASE_ID,
+    build_demo_skill_seed,
     ensure_seed_allowed,
 )
 from night_voyager.planning.application import POLICY_VERSION
 from night_voyager.planning.fixtures import ValidatedPlanningFixture, validate_planning_fixture
+from night_voyager.skills.evaluation import SkillEvaluator
+from night_voyager.skills.registry import SkillRuntimeRegistry
 
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 CASE_ID = UUID("40000000-0000-0000-0000-000000000001")
@@ -42,6 +45,7 @@ async def seed_demo(
     *,
     include_planning: bool = True,
     include_collaboration: bool = True,
+    include_skills: bool = True,
 ) -> None:
     fixture = validate_planning_fixture()
     engine = create_async_engine(database_url)
@@ -53,6 +57,8 @@ async def seed_demo(
             )
             await _seed_identity(connection)
             if include_planning:
+                if include_skills:
+                    await _seed_skills(connection)
                 await _seed_planning(connection, fixture)
                 await connection.execute(
                     text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
@@ -70,6 +76,23 @@ async def seed_demo(
     finally:
         await engine.dispose()
     print("demo seed: canonical synthetic identity and planning snapshot ready")
+
+
+async def _seed_skills(connection: AsyncConnection) -> None:
+    registry = SkillRuntimeRegistry.load_packaged()
+    evaluator = SkillEvaluator.load_packaged(registry)
+    projection = build_demo_skill_seed(registry, evaluator)
+    await connection.execute(
+        text(
+            "SELECT app.seed_demo_skill_registry("
+            ":org,:owner,CAST(:projection AS jsonb))"
+        ),
+        {
+            "org": DEMO_ORG,
+            "owner": ACTORS[0][1],
+            "projection": json.dumps(projection),
+        },
+    )
 
 
 async def _seed_identity(connection: AsyncConnection) -> None:
@@ -438,6 +461,17 @@ async def _seed_collaboration(
             },
         )
 
+    skill_catalog_exists = await connection.scalar(
+        text("SELECT to_regclass('app.skill_definitions') IS NOT NULL")
+    )
+    legacy_active_task_exists = await connection.scalar(
+        text(
+            "SELECT EXISTS(SELECT 1 FROM app.agent_tasks "
+            "WHERE organization_id=:org AND id=:task)"
+        ),
+        {"org": DEMO_ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+    )
+
     seed_specs = (
         (
             COLLABORATION_CASE_ID,
@@ -477,6 +511,11 @@ async def _seed_collaboration(
         ),
     )
     for case_id, thread_id, subject_id, message_id, candidate_id, task_id, kind in seed_specs:
+        if kind == "active_task" and skill_catalog_exists:
+            if legacy_active_task_exists:
+                continue
+            task_id = None
+            kind = "primary"
         await connection.execute(
             text(
                 "SELECT app.seed_demo_collaboration("
@@ -545,6 +584,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--identity-only", action="store_true")
     parser.add_argument("--without-collaboration", action="store_true")
+    parser.add_argument("--without-skills", action="store_true")
     arguments = parser.parse_args(argv)
     fixture = validate_planning_fixture()
     if arguments.validate_only:
@@ -562,6 +602,7 @@ def main(argv: list[str] | None = None) -> None:
             database_url,
             include_planning=not arguments.identity_only,
             include_collaboration=not arguments.without_collaboration,
+            include_skills=not arguments.without_skills,
         )
     )
 

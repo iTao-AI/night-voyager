@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -34,10 +33,21 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     assert "catalog|worker|lifecycle" in runner
     assert "-o addopts='' -m database" in runner
     assert "docker compose --profile db-test run --rm --build" in runner
-    assert "docker compose --profile db-test down --volumes --remove-orphans" in runner
+    assert "docker compose --profile db-test \\" in runner
+    assert "down --volumes --remove-orphans" in runner
+    assert 'label=com.docker.compose.project=$active_project' in runner
+    assert "docker volume ls --quiet" in runner
+    assert "docker network ls --quiet" in runner
+    assert "Skill database project was not empty after teardown" in runner
     assert "trap cleanup EXIT INT TERM" in runner
     assert "night-voyager-skills-db-check" in runner
     assert "uv run --no-editable python scripts/seed_demo.py" in runner
+    legacy = runner.index("uv run alembic downgrade 0007")
+    legacy_seed = runner.index(
+        "uv run --no-editable python scripts/seed_demo.py --without-skills"
+    )
+    head = runner.index("uv run alembic upgrade head")
+    assert legacy < legacy_seed < head
 
 
 def test_skills_database_runner_freezes_the_approved_suite_map() -> None:
