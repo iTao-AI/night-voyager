@@ -165,7 +165,7 @@ def set_wrong_pack_version(data: dict[str, Any]) -> None:
 def set_wrong_country_scope(data: dict[str, Any]) -> None:
     case = cast(dict[str, Any], data["case"])
     student = cast(dict[str, Any], case["student"])
-    student["preferred_countries"] = ["australia", "japan"]
+    student["preferred_countries"] = ["japan", "australia"]
 
 
 def set_untrusted_authority(data: dict[str, Any]) -> None:
@@ -192,6 +192,39 @@ def test_adapter_payload_rejects_invalid_schema_pins_scope_and_authority(
     with pytest.raises(AdapterPayloadError) as captured:
         validate_adapter_payload(AdapterPayload(payload=json.dumps(data).encode()), request())
     assert captured.value.code == code
+
+
+def test_adapter_payload_accepts_a_selected_country_subset_without_product_leakage() -> None:
+    data = cast(dict[str, Any], json.loads(valid_payload()))
+    case = cast(dict[str, Any], data["case"])
+    student = cast(dict[str, Any], case["student"])
+    student["preferred_countries"] = ["japan"]
+    data["costs"] = []
+    data["rankings"] = []
+
+    result = validate_adapter_payload(
+        AdapterPayload(payload=json.dumps(data).encode()), request()
+    )
+
+    assert tuple(country.value for country in result.case.student.preferred_countries) == (
+        "japan",
+    )
+    assert result.costs == ()
+    assert result.rankings == ()
+
+
+def test_adapter_payload_rejects_unselected_country_product_rows() -> None:
+    data = cast(dict[str, Any], json.loads(valid_payload()))
+    case = cast(dict[str, Any], data["case"])
+    student = cast(dict[str, Any], case["student"])
+    student["preferred_countries"] = ["japan"]
+
+    with pytest.raises(AdapterPayloadError) as captured:
+        validate_adapter_payload(
+            AdapterPayload(payload=json.dumps(data).encode()), request()
+        )
+
+    assert captured.value.code == "country_scope_invalid"
 
 
 def test_adapter_payload_enforces_bytes_narrative_and_evidence_bounds() -> None:

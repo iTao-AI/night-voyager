@@ -105,6 +105,24 @@ def validate_adapter_payload(
     narrative = raw.get("narrative")
     if isinstance(narrative, str) and len(narrative.encode("utf-8")) > policy.max_narrative_bytes:
         raise AdapterPayloadError("narrative_oversize")
+    case_value = raw.get("case")
+    if not isinstance(case_value, dict):
+        raise AdapterPayloadError("invalid_schema")
+    student_value = cast(dict[str, object], case_value).get("student")
+    if not isinstance(student_value, dict):
+        raise AdapterPayloadError("invalid_schema")
+    country_value = cast(dict[str, object], student_value).get("preferred_countries")
+    if not isinstance(country_value, list):
+        raise AdapterPayloadError("country_scope_invalid")
+    raw_countries = cast(list[object], country_value)
+    country_strings = tuple(item for item in raw_countries if isinstance(item, str))
+    if (
+        not raw_countries
+        or len(country_strings) != len(raw_countries)
+        or country_strings != tuple(sorted(set(country_strings)))
+        or not set(country_strings) <= APPROVED_COUNTRIES
+    ):
+        raise AdapterPayloadError("country_scope_invalid")
     expected_pair = (
         ("deterministic_planning", "m4a-v1")
         if request.operation == "generate_planning_run_v1"
@@ -134,7 +152,13 @@ def validate_adapter_payload(
     ):
         raise AdapterPayloadError("pin_mismatch")
     countries = tuple(item.value for item in planning_input.case.student.preferred_countries)
-    if len(countries) != 3 or set(countries) != set(APPROVED_COUNTRIES):
+    selected_countries = set(countries)
+    if (
+        not selected_countries
+        or not selected_countries <= APPROVED_COUNTRIES
+        or any(item.country.value not in selected_countries for item in planning_input.costs)
+        or any(item.country.value not in selected_countries for item in planning_input.rankings)
+    ):
         raise AdapterPayloadError("country_scope_invalid")
     if isinstance(planning_input, PlanningInput):
         if any(
