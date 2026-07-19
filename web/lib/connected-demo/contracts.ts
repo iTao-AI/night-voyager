@@ -21,15 +21,15 @@ export interface SkillRuntimePin {
   skill_definition_id: string; skill_version_id: string; skill_activation_event_id: string;
   skill_activation_sequence: number; runtime_binding_sha256: string;
 }
-export interface SkillLeafBindingV1 {
-  operation: "generate_planning_run_v1" | "generate_governed_mixed_planning_run_v1";
-  adapter_id: "deterministic_planning" | "governed_mixed_planning";
-  adapter_version: "m4a-v1" | "dra-mixed-v1";
-}
-export interface StandaloneTaskProjection extends TaskProjection {
-  schema_version: 1; created_at: string; skill_pin: SkillRuntimePin | null;
-  leaf_binding: SkillLeafBindingV1 | null;
-}
+export type SkillLeafBindingV1 =
+  | { operation: "generate_planning_run_v1"; adapter_id: "deterministic_planning"; adapter_version: "m4a-v1" }
+  | { operation: "generate_governed_mixed_planning_run_v1"; adapter_id: "governed_mixed_planning"; adapter_version: "dra-mixed-v1" };
+type StandaloneTaskRuntimeBinding =
+  | { skill_pin: null; leaf_binding: null }
+  | { skill_pin: SkillRuntimePin; leaf_binding: SkillLeafBindingV1 };
+export type StandaloneTaskProjection = TaskProjection & {
+  schema_version: 1; created_at: string;
+} & StandaloneTaskRuntimeBinding;
 export interface PlanningRunProjection {
   planning_run_id: string; state: "review_required"; source_pack_id: string;
   source_pack_version: number; policy_version: "m3a-policy-v1"; source_snapshot_date: string;
