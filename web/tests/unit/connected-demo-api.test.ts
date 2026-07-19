@@ -2,11 +2,38 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createConnectedDemoApi } from "../../lib/connected-demo/api";
-import { parseBrief, parseLedger } from "../../lib/connected-demo/contracts";
+import { parseBrief, parseLedger, parseTask } from "../../lib/connected-demo/contracts";
 import { requestFingerprint } from "../../lib/connected-demo/idempotency";
-import { brief, ledger } from "./connected-demo-test-data";
+import { brief, ledger, standaloneTask } from "./connected-demo-test-data";
 
 afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+  ["create", standaloneTask(false)],
+  ["get", standaloneTask()],
+  ["cancel", { ...standaloneTask(true), status: "cancelled", row_version: 2 }],
+  ["legacy unpinned get", { ...standaloneTask(), skill_pin: null, leaf_binding: null }],
+])("accepts the exact PR B standalone Task %s response", (_operation, response) => {
+  expect(parseTask(response)).toEqual(response);
+});
+
+it.each([
+  ["missing pin", () => { const value = structuredClone(standaloneTask()) as Record<string, unknown>; delete value.skill_pin; return value; }],
+  ["extra pin key", () => ({ ...standaloneTask(), skill_pin: { ...standaloneTask().skill_pin, extra: true } })],
+  ["malformed pin", () => ({ ...standaloneTask(), skill_pin: { ...standaloneTask().skill_pin, runtime_binding_sha256: "not-a-sha256" } })],
+  ["pin without leaf", () => ({ ...standaloneTask(), leaf_binding: null })],
+  ["missing leaf", () => { const value = structuredClone(standaloneTask()) as Record<string, unknown>; delete value.leaf_binding; return value; }],
+  ["extra leaf key", () => ({ ...standaloneTask(), leaf_binding: { ...standaloneTask().leaf_binding, extra: true } })],
+  ["mismatched leaf", () => ({ ...standaloneTask(), leaf_binding: { ...standaloneTask().leaf_binding, adapter_id: "governed_mixed_planning" } })],
+])("rejects a standalone Task with %s", (_name, mutate) => {
+  expect(() => parseTask(mutate())).toThrow("invalid response");
+});
+
+it("keeps the nested AdvisorLedger Task projection on its existing exact shape", () => {
+  const value = ledger("active-task");
+  value.task = { ...value.task!, skill_pin: standaloneTask().skill_pin } as typeof value.task;
+  expect(() => parseLedger(value)).toThrow("invalid response");
+});
 
 it("uses only same-origin explicit routes and closed schema guards", async () => {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {

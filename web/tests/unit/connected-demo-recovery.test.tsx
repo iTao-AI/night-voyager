@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { loadRecoveryMetadata, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
-import { CASE_ID, BRIEF_ID, TASK_ID, brief, ledger } from "./connected-demo-test-data";
+import { CASE_ID, BRIEF_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
 
 const advisorMetadata = () => ({ role: "advisor" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: null, cursor: 0, mutations: {} });
 const parentMetadata = () => ({ role: "parent" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: BRIEF_ID, cursor: 0, mutations: {} });
@@ -122,7 +122,7 @@ it("reuses the request-bound idempotency key after a lost mutation response", as
       keys.push(new Headers(init?.headers).get("Idempotency-Key") ?? "");
       createAttempts += 1;
       if (createAttempts === 1) return Response.json({ code: "bff_upstream_unavailable" }, { status: 503 });
-      return Response.json({ schema_version: 1, task_id: TASK_ID, row_version: 1, status: "preparing", public_code: null, attempt_count: 0, planning_run_id: null, created_at: "2026-07-14T00:00:00Z", updated_at: "2026-07-14T00:00:00Z", replayed: true }, { status: 202 });
+      return Response.json(standaloneTask(true), { status: 202 });
     }
     throw new Error(`unexpected ${path}`);
   }));
@@ -135,6 +135,30 @@ it("reuses the request-bound idempotency key after a lost mutation response", as
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBe(keys[1]);
   expect(loadRecoveryMetadata()?.mutations["create-task"]?.idempotencyKey).toBe(keys[0]);
+});
+
+it("streams through one EventSource after the exact PR B create response", async () => {
+  saveRecoveryMetadata(advisorMetadata());
+  const sources: string[] = [];
+  class FakeEventSource {
+    constructor(public readonly url: string) { sources.push(url); }
+    addEventListener() {}
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("task-ready"));
+    if (path.endsWith("/agent-tasks")) return Response.json(standaloneTask(false), { status: 202 });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("advisor_ready"));
+  await act(async () => { await result.current.createTask(); });
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+
+  expect(sources).toEqual([`/api/demo/tasks/${TASK_ID}/events?after=0`]);
 });
 
 it("keeps one EventSource and coalesces out-of-order refreshes with a monotonic cursor", async () => {
