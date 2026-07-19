@@ -97,15 +97,28 @@ def test_required_db_gate_runs_fresh_head_seed_replay_regressions() -> None:
     runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     assert "inside-skill-seed-replay" in runner
     assert "NIGHT_VOYAGER_SKILL_SEED_PATH=fresh_head" in runner
-    for test_name in (
+    expected_tests = (
         "test_fresh_head_seed_creates_exact_pinned_active_task_fixture",
         "test_pinned_seed_replay_rejects_task_projection_drift_atomically",
         "test_pinned_helper_rejects_extra_event_without_partial_history",
+        "test_pinned_seed_replay_rejects_missing_event_without_repair",
+        "test_legacy_seed_replay_rejects_missing_event_without_repair",
+        "test_pinned_helper_rejects_execution_residue_without_partial_history",
+        "test_pinned_helper_rejects_dispatch_residue_without_partial_history",
         "test_seed_replay_preserves_only_exact_all_null_legacy_task",
         "test_seed_replay_rejects_all_null_legacy_projection_drift",
         "test_seed_replay_rejects_partial_pin_classification",
-    ):
-        assert test_name in runner
+        "test_pinned_active_task_seed_mismatch_has_no_partial_task_or_event",
+    )
+    replay_lane = runner.split(
+        'if [ "${1:-}" = "inside-skill-seed-replay" ]; then', maxsplit=1
+    )[1].split("    exit 0", maxsplit=1)[0]
+    routed_tests = tuple(
+        line.rsplit("::", maxsplit=1)[1].removesuffix(" \\")
+        for line in replay_lane.splitlines()
+        if "tests/integration/skills/test_postgres_skills.py::" in line
+    )
+    assert routed_tests == expected_tests
 
 
 def test_skills_database_runner_rejects_unknown_suite_before_docker() -> None:

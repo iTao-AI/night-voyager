@@ -1097,7 +1097,7 @@ BEGIN
 END; $$;
 
 CREATE FUNCTION app.seed_demo_collaboration(p_org uuid,p_case uuid,p_thread uuid,p_advisor uuid,p_subject uuid,p_message uuid,p_candidate uuid,p_task uuid,p_fixture_kind text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
-DECLARE existing app.collaboration_threads%ROWTYPE; existing_message app.message_events%ROWTYPE; existing_candidate app.memory_candidates%ROWTYPE; existing_task app.agent_tasks%ROWTYPE; existing_event app.agent_task_events%ROWTYPE; subject_role text; seeded_at timestamptz; source_pack app.source_packs%ROWTYPE; fixture_body text; fixture_fact_key text; fixture_value jsonb; message_content_sha text; message_request_sha text; candidate_value_sha text; candidate_request_sha text;
+DECLARE existing app.collaboration_threads%ROWTYPE; existing_message app.message_events%ROWTYPE; existing_candidate app.memory_candidates%ROWTYPE; existing_task app.agent_tasks%ROWTYPE; existing_event app.agent_task_events%ROWTYPE; subject_role text; seeded_at timestamptz; source_pack app.source_packs%ROWTYPE; fixture_body text; fixture_fact_key text; fixture_value jsonb; message_content_sha text; message_request_sha text; candidate_value_sha text; candidate_request_sha text; task_insert_count integer;
 BEGIN
   IF p_org IS NULL OR p_case IS NULL OR p_thread IS NULL OR p_advisor IS NULL
      OR p_fixture_kind IS NULL
@@ -1145,6 +1145,7 @@ BEGIN
       1,'waiting_review',0,0,timestamptz '2026-01-01 00:00:00+00',
       timestamptz '2026-01-01 00:00:00+00'
     ) ON CONFLICT DO NOTHING;
+    GET DIAGNOSTICS task_insert_count = ROW_COUNT;
     SELECT * INTO existing_task FROM app.agent_tasks task
      WHERE task.organization_id=p_org AND task.case_id=p_case
        AND task.operation='generate_planning_run_v1'
@@ -1170,13 +1171,15 @@ BEGIN
        OR existing_task.updated_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
       RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration active task mismatch';
     END IF;
-    INSERT INTO app.agent_task_events(
-      organization_id,task_id,event_sequence,event_code,public_status,
-      public_code,attempt_no,result_planning_run_id,created_at
-    ) VALUES(
-      p_org,p_task,1,'waiting_review','needs_advisor_review',
-      'review_required',0,NULL,timestamptz '2026-01-01 00:00:00+00'
-    ) ON CONFLICT DO NOTHING;
+    IF task_insert_count=1 THEN
+      INSERT INTO app.agent_task_events(
+        organization_id,task_id,event_sequence,event_code,public_status,
+        public_code,attempt_no,result_planning_run_id,created_at
+      ) VALUES(
+        p_org,p_task,1,'waiting_review','needs_advisor_review',
+        'review_required',0,NULL,timestamptz '2026-01-01 00:00:00+00'
+      );
+    END IF;
     SELECT * INTO existing_event FROM app.agent_task_events event
      WHERE event.organization_id=p_org AND event.task_id=p_task
        AND event.event_sequence=1;

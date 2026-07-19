@@ -523,7 +523,7 @@ async def _seed_collaboration(
         seed_pinned_task = False
         if kind == "active_task" and skill_catalog_exists:
             if active_task_pin_state == "legacy_unpinned":
-                pass
+                await _assert_exact_legacy_active_task(connection)
             else:
                 if active_task_pin is None:
                     raise RuntimeError("demo collaboration pinned task seed is unavailable")
@@ -653,8 +653,28 @@ async def _classify_active_task_pin(connection: AsyncConnection) -> str:
 async def _assert_exact_legacy_active_task(connection: AsyncConnection) -> None:
     exact = await connection.scalar(
         text(
-            "SELECT t.lease_owner IS NULL AND t.lease_expires_at IS NULL "
+            "SELECT t.case_id=:case AND t.operation='generate_planning_run_v1' "
+            "AND t.case_revision=1 AND (t.source_pack_id,t.source_pack_version)=("
+            " SELECT pack.id,pack.version FROM app.source_packs pack "
+            " WHERE pack.organization_id=t.organization_id ORDER BY pack.id,pack.version LIMIT 1) "
+            "AND t.policy_version='m3a-policy-v1' AND t.request_sha256=repeat('e',64) "
+            "AND t.created_by_actor_id=:advisor AND t.row_version=1 "
+            "AND t.state='waiting_review' AND t.attempt_count=0 "
+            "AND t.lease_owner IS NULL AND t.lease_generation=0 "
+            "AND t.lease_expires_at IS NULL AND t.result_planning_run_id IS NULL "
             "AND t.terminal_code IS NULL "
+            "AND t.skill_definition_id IS NULL AND t.skill_version_id IS NULL "
+            "AND t.skill_activation_event_id IS NULL "
+            "AND t.skill_activation_sequence IS NULL AND t.runtime_binding_sha256 IS NULL "
+            "AND t.created_at=timestamptz '2026-01-01 00:00:00+00' "
+            "AND t.updated_at=timestamptz '2026-01-01 00:00:00+00' "
+            "AND EXISTS(SELECT 1 FROM app.agent_task_events event "
+            " WHERE event.organization_id=t.organization_id AND event.task_id=t.id "
+            " AND event.event_sequence=1 AND event.event_code='waiting_review' "
+            " AND event.public_status='needs_advisor_review' "
+            " AND event.public_code='review_required' AND event.attempt_no=0 "
+            " AND event.result_planning_run_id IS NULL "
+            " AND event.created_at=timestamptz '2026-01-01 00:00:00+00') "
             "AND NOT EXISTS(SELECT 1 FROM app.agent_executions execution "
             " WHERE execution.organization_id=t.organization_id "
             " AND execution.task_id=t.id) "
@@ -666,7 +686,12 @@ async def _assert_exact_legacy_active_task(connection: AsyncConnection) -> None:
             " AND event.task_id=t.id)=1 "
             "FROM app.agent_tasks t WHERE t.organization_id=:org AND t.id=:task"
         ),
-        {"org": DEMO_ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+        {
+            "org": DEMO_ORG,
+            "case": COLLABORATION_ACTIVE_CASE_ID,
+            "task": COLLABORATION_ACTIVE_TASK_ID,
+            "advisor": ACTORS[0][1],
+        },
     )
     if exact is not True:
         raise RuntimeError("demo collaboration legacy active task mismatch")

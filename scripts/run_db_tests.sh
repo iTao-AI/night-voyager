@@ -80,9 +80,14 @@ if [ "${1:-}" = "inside-skill-seed-replay" ]; then
         tests/integration/skills/test_postgres_skills.py::test_fresh_head_seed_creates_exact_pinned_active_task_fixture \
         tests/integration/skills/test_postgres_skills.py::test_pinned_seed_replay_rejects_task_projection_drift_atomically \
         tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_extra_event_without_partial_history \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_seed_replay_rejects_missing_event_without_repair \
+        tests/integration/skills/test_postgres_skills.py::test_legacy_seed_replay_rejects_missing_event_without_repair \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_execution_residue_without_partial_history \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_dispatch_residue_without_partial_history \
         tests/integration/skills/test_postgres_skills.py::test_seed_replay_preserves_only_exact_all_null_legacy_task \
         tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_all_null_legacy_projection_drift \
-        tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_partial_pin_classification
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_partial_pin_classification \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_active_task_seed_mismatch_has_no_partial_task_or_event
     exit 0
 fi
 

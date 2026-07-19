@@ -122,7 +122,7 @@ async def _call_pinned_demo_task_helper(connection: AsyncConnection) -> None:
     )
 
 
-async def _task_history_counts(connection: AsyncConnection) -> tuple[int, int]:
+async def _task_history_counts(connection: AsyncConnection) -> tuple[int, int, int, int]:
     row = (
         await connection.execute(
             text(
@@ -130,12 +130,16 @@ async def _task_history_counts(connection: AsyncConnection) -> tuple[int, int]:
                 "(SELECT count(*) FROM app.agent_tasks "
                 " WHERE organization_id=:org AND id=:task) AS tasks,"
                 "(SELECT count(*) FROM app.agent_task_events "
-                " WHERE organization_id=:org AND task_id=:task) AS events"
+                " WHERE organization_id=:org AND task_id=:task) AS events,"
+                "(SELECT count(*) FROM app.agent_executions "
+                " WHERE organization_id=:org AND task_id=:task) AS executions,"
+                "(SELECT count(*) FROM internal.agent_task_dispatch "
+                " WHERE organization_id=:org AND task_id=:task) AS dispatches"
             ),
             {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
         )
     ).one()
-    return cast(tuple[int, int], tuple(row))
+    return cast(tuple[int, int, int, int], tuple(row))
 
 
 @pytest.mark.database
@@ -279,6 +283,165 @@ async def test_pinned_helper_rejects_extra_event_without_partial_history() -> No
                     "public_code,attempt_no,result_planning_run_id,created_at) "
                     "VALUES(:org,:task,2,'queued','preparing','event_drift',0,NULL,"
                     "timestamptz '2026-01-01 00:00:01+00')"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError):
+                await _call_pinned_demo_task_helper(connection)
+            await savepoint.rollback()
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_pinned_seed_replay_rejects_missing_event_without_repair() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_task_events DISABLE TRIGGER "
+                    "agent_task_events_immutable"
+                )
+            )
+            await connection.execute(
+                text(
+                    "DELETE FROM app.agent_task_events "
+                    "WHERE organization_id=:org AND task_id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError):
+                await _call_pinned_demo_task_helper(connection)
+            await savepoint.rollback()
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_legacy_seed_replay_rejects_missing_event_without_repair() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_tasks DISABLE TRIGGER "
+                    "agent_tasks_skill_pin_immutable"
+                )
+            )
+            await connection.execute(
+                text(
+                    "ALTER TABLE app.agent_task_events DISABLE TRIGGER "
+                    "agent_task_events_immutable"
+                )
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.agent_tasks SET "
+                    "skill_definition_id=NULL,skill_version_id=NULL,"
+                    "skill_activation_event_id=NULL,skill_activation_sequence=NULL,"
+                    "runtime_binding_sha256=NULL "
+                    "WHERE organization_id=:org AND id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            await connection.execute(
+                text(
+                    "DELETE FROM app.agent_task_events "
+                    "WHERE organization_id=:org AND task_id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            with pytest.raises(RuntimeError, match="legacy active task mismatch"):
+                await _replay_collaboration_seed(connection)
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_pinned_helper_rejects_execution_residue_without_partial_history() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.agent_executions("
+                    "organization_id,id,task_id,attempt_no,lease_generation,"
+                    "adapter_id,adapter_version,status,cost_status,"
+                    "skill_definition_id,skill_version_id,skill_activation_event_id,"
+                    "skill_activation_sequence,runtime_binding_sha256) "
+                    "SELECT organization_id,gen_random_uuid(),id,1,1,"
+                    "'deterministic_planning','m4a-v1','blocked','not_applicable',"
+                    "skill_definition_id,skill_version_id,skill_activation_event_id,"
+                    "skill_activation_sequence,runtime_binding_sha256 "
+                    "FROM app.agent_tasks WHERE organization_id=:org AND id=:task"
+                ),
+                {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
+            )
+            before = await _task_history_counts(connection)
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError):
+                await _call_pinned_demo_task_helper(connection)
+            await savepoint.rollback()
+            assert await _task_history_counts(connection) == before
+            await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.database
+@pytest.mark.asyncio
+async def test_pinned_helper_rejects_dispatch_residue_without_partial_history() -> None:
+    if os.environ.get("NIGHT_VOYAGER_SKILL_SEED_PATH") != "fresh_head":
+        pytest.skip("fresh-head seed regression runs in the required database lane")
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO internal.agent_task_dispatch("
+                    "task_id,organization_id,available_at) "
+                    "VALUES(:task,:org,timestamptz '2026-01-01 00:00:00+00')"
                 ),
                 {"org": ORG, "task": COLLABORATION_ACTIVE_TASK_ID},
             )
