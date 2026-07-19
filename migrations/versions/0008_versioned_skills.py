@@ -1077,6 +1077,73 @@ BEGIN
 END; $$;
 """
 
+LEGACY_DEMO_TASK_SEED_SQL = r"""
+CREATE FUNCTION app.seed_demo_collaboration(p_org uuid,p_case uuid,p_thread uuid,p_advisor uuid,p_subject uuid,p_message uuid,p_candidate uuid,p_task uuid,p_fixture_kind text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE existing_task app.agent_tasks%ROWTYPE; existing_event app.agent_task_events%ROWTYPE; source_pack app.source_packs%ROWTYPE;
+BEGIN
+  PERFORM set_config('night_voyager.organization_id',p_org::text,true);
+  IF p_fixture_kind='active_task' AND EXISTS (
+    SELECT 1 FROM app.agent_tasks task
+     WHERE task.organization_id=p_org AND task.id=p_task
+  ) THEN
+    SELECT * INTO source_pack FROM app.source_packs pack
+     WHERE pack.organization_id=p_org ORDER BY pack.id,pack.version LIMIT 1;
+    SELECT * INTO existing_task FROM app.agent_tasks task
+     WHERE task.organization_id=p_org AND task.id=p_task;
+    IF NOT FOUND OR source_pack.id IS NULL
+       OR existing_task.case_id IS DISTINCT FROM p_case
+       OR existing_task.operation IS DISTINCT FROM 'generate_planning_run_v1'
+       OR existing_task.case_revision IS DISTINCT FROM 1
+       OR existing_task.source_pack_id IS DISTINCT FROM source_pack.id
+       OR existing_task.source_pack_version IS DISTINCT FROM source_pack.version
+       OR existing_task.policy_version IS DISTINCT FROM 'm3a-policy-v1'
+       OR existing_task.request_sha256 IS DISTINCT FROM repeat('e',64)
+       OR existing_task.created_by_actor_id IS DISTINCT FROM p_advisor
+       OR existing_task.row_version IS DISTINCT FROM 1
+       OR existing_task.state IS DISTINCT FROM 'waiting_review'
+       OR existing_task.attempt_count IS DISTINCT FROM 0
+       OR existing_task.lease_owner IS NOT NULL
+       OR existing_task.lease_generation IS DISTINCT FROM 0
+       OR existing_task.lease_expires_at IS NOT NULL
+       OR existing_task.result_planning_run_id IS NOT NULL
+       OR existing_task.terminal_code IS NOT NULL
+       OR existing_task.skill_definition_id IS NOT NULL
+       OR existing_task.skill_version_id IS NOT NULL
+       OR existing_task.skill_activation_event_id IS NOT NULL
+       OR existing_task.skill_activation_sequence IS NOT NULL
+       OR existing_task.runtime_binding_sha256 IS NOT NULL
+       OR existing_task.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00'
+       OR existing_task.updated_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00' THEN
+      RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration legacy task mismatch';
+    END IF;
+    SELECT * INTO existing_event FROM app.agent_task_events event
+     WHERE event.organization_id=p_org AND event.task_id=p_task
+       AND event.event_sequence=1;
+    IF NOT FOUND OR existing_event.event_code IS DISTINCT FROM 'waiting_review'
+       OR existing_event.public_status IS DISTINCT FROM 'needs_advisor_review'
+       OR existing_event.public_code IS DISTINCT FROM 'review_required'
+       OR existing_event.attempt_no IS DISTINCT FROM 0
+       OR existing_event.result_planning_run_id IS NOT NULL
+       OR existing_event.created_at IS DISTINCT FROM timestamptz '2026-01-01 00:00:00+00'
+       OR (SELECT count(*) FROM app.agent_task_events event
+            WHERE event.organization_id=p_org AND event.task_id=p_task)<>1
+       OR EXISTS (
+         SELECT 1 FROM app.agent_executions execution
+          WHERE execution.organization_id=p_org AND execution.task_id=p_task
+       )
+       OR EXISTS (
+         SELECT 1 FROM internal.agent_task_dispatch dispatch
+          WHERE dispatch.organization_id=p_org AND dispatch.task_id=p_task
+       ) THEN
+      RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='demo collaboration legacy task event mismatch';
+    END IF;
+  END IF;
+  PERFORM app.seed_demo_collaboration_0007(
+    p_org,p_case,p_thread,p_advisor,p_subject,p_message,p_candidate,p_task,p_fixture_kind
+  );
+END; $$;
+"""
+
 DOWNGRADE_GUARD_SQL_TEMPLATE = r"""
 DO $$
 DECLARE
@@ -1379,6 +1446,12 @@ REVOKE ALL ON FUNCTION app.record_skill_candidate_evaluation(uuid,uuid,uuid,uuid
 REVOKE ALL ON FUNCTION app.promote_skill_change_candidate(uuid,uuid,uuid,uuid,text,bigint,text,jsonb,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.rollback_skill_activation(uuid,uuid,text,uuid,text,text,bigint,text,jsonb,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.seed_demo_skill_registry(uuid,uuid,jsonb) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_api;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_worker;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration_0007(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration_0007(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_api;
+REVOKE ALL ON FUNCTION app.seed_demo_collaboration_0007(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) FROM night_voyager_worker;
 REVOKE ALL ON FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb) FROM night_voyager_api;
 REVOKE ALL ON FUNCTION app.seed_demo_pinned_collaboration_task(uuid,uuid,uuid,uuid,jsonb) FROM night_voyager_worker;
@@ -1484,6 +1557,11 @@ def upgrade() -> None:
     _execute_statements(LEGACY_UPGRADE_SQL)
     op.execute("ALTER TABLE app.agent_tasks FORCE ROW LEVEL SECURITY")
     op.execute(
+        "ALTER FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) "
+        "RENAME TO seed_demo_collaboration_0007"
+    )
+    _execute_statements(LEGACY_DEMO_TASK_SEED_SQL)
+    op.execute(
         "DROP FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,text,text)"
     )
     op.execute("DROP FUNCTION app.claim_agent_task(text)")
@@ -1506,6 +1584,14 @@ def downgrade() -> None:
     op.execute(DOWNGRADE_GUARD_SQL)
     op.execute("ALTER TABLE app.agent_tasks FORCE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE app.agent_executions FORCE ROW LEVEL SECURITY")
+
+    op.execute(
+        "DROP FUNCTION app.seed_demo_collaboration(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text)"
+    )
+    op.execute(
+        "ALTER FUNCTION app.seed_demo_collaboration_0007(uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,text) "
+        "RENAME TO seed_demo_collaboration"
+    )
 
     op.execute(
         "DROP FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,jsonb,text,text)"

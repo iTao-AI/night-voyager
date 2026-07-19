@@ -72,6 +72,12 @@ if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-skill-migration-parity" ]; then
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/skills/test_skill_migration_parity.py::test_0008_legacy_seed_helper_has_fresh_upgrade_and_downgrade_parity
+    exit 0
+fi
+
 if [ "${1:-}" = "inside-skill-seed-replay" ]; then
     export NIGHT_VOYAGER_SKILL_SEED_PATH=fresh_head
     uv run --no-editable python scripts/seed_demo.py
@@ -113,5 +119,6 @@ run_lane() {
 }
 
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
+run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
 run_lane "${BASE_PROJECT_NAME}-main" inside
 run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade

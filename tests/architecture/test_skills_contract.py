@@ -110,6 +110,18 @@ def test_required_db_gate_runs_fresh_head_seed_replay_regressions() -> None:
         "test_seed_replay_rejects_partial_pin_classification",
         "test_pinned_active_task_seed_mismatch_has_no_partial_task_or_event",
     )
+    parity_lane = runner.split(
+        'if [ "${1:-}" = "inside-skill-migration-parity" ]; then', maxsplit=1
+    )[1].split("    exit 0", maxsplit=1)[0]
+    parity_node = (
+        "tests/integration/skills/test_skill_migration_parity.py::"
+        "test_0008_legacy_seed_helper_has_fresh_upgrade_and_downgrade_parity"
+    )
+    assert parity_lane.count(parity_node) == 1
+    assert (
+        'run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" '
+        "inside-skill-migration-parity"
+    ) in runner
     replay_lane = runner.split(
         'if [ "${1:-}" = "inside-skill-seed-replay" ]; then', maxsplit=1
     )[1].split("    exit 0", maxsplit=1)[0]
