@@ -17,6 +17,19 @@ export interface TaskProjection {
   public_code: string | null; attempt_count: number; planning_run_id: string | null;
   created_at?: string; updated_at: string; replayed?: boolean;
 }
+export interface SkillRuntimePin {
+  skill_definition_id: string; skill_version_id: string; skill_activation_event_id: string;
+  skill_activation_sequence: number; runtime_binding_sha256: string;
+}
+export type SkillLeafBindingV1 =
+  | { operation: "generate_planning_run_v1"; adapter_id: "deterministic_planning"; adapter_version: "m4a-v1" }
+  | { operation: "generate_governed_mixed_planning_run_v1"; adapter_id: "governed_mixed_planning"; adapter_version: "dra-mixed-v1" };
+type StandaloneTaskRuntimeBinding =
+  | { skill_pin: null; leaf_binding: null }
+  | { skill_pin: SkillRuntimePin; leaf_binding: SkillLeafBindingV1 };
+export type StandaloneTaskProjection = TaskProjection & {
+  schema_version: 1; created_at: string;
+} & StandaloneTaskRuntimeBinding;
 export interface PlanningRunProjection {
   planning_run_id: string; state: "review_required"; source_pack_id: string;
   source_pack_version: number; policy_version: "m3a-policy-v1"; source_snapshot_date: string;
@@ -70,6 +83,7 @@ export type DecisionResult = Record<string, unknown>;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
 const PHASES = ["task-ready", "active-task", "review-required", "family-review", "plan-ready", "terminal-task-failure"];
 const STATUSES = ["preparing", "needs_advisor_review", "ready", "needs_evidence", "timed_out", "failed", "cancelled", "outdated"];
 const COUNTRIES = ["australia", "japan", "malaysia"];
@@ -82,10 +96,18 @@ function nonnegative(value: unknown): value is number { return Number.isSafeInte
 function strings(value: unknown): value is string[] { return Array.isArray(value) && value.every((item) => typeof item === "string"); }
 function date(value: unknown): value is string { return typeof value === "string" && DATE.test(value); }
 function risk(value: unknown): boolean { return object(value) && exact(value, ["evidence_id", "kind", "reason"]) && uuid(value.evidence_id) && ["optional", "stale", "unverified"].includes(String(value.kind)) && typeof value.reason === "string"; }
+function skillPin(value: unknown): value is SkillRuntimePin {
+  return object(value) && exact(value, ["skill_definition_id", "skill_version_id", "skill_activation_event_id", "skill_activation_sequence", "runtime_binding_sha256"]) && uuid(value.skill_definition_id) && uuid(value.skill_version_id) && uuid(value.skill_activation_event_id) && positive(value.skill_activation_sequence) && typeof value.runtime_binding_sha256 === "string" && SHA256.test(value.runtime_binding_sha256);
+}
+function leafBinding(value: unknown): value is SkillLeafBindingV1 {
+  if (!object(value) || !exact(value, ["operation", "adapter_id", "adapter_version"])) return false;
+  return (value.operation === "generate_planning_run_v1" && value.adapter_id === "deterministic_planning" && value.adapter_version === "m4a-v1") || (value.operation === "generate_governed_mixed_planning_run_v1" && value.adapter_id === "governed_mixed_planning" && value.adapter_version === "dra-mixed-v1");
+}
 function task(value: unknown, standalone = false): value is TaskProjection {
   if (!object(value)) return false;
-  const keys = ["task_id", "row_version", "status", "public_code", "attempt_count", "planning_run_id", "updated_at", ...(standalone ? ["schema_version", "created_at"] : []), ...(standalone && "replayed" in value ? ["replayed"] : [])];
-  return exact(value, keys) && (!standalone || value.schema_version === 1) && uuid(value.task_id) && positive(value.row_version) && STATUSES.includes(String(value.status)) && (value.public_code === null || typeof value.public_code === "string") && nonnegative(value.attempt_count) && (value.planning_run_id === null || uuid(value.planning_run_id)) && (!standalone || typeof value.created_at === "string") && typeof value.updated_at === "string" && (!standalone || !("replayed" in value) || typeof value.replayed === "boolean");
+  const keys = ["task_id", "row_version", "status", "public_code", "attempt_count", "planning_run_id", "updated_at", ...(standalone ? ["schema_version", "created_at", "skill_pin", "leaf_binding"] : []), ...(standalone && "replayed" in value ? ["replayed"] : [])];
+  const validRuntimeBinding = !standalone || (value.skill_pin === null && value.leaf_binding === null) || (skillPin(value.skill_pin) && leafBinding(value.leaf_binding));
+  return exact(value, keys) && (!standalone || value.schema_version === 1) && uuid(value.task_id) && positive(value.row_version) && STATUSES.includes(String(value.status)) && (value.public_code === null || typeof value.public_code === "string") && nonnegative(value.attempt_count) && (value.planning_run_id === null || uuid(value.planning_run_id)) && (!standalone || typeof value.created_at === "string") && typeof value.updated_at === "string" && (!standalone || !("replayed" in value) || typeof value.replayed === "boolean") && validRuntimeBinding;
 }
 function canonical(value: unknown): value is CanonicalTaskInputs { return object(value) && exact(value, ["schema_version", "operation", "case_id", "expected_case_revision", "source_pack_id", "source_pack_version", "policy_version"]) && value.schema_version === 1 && value.operation === "generate_planning_run_v1" && uuid(value.case_id) && positive(value.expected_case_revision) && uuid(value.source_pack_id) && positive(value.source_pack_version) && value.policy_version === "m3a-policy-v1"; }
 function planningRun(value: unknown): value is PlanningRunProjection { return object(value) && exact(value, ["planning_run_id", "state", "source_pack_id", "source_pack_version", "policy_version", "source_snapshot_date"]) && uuid(value.planning_run_id) && value.state === "review_required" && uuid(value.source_pack_id) && positive(value.source_pack_version) && value.policy_version === "m3a-policy-v1" && date(value.source_snapshot_date); }
@@ -138,4 +160,4 @@ export function parseBrief(value: unknown): CurrentDecisionBrief {
   if (!object(value) || !exact(value, keys) || value.schema_version !== 1 || value.proof_mode !== "synthetic-demo" || !["family-review", "plan-ready"].includes(String(value.phase)) || !uuid(value.case_id) || !uuid(value.brief_id) || !positive(value.brief_version) || !date(value.source_snapshot_date) || !familyProjection(value.family_safe_projection) || !requirements(value.decision_requirements) || !(value.receipt === null || receipt(value.receipt)) || !(value.timeline === null || timeline(value.timeline)) || (value.phase === "family-review" ? value.receipt !== null || value.timeline !== null : value.receipt === null || value.timeline === null) || !briefConsistent(value)) throw new Error("invalid response");
   return value as unknown as CurrentDecisionBrief;
 }
-export function parseTask(value: unknown): TaskProjection { if (!task(value, true)) throw new Error("invalid response"); return value; }
+export function parseTask(value: unknown): StandaloneTaskProjection { if (!task(value, true)) throw new Error("invalid response"); return value as StandaloneTaskProjection; }

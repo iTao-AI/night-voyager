@@ -20,6 +20,11 @@ from night_voyager.interfaces.http.identity import (
     create_identity_router,
     default_service_factory,
 )
+from night_voyager.interfaces.http.skills import (
+    create_skills_router,
+    is_skills_http_path,
+    skills_request_validation_problem,
+)
 from night_voyager.interfaces.http.tasks import create_task_router
 
 
@@ -42,6 +47,7 @@ def create_app(
             or path.startswith("/api/v1/decision-briefs/")
             or path.startswith("/api/v1/tasks/")
             or is_collaboration_http_path(path)
+            or is_skills_http_path(path)
         )
 
     @app.exception_handler(HTTPException)
@@ -62,6 +68,9 @@ def create_app(
         collaboration_response = collaboration_request_validation_problem(request, error)
         if collaboration_response is not None:
             return collaboration_response
+        skills_response = skills_request_validation_problem(request, error)
+        if skills_response is not None:
+            return skills_response
         if uses_problem_json(request.url.path):
             return decision_problem(422, "request_validation_failed", "request validation failed")
         from fastapi.exception_handlers import request_validation_exception_handler
@@ -78,6 +87,7 @@ def create_app(
         app.include_router(create_collaboration_router(resolved_settings, session_factory))
         app.include_router(create_decision_router(resolved_settings, session_factory))
         app.include_router(create_dra_router(resolved_settings, session_factory))
+        app.include_router(create_skills_router(resolved_settings, session_factory))
         app.include_router(create_task_router(resolved_settings, session_factory))
     return app
 

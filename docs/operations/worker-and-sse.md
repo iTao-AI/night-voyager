@@ -4,7 +4,9 @@ M4A runs one local asyncio worker using the non-owner
 `night_voyager_worker` database role. The default Compose adapter is
 deterministic, credential-free, and network-free. The router accepts the
 original all-synthetic adapter and the governed mixed adapter; both reuse the
-same task, lease, retry, fencing, event, and SSE machinery.
+same task, lease, retry, fencing, event, and SSE machinery. Migration `0008`
+pins both operations to the active `study-destination-compare` SkillVersion and
+requires packaged-registry validation before either adapter starts.
 
 ## Start and prove the local stack
 
@@ -27,15 +29,35 @@ and volumes.
 ## Runtime behavior
 
 The worker globally claims only payload-free dispatch identity, then loads
-tenant-pinned input in a short tenant-scoped transaction. Adapter execution
+tenant-pinned input, the claim-time execution Skill pin, trusted Skill key/version,
+and claimed adapter leaf in a short tenant-scoped transaction. Adapter execution
 runs outside a transaction. Start, heartbeat, retry, and finalize each use a
 fresh short transaction and the current lease owner plus generation.
+
+Before start the worker resolves the configured router leaf and validates the exact
+packaged manifest entry, complete operation map, five-field execution pin, and
+`runtime_binding_sha256`. The claimed execution leaf, resolved router leaf, and
+packaged leaf must be equal. A valid start records the canonical hash of
+`{request, five_field_pin}`; the leaf remains a separate normalized execution audit
+fact.
+
+Missing, mismatched, unsupported, catalog-only, stale, or malformed pins fail through
+the generation-fenced `skill_pin_invalid` path with `retryable=false`. The worker does
+not call `start_agent_task`, invoke an adapter, or leave the task in a reclaim loop.
+It never treats a database operation string or UUID as executable router authority.
 
 For `generate_governed_mixed_planning_run_v1`, the worker alone executes the
 PostgreSQL mixed snapshot function. The snapshot must contain exactly one
 `australia_program_fit` external Evidence and exact synthetic baseline facts for
 all other accepted claims. Pin, policy, authority, or baseline drift fails
 closed; the adapter never calls DRA or reads operator source files.
+
+For both planning operations the worker materializes the exact persisted
+organization, Case, revision, source pack, source-pack version, and policy. Persisted
+budget, intake, Japan-risk acceptance, and preferred countries reach the actual
+adapter. Route, cost, ranking, route-to-Evidence, and advisor-eligibility product
+rows are filtered to the selected non-empty country subset; fixture Case values cannot
+overwrite the requested revision.
 
 The worker polls once per second when idle. A lease lasts 60 seconds and is
 renewed every 15 seconds. An expired lease can be reclaimed; stale generation
@@ -61,6 +83,8 @@ non-negative duration, result reference, public code, and deterministic
 Use `make db-check` for fresh migration, role, forced-RLS, dispatch privacy,
 lease/reclaim/fencing/retry/cancel, SSE pagination, reconnect concurrency,
 capacity, downgrade/re-upgrade, and connection-pool cleanup evidence.
+Use `make skills-db-check SUITE=worker` for the focused task/execution pin,
+registry-leaf, persisted-revision, selected-country, and invalid-pin proof.
 
 ## Troubleshooting
 

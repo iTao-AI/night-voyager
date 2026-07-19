@@ -18,6 +18,10 @@ from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
 from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
+from night_voyager.planning.synthetic_postgres import (
+    PersistedSyntheticSnapshotRepository,
+)
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.postgres import postgres_worker_repository_factory
 from night_voyager.tasks.worker import TaskWorker
 from scripts.seed_dra_proof import seed
@@ -140,11 +144,14 @@ async def test_fixture_candidate_closes_through_mixed_task_and_family_decision()
             worker = TaskWorker(
                 postgres_worker_repository_factory(worker_sessions),
                 PlanningAdapterRouter(
-                    synthetic=DeterministicPlanningAdapter(),
+                    synthetic=DeterministicPlanningAdapter(
+                        PersistedSyntheticSnapshotRepository(worker_sessions)
+                    ),
                     mixed=GovernedMixedPlanningAdapter(
                         PostgresMixedPlanningRepository(worker_sessions)
                     ),
                 ),
+                SkillRuntimeRegistry.load_packaged(),
                 worker_id="governed-closure-worker",
             )
             assert await worker.run_once() is True

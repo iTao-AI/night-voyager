@@ -35,9 +35,7 @@ def test_api_image_contains_alembic_configuration_and_migrations() -> None:
 
 
 def test_initial_migration_defines_forced_rls_and_restricted_auth_functions() -> None:
-    migration = (ROOT / "migrations/versions/0001_identity_and_rls.py").read_text(
-        encoding="utf-8"
-    )
+    migration = (ROOT / "migrations/versions/0001_identity_and_rls.py").read_text(encoding="utf-8")
 
     for table in ("organizations", "actors", "memberships"):
         assert f"ALTER TABLE app.{table} ENABLE ROW LEVEL SECURITY" in migration
@@ -73,8 +71,9 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "M3B_TABLES" in verifier
     assert "M4A_TABLES" in verifier
     assert "DRA_TABLES" in verifier
+    assert "SKILL_TABLES" in verifier
     assert "load_governed_mixed_planning_snapshot" in verifier
-    assert "policy_count != 33" in verifier
+    assert "policy_count != 38" in verifier
 
 
 def test_release_verifier_includes_collaboration_roles_and_legacy_revocation() -> None:
@@ -93,4 +92,23 @@ def test_release_verifier_includes_collaboration_roles_and_legacy_revocation() -
         assert token in verifier
     assert "runtime roles must not access collaboration authority tables" in verifier
     assert "legacy Case revision writer must not be executable by the API" in verifier
-    assert "policy_count != 33" in verifier
+    assert "policy_count != 38" in verifier
+
+
+def test_release_verifier_includes_skill_role_and_pin_authority() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+
+    for token in (
+        "SKILL_TABLES",
+        "SKILL_API_FUNCTIONS",
+        "SKILL_WORKER_FUNCTIONS",
+        "skill_runtime_grants",
+        "skill_signatures",
+        "seed_demo_skill_registry",
+        "load_agent_task_skill_pin",
+        "load_persisted_synthetic_planning_snapshot",
+        "runtime roles must not access Skill authority tables",
+        "Skill function grants violate API/worker separation",
+        "five-field task pin catalog drift",
+    ):
+        assert token in verifier

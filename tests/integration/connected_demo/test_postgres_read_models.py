@@ -10,6 +10,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from night_voyager.adapters.deterministic_planning import DeterministicPlanningAdapter
+from night_voyager.adapters.governed_mixed_planning import GovernedMixedPlanningAdapter
+from night_voyager.adapters.router import PlanningAdapterRouter
 from night_voyager.connected_demo.errors import DemoContractUnavailableError
 from night_voyager.connected_demo.fixtures import (
     CanonicalDemoSourceContract,
@@ -19,13 +21,24 @@ from night_voyager.connected_demo.models import DemoPhase
 from night_voyager.connected_demo.postgres import PostgresConnectedDemoRepository
 from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID
 from night_voyager.identity.models import ActorContext, ActorRole
-from night_voyager.tasks.postgres import postgres_worker_repository_factory
+from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
+from night_voyager.planning.synthetic_postgres import (
+    PersistedSyntheticSnapshotRepository,
+)
+from night_voyager.skills.registry import SkillRuntimeRegistry
+from night_voyager.tasks.application import CreateTaskCommand, TaskService
+from night_voyager.tasks.postgres import (
+    PostgresTaskRepository,
+    postgres_worker_repository_factory,
+)
 from night_voyager.tasks.worker import TaskWorker
 
 pytestmark = pytest.mark.database
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
+PLANNING_FIXTURE = validate_planning_fixture().planning_input
 
 
 def context(role: ActorRole = ActorRole.ADVISOR) -> ActorContext:
@@ -121,12 +134,13 @@ async def test_review_required_projection_reads_real_worker_result() -> None:
             await connection.execute(
                 text(
                     "SELECT app.publish_case_revision(:org,:case,NULL,1,"
-                    "CAST(:preferences AS jsonb),'{}'::jsonb)"
+                    "CAST(:student AS jsonb),CAST(:family AS jsonb))"
                 ),
                 {
                     "org": DEMO_ORG,
                     "case": case_id,
-                    "preferences": '{"budget":{"hard_ceiling_minor":40000000}}',
+                    "student": json.dumps(PLANNING_FIXTURE.case.student.model_dump(mode="json")),
+                    "family": json.dumps(PLANNING_FIXTURE.case.family.model_dump(mode="json")),
                 },
             )
             await connection.execute(
@@ -141,37 +155,44 @@ async def test_review_required_projection_reads_real_worker_result() -> None:
                 ),
                 {"org": DEMO_ORG, "case": case_id, "actor": ADVISOR},
             )
-        async with api.begin() as connection:
+        sessions = async_sessionmaker(api, expire_on_commit=False)
+        async with sessions() as session, session.begin():
             for name, value in (
                 ("night_voyager.organization_id", str(DEMO_ORG)),
                 ("night_voyager.actor_id", str(ADVISOR)),
                 ("night_voyager.role", "advisor"),
             ):
-                await connection.execute(
+                await session.execute(
                     text("SELECT set_config(:name,:value,true)"),
                     {"name": name, "value": value},
                 )
-            await connection.execute(
-                    text(
-                        "SELECT * FROM app.create_agent_task(:org,:actor,:case,:task,"
-                        "'generate_planning_run_v1',1,"
-                        ":pack,:version,:policy,repeat('a',64),:key_hash)"
+            await TaskService(
+                PostgresTaskRepository(session),
+                registry=SkillRuntimeRegistry.load_packaged(),
+                id_factory=lambda: task_id,
+            ).create(
+                context(),
+                CreateTaskCommand(
+                    case_id=case_id,
+                    expected_case_revision=1,
+                    source_pack_id=source.source_pack_id,
+                    source_pack_version=source.source_pack_version,
+                    policy_version=source.policy_version,
                 ),
-                {
-                    "org": DEMO_ORG,
-                    "actor": ADVISOR,
-                    "case": case_id,
-                    "task": task_id,
-                    "pack": source.source_pack_id,
-                    "version": source.source_pack_version,
-                    "policy": source.policy_version,
-                    "key_hash": task_id.hex * 2,
-                },
+                f"connected-demo-{task_id}",
             )
-        sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+        worker_sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
         worker = TaskWorker(
-            postgres_worker_repository_factory(sessions),
-            DeterministicPlanningAdapter(),
+            postgres_worker_repository_factory(worker_sessions),
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(worker_sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(worker_sessions)
+                ),
+            ),
+            SkillRuntimeRegistry.load_packaged(),
             worker_id="connected-demo-review-projection",
         )
         assert await worker.run_once() is True
@@ -304,9 +325,7 @@ async def test_plan_ready_projection_reads_decision_linked_completed_brief() -> 
                     },
                 )
                 async with AsyncSession(bind=connection) as session:
-                    advisor_ledger = await PostgresConnectedDemoRepository(
-                        session
-                    ).advisor_ledger(
+                    advisor_ledger = await PostgresConnectedDemoRepository(session).advisor_ledger(
                         context(), case_id, resolve_canonical_demo_source_contract()
                     )
 

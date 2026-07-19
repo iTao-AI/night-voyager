@@ -5,6 +5,7 @@ from uuid import UUID
 
 from night_voyager.adapters.protocols import PlanningAdapter
 from night_voyager.identity.models import ActorContext
+from night_voyager.skills.models import SkillRuntimeManifestEntryV1
 from night_voyager.tasks.models import CancelTaskCommand, CreateTaskCommand
 
 
@@ -13,12 +14,17 @@ class PlanningAdapterPort(PlanningAdapter, Protocol):
 
 
 class TaskRepository(Protocol):
+    async def resolve_active_skill_version(
+        self, context: ActorContext
+    ) -> tuple[str, str]: ...
+
     async def create(
         self,
         context: ActorContext,
         command: CreateTaskCommand,
         task_id: UUID,
         idempotency_key: str,
+        skill_manifest: SkillRuntimeManifestEntryV1,
     ) -> dict[str, object]: ...
 
     async def get(

@@ -132,10 +132,11 @@ def test_demo_seed_function_has_one_closed_fixture_contract() -> None:
     assert seed.count("IS DISTINCT FROM") >= 30
 
 
-def test_demo_seed_script_uses_only_the_migrator_owned_collaboration_function() -> None:
+def test_demo_seed_script_uses_only_migrator_owned_collaboration_functions() -> None:
     script = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
     assert "SELECT app.seed_demo_collaboration(" in script
-    assert "await _seed_collaboration(connection, fixture)" in script
+    assert "SELECT app.seed_demo_pinned_collaboration_task(" in script
+    assert "await _seed_collaboration(" in script
     for table in TABLES:
         assert f"INSERT INTO app.{table}" not in script
 

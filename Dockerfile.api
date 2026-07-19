@@ -4,6 +4,7 @@ ENV UV_BUILD_CONSTRAINT=build-constraints.txt \
     UV_REQUIRE_HASHES=1
 COPY pyproject.toml uv.lock build-constraints.txt README.md ./
 COPY src ./src
+COPY fixtures/skills ./fixtures/skills
 RUN pip install --no-cache-dir uv==0.11.7 \
     && uv export --frozen --no-dev --no-emit-project --output-file requirements.txt \
     && pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \

@@ -48,6 +48,18 @@ PARTICIPANT_FACT_FIELDS = {
     "subject_role",
     "confirming_advisor_role",
 }
+COLLABORATION_PROBLEM_CODES = {
+    "active_task_blocks_revision",
+    "case_revision_stale",
+    "collaboration_thread_full",
+    "invalid_collaboration_message",
+    "memory_candidate_expired",
+    "memory_candidate_stale",
+    "memory_candidate_terminal",
+    "resource_unavailable",
+    "unsupported_fact_key",
+    "unsafe_fact_value",
+}
 
 
 def require(condition: bool, message: str) -> None:
@@ -209,7 +221,17 @@ def verification_payload() -> dict[str, object]:
 
 
 def expect_problem(payload: dict[str, Any], code: str) -> None:
-    require(payload.get("code") == code, "collaboration proof problem code mismatch")
+    actual = payload.get("code")
+    if actual != code:
+        bounded_actual = (
+            actual
+            if isinstance(actual, str) and actual in COLLABORATION_PROBLEM_CODES
+            else "resource_unavailable"
+        )
+        raise SystemExit(
+            "collaboration proof problem code mismatch: "
+            f"expected={code} actual={bounded_actual}"
+        )
     require(payload.get("status") in {404, 409}, "collaboration proof problem status mismatch")
 
 

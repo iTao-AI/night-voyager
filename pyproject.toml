@@ -36,6 +36,10 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["src/night_voyager"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"fixtures/skills/runtime-manifest-v1.json" = "night_voyager/skills/data/runtime-manifest-v1.json"
+"fixtures/skills/eval-manifest-v1.json" = "night_voyager/skills/data/eval-manifest-v1.json"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [

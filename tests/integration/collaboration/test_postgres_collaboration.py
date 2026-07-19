@@ -3868,7 +3868,10 @@ async def test_demo_collaboration_seed_is_exact_idempotent_and_isolated() -> Non
                 (
                     await connection.execute(
                         text(
-                            "SELECT state,operation,result_planning_run_id "
+                            "SELECT state,operation,result_planning_run_id,"
+                            "skill_definition_id,skill_version_id,"
+                            "skill_activation_event_id,skill_activation_sequence,"
+                            "runtime_binding_sha256 "
                             "FROM app.agent_tasks WHERE organization_id=:org AND id=:task"
                         ),
                         {"org": ORG_ID, "task": COLLABORATION_ACTIVE_TASK_ID},
@@ -3881,6 +3884,11 @@ async def test_demo_collaboration_seed_is_exact_idempotent_and_isolated() -> Non
                 "state": "waiting_review",
                 "operation": "generate_planning_run_v1",
                 "result_planning_run_id": None,
+                "skill_definition_id": None,
+                "skill_version_id": None,
+                "skill_activation_event_id": None,
+                "skill_activation_sequence": None,
+                "runtime_binding_sha256": None,
             }
             assert (
                 await connection.scalar(

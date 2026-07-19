@@ -4,6 +4,8 @@ import asyncio
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from dataclasses import replace
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -13,8 +15,11 @@ from night_voyager.adapters.protocols import (
     AdapterFailureCode,
     AdapterPayload,
     PlanningAdapterRequest,
+    PlanningAdapterResolution,
 )
 from night_voyager.planning.hashing import canonical_sha256
+from night_voyager.skills.models import SkillKey, SkillRuntimePin
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.errors import TaskLeaseLostError, TaskTransientError
 from night_voyager.tasks.worker import AgentTaskClaim, TaskWorker, WorkerTaskInput
 from tests.unit.planning.test_mixed import governed_mixed_input
@@ -23,6 +28,21 @@ ORG = UUID("10000000-0000-0000-0000-000000000001")
 TASK = UUID("80000000-0000-0000-0000-000000000401")
 CASE = UUID("40000000-0000-0000-0000-000000000401")
 PACK = UUID("50000000-0000-0000-0000-000000000001")
+ROOT = Path(__file__).resolve().parents[3]
+REGISTRY = SkillRuntimeRegistry.from_json(
+    (ROOT / "fixtures/skills/runtime-manifest-v1.json").read_bytes()
+)
+ENTRY = REGISTRY.get(SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0")
+assert ENTRY.operation_bindings is not None
+PIN = SkillRuntimePin(
+    skill_definition_id=UUID("81000000-0000-0000-0000-000000000002"),
+    skill_version_id=UUID("82000000-0000-0000-0000-000000000002"),
+    skill_activation_event_id=UUID("84000000-0000-0000-0000-000000000001"),
+    skill_activation_sequence=1,
+    runtime_binding_sha256=ENTRY.runtime_binding_sha256 or "",
+)
+SYNTHETIC_LEAF = ENTRY.operation_bindings[0]
+MIXED_LEAF = ENTRY.operation_bindings[1]
 CLAIM = AgentTaskClaim(task_id=TASK, organization_id=ORG, lease_generation=1)
 INPUT = WorkerTaskInput(
     request=PlanningAdapterRequest(
@@ -35,9 +55,22 @@ INPUT = WorkerTaskInput(
         source_pack_version=1,
         policy_version="m3a-policy-v1",
     ),
+    skill_pin=PIN,
+    skill_key=SkillKey.STUDY_DESTINATION_COMPARE,
+    semantic_version="1.0.0",
+    leaf_binding=SYNTHETIC_LEAF,
+    registered_manifest=ENTRY,
+    runtime_manifest_id=REGISTRY.manifest.manifest_id,
+    runtime_manifest_version=REGISTRY.manifest.manifest_version,
+    runtime_manifest_sha256=REGISTRY.manifest.manifest_sha256,
     supersedes_run_id=None,
 )
-INPUT_SHA256 = canonical_sha256(INPUT.request.model_dump(mode="json"))
+INPUT_SHA256 = canonical_sha256(
+    {
+        "request": INPUT.request.model_dump(mode="json"),
+        "five_field_pin": INPUT.skill_pin.model_dump(mode="json"),
+    }
+)
 
 
 def test_worker_request_contract_accepts_only_the_two_planning_operations() -> None:
@@ -82,12 +115,13 @@ class FakeRepository:
         self.state.calls.append("load")
         return self.state.task_input
 
-    async def start(
-        self, claim: AgentTaskClaim, worker_id: str, input_sha256: str
-    ) -> None:
+    async def start(self, claim: AgentTaskClaim, worker_id: str, input_sha256: str) -> None:
         assert claim == CLAIM
         assert input_sha256 == canonical_sha256(
-            self.state.task_input.request.model_dump(mode="json")
+            {
+                "request": self.state.task_input.request.model_dump(mode="json"),
+                "five_field_pin": self.state.task_input.skill_pin.model_dump(mode="json"),
+            }
         )
         self.state.calls.append(f"start:{input_sha256}")
 
@@ -138,6 +172,23 @@ class PayloadAdapter:
         return self.payload
 
 
+class FixedRouter:
+    def __init__(
+        self,
+        adapter: FailureAdapter | PayloadAdapter,
+        *,
+        leaf_binding=SYNTHETIC_LEAF,  # type: ignore[no-untyped-def]
+    ) -> None:
+        self.adapter = adapter
+        self.leaf_binding = leaf_binding
+
+    def resolve(self, operation: str) -> PlanningAdapterResolution:
+        return PlanningAdapterResolution(
+            leaf_binding=self.leaf_binding,
+            adapter=self.adapter,
+        )
+
+
 def repository_factory(state: FakeState):
     @asynccontextmanager
     async def factory() -> AsyncGenerator[FakeRepository]:
@@ -155,7 +206,8 @@ async def test_run_once_uses_short_sessions_and_runs_adapter_outside_them() -> N
     state = FakeState()
     worker = TaskWorker(
         repository_factory(state),
-        FailureAdapter(state),
+        FixedRouter(FailureAdapter(state)),
+        REGISTRY,
         worker_id="worker-unit",
     )
 
@@ -187,18 +239,30 @@ async def test_worker_rejects_mixed_payload_baseline_drift_before_policy() -> No
             source_pack_version=planning_input.source_pack.version,
             policy_version="m3a-policy-v1",
         ),
+        skill_pin=PIN,
+        skill_key=SkillKey.STUDY_DESTINATION_COMPARE,
+        semantic_version="1.0.0",
+        leaf_binding=MIXED_LEAF,
+        registered_manifest=ENTRY,
+        runtime_manifest_id=REGISTRY.manifest.manifest_id,
+        runtime_manifest_version=REGISTRY.manifest.manifest_version,
+        runtime_manifest_sha256=REGISTRY.manifest.manifest_sha256,
         supersedes_run_id=None,
     )
     state = FakeState(task_input=task_input)
     worker = TaskWorker(
         repository_factory(state),
-        PayloadAdapter(
-            AdapterPayload(
-                payload=json.dumps(payload).encode(),
-                adapter_id="governed_mixed_planning",
-                adapter_version="dra-mixed-v1",
-            )
+        FixedRouter(
+            PayloadAdapter(
+                AdapterPayload(
+                    payload=json.dumps(payload).encode(),
+                    adapter_id="governed_mixed_planning",
+                    adapter_version="dra-mixed-v1",
+                )
+            ),
+            leaf_binding=MIXED_LEAF,
         ),
+        REGISTRY,
         worker_id="worker-mixed-drift",
     )
 
@@ -220,7 +284,8 @@ async def test_heartbeat_uses_independent_session_and_lease_loss_discards_output
 
     worker = TaskWorker(
         repository_factory(state),
-        FailureAdapter(state, wait_for_heartbeat=True),
+        FixedRouter(FailureAdapter(state, wait_for_heartbeat=True)),
+        REGISTRY,
         worker_id="worker-unit",
         sleep=pulse_sleep,
     )
@@ -254,7 +319,8 @@ async def test_supervisor_retries_transient_database_errors_with_bounded_idle_sl
 
     worker = TaskWorker(
         factory,
-        FailureAdapter(state),
+        FixedRouter(FailureAdapter(state)),
+        REGISTRY,
         worker_id="worker-supervisor",
         sleep=stop_after_one_sleep,
     )
@@ -278,9 +344,47 @@ async def test_supervisor_does_not_hide_programming_errors() -> None:
 
     worker = TaskWorker(
         factory,
-        FailureAdapter(state),
+        FixedRouter(FailureAdapter(state)),
+        REGISTRY,
         worker_id="worker-broken",
     )
 
     with pytest.raises(RuntimeError, match="programming defect"):
         await worker.run_forever()
+
+
+@pytest.mark.asyncio
+async def test_invalid_pin_fails_before_start_adapter_or_retry() -> None:
+    invalid_pin = PIN.model_copy(update={"runtime_binding_sha256": "f" * 64})
+    state = FakeState(task_input=replace(INPUT, skill_pin=invalid_pin))
+    worker = TaskWorker(
+        repository_factory(state),
+        FixedRouter(FailureAdapter(state)),
+        REGISTRY,
+        worker_id="worker-invalid-pin",
+    )
+
+    assert await worker.run_once() is True
+    assert state.calls == [
+        "claim:worker-invalid-pin",
+        "load",
+        "fail:skill_pin_invalid:False:False",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_configured_router_leaf_drift_fails_before_start_or_adapter() -> None:
+    state = FakeState()
+    worker = TaskWorker(
+        repository_factory(state),
+        FixedRouter(FailureAdapter(state), leaf_binding=MIXED_LEAF),
+        REGISTRY,
+        worker_id="worker-router-drift",
+    )
+
+    assert await worker.run_once() is True
+    assert state.calls == [
+        "claim:worker-router-drift",
+        "load",
+        "fail:skill_pin_invalid:False:False",
+    ]

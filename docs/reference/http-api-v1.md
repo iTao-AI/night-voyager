@@ -166,6 +166,64 @@ Problems use the closed collaboration codes documented in
 [Collaboration and confirmed facts](collaboration-and-confirmed-facts.md#closed-public-errors).
 PR A adds no BFF route or frontend; `/demo/collaboration` remains deferred to PR C.
 
+## Versioned Skill governance
+
+Migration `0008` adds exactly seven backend Skill endpoints. Every endpoint requires
+an organization advisor session and returns `Cache-Control: no-store`. Mutations also
+require the exact configured `Origin`, session-bound `X-CSRF-Token`, and a 1–200
+character `Idempotency-Key`. Candidate/evaluate/activate/rollback operations require
+the designated Skill owner; non-owner and unknown-resource failures remain
+non-enumerating.
+
+| Method and path | Result |
+| --- | --- |
+| `GET /api/v1/skills` | exact six-key advisor catalog with binding kind and active projection |
+| `GET /api/v1/skills/{skill_key}` | immutable versions, evaluation summaries, and activation history |
+| `POST /api/v1/skills/{skill_key}/change-candidates` | create one owner-controlled candidate for a pre-registered packaged version |
+| `POST /api/v1/skill-change-candidates/{candidate_id}/evaluations` | compute and persist the checked-in deterministic evaluation |
+| `POST /api/v1/skill-change-candidates/{candidate_id}/activations` | append one promotion event under expected active version/sequence CAS |
+| `POST /api/v1/skills/{skill_key}/rollbacks` | append one rollback to a previously activated supported version |
+| `GET /api/v1/cases/{case_id}/planning-skill-inspector` | assigned-advisor composite active/evaluation/task/execution pin projection |
+
+Mutation bodies are strict `schema_version=1` objects:
+
+```text
+POST /skills/{skill_key}/change-candidates
+  proposed_version, provenance, reason, reference?
+
+POST /skill-change-candidates/{candidate_id}/evaluations
+  schema_version only
+
+POST /skill-change-candidates/{candidate_id}/activations
+  expected_active_version, expected_activation_sequence, reason
+
+POST /skills/{skill_key}/rollbacks
+  target_version, expected_active_version, expected_activation_sequence, reason
+```
+
+The API never accepts a tenant, actor, owner, executor, adapter, contract or schema
+hash, tool/data scope, runtime binding, evaluation status/assertions, activation
+identity, task pin, or leaf binding. The server resolves those values from the opaque
+session, packaged manifests, deterministic evaluator, and PostgreSQL authority.
+
+Only `study-destination-compare` is `planning_runtime`. The other five Skills are
+`catalog_only`; activation and rollback fail closed. The inspector returns one
+server-owned projection with `pin_status=not_created|matched|legacy_unpinned`, bounded
+digest prefixes, active evaluation/activation identity, task pin, and actual leaf.
+It does not expose raw evaluator output, prompt text, local paths, database roles, or
+private test locations.
+
+Skill-domain problems are closed to `resource_unavailable`,
+`skill_version_unavailable`, `skill_candidate_stale`, `skill_candidate_terminal`,
+`skill_evaluation_failed`, `skill_activation_stale`, `skill_scope_expansion`,
+`skill_rollback_unsupported`, `skill_pin_invalid`, `idempotency_conflict`, and
+`persistence_unavailable`. Shared identity, Origin, CSRF, idempotency-header, and
+request-validation failures keep their existing bounded codes. Unknown persistence
+failures never expose raw SQL, permissions, connection details, or tracebacks.
+
+PR B adds no BFF route or frontend. The `/demo/collaboration` walkthrough and
+technical inspector UI remain deferred to PR C.
+
 ## M5 same-origin BFF
 
 The connected browser uses eleven explicit `/api/demo/*` Route Handlers for

@@ -107,6 +107,10 @@ def alembic(*args: str) -> None:
 @pytest.mark.asyncio
 async def test_downgrade_freezes_nonterminal_mixed_tasks_and_preserves_terminal_audit() -> None:
     await assert_collaboration_authority_is_empty()
+    # 0008 owns versioned Skill pins and must refuse pinned history. Prove the
+    # pre-existing 0006 mixed-task downgrade only after a clean 0008 -> 0007
+    # downgrade has restored the exact legacy task signature.
+    alembic("downgrade", "0007")
     running_case, running_version = await approved_pack(1401)
     queued_case, queued_version = await approved_pack(1402)
     terminal_case, terminal_version = await approved_pack(1403)

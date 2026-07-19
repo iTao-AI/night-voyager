@@ -2,7 +2,7 @@
 export UV_BUILD_CONSTRAINT := build-constraints.txt
 export UV_REQUIRE_HASHES := 1
 
-.PHONY: help doctor demo proof compose-proof db-check collaboration-db-check collaboration-check check dra-check dra-consumer-proof \
+.PHONY: help doctor demo proof compose-proof db-check collaboration-db-check collaboration-check skills-db-check skills-check check dra-check dra-consumer-proof \
 	mke-doctor mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
 
 help: ## Show available commands
@@ -33,6 +33,15 @@ collaboration-check: ## Run the deterministic offline collaboration contract lan
 	uv run pytest -o addopts= -q -m "not database" \
 	  tests/integration/collaboration/test_http_collaboration.py
 
+skills-db-check: ## Run one disposable versioned-Skill database suite
+	@SUITE="$(SUITE)" sh scripts/run_skill_db_tests.sh
+
+skills-check: ## Run the deterministic offline versioned-Skill contract lane
+	uv run pytest -q tests/unit/skills tests/unit/identity/test_seed_demo.py \
+	  tests/contracts/test_skill_runtime_registry.py \
+	  tests/architecture/test_skills_contract.py tests/unit/test_release_surface.py \
+	  tests/security/test_database_catalog.py
+
 mke-doctor: ## Verify an operator-supplied MKE candidate without installing it
 	@uv run python scripts/verify_mke_consumer.py doctor --wheel "$(MKE_WHEEL)" --candidate-receipt "$(MKE_RECEIPT)"
 
@@ -62,6 +71,7 @@ check: ## Run backend, frontend, Compose, and proof checks
 	uv build --build-constraints build-constraints.txt --require-hashes
 	$(MAKE) dra-check
 	$(MAKE) collaboration-check
+	$(MAKE) skills-check
 	npm --prefix web ci
 	npm --prefix web run lint
 	npm --prefix web run typecheck

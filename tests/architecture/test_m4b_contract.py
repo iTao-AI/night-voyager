@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import json
 import tomllib
 from pathlib import Path
 
@@ -63,9 +65,28 @@ def test_python_ci_has_artifact_free_optional_process_step() -> None:
 def test_m4b_remains_outside_compose_migrations_and_m4a_runtime() -> None:
     compose = (ROOT / "compose.yaml").read_text(encoding="utf-8").lower()
     assert "mke" not in compose
-    migrations = "\n".join(
-        path.read_text(encoding="utf-8").lower()
+    migration_texts = {
+        path.name: path.read_text(encoding="utf-8")
         for path in (ROOT / "migrations" / "versions").glob("*.py")
+    }
+    skill_seed_line = next(
+        line
+        for line in migration_texts["0008_versioned_skills.py"].splitlines()
+        if line.startswith("CANONICAL_DEMO_SKILL_SEED = ")
+    )
+    skill_seed = json.loads(ast.literal_eval(skill_seed_line.split("=", 1)[1].strip()))
+    document_skill = next(
+        entry
+        for entry in skill_seed["entries"]
+        if entry["manifest"]["skill_key"] == "document-evidence-retrieval"
+    )
+    assert document_skill["manifest"]["binding_kind"] == "catalog_only"
+    assert document_skill["manifest"]["tool_ids"] == ["mke_readonly"]
+    migrations = "\n".join(
+        line.lower()
+        for content in migration_texts.values()
+        for line in content.splitlines()
+        if not line.startswith("CANONICAL_DEMO_SKILL_SEED = ")
     )
     assert "mke" not in migrations
     runtime_paths = [

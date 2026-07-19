@@ -2,7 +2,7 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The M5 `/demo` route is now a connected local synthetic application: it creates a durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. The M1 Japan fixture remains historical design context only.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The M5 `/demo` route is now a connected local synthetic application: it creates a durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. The backend now also governs collaboration facts and versioned Skill runtime pins without changing the current frontend. The M1 Japan fixture remains historical design context only.
 
 - **Primary route:** `/demo`
 - **Audience:** advisors first, then students and families
@@ -63,7 +63,15 @@ The first screen contains exactly one current lifecycle stage, one required huma
 
 The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
-PR A adds an unreleased governed-collaboration backend contract but no new visual surface. The existing `/demo` lifecycle and screenshots remain authoritative for the current frontend. The secondary `/demo/collaboration` walkthrough, collaboration reducer, and technical inspector belong to deferred PR C and must consume the frozen role-safe HTTP projections rather than recreate authority in the browser.
+PR A adds an unreleased governed-collaboration backend contract. PR B adds an
+unreleased versioned Skill catalog, deterministic evaluation, owner-controlled
+activation/rollback, persisted planning-revision materialization, and five-field
+task/execution pins. Neither PR adds a visual surface. The existing `/demo` lifecycle
+and screenshots remain authoritative for the current frontend. The secondary
+`/demo/collaboration` walkthrough, collaboration reducer, and technical inspector
+belong to deferred PR C and must consume the frozen role-safe HTTP projections rather
+than recreate authority in the browser. Catalog-only Skills must never be presented as
+executing capabilities merely because they have versions or passing evaluations.
 
 ## Accessibility
 
@@ -85,3 +93,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-12 | Use local/system font fallbacks | Preserves the typography intent without adding dependencies or remote runtime requirements. |
 | 2026-07-14 | Connect the M5 Australia walkthrough | Preserves backend authority while proving the advisor-to-parent flow in real Chromium. |
 | 2026-07-17 | Keep PR A collaboration backend-only | Freezes conversation, candidate, and confirmed-fact authority without prebuilding the deferred PR C interface. |
+| 2026-07-18 | Keep PR B Skill governance backend-only | Pins checked-in runtime compatibility to durable tasks while leaving the deferred PR C inspector as a server-projected consumer. |

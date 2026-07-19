@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, cast
 from uuid import UUID
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, PositiveInt, field_validator, model_validator
@@ -34,6 +34,18 @@ class Country(StrEnum):
     AUSTRALIA = "australia"
     JAPAN = "japan"
     MALAYSIA = "malaysia"
+
+
+def preferred_country_scope_is_valid(value: tuple[Country, ...]) -> bool:
+    if not value:
+        return False
+    countries_list: list[Country] = []
+    for country in cast(tuple[object, ...], value):
+        if not isinstance(country, Country):
+            return False
+        countries_list.append(country)
+    countries = tuple(countries_list)
+    return countries == tuple(sorted(set(countries), key=lambda country: country.value))
 
 
 class RouteOutcome(StrEnum):
@@ -102,6 +114,14 @@ class StudentPreferences(FrozenModel):
     intended_field: str
     preferred_countries: tuple[Country, ...]
     intake: str
+
+    @model_validator(mode="after")
+    def validate_preferred_countries(self) -> StudentPreferences:
+        if not preferred_country_scope_is_valid(self.preferred_countries):
+            raise ValueError(
+                "preferred_countries must be a non-empty sorted unique supported subset"
+            )
+        return self
 
 
 class FamilyPreferences(FrozenModel):

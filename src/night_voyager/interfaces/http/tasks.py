@@ -19,6 +19,7 @@ from night_voyager.interfaces.http.dependencies import (
     resolve_mutation_actor_context,
 )
 from night_voyager.interfaces.http.identity import SESSION_COOKIE
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.application import (
     CancelTaskCommand,
     CreateTaskCommand,
@@ -59,6 +60,13 @@ def create_task_router(
     settings: Settings, session_factory: async_sessionmaker[AsyncSession]
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
+    registry: SkillRuntimeRegistry | None = None
+
+    def task_registry() -> SkillRuntimeRegistry:
+        nonlocal registry
+        if registry is None:
+            registry = SkillRuntimeRegistry.load_packaged()
+        return registry
 
     def enforce_origin(request: Request) -> None:
         try:
@@ -75,9 +83,7 @@ def create_task_router(
         service = IdentityService(IdentityRepository(session), settings.secret_key)
         return await resolve_mutation_actor_context(raw_session, csrf, service)
 
-    async def read_context(
-        session: AsyncSession, raw_session: str | None
-    ) -> ActorContext:
+    async def read_context(session: AsyncSession, raw_session: str | None) -> ActorContext:
         service = IdentityService(IdentityRepository(session), settings.secret_key)
         return await resolve_actor_context(raw_session, service)
 
@@ -110,9 +116,9 @@ def create_task_router(
                 policy_version=payload.policy_version,
             )
             try:
-                result = await TaskService(PostgresTaskRepository(session)).create(
-                    context, command, idempotency_key
-                )
+                result = await TaskService(
+                    PostgresTaskRepository(session), registry=task_registry()
+                ).create(context, command, idempotency_key)
             except TaskAuthorizationError:
                 return problem(404, "resource_unavailable", "resource unavailable")
             except TaskConflictError as error:
@@ -129,9 +135,9 @@ def create_task_router(
         async with session_factory() as session, session.begin():
             context = await read_context(session, raw_session)
             try:
-                result = await TaskService(PostgresTaskRepository(session)).get(
-                    context, task_id
-                )
+                result = await TaskService(
+                    PostgresTaskRepository(session), registry=task_registry()
+                ).get(context, task_id)
             except TaskAuthorizationError:
                 result = None
         if result is None:
@@ -156,7 +162,9 @@ def create_task_router(
         async with session_factory() as session, session.begin():
             context = await mutation_context(session, raw_session, csrf)
             try:
-                result = await TaskService(PostgresTaskRepository(session)).cancel(
+                result = await TaskService(
+                    PostgresTaskRepository(session), registry=task_registry()
+                ).cancel(
                     context,
                     CancelTaskCommand(
                         task_id=task_id,
@@ -199,9 +207,7 @@ def create_task_router(
         async def load_page(after: int):
             async with session_factory() as session, session.begin():
                 await IdentityRepository(session).set_actor_context(context)
-                return await PostgresTaskEventReader(session).read_page(
-                    context, task_id, after
-                )
+                return await PostgresTaskEventReader(session).read_page(context, task_id, after)
 
         return StreamingResponse(
             stream_task_events(load_page, initial_page, after=cursor),

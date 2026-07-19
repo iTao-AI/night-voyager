@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal, Protocol
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, PositiveInt, model_validator
+
+from night_voyager.skills.models import SkillLeafBindingV1
 
 
 class FrozenModel(BaseModel):
@@ -64,3 +67,13 @@ type AdapterOutcome = AdapterPayload | AdapterFailure
 
 class PlanningAdapter(Protocol):
     async def generate(self, request: PlanningAdapterRequest) -> AdapterOutcome: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PlanningAdapterResolution:
+    leaf_binding: SkillLeafBindingV1
+    adapter: PlanningAdapter
+
+
+class PlanningAdapterResolver(Protocol):
+    def resolve(self, operation: str) -> PlanningAdapterResolution: ...

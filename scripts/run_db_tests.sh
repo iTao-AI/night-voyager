@@ -9,30 +9,36 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
+    uv run alembic current | grep '0008'
+    uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
-    uv run alembic upgrade head
+    uv run alembic upgrade 0007
     uv run alembic current | grep '0007'
-    uv run python scripts/seed_demo.py
-    uv run python scripts/seed_demo.py
-    uv run python scripts/verify_release.py --check-db-roles
-    NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run pytest -q -m database \
+    uv run --no-editable python scripts/seed_demo.py --without-skills
+    uv run alembic upgrade head
+    uv run alembic current | grep '0008'
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
+    NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run --no-editable pytest \
+        -q -m database \
         tests/security tests/integration/identity tests/integration/planning \
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
         tests/integration/connected_demo tests/integration/dra \
@@ -40,29 +46,54 @@ if [ "${1:-}" = "inside" ]; then
         --ignore=tests/integration/tasks/test_mixed_downgrade.py \
         --ignore=tests/integration/collaboration/test_collaboration_downgrade.py \
         --ignore=tests/integration/dra/test_governed_closure.py
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/dra/test_governed_closure.py
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_postgres_decision.py
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_http_decision.py
-    if uv run alembic downgrade 0006 >"$downgrade_output" 2>&1; then
-        echo "expected collaboration authority downgrade refusal" >&2
+    if uv run alembic downgrade 0007 >"$downgrade_output" 2>&1; then
+        echo "expected Skill authority downgrade refusal" >&2
         exit 1
     fi
-    grep -q 'refusing downgrade: collaboration authority history exists' "$downgrade_output"
-    uv run alembic current | grep '0007'
-    uv run python scripts/verify_release.py --check-db-roles
+    grep -q 'refusing downgrade: Skill governance or runtime pin history exists' "$downgrade_output"
+    uv run alembic current | grep '0008'
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0007'
-    uv run python scripts/seed_demo.py --without-collaboration
-    PYTEST_ADDOPTS= uv run pytest -q -m database \
+    uv run alembic current | grep '0008'
+    uv run --no-editable python scripts/seed_demo.py --without-collaboration
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0007'
+    uv run alembic current | grep '0008'
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-skill-migration-parity" ]; then
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/skills/test_skill_migration_parity.py::test_0008_legacy_seed_helper_has_fresh_upgrade_and_downgrade_parity
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-skill-seed-replay" ]; then
+    export NIGHT_VOYAGER_SKILL_SEED_PATH=fresh_head
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/skills/test_postgres_skills.py::test_fresh_head_seed_creates_exact_pinned_active_task_fixture \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_seed_replay_rejects_task_projection_drift_atomically \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_extra_event_without_partial_history \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_seed_replay_rejects_missing_event_without_repair \
+        tests/integration/skills/test_postgres_skills.py::test_legacy_seed_replay_rejects_missing_event_without_repair \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_execution_residue_without_partial_history \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_helper_rejects_dispatch_residue_without_partial_history \
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_preserves_only_exact_all_null_legacy_task \
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_all_null_legacy_projection_drift \
+        tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_partial_pin_classification \
+        tests/integration/skills/test_postgres_skills.py::test_pinned_active_task_seed_mismatch_has_no_partial_task_or_event
     exit 0
 fi
 
@@ -87,5 +118,7 @@ run_lane() {
     ACTIVE_PROJECT_NAME=
 }
 
+run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
+run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
 run_lane "${BASE_PROJECT_NAME}-main" inside
 run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade

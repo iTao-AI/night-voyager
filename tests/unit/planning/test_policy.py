@@ -48,7 +48,15 @@ def entry(key: str, claim: str, digest: str) -> SourcePackEntryV1:
     )
 
 
-def valid_input(*, budget_refused: bool = False) -> PlanningInput:
+def valid_input(
+    *,
+    budget_refused: bool = False,
+    preferred_countries: tuple[Country, ...] = (
+        Country.AUSTRALIA,
+        Country.JAPAN,
+        Country.MALAYSIA,
+    ),
+) -> PlanningInput:
     entries = (
         entry("51000000-0000-0000-0000-000000000001", "australia_program_fit", "1" * 64),
         entry("51000000-0000-0000-0000-000000000002", "australia_tuition", "2" * 64),
@@ -86,7 +94,7 @@ def valid_input(*, budget_refused: bool = False) -> PlanningInput:
         student=StudentPreferences(
             schema_version=1,
             intended_field="computing",
-            preferred_countries=(Country.AUSTRALIA, Country.JAPAN, Country.MALAYSIA),
+            preferred_countries=preferred_countries,
             intake="2027-02",
         ),
         family=FamilyPreferences(
@@ -158,6 +166,41 @@ def test_original_all_synthetic_result_remains_exactly_compatible() -> None:
     assert result.model_dump(mode="json") == evaluate_planning_run(payload).model_dump(mode="json")
     assert result.state.value == "review_required"
     assert result.reason_code == "single_fully_evidenced_recommendation"
+
+
+@pytest.mark.parametrize(
+    ("preferred_countries", "expected_countries"),
+    (
+        ((Country.AUSTRALIA,), (Country.AUSTRALIA,)),
+        ((Country.JAPAN,), (Country.JAPAN,)),
+        (
+            (Country.AUSTRALIA, Country.JAPAN),
+            (Country.AUSTRALIA, Country.JAPAN),
+        ),
+    ),
+)
+def test_policy_returns_only_selected_country_routes(
+    preferred_countries: tuple[Country, ...],
+    expected_countries: tuple[Country, ...],
+) -> None:
+    result = evaluate_planning_run(
+        valid_input(preferred_countries=preferred_countries)
+    )
+
+    assert tuple(route.country for route in result.routes) == expected_countries
+
+
+def test_policy_fails_closed_if_invalid_country_scope_bypasses_model_validation() -> None:
+    payload = valid_input()
+    invalid_student = payload.case.student.model_copy(
+        update={"preferred_countries": (Country.JAPAN, Country.AUSTRALIA)}
+    )
+    invalid_case = payload.case.model_copy(update={"student": invalid_student})
+
+    result = evaluate_planning_run(payload.model_copy(update={"case": invalid_case}))
+
+    assert result.state.value == "failed"
+    assert result.reason_code == "country_scope_invalid"
 
 
 def test_budget_refused_blocks_australia() -> None:

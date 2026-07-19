@@ -6,6 +6,32 @@ export const BRIEF_ID = "81000000-0000-0000-0000-000000000301";
 export const ROUTE_ID = "71000000-0000-0000-0000-000000000001";
 
 const task = (status: TaskStatus) => ({ task_id: TASK_ID, row_version: 1, status, public_code: null, attempt_count: 1, planning_run_id: status === "preparing" ? null : "70000000-0000-0000-0000-000000000001", updated_at: "2026-07-14T00:00:00Z" });
+export function standaloneTask(replayed?: boolean) {
+  return {
+    schema_version: 1,
+    task_id: TASK_ID,
+    row_version: 1,
+    status: "preparing",
+    public_code: null,
+    attempt_count: 0,
+    planning_run_id: null,
+    created_at: "2026-07-14T00:00:00Z",
+    updated_at: "2026-07-14T00:00:00Z",
+    skill_pin: {
+      skill_definition_id: "81000000-0000-0000-0000-000000000002",
+      skill_version_id: "82000000-0000-0000-0000-000000000002",
+      skill_activation_event_id: "84000000-0000-0000-0000-000000000001",
+      skill_activation_sequence: 1,
+      runtime_binding_sha256: "cd897b22d034c7aa1c841a3a5d67b70367a8556009cc665b4a27fa16e8170a29",
+    },
+    leaf_binding: {
+      operation: "generate_planning_run_v1",
+      adapter_id: "deterministic_planning",
+      adapter_version: "m4a-v1",
+    },
+    ...(replayed === undefined ? {} : { replayed }),
+  };
+}
 const route = (country: "australia" | "japan" | "malaysia", outcome: "recommended_with_condition" | "conditional" | "blocked", eligible: boolean) => ({
   route_id: country === "australia" ? ROUTE_ID : country === "japan" ? "71000000-0000-0000-0000-000000000002" : "71000000-0000-0000-0000-000000000003",
   country,

@@ -14,6 +14,8 @@ from night_voyager.config import Settings
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
+from night_voyager.skills.models import SkillKey
+from night_voyager.skills.registry import SkillRuntimeRegistry
 from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
 
 pytestmark = pytest.mark.database
@@ -24,6 +26,12 @@ PARENT = UUID("20000000-0000-0000-0000-000000000003")
 CASE = UUID("40000000-0000-0000-0000-000000000220")
 UNASSIGNED_CASE = UUID("40000000-0000-0000-0000-000000000221")
 PACK = UUID("50000000-0000-0000-0000-000000000001")
+
+
+def runtime_entry():
+    return SkillRuntimeRegistry.load_packaged().get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    )
 
 
 async def mint(
@@ -114,9 +122,7 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
                 json=create_payload(),
             )
             assert rejected_origin.status_code == 403
-            assert rejected_origin.headers["content-type"].startswith(
-                "application/problem+json"
-            )
+            assert rejected_origin.headers["content-type"].startswith("application/problem+json")
 
             client.cookies.set("night_voyager_session", "invalid")
             invalid_session = await client.post(
@@ -170,6 +176,18 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
             assert created.json()["schema_version"] == 1
             assert created.json()["status"] == "preparing"
             assert created.json()["replayed"] is False
+            assert created.json()["skill_pin"] == {
+                "skill_definition_id": "81000000-0000-0000-0000-000000000002",
+                "skill_version_id": "82000000-0000-0000-0000-000000000002",
+                "skill_activation_event_id": "84000000-0000-0000-0000-000000000001",
+                "skill_activation_sequence": 1,
+                "runtime_binding_sha256": runtime_entry().runtime_binding_sha256,
+            }
+            assert created.json()["leaf_binding"] == {
+                "operation": "generate_planning_run_v1",
+                "adapter_id": "deterministic_planning",
+                "adapter_version": "m4a-v1",
+            }
             task_id = created.json()["task_id"]
             assert set(created.json()) == {
                 "schema_version",
@@ -181,6 +199,8 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
                 "planning_run_id",
                 "created_at",
                 "updated_at",
+                "skill_pin",
+                "leaf_binding",
                 "replayed",
             }
 
@@ -217,9 +237,7 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
             hidden = await client.get(f"/api/v1/tasks/{task_id}")
             assert hidden.status_code == 404
             client.cookies.set("night_voyager_session", advisor.raw_session_token)
-            missing = await client.get(
-                "/api/v1/tasks/80000000-0000-0000-0000-000000000999"
-            )
+            missing = await client.get("/api/v1/tasks/80000000-0000-0000-0000-000000000999")
             assert missing.status_code == 404
 
             stale_cancel = await client.post(
@@ -292,6 +310,11 @@ async def test_real_http_mixed_task_requires_approved_exact_pins_and_replays() -
             assert created.status_code == 202, created.text
             assert created.json()["status"] == "preparing"
             assert created.json()["replayed"] is False
+            assert created.json()["leaf_binding"] == {
+                "operation": "generate_governed_mixed_planning_run_v1",
+                "adapter_id": "governed_mixed_planning",
+                "adapter_version": "dra-mixed-v1",
+            }
 
             replayed = await client.post(
                 f"/api/v1/cases/{case_id}/agent-tasks",

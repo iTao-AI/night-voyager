@@ -13,7 +13,7 @@ import {
   type FamilyDecisionBody,
   type ReviewResult,
   type SessionProjection,
-  type TaskProjection,
+  type StandaloneTaskProjection,
 } from "./contracts";
 
 export interface ConnectedDemoApi {
@@ -21,9 +21,9 @@ export interface ConnectedDemoApi {
   mint(role: "advisor" | "parent", csrf: string): Promise<SessionProjection>;
   revoke(csrf: string): Promise<void>;
   advisorLedger(caseId: string): Promise<AdvisorLedger>;
-  createTask(caseId: string, body: CreateTaskBody, csrf: string, key: string): Promise<TaskProjection>;
-  task(taskId: string): Promise<TaskProjection>;
-  cancelTask(taskId: string, body: CancelTaskBody, csrf: string, key: string): Promise<TaskProjection>;
+  createTask(caseId: string, body: CreateTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
+  task(taskId: string): Promise<StandaloneTaskProjection>;
+  cancelTask(taskId: string, body: CancelTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
   review(caseId: string, body: AdvisorReviewBody, csrf: string, key: string): Promise<ReviewResult>;
   currentBrief(caseId: string): Promise<CurrentDecisionBrief>;
   decide(briefId: string, body: FamilyDecisionBody, csrf: string, key: string): Promise<DecisionResult>;
