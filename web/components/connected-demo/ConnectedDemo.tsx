@@ -7,6 +7,7 @@ import { AdvisorLedger } from "./AdvisorLedger";
 import { DecisionReceiptTimeline } from "./DecisionReceiptTimeline";
 import { FamilyDecisionBrief } from "./FamilyDecisionBrief";
 import { RecoveryNotice } from "./RecoveryNotice";
+import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
 
 export function ConnectedDemo() {
   const demo = useConnectedDemo();
@@ -22,7 +23,8 @@ export function ConnectedDemo() {
       <a className="skip-link" href="#demo-main">Skip to decision workflow</a>
       <header className="site-header"><Link className="wordmark" href="/">Night Voyager</Link><nav aria-label="Demo context"><span>Connected advisor-to-family demo</span><strong>Synthetic demo</strong></nav></header>
       <main id="demo-main" className="demo-shell">
-        {state.value === "bootstrapping" ? (
+        {demo.journeyConflict === "collaboration" ? <JourneyConflictNotice currentJourney="collaboration" returnHref="/demo/collaboration" onEnd={() => void demo.endConflictingJourney()} /> : null}
+        {state.value === "bootstrapping" && !demo.journeyConflict ? (
           <section className="ledger-hero"><p className="overline">Local synthetic pilot</p><h1>Connected advisor-to-family demo</h1><p className="lede">Follow real session, task, review, family decision, receipt, and timeline boundaries.</p><button className="primary-action" type="button" onClick={() => void demo.connectAdvisor()}>Start advisor walkthrough</button></section>
         ) : null}
         {["advisor_ready", "advisor_review"].includes(state.value) && "ledger" in state ? <AdvisorLedger ledger={state.ledger} onPrimaryAction={advisorAction} /> : null}

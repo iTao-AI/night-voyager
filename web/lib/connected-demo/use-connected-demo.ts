@@ -7,7 +7,7 @@ import type { FamilyDecisionBody } from "./contracts";
 import { idempotencyFor } from "./idempotency";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
-  clearRecoveryMetadata, loadRecoveryMetadata, saveRecoveryMetadata, withMutation,
+  clearRecoveryMetadata, loadDemoJourneyEnvelope, loadRecoveryMetadata, saveRecoveryMetadata, withMutation,
   type MutationOperation, type RecoveryMetadata,
 } from "./session-storage";
 
@@ -25,10 +25,19 @@ function failure(error: unknown): RecoveryCode {
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
+  const [journeyConflict, setJourneyConflict] = useState<"collaboration" | null>(() => {
+    if (typeof window === "undefined") return null;
+    return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
+  });
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
 
   const connectAdvisor = useCallback(async () => {
+    const existing = loadDemoJourneyEnvelope();
+    if (existing?.journey === "collaboration") {
+      setJourneyConflict("collaboration");
+      return;
+    }
     try {
       const { csrf_token: bootstrapCsrf } = await api.bootstrap();
       const session = await api.mint("advisor", bootstrapCsrf);
@@ -37,7 +46,7 @@ export function useConnectedDemo() {
       const taskId = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase)
         ? ledger.task?.task_id ?? null
         : null;
-      saveRecoveryMetadata({ role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
+      saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
       dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
@@ -45,6 +54,11 @@ export function useConnectedDemo() {
   }, []);
 
   const recover = useCallback(async () => {
+    const journey = loadDemoJourneyEnvelope();
+    if (journey?.journey === "collaboration") {
+      setJourneyConflict("collaboration");
+      return;
+    }
     const metadata = loadRecoveryMetadata();
     if (!metadata) {
       await connectAdvisor();
@@ -79,7 +93,8 @@ export function useConnectedDemo() {
   useEffect(() => {
     if (recoveryStarted.current) return;
     recoveryStarted.current = true;
-    if (loadRecoveryMetadata()) void recover();
+    const journey = loadDemoJourneyEnvelope();
+    if (journey?.journey === "advisor-family") queueMicrotask(() => { void recover(); });
   }, [recover]);
 
   const streamingTaskId = state.value === "task_streaming" ? state.taskId : null;
@@ -163,7 +178,7 @@ export function useConnectedDemo() {
       const parent = await api.mint("parent", bootstrap.csrf_token);
       const brief = await api.currentBrief(caseId);
       if (brief.case_id !== caseId) throw new Error("projection identity mismatch");
-      saveRecoveryMetadata({ role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
+      saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
       dispatch({ type: "PARENT_SESSION_READY", brief });
     } catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
   }, []);
@@ -230,5 +245,25 @@ export function useConnectedDemo() {
     else await recover();
   }, [recover]);
 
-  return { state, confirmed, setConfirmed, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
+  const endConflictingJourney = useCallback(async () => {
+    const existing = loadDemoJourneyEnvelope();
+    if (!existing || existing.journey !== "collaboration") { setJourneyConflict(null); return; }
+    try {
+      await api.revoke(existing.csrf);
+      clearRecoveryMetadata();
+      setJourneyConflict(null);
+      await connectAdvisor();
+    } catch (error) {
+      if (error instanceof ConnectedDemoApiError && error.status === 401) {
+        clearRecoveryMetadata();
+        setJourneyConflict(null);
+        await connectAdvisor();
+      } else {
+        setJourneyConflict("collaboration");
+        dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
+      }
+    }
+  }, [connectAdvisor]);
+
+  return { state, confirmed, setConfirmed, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
 }

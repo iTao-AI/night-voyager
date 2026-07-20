@@ -1,12 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { loadRecoveryMetadata, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
+import { loadDemoJourneyEnvelope, loadRecoveryMetadata, saveCollaborationJourney, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import { CASE_ID, BRIEF_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
 
-const advisorMetadata = () => ({ role: "advisor" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: null, cursor: 0, mutations: {} });
-const parentMetadata = () => ({ role: "parent" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: BRIEF_ID, cursor: 0, mutations: {} });
+const advisorMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "advisor" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: null, cursor: 0, mutations: {} });
+const parentMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "parent" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: BRIEF_ID, cursor: 0, mutations: {} });
 
 afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -24,6 +24,16 @@ it("stores only same-tab display and mutation recovery metadata", () => {
   saveRecoveryMetadata(advisorMetadata());
   expect(loadRecoveryMetadata()?.role).toBe("advisor");
   expect(localStorage.length).toBe(0);
+});
+
+it("preserves a valid collaboration journey instead of bootstrapping over it", async () => {
+  saveCollaborationJourney({ schema_version: 2, journey: "collaboration", role: "parent", csrf: "csrf", caseId: "41000000-0000-0000-0000-000000000001", threadId: "42000000-0000-0000-0000-000000000001", messageId: null, candidateId: null, phase: "thread_ready", mutations: {} });
+  const fetchMock = vi.fn();
+  vi.stubGlobal("fetch", fetchMock);
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.journeyConflict).toBe("collaboration"));
+  expect(fetchMock).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()?.journey).toBe("collaboration");
 });
 
 it("classifies a residual-cookie bootstrap guard as session recovery without minting", async () => {
