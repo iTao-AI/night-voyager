@@ -2,6 +2,7 @@
 set -eu
 
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
+UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
 export COMPOSE_PROJECT_NAME
 
 cleanup() {
@@ -70,5 +71,6 @@ docker compose --profile browser-proof run --rm --build -e M5_TERMINAL_PROOF=1 b
 printf 'compose-proof: native reconnect and terminal browser proof passed\n'
 docker compose down --volumes --remove-orphans
 docker compose up --build --wait
-docker compose --profile browser-proof run --rm --build browser-proof
+docker compose --profile browser-proof run --rm --build \
+    -e UPDATE_COLLABORATION_SCREENSHOT="$UPDATE_COLLABORATION_SCREENSHOT" browser-proof
 printf 'compose-proof: connected browser proof passed\n'
