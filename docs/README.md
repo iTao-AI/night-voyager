@@ -1,12 +1,13 @@
 # Documentation
 
-Night Voyager v0.1.1 is the local synthetic portfolio release of the connected
-advisor-to-family workflow, adding deterministic offline governed DRA candidate import,
-atomic human verification/promotion, and existing durable-worker mixed PlanningRun
-generation. Start with the [release notes](releases/v0.1.1.md)
-and [source-archive verification guide](how-to/verify-v0.1.1-release.md). The
-[v0.1.0 release notes](releases/v0.1.0.md) and
-[verification guide](how-to/verify-v0.1.0-release.md) remain immutable history. M1 fixture-only
+Night Voyager v0.1.2 is the local synthetic portfolio release of the connected
+advisor-to-family workflow and Governed Collaboration Core v1, including versioned
+Skill governance and a secondary task-free browser walkthrough. Start with the
+[release notes](releases/v0.1.2.md) and
+[source-archive verification guide](how-to/verify-v0.1.2-release.md). The v0.1.1
+[release notes](releases/v0.1.1.md) and [verification guide](how-to/verify-v0.1.1-release.md),
+plus the v0.1.0 [release notes](releases/v0.1.0.md) and
+[verification guide](how-to/verify-v0.1.0-release.md), remain immutable history. M1 fixture-only
 documents remain historical visual context; current `/demo` behavior is the M5 walkthrough.
 
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).
@@ -18,8 +19,8 @@ documents remain historical visual context; current `/demo` behavior is the M5 w
 - Database reviewers: run `make db-check`, then inspect the [identity/RLS ADR](decisions/0001-identity-session-and-rls-boundary.md), [deterministic planning ADR](decisions/0002-deterministic-planning-and-evidence-authority.md), [advisor/family ADR](decisions/0003-advisor-family-decision-authority.md), [durable task ADR](decisions/0004-durable-agent-task-authority.md), [HTTP contract](reference/http-api-v1.md), [AgentTask/event reference](reference/agent-tasks-and-events.md), [role operations](operations/database-roles.md), and [worker/SSE operations](operations/worker-and-sse.md).
 - MKE compatibility reviewers: inspect the [consumer reference](reference/mke-readonly-consumer.md), [candidate proof runbook](operations/mke-candidate-proof.md), [M4B design](superpowers/specs/2026-07-13-m4b-mke-readonly-consumer-design.md), [implementation plan](superpowers/plans/2026-07-13-m4b-mke-readonly-consumer.md), and [MKE Evidence boundary ADR](decisions/0005-mke-readonly-evidence-boundary.md). M4B is implemented as an optional local synthetic read-only proof; every result remains `UNTRUSTED_CANDIDATE`, and no `PlanningAdapter` or product path is connected.
 - DRA integration reviewers: inspect the [governed evidence reference](reference/dra-governed-evidence.md), [consumer proof runbook](operations/dra-consumer-proof.md), [authority ADR](decisions/0007-dra-governed-mixed-evidence-boundary.md), [approved design](superpowers/specs/2026-07-15-dra-governed-mixed-evidence-closure-design.md), and [implementation plan](superpowers/plans/2026-07-15-dra-governed-mixed-evidence-closure.md). Candidate import, atomic human verification/promotion, and deterministic governed mixed PlanningRun generation are implemented. DRA remains optional, imported results begin as `UNTRUSTED_CANDIDATE`, and the existing connected synthetic `/demo` remains unchanged by DRA integration.
-- Collaboration-core reviewers: inspect the [governed collaboration and confirmed-fact reference](reference/collaboration-and-confirmed-facts.md), [authority operations](operations/collaboration-authority.md), [browser walkthrough](operations/collaboration-walkthrough.md), accepted [ADR 0008](decisions/0008-governed-collaboration-and-memory-authority.md), [Governed Collaboration Core v1 design](superpowers/specs/2026-07-16-governed-collaboration-core-design.md), [PR A implementation plan](superpowers/plans/2026-07-16-governed-conversation-memory-authority.md), and [PR C implementation plan](superpowers/plans/2026-07-16-collaboration-walkthrough-and-inspector.md). PR A and PR C are implemented as unreleased authority and browser layers.
-- Versioned-Skill reviewers: inspect [Versioned Skills and runtime pins](reference/versioned-skills-and-runtime-pins.md), [Skill governance operations](operations/skill-governance.md), accepted [ADR 0009](decisions/0009-versioned-skill-runtime-pinning.md), and the [PR B implementation plan](superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md). PR B is implemented as an unreleased backend boundary, and PR C implements the read-only server-projected inspector; live-provider execution remains separately authorized.
+- Collaboration-core reviewers: inspect the [governed collaboration and confirmed-fact reference](reference/collaboration-and-confirmed-facts.md), [authority operations](operations/collaboration-authority.md), [browser walkthrough](operations/collaboration-walkthrough.md), accepted [ADR 0008](decisions/0008-governed-collaboration-and-memory-authority.md), [Governed Collaboration Core v1 design](superpowers/specs/2026-07-16-governed-collaboration-core-design.md), [PR A implementation plan](superpowers/plans/2026-07-16-governed-conversation-memory-authority.md), and [PR C implementation plan](superpowers/plans/2026-07-16-collaboration-walkthrough-and-inspector.md). PR A and PR C are released in v0.1.2 as authority and browser layers.
+- Versioned-Skill reviewers: inspect [Versioned Skills and runtime pins](reference/versioned-skills-and-runtime-pins.md), [Skill governance operations](operations/skill-governance.md), accepted [ADR 0009](decisions/0009-versioned-skill-runtime-pinning.md), and the [PR B implementation plan](superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md). PR B is released in v0.1.2, and PR C implements the read-only server-projected inspector; live-provider execution remains separately authorized.
 - Connected-demo reviewers: inspect the [M5 runbook](operations/connected-demo.md), [design](superpowers/specs/2026-07-14-m5-connected-advisor-family-demo-design.md), [implementation plan](superpowers/plans/2026-07-14-m5-connected-advisor-family-demo.md), [connected BFF authority ADR](decisions/0006-connected-demo-bff-authority.md), and [HTTP contract](reference/http-api-v1.md). M5 is implemented as a connected local synthetic walkthrough; M1 remains historical visual context.
 - Evaluators do not need MKE or candidate bytes. Contributors run `make mke-check`. Maintainers with the exact reviewed pair run `make mke-artifact-check` and `make mke-consumer-proof` using the runbook.
 
@@ -27,5 +28,5 @@ M1 preserves the historical visual contract; M2 adds identity/session/RLS; M3A a
 
 The deterministic governed mixed-evidence DRA closure was released in v0.1.1. Governed
 collaboration PR A, versioned Skill PR B, and browser walkthrough/inspector PR C are
-implemented post-v0.1.1 and remain unreleased. Live-provider execution remains
+released in v0.1.2 as Governed Collaboration Core v1. Live-provider execution remains
 unimplemented; live provider proof was not run.

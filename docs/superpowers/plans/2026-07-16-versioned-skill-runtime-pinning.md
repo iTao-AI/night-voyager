@@ -1,11 +1,9 @@
 # Versioned Skill Governance and Runtime Pinning Implementation Plan
 
-**Implementation status:** Implemented locally and verified as the unreleased PR B
-backend boundary. All non-Compose gates below pass. `make compose-proof` remains
-blocked on Alpine/ARM64 because the native Next.js SWC binding is unavailable;
-authority review and an integration decision remain pending. The tasks below remain
-the approved execution record; push, PR, merge, release, deployment, live-provider
-proof, and PR C remain separately gated.
+**Implementation status:** Complete. PR B was merged to `main` and is released in
+v0.1.2 as part of Governed Collaboration Core v1. The tasks below remain the approved
+execution record, including intermediate verification states that were resolved before
+release.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:dispatching-parallel-agents` only for the isolated lanes declared

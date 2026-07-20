@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Night Voyager v0.1.1 is a local synthetic portfolio release with deterministic offline governed DRA capability. Security fixes apply to the current default branch; the release is not supported as a production service.
+Night Voyager v0.1.2 is a local synthetic portfolio release with Governed Collaboration Core v1 and deterministic offline governed DRA capability. Security fixes apply to the current default branch; the release is not supported as a production service.
 
 ## Reporting
 

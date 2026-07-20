@@ -1,7 +1,7 @@
 # Versioned Skills and runtime pins
 
-PR B implements an unreleased, local synthetic Skill governance boundary after
-`v0.1.1`. PostgreSQL owns immutable governance and provenance records. Packaged,
+PR B implements the local synthetic Skill governance boundary released in `v0.1.2`.
+PostgreSQL owns immutable governance and provenance records. Packaged,
 checked-in Python owns executable compatibility. A database row, passing evaluation,
 or browser response cannot become executable authority by itself.
 
@@ -193,7 +193,7 @@ functions, effective-task index, grants, and task behavior.
 
 ## Public boundary
 
-This is an unreleased local synthetic backend proof. PR C's
-`/demo/collaboration` walkthrough and technical inspector UI remain deferred. No live
-provider, external message transport, dynamic plugin loader, release, deployment,
+This is a local synthetic backend proof released in `v0.1.2`. PR C's
+`/demo/collaboration` walkthrough includes the read-only technical inspector UI. No live
+provider, external message transport, dynamic plugin loader, production deployment,
 production tenancy, or real-user evidence is claimed.

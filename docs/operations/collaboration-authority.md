@@ -1,7 +1,7 @@
 # Collaboration authority operations
 
-The governed collaboration boundary is an unreleased post-`v0.1.1` local synthetic
-backend capability. It proves assigned-participant conversation, typed fact
+The governed collaboration boundary is a `v0.1.2` local synthetic backend capability.
+It proves assigned-participant conversation, typed fact
 proposal, assigned-advisor verification, and atomic confirmed-fact revision
 publication. The PR C browser walkthrough is documented separately. PR B Skill
 governance, external message transport, and live-provider execution retain their own

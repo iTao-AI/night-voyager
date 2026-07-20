@@ -2,8 +2,8 @@
 
 ## Status
 
-Approved design. PR A, PR B, and PR C are implemented as post-v0.1.1 unreleased
-capabilities. PR C adds the secondary browser walkthrough and read-only inspector
+Approved design. PR A, PR B, and PR C are implemented and released in v0.1.2 as
+Governed Collaboration Core v1. PR C adds the secondary browser walkthrough and read-only inspector
 without backend authority or migration changes. The inspected baseline below remains
 the historical design snapshot rather than a statement about the current migration
 head.
@@ -1274,16 +1274,15 @@ package identities, release notes, source-archive verification, the release veri
 and tests. Annotated tag, GitHub Release, and public archive smoke remain separately
 authorized stages.
 
-`v0.1.1` is the current local synthetic portfolio release. Any later approved
-`v0.1.2` keeps the same claim boundary. A `v0.2.0` decision is deferred until
+`v0.1.2` is the current local synthetic portfolio release and keeps the same claim
+boundary. A `v0.2.0` decision is deferred until
 collaboration/memory/Skill contracts are stable and at least one real
 cross-project producer path has a merged, versioned, non-fixture producer release, an
 exact Night Voyager consumer, a human authority gate, a persisted business result,
 and an end-to-end proof. Fixture-only or operator-supplied candidate evidence does not
 satisfy that boundary.
 
-The three implementation PRs do not modify the published
+The three implementation PRs did not modify the published
 `docs/releases/v0.1.1.md`, `docs/how-to/verify-v0.1.1-release.md`, tag, or GitHub
-Release. README and the docs index describe merged collaboration work as an
-unreleased post-v0.1.1 capability until a separately approved release closes its own
-publication gates.
+Release. The separately approved v0.1.2 release closes the repository release contract
+for the merged collaboration work while keeping the historical v0.1.1 documents immutable.

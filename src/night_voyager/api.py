@@ -39,7 +39,7 @@ def create_app(
     if session_factory is None and identity_service_factory is None:
         session_factory = create_session_factory(create_engine(resolved_settings.database_url))
     service_factory = identity_service_factory or default_service_factory(resolved_settings)
-    app = FastAPI(title="Night Voyager API", version="0.1.1")
+    app = FastAPI(title="Night Voyager API", version="0.1.2")
 
     def uses_problem_json(path: str) -> bool:
         return (

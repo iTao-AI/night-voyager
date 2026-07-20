@@ -1,66 +1,22 @@
 from __future__ import annotations
 
-import json
-import tomllib
+import hashlib
 from pathlib import Path
 
-from night_voyager.api import create_app
-
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "0.1.1"
-DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
+HISTORICAL_RELEASE_DIGESTS = {
+    "docs/releases/v0.1.1.md": (
+        "0e7724ca54a9d9c8b3ed403f6bbbd86c04dde3ee79e0644e95ee3ccf90513ab2"
+    ),
+    "docs/how-to/verify-v0.1.1-release.md": (
+        "3e20b41e3256c275d557e6165e7e224a95a3a642286f6993da209a51aebe8f16"
+    ),
+}
 
 
-def test_current_release_identity_is_v0_1_1_without_dependency_drift() -> None:
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
-    package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
-    package_lock = json.loads(
-        (ROOT / "web/package-lock.json").read_text(encoding="utf-8")
-    )
-    locked_project = next(
-        item for item in uv_lock["package"] if item.get("name") == "night-voyager"
-    )
-
-    assert pyproject["project"]["version"] == VERSION
-    assert pyproject["project"]["description"] == DESCRIPTION
-    assert locked_project["version"] == VERSION
-    assert package["version"] == VERSION
-    assert package_lock["version"] == VERSION
-    assert package_lock["packages"][""]["version"] == VERSION
-    assert create_app().version == VERSION
-    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert f'VERSION = "{VERSION}"' in verifier
-    assert 'f"docs/releases/v{VERSION}.md"' in verifier
-    assert 'f"docs/how-to/verify-v{VERSION}-release.md"' in verifier
-
-
-def test_current_release_entries_point_to_v0_1_1_and_keep_v0_1_0_as_history() -> None:
-    current_entries = {
-        "README.md": (
-            "docs/releases/v0.1.1.md",
-            "docs/how-to/verify-v0.1.1-release.md",
-            "local synthetic portfolio release",
-        ),
-        "README_CN.md": (
-            "docs/releases/v0.1.1.md",
-            "docs/how-to/verify-v0.1.1-release.md",
-            "local synthetic portfolio release",
-        ),
-        "docs/README.md": (
-            "releases/v0.1.1.md",
-            "how-to/verify-v0.1.1-release.md",
-            "local synthetic portfolio release",
-        ),
-        "CONTRIBUTING.md": ("v0.1.1", "local synthetic portfolio release"),
-        "SECURITY.md": ("v0.1.1", "local synthetic portfolio release"),
-    }
-    for relative, tokens in current_entries.items():
-        source = (ROOT / relative).read_text(encoding="utf-8")
-        assert all(token in source for token in tokens), relative
-
-    for relative in ("README.md", "README_CN.md", "docs/README.md"):
-        assert "v0.1.0" in (ROOT / relative).read_text(encoding="utf-8"), relative
+def test_v0_1_1_release_documents_are_immutable_history() -> None:
+    for relative, expected in HISTORICAL_RELEASE_DIGESTS.items():
+        assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
 
 
 def test_v0_1_1_release_notes_freeze_the_governed_dra_release_claim() -> None:

@@ -56,21 +56,21 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "Governed Collaboration Core v1",
-        "PR A, PR B, and PR C implemented post-v0.1.1; unreleased",
+        "Implemented and released in v0.1.2",
         "2026-07-16-governed-conversation-memory-authority.md",
         "**Implementation status:** Complete.",
     ),
     (
         "Governed Collaboration Core v1",
-        "PR A, PR B, and PR C implemented post-v0.1.1; unreleased",
+        "Implemented and released in v0.1.2",
         "2026-07-16-versioned-skill-runtime-pinning.md",
-        "**Implementation status:** Implemented locally",
+        "**Implementation status:** Complete.",
     ),
     (
         "Governed Collaboration Core v1",
-        "PR A, PR B, and PR C implemented post-v0.1.1; unreleased",
+        "Implemented and released in v0.1.2",
         "2026-07-16-collaboration-walkthrough-and-inspector.md",
-        "**Implementation status:** Implemented locally",
+        "**Implementation status:** Complete and released in v0.1.2.",
     ),
 )
 
@@ -248,8 +248,8 @@ def test_implemented_document_statuses_do_not_regress() -> None:
         "docs/superpowers/plans/2026-07-16-governed-conversation-memory-authority.md": (
             "merged to `main`",
             "PR #30",
-            "unreleased post-v0.1.1 backend capability",
-            "PR B, PR C, and live-provider work remain unimplemented",
+            "released in v0.1.2 as part of Governed Collaboration Core v1",
+            "PR B and PR C were delivered under their own plans",
         ),
     }
     for relative, required in expected.items():

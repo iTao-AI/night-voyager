@@ -1,6 +1,6 @@
 # Skill governance operations
 
-This runbook verifies the unreleased PR B Skill boundary locally. It uses packaged
+This runbook verifies the PR B Skill boundary released in `v0.1.2` locally. It uses packaged
 manifests, deterministic evaluators, disposable PostgreSQL projects, and synthetic
 data only. It does not call a live provider or authorize release or deployment.
 
