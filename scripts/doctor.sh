@@ -25,7 +25,7 @@ ensure_probe_image() {
 check_docker_space() {
     minimum_kb=${NIGHT_VOYAGER_DOCKER_MINIMUM_KB:-8388608}
     case "$minimum_kb" in
-        ''|*[!0-9]*)
+        ''|0|*[!0-9]*)
             fail "Docker VM filesystem threshold" "a positive integer KiB value" \
                 "NIGHT_VOYAGER_DOCKER_MINIMUM_KB=$minimum_kb" \
                 "set NIGHT_VOYAGER_DOCKER_MINIMUM_KB to a positive integer, then rerun make doctor"

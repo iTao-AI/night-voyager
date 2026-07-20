@@ -7,5 +7,7 @@
 **/.next
 **/node_modules
 **/*.tsbuildinfo
+**/playwright-report
+**/test-results
 dist
 .env

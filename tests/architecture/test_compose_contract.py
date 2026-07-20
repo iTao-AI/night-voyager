@@ -62,6 +62,17 @@ def test_compose_proof_cleans_task_owned_images_and_ignores_local_build_state() 
         assert "**/*.tsbuildinfo" in ignored, relative
 
 
+def test_root_browser_proof_context_ignores_local_playwright_artifacts() -> None:
+    compose = Path("compose.yaml").read_text(encoding="utf-8")
+    browser_proof = compose.split("  browser-proof:", 1)[1].split("volumes:", 1)[0]
+    ignored = Path(".dockerignore").read_text(encoding="utf-8").splitlines()
+
+    assert "context: ." in browser_proof
+    assert "dockerfile: web/Dockerfile.e2e" in browser_proof
+    assert "**/playwright-report" in ignored
+    assert "**/test-results" in ignored
+
+
 def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
     dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
     normalized = " ".join(dockerfile.replace("\\", "").split())

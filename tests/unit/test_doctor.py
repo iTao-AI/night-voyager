@@ -106,6 +106,17 @@ def test_docker_space_probe_fails_closed_when_space_is_low(tmp_path: Path) -> No
     assert "does not delete Docker resources automatically" in result.stdout
 
 
+def test_docker_space_probe_rejects_zero_minimum_threshold(tmp_path: Path) -> None:
+    result = run_docker_space_probe(
+        tmp_path, available_kb="16777216", minimum_kb="0"
+    )
+
+    assert result.returncode == 1
+    assert "FAILED CHECK: Docker VM filesystem threshold" in result.stdout
+    assert "expected: a positive integer KiB value" in result.stdout
+    assert "observed: NIGHT_VOYAGER_DOCKER_MINIMUM_KB=0" in result.stdout
+
+
 def test_docker_space_probe_fails_closed_on_malformed_output(tmp_path: Path) -> None:
     result = run_docker_space_probe(tmp_path, available_kb="not-a-number")
 
