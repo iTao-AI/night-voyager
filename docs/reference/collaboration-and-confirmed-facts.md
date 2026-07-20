@@ -1,7 +1,7 @@
 # Collaboration and confirmed-fact reference
 
-Migration `0007` implements the PR A governed conversation and memory authority.
-It is an unreleased post-`v0.1.1` backend capability for the local synthetic pilot.
+Migration `0007` implements the PR A governed conversation and memory authority,
+released in `v0.1.2` for the local synthetic pilot.
 PR B Skill governance, PR C browser integration, external transports, and
 live-provider execution are not implemented by this boundary.
 

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-18
 - Implementation status: Implemented by migration `0008` and the PR B backend
-  boundary; unreleased after `v0.1.1`
+  boundary; released in `v0.1.2`
 
 ## Context
 
@@ -122,8 +122,8 @@ refuses downgrade before history is removed.
   checked-in code owns executable compatibility.
 - Persisted Case revisions, rather than fixture Case values, determine both planning
   operations and selected-country product projections.
-- The capability is an unreleased local synthetic backend proof after `v0.1.1`; it is
-  not a production deployment, live-provider proof, or real-user claim.
+- The capability is a local synthetic backend proof released in `v0.1.2`; it is not a
+  production deployment, live-provider proof, or real-user claim.
 
 ## Deferred and rejected alternatives
 

@@ -1,6 +1,6 @@
 # Contributing
 
-Night Voyager v0.1.1 is a local synthetic portfolio release with deterministic offline governed DRA capability. Keep changes focused, public-neutral, and reproducible without remote credentials. Use Python 3.12.13, Node.js 24.18.0, a short-lived `codex/` branch, and test-first development for behavior.
+Night Voyager v0.1.2 is a local synthetic portfolio release with Governed Collaboration Core v1 and deterministic offline governed DRA capability. Keep changes focused, public-neutral, and reproducible without remote credentials. Use Python 3.12.13, Node.js 24.18.0, a short-lived `codex/` branch, and test-first development for behavior.
 
 M1 fixture-only material is retained as historical visual context; current `/demo`
 behavior is the connected M5 local synthetic walkthrough.

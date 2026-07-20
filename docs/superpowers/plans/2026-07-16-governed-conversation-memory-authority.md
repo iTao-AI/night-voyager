@@ -7,9 +7,9 @@
 > proof slice follows test-first RED -> GREEN. Steps use checkbox (`- [ ]`) syntax
 > for tracking.
 
-**Implementation status:** Complete. PR A was merged to `main` through PR #30 as an
-unreleased post-v0.1.1 backend capability.
-PR B, PR C, and live-provider work remain unimplemented and outside this plan.
+**Implementation status:** Complete. PR A was merged to `main` through PR #30 and is
+released in v0.1.2 as part of Governed Collaboration Core v1.
+PR B and PR C were delivered under their own plans; live-provider work remains outside this plan.
 The checkboxes below retain the approved test-first execution recipe; actual command
 evidence belongs to the implementation record.
 

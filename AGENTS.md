@@ -198,9 +198,14 @@ run a targeted documentation-release audit before merge. Check reference, how-to
 explanation, and tutorial coverage according to actual user need; verify commands,
 relative links, and discoverability from the README or docs index.
 
-Use document generation only to close a confirmed documentation gap. Do not create every
-Diataxis quadrant mechanically or duplicate existing material. For an internal change
-with no documentation effect, record `No documentation impact` in the PR.
+Every release PR must run the GStack `document-release` targeted audit before merge.
+Invoking a Skill does not authorize push, PR mutation, merge, tag, GitHub Release, publish,
+or deploy actions; each still requires the repository's explicit user authorization.
+
+Use `document-generate` only to close a concrete, in-scope documentation gap confirmed by
+the audit. Do not generate every Diataxis quadrant mechanically or duplicate existing
+material. For an internal change with no documentation effect, record
+`No documentation impact` in the PR.
 
 ## Implementation and testing
 

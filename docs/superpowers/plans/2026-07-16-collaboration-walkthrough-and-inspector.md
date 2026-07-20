@@ -1,8 +1,8 @@
 # Collaboration Walkthrough and Skill Inspector Implementation Plan
 
-**Implementation status:** Implemented locally on 2026-07-20 from exact base
+**Implementation status:** Complete and released in v0.1.2. Implemented on 2026-07-20 from exact base
 `8283b8df0b955712baf7b24a7d0b19996007fd1b`; all Tasks C1-C7 and local acceptance
-gates are complete. The capability remains post-v0.1.1 and unreleased.
+gates are complete.
 
 > **Execution record:** implementation used `superpowers:using-git-worktrees` and
 > `superpowers:executing-plans` as the only primary controllers. C2 followed C1, and

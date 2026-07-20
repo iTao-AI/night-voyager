@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-07-17
 - Implementation status: Implemented by migration `0007` and the PR A backend
-  boundary; unreleased after `v0.1.1`
+  boundary; released in `v0.1.2`
 
 ## Context
 
@@ -109,17 +109,19 @@ planning-result persistence function.
   before changing current PlanningRun state, eliminating their reverse lock order.
 - New planning work after confirmation must be created explicitly against the new
   revision; confirmation does not create an `AgentTask` or advance Case state.
-- The capability is a local synthetic backend proof and an unreleased post-`v0.1.1`
-  change. It is not evidence of production tenancy, real users, or admissions
+- The capability is a local synthetic backend proof released in `v0.1.2`. It is not
+  evidence of production tenancy, real users, or admissions
   outcomes.
 
 ## Deferred and rejected alternatives
 
 PR B's versioned Skill registry, evaluation, activation, rollback, and runtime pins
-are not implemented by this decision. PR C's `/demo/collaboration` browser
-walkthrough and technical inspector are also deferred. Live-provider execution and
-external transports such as email, messaging platforms, webhooks, or OpenClaw are
-not part of PR A and were not run as proof.
+were not implemented by this PR A decision. PR C's presentation layer was likewise
+outside PR A's decision authority. PR C later implemented the `/demo/collaboration`
+browser walkthrough and technical inspector under its own approved plan; PR B and PR C
+were released in `v0.1.2`. Live-provider execution and external transports such as
+email, messaging platforms, webhooks, or OpenClaw are not part of PR A and were not
+run as proof.
 
 Generic team chat, private participant channels, autonomous memory extraction,
 vector memory, advisor-authored participant proposals, attachment storage,

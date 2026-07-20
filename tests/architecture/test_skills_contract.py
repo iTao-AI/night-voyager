@@ -237,7 +237,8 @@ def test_versioned_skill_plan_and_design_status_match_implementation() -> None:
 
     assert "PR A, PR B, and PR C are implemented" in spec
     assert "PR C has not started" not in spec
-    assert "**Implementation status:** Implemented locally" in plan
+    assert "**Implementation status:** Complete." in plan
+    assert "released in\nv0.1.2 as part of Governed Collaboration Core v1" in plan
     assert "FastAPI 0.139.2" in plan
     assert "fastapi>=0.139,<0.140" in plan
 

@@ -31,6 +31,8 @@ def copy_release_surface(destination: Path) -> None:
         "docs/how-to/verify-v0.1.0-release.md",
         "docs/releases/v0.1.1.md",
         "docs/how-to/verify-v0.1.1-release.md",
+        "docs/releases/v0.1.2.md",
+        "docs/how-to/verify-v0.1.2-release.md",
     ):
         source = ROOT / relative
         target = destination / relative
@@ -38,7 +40,7 @@ def copy_release_surface(destination: Path) -> None:
         shutil.copyfile(source, target)
 
 
-def test_release_verifier_checks_the_public_v0_1_1_surface(
+def test_release_verifier_checks_the_public_v0_1_2_surface(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     verifier = load_verifier()
@@ -46,7 +48,7 @@ def test_release_verifier_checks_the_public_v0_1_1_surface(
     verifier.verify_release_surface()
 
     output = capsys.readouterr().out
-    assert "proof release surface: v0.1.1 local synthetic portfolio contract confirmed" in output
+    assert "proof release surface: v0.1.2 local synthetic portfolio contract confirmed" in output
 
 
 def test_release_verifier_checks_the_governed_mixed_planning_surface(
@@ -143,7 +145,7 @@ def test_release_verifier_rejects_mutated_published_release_document(
 
 def test_release_verifier_registers_collaboration_authority_without_version_change() -> None:
     verifier = load_verifier()
-    assert verifier.VERSION == "0.1.1"
+    assert verifier.VERSION == "0.1.2"
     assert {
         "collaboration_threads",
         "message_events",
@@ -231,7 +233,7 @@ def test_release_verifier_freezes_the_cross_runtime_lock_order() -> None:
 def test_release_verifier_registers_skill_authority_without_version_change() -> None:
     verifier = load_verifier()
 
-    assert verifier.VERSION == "0.1.1"
+    assert verifier.VERSION == "0.1.2"
     assert not hasattr(verifier, "LOCKED_FASTAPI_VERSION")
     assert verifier.FASTAPI_VERSION_FLOOR == (0, 139, 2)
     assert verifier.FASTAPI_VERSION_CEILING == (0, 140)
@@ -296,7 +298,7 @@ def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> N
     assert "collaboration-confirmed-fact.png" in readmes
     assert "collaboration-walkthrough.md" in docs_index
     assert "PR C" in docs_index and "implemented" in docs_index
-    assert "post-v0.1.1" in docs_index and "unreleased" in docs_index
+    assert "released in v0.1.2" in docs_index
 
 
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:

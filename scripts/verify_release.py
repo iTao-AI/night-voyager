@@ -16,7 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 FASTAPI_VERSION_FLOOR = (0, 139, 2)
 FASTAPI_VERSION_CEILING = (0, 140)
 RELEASE_TAG = f"v{VERSION}"
@@ -131,17 +131,21 @@ RELEASE_HEADINGS = (
 )
 RELEASE_NOTE_TOKENS = (
     "local synthetic portfolio release",
-    "deterministic offline governed DRA closure",
+    "Governed Collaboration Core v1",
+    "MessageEvent",
+    "MemoryCandidate",
+    "advisor verification",
+    "ConfirmedFact",
+    "Case revision",
+    "versioned Skill",
+    "activation",
+    "rollback",
+    "runtime task",
+    "/demo/collaboration",
+    "read-only Planning Skill inspector",
+    "task-free",
     "GitHub-generated source archive",
-    "UNTRUSTED_CANDIDATE",
-    "atomic authority gate",
-    "australia_program_fit -> program_fit -> externally_verified",
-    "synthetic baseline",
-    "cost/FX",
-    "ranking",
-    "pinned current Case revision",
     "Live provider proof was not run",
-    "local synthetic walkthrough",
 )
 RELEASE_HOW_TO_TOKENS = (
     "git fetch origin --tags --prune",
@@ -159,6 +163,8 @@ RELEASE_HOW_TO_TOKENS = (
     'tar -xzf "$archive" -C "$tmp_dir"',
     f'cd "$tmp_dir/{RELEASE_ARCHIVE_ROOT}"',
     "make doctor",
+    "make collaboration-check",
+    "make skills-check",
     "make dra-check",
     "make db-check",
     "make check",
@@ -588,7 +594,7 @@ def verify_skill_surface() -> None:
         or "expected_evaluation_projection jsonb NOT NULL" not in migration
         or "p_result IS DISTINCT FROM version.expected_evaluation_projection"
         not in migration
-        or "**Implementation status:** Implemented locally" not in plan
+        or "**Implementation status:** Complete." not in plan
         or "PR A, PR B, and PR C are implemented" not in spec
         or "PR C has not started" in spec
     ):

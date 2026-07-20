@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "night-voyager"
-version = "0.1.1"
+version = "0.1.2"
 description = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
