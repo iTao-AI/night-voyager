@@ -116,10 +116,12 @@ planning-result persistence function.
 ## Deferred and rejected alternatives
 
 PR B's versioned Skill registry, evaluation, activation, rollback, and runtime pins
-are not implemented by this decision. PR C's `/demo/collaboration` browser
-walkthrough and technical inspector are also deferred. Live-provider execution and
-external transports such as email, messaging platforms, webhooks, or OpenClaw are
-not part of PR A and were not run as proof.
+were not implemented by this PR A decision. PR C's presentation layer was likewise
+outside PR A's decision authority. PR C later implemented the `/demo/collaboration`
+browser walkthrough and technical inspector under its own approved plan; PR B and PR C
+were released in `v0.1.2`. Live-provider execution and external transports such as
+email, messaging platforms, webhooks, or OpenClaw are not part of PR A and were not
+run as proof.
 
 Generic team chat, private participant channels, autonomous memory extraction,
 vector memory, advisor-authored participant proposals, attachment storage,

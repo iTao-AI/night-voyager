@@ -110,6 +110,26 @@ def test_v0_1_2_release_notes_define_governed_collaboration_core_v1() -> None:
         assert token in release
 
 
+def test_v0_1_2_release_notes_distinguish_included_maintenance_from_release_prep() -> None:
+    release = (ROOT / "docs/releases/v0.1.2.md").read_text(encoding="utf-8")
+
+    for token in (
+        "routine dependency and repository maintenance",
+        "React / ReactDOM `19.2.7`",
+        "pytest `9.1.1`",
+        "Ruff `>=0.15.22`",
+        "Node / React types 与 ESLint patch updates",
+        "PostgreSQL Alpine variant/digest pin",
+        "GitHub Actions setup updates",
+        "本次 release-prep diff 未再引入额外 dependency upgrade、migration、API 或 "
+        "runtime behavior 变更",
+    ):
+        assert token in release
+
+    assert "也未引入 dependency upgrade" not in release
+    assert "dependency upgrade、CI redesign" not in release
+
+
 def test_v0_1_2_verification_guide_defines_publication_and_archive_gates() -> None:
     how_to = (ROOT / "docs/how-to/verify-v0.1.2-release.md").read_text(
         encoding="utf-8"

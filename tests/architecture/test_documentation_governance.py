@@ -376,6 +376,30 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
     assert "ADR 0006 already records M5 as implemented" in plan
 
 
+def test_current_collaboration_documents_do_not_revert_to_unreleased_or_deferred() -> None:
+    design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
+    skill_operations = (ROOT / "docs/operations/skill-governance.md").read_text(
+        encoding="utf-8"
+    )
+    collaboration_adr = (
+        ROOT / "docs/decisions/0008-governed-collaboration-and-memory-authority.md"
+    ).read_text(encoding="utf-8")
+
+    assert "PR A and PR B are released in `v0.1.2`" in design
+    assert "adds the unreleased governed-collaboration" not in design
+    assert "unreleased versioned Skill catalog" not in design
+
+    normalized_skill_operations = " ".join(skill_operations.split())
+    assert "PR C's browser walkthrough and technical inspector are implemented" in (
+        normalized_skill_operations
+    )
+    assert "remain deferred" not in skill_operations
+
+    assert "PR C later implemented" in collaboration_adr
+    assert "released in `v0.1.2`" in collaboration_adr
+    assert "are also deferred" not in collaboration_adr
+
+
 def test_collaboration_state_matrix_matches_executable_and_approved_plan() -> None:
     expected = {
         "bootstrapping_parent",

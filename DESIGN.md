@@ -63,10 +63,10 @@ The first screen contains exactly one current lifecycle stage, one required huma
 
 The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
-PR A adds the unreleased governed-collaboration backend contract. PR B adds the
-unreleased versioned Skill catalog, deterministic evaluation, owner-controlled
-activation/rollback, persisted planning-revision materialization, and five-field
-task/execution pins. PR C implements the secondary `/demo/collaboration` walkthrough,
+PR A and PR B are released in `v0.1.2`: PR A adds the governed-collaboration backend
+contract, while PR B adds the versioned Skill catalog, deterministic evaluation,
+owner-controlled activation/rollback, persisted planning-revision materialization, and
+five-field task/execution pins. PR C implements the secondary `/demo/collaboration` walkthrough,
 closed browser reducer, and shared read-only inspector from the frozen role-safe HTTP
 projections. It adds no backend authority, migration, task operation, polling, or
 EventSource. The existing `/demo` lifecycle remains the primary advisor-family flow

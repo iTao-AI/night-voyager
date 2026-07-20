@@ -162,5 +162,5 @@ docker compose ps --all
 ```
 
 See [Versioned Skills and runtime pins](../reference/versioned-skills-and-runtime-pins.md)
-for the exact catalog, manifests, pin, worker, and downgrade contracts. PR C's
-browser walkthrough and technical inspector remain deferred.
+for the exact catalog, manifests, pin, worker, and downgrade contracts. PR C's browser
+walkthrough and technical inspector are implemented and released in `v0.1.2`.
