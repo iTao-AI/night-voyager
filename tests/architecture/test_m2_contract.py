@@ -64,7 +64,7 @@ def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
     python_job = workflow.split("  python:", 1)[1].split("  frontend:", 1)[0]
     assert 'uv run pytest -q -m "not database and not mke"' in python_job
     assert "COMPOSE_PROJECT_NAME" in script
-    assert "down --volumes" in script
+    assert script.count("down --volumes --remove-orphans --rmi local") == 2
 
 
 def test_local_demo_runs_explicit_seed_and_identity_probe() -> None:

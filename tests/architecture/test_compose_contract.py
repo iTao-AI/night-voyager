@@ -40,7 +40,26 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert "docker compose --profile browser-proof run --rm --build" in script
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 2
+
+
+def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert script.count("docker compose --profile browser-proof build") == 1
+    assert script.count("docker compose up --no-build --wait") == 3
+    assert "docker compose up --build --wait" not in script
+    assert "run --rm --build" not in script
+
+
+def test_compose_proof_cleans_task_owned_images_and_ignores_local_build_state() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    cleanup = script.split("cleanup() {", 1)[1].split("}", 1)[0]
+
+    assert "down --volumes --remove-orphans --rmi local" in cleanup
+    for relative in (".dockerignore", "web/.dockerignore"):
+        ignored = Path(relative).read_text(encoding="utf-8").splitlines()
+        assert "**/*.tsbuildinfo" in ignored, relative
 
 
 def test_browser_proof_includes_governed_collaboration_and_screenshot_capture() -> None:

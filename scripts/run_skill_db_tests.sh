@@ -93,7 +93,7 @@ cleanup() {
     if [ -n "$active_project" ]; then
         cleanup_status=0
         COMPOSE_PROJECT_NAME="$active_project" docker compose --profile db-test \
-            down --volumes --remove-orphans || cleanup_status=$?
+            down --volumes --remove-orphans --rmi local || cleanup_status=$?
         resource_ids=$(
             {
                 docker ps --all --quiet \

@@ -27,7 +27,7 @@ def test_collaboration_database_runner_is_disposable_and_suite_bounded() -> None
     assert source.count(
         "uv run --no-editable python scripts/seed_demo.py --without-skills"
     ) == 2
-    assert "down --volumes --remove-orphans" in source
+    assert source.count("down --volumes --remove-orphans --rmi local") == 2
 
 
 def test_required_local_and_hosted_gates_execute_the_authority_suite() -> None:
