@@ -48,10 +48,17 @@ check_docker_space() {
                 "inspect Docker Desktop storage; this check does not delete Docker resources automatically"
             ;;
     esac
-    [ "$available_kb" -ge "$minimum_kb" ] || fail \
-        "Docker VM filesystem space" "at least $minimum_kb KiB available" \
-        "$available_kb KiB available" \
-        "inspect task-owned Docker images and build cache; this check does not delete Docker resources automatically"
+    if comparison_error=$([ "$available_kb" -ge "$minimum_kb" ] 2>&1); then
+        :
+    elif [ -n "$comparison_error" ]; then
+        fail "Docker VM filesystem threshold" "a positive integer KiB value within the shell numeric range" \
+            "NIGHT_VOYAGER_DOCKER_MINIMUM_KB=$minimum_kb" \
+            "set NIGHT_VOYAGER_DOCKER_MINIMUM_KB to a smaller positive integer, then rerun make doctor"
+    else
+        fail "Docker VM filesystem space" "at least $minimum_kb KiB available" \
+            "$available_kb KiB available" \
+            "inspect task-owned Docker images and build cache; this check does not delete Docker resources automatically"
+    fi
     printf 'PASSED CHECK: Docker VM filesystem %s KiB available\n' "$available_kb"
 }
 

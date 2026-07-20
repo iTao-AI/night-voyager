@@ -122,6 +122,21 @@ def test_docker_space_probe_rejects_zero_minimum_threshold(
     assert f"observed: NIGHT_VOYAGER_DOCKER_MINIMUM_KB={minimum_kb}" in result.stdout
 
 
+def test_docker_space_probe_bounds_oversized_numeric_threshold(tmp_path: Path) -> None:
+    minimum_kb = "9" * 42
+    result = run_docker_space_probe(
+        tmp_path, available_kb="16777216", minimum_kb=minimum_kb
+    )
+
+    assert result.returncode == 1
+    assert "FAILED CHECK: Docker VM filesystem threshold" in result.stdout
+    assert f"observed: NIGHT_VOYAGER_DOCKER_MINIMUM_KB={minimum_kb}" in result.stdout
+    assert "PASSED CHECK" not in result.stdout
+    assert result.stderr == ""
+    assert "integer expression expected" not in result.stderr
+    assert "out of range" not in result.stderr
+
+
 def test_docker_space_probe_fails_closed_on_malformed_output(tmp_path: Path) -> None:
     result = run_docker_space_probe(tmp_path, available_kb="not-a-number")
 
