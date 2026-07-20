@@ -12,6 +12,7 @@ test("connected-demo.spec.ts preserves the native SSE cursor and renders a live 
   await page.goto("/demo");
   await page.getByRole("button", { name: "Start advisor walkthrough" }).click();
   await expect(page.getByRole("button", { name: "Create planning task" })).toBeEnabled();
+  await expect(page.getByText("No planning task created")).toBeVisible();
 
   let closedFirstStream = false;
   await page.route("**/api/demo/tasks/*/events?after=0", async (route) => {
@@ -90,6 +91,7 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   await expect(page.getByText("Blocked").first()).toBeVisible();
   await expect(page.getByText(/Accepted synthetic evidence and limitations/i)).toBeVisible();
   await expect(page.getByRole("status")).toContainText(/needs_advisor_review/i);
+  await expect(page.getByText("Pinned execution matched")).toBeVisible();
   await expectNoRawPresentation(page);
   await page.setViewportSize({ width: 768, height: 900 });
   await expect(page.getByText("Recommended with budget condition").first()).toBeVisible();

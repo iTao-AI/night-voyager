@@ -191,6 +191,39 @@ COLLABORATION_SURFACE = (
     "docs/reference/collaboration-and-confirmed-facts.md",
     "docs/operations/collaboration-authority.md",
 )
+PR_C_BFF_ROUTE_METHODS = {
+    "web/app/api/demo/cases/[caseId]/collaboration-thread/route.ts": ("GET",),
+    "web/app/api/demo/collaboration-threads/[threadId]/messages/route.ts": ("GET", "POST"),
+    "web/app/api/demo/messages/[messageId]/memory-candidates/route.ts": ("POST",),
+    "web/app/api/demo/cases/[caseId]/memory-candidates/route.ts": ("GET",),
+    "web/app/api/demo/memory-candidates/[candidateId]/verification-decisions/route.ts": ("POST",),
+    "web/app/api/demo/cases/[caseId]/confirmed-facts/route.ts": ("GET",),
+    "web/app/api/demo/cases/[caseId]/planning-skill-inspector/route.ts": ("GET",),
+}
+PR_C_BROWSER_SURFACE = (
+    "web/app/demo/collaboration/page.tsx",
+    *PR_C_BFF_ROUTE_METHODS,
+    "web/components/collaboration-demo/CollaborationDemo.tsx",
+    "web/components/collaboration-demo/CollaborationRecoveryNotice.tsx",
+    "web/components/collaboration-demo/ConfirmedFactSummary.tsx",
+    "web/components/collaboration-demo/MemoryCandidateCard.tsx",
+    "web/components/collaboration-demo/SharedThread.tsx",
+    "web/components/skill-inspector/PlanningSkillInspector.tsx",
+    "web/lib/collaboration-demo/api.ts",
+    "web/lib/collaboration-demo/contracts.ts",
+    "web/lib/collaboration-demo/reducer.ts",
+    "web/lib/collaboration-demo/use-collaboration-demo.ts",
+    "web/lib/skill-inspector/contracts.ts",
+    "web/lib/connected-demo/session-storage.ts",
+    "web/lib/connected-demo/use-connected-demo.ts",
+    "web/e2e/collaboration-demo.spec.ts",
+    "web/playwright.compose.config.ts",
+    "scripts/verify_compose.sh",
+    "docs/operations/collaboration-walkthrough.md",
+    "docs/assets/collaboration-confirmed-fact.png",
+    "README.md",
+    "README_CN.md",
+)
 SKILL_SURFACE = (
     "migrations/versions/0008_versioned_skills.py",
     "fixtures/skills/runtime-manifest-v1.json",
@@ -333,6 +366,8 @@ def verify_collaboration_surface() -> None:
     adr = (ROOT / COLLABORATION_SURFACE[4]).read_text(encoding="utf-8")
     reference = (ROOT / COLLABORATION_SURFACE[5]).read_text(encoding="utf-8")
     operations = (ROOT / COLLABORATION_SURFACE[6]).read_text(encoding="utf-8")
+    walkthrough_path = ROOT / "docs/operations/collaboration-walkthrough.md"
+    walkthrough = walkthrough_path.read_text(encoding="utf-8") if walkthrough_path.is_file() else ""
     migration = (ROOT / COLLABORATION_SURFACE[0]).read_text(encoding="utf-8")
     if (
         "collaboration-check:" not in makefile
@@ -350,13 +385,85 @@ def verify_collaboration_surface() -> None:
         or "Case FOR UPDATE -> superseded PlanningRun update" not in reference
         or "make collaboration-db-check SUITE=authority" not in operations
         or "PR C browser walkthrough" not in operations
+        or "/demo/collaboration" not in walkthrough
+        or "does not create" not in walkthrough
+        or "server-owned" not in walkthrough
         or 'revision = "0007"' not in migration
         or 'down_revision = "0006"' not in migration
         or "CREATE OR REPLACE FUNCTION app.persist_planning_result(" not in migration
         or "LEGACY_PLANNING_PERSISTENCE_SQL" not in migration
     ):
         raise SystemExit("governed collaboration command, status, or documentation drift")
+    verify_pr_c_browser_surface()
     print("proof collaboration surface: governed conversation and memory authority confirmed")
+
+
+def verify_pr_c_browser_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in PR_C_BROWSER_SURFACE):
+        raise SystemExit("PR C browser proof surface incomplete")
+
+    method_count = 0
+    for relative, expected in PR_C_BFF_ROUTE_METHODS.items():
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        actual = tuple(re.findall(r"export async function (GET|POST)\b", source))
+        if actual != expected:
+            raise SystemExit(f"PR C BFF route method drift: {relative}")
+        method_count += len(actual)
+    if len(PR_C_BFF_ROUTE_METHODS) != 7 or method_count != 8:
+        raise SystemExit("PR C BFF route inventory drift")
+
+    page = (ROOT / "web/app/demo/collaboration/page.tsx").read_text(encoding="utf-8")
+    walkthrough = (
+        ROOT / "web/components/collaboration-demo/CollaborationDemo.tsx"
+    ).read_text(encoding="utf-8")
+    hook = (ROOT / "web/lib/collaboration-demo/use-collaboration-demo.ts").read_text(
+        encoding="utf-8"
+    )
+    inspector = (
+        ROOT / "web/components/skill-inspector/PlanningSkillInspector.tsx"
+    ).read_text(encoding="utf-8")
+    playwright = (ROOT / "web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    browser_spec = (ROOT / "web/e2e/collaboration-demo.spec.ts").read_text(encoding="utf-8")
+    compose_proof = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
+    required_tokens = (
+        "CollaborationDemo" in page,
+        "useCollaborationDemo" in walkthrough,
+        "PlanningSkillInspector" in walkthrough,
+        "confirmation_submitting" in hook,
+        "confirmedFacts" in hook,
+        "server-owned planning execution record" in inspector,
+        '"collaboration-demo.spec.ts"' in playwright,
+        'page.goto("/demo/collaboration")' in browser_spec,
+        "{ width: 1440" in browser_spec,
+        "{ width: 768" in browser_spec,
+        "{ width: 390" in browser_spec,
+        "collaboration-confirmed-fact.png" in browser_spec,
+        "UPDATE_COLLABORATION_SCREENSHOT" in compose_proof,
+        "new EventSource" not in hook,
+    )
+    if not all(required_tokens):
+        raise SystemExit("PR C browser proof surface drift")
+
+    screenshot = (ROOT / "docs/assets/collaboration-confirmed-fact.png").read_bytes()
+    if not screenshot.startswith(b"\x89PNG\r\n\x1a\n") or len(screenshot) < 24:
+        raise SystemExit("PR C browser screenshot invalid")
+    width = int.from_bytes(screenshot[16:20], "big")
+    height = int.from_bytes(screenshot[20:24], "big")
+    if width != 1440 or height < 900:
+        raise SystemExit("PR C browser screenshot dimensions drift")
+
+    for relative in ("README.md", "README_CN.md"):
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        if (
+            source.count("/demo/collaboration") < 1
+            or source.count("docs/operations/collaboration-walkthrough.md") < 1
+            or source.count("docs/assets/collaboration-confirmed-fact.png") != 1
+        ):
+            raise SystemExit(f"PR C README discovery drift: {relative}")
+    print(
+        "proof PR C browser surface: seven explicit routes, eight methods, "
+        "Chromium walkthrough, screenshot, and read-only inspector confirmed"
+    )
 
 
 def _canonical_json_sha256(value: object) -> str:
@@ -482,14 +589,11 @@ def verify_skill_surface() -> None:
         or "p_result IS DISTINCT FROM version.expected_evaluation_projection"
         not in migration
         or "**Implementation status:** Implemented locally" not in plan
-        or "PR A and PR B are implemented" not in spec
-        or "PR C has not started" not in spec
+        or "PR A, PR B, and PR C are implemented" not in spec
+        or "PR C has not started" in spec
     ):
         raise SystemExit("versioned Skill command, status, or documentation drift")
-    print(
-        "proof Skill surface: six governed definitions, packaged runtime pins, "
-        "and deferred PR C confirmed"
-    )
+    print("proof Skill surface: six governed definitions and packaged runtime pins confirmed")
 
 
 def verify_release_surface() -> None:

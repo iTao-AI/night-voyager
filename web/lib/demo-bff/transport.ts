@@ -5,6 +5,7 @@ export interface DemoRoute {
   method: "GET" | "POST" | "DELETE";
   upstreamPath: string;
   mutation: boolean;
+  validateBody?: (value: unknown) => boolean;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -54,15 +55,51 @@ async function readBoundedBody(
   }
 }
 
-function upstreamHeaders(request: Request, config: DemoBffConfig): Headers {
+async function readBoundedResponseBody(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array | null> {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const cancel = () => { void reader.cancel("upstream response aborted"); };
+  signal.addEventListener("abort", cancel, { once: true });
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel("upstream response too large");
+        throw new Error("upstream response too large");
+      }
+      chunks.push(value);
+    }
+    const body = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    return body;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
+function jsonHeaders(request: Request, config: DemoBffConfig, mutation: boolean): Headers {
   const headers = new Headers({ Origin: config.publicOrigin });
-  for (const name of [
-    "Cookie",
-    "Content-Type",
-    "X-CSRF-Token",
-    "Idempotency-Key",
-    "Last-Event-ID",
-  ]) {
+  for (const name of ["Cookie", ...(mutation ? ["Content-Type", "X-CSRF-Token", "Idempotency-Key"] : [])]) {
+    const value = request.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  return headers;
+}
+
+function sseHeaders(request: Request, config: DemoBffConfig): Headers {
+  const headers = new Headers({ Origin: config.publicOrigin });
+  for (const name of ["Cookie", "Last-Event-ID"]) {
     const value = request.headers.get(name);
     if (value !== null) headers.set(name, value);
   }
@@ -104,13 +141,22 @@ export async function forwardDemoJson(
   try {
     const body = await readBoundedBody(request, config.maxJsonBytes, controller.signal);
     if (body instanceof Response) return body;
+    if (route.validateBody) {
+      if (!body) return demoBffProblem(400, "bff_invalid_request", "invalid request");
+      const parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+      if (!route.validateBody(parsed)) return demoBffProblem(400, "bff_invalid_request", "invalid request");
+    }
     const upstream = await fetch(`${config.apiOrigin}${route.upstreamPath}`, {
       method: route.method,
-      headers: upstreamHeaders(request, config),
+      headers: jsonHeaders(request, config, route.mutation),
       body: body ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer : undefined,
       signal: controller.signal,
     });
-    return new Response(upstream.body, {
+    const responseBody = await readBoundedResponseBody(upstream, config.maxJsonBytes, controller.signal);
+    const responseBytes = responseBody
+      ? responseBody.buffer.slice(responseBody.byteOffset, responseBody.byteOffset + responseBody.byteLength) as ArrayBuffer
+      : null;
+    return new Response(responseBytes, {
       status: upstream.status,
       headers: responseHeaders(upstream, false),
     });
@@ -130,7 +176,7 @@ export async function forwardDemoSse(
   route: DemoRoute,
   config: DemoBffConfig = loadDemoBffConfig(),
 ): Promise<Response> {
-  const headers = upstreamHeaders(request, config);
+  const headers = sseHeaders(request, config);
   if (!headers.has("Last-Event-ID")) {
     const after = new URL(request.url).searchParams.get("after");
     if (after !== null) {

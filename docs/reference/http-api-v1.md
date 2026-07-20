@@ -164,7 +164,25 @@ versions, timestamps, subject/advisor role labels, and only their own proposal
 status; they do not receive internal IDs, source digests, reasons, or history.
 Problems use the closed collaboration codes documented in
 [Collaboration and confirmed facts](collaboration-and-confirmed-facts.md#closed-public-errors).
-PR A adds no BFF route or frontend; `/demo/collaboration` remains deferred to PR C.
+PR A owns the backend authority. PR C consumes it through seven explicit same-origin
+BFF route files with exactly eight HTTP methods:
+
+| BFF method and path | Frozen upstream |
+| --- | --- |
+| `GET /api/demo/cases/{case_id}/collaboration-thread` | collaboration-thread GET |
+| `GET /api/demo/collaboration-threads/{thread_id}/messages` | message-page GET |
+| `POST /api/demo/collaboration-threads/{thread_id}/messages` | message append POST |
+| `POST /api/demo/messages/{message_id}/memory-candidates` | candidate proposal POST |
+| `GET /api/demo/cases/{case_id}/memory-candidates` | candidate projection GET |
+| `POST /api/demo/memory-candidates/{candidate_id}/verification-decisions` | advisor decision POST |
+| `GET /api/demo/cases/{case_id}/confirmed-facts` | fact projection GET |
+| `GET /api/demo/cases/{case_id}/planning-skill-inspector` | inspector GET |
+
+These handlers use the existing bounded transport, separate upstream cookies,
+fixed Origin, CSRF, idempotency, and `no-store` rules. They do not use a catch-all,
+dynamic upstream, arbitrary header forwarding, or cookie joining. The secondary
+`/demo/collaboration` route creates no `AgentTask`, performs no polling, and opens no
+`EventSource`.
 
 ## Versioned Skill governance
 
@@ -221,8 +239,12 @@ Skill-domain problems are closed to `resource_unavailable`,
 request-validation failures keep their existing bounded codes. Unknown persistence
 failures never expose raw SQL, permissions, connection details, or tracebacks.
 
-PR B adds no BFF route or frontend. The `/demo/collaboration` walkthrough and
-technical inspector UI remain deferred to PR C.
+PR B owns the Skill backend authority. PR C exposes only the inspector GET above and
+renders its server-owned `no-store` projection on `/demo` and
+`/demo/collaboration`. The browser performs no client-side relational join and has no
+Skill mutation authority. The primary route progresses from `not_created` to
+`matched`; collaboration remains `not_created`, while `legacy_unpinned` stays an
+explicit historical status.
 
 ## M5 same-origin BFF
 

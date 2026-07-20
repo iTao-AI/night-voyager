@@ -144,15 +144,37 @@ describe("demo BFF transport", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("keeps the JSON deadline active until the upstream response body is complete", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode("{")); },
+      cancel() { cancelled = true; },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { headers: { "Content-Type": "application/json", Server: "hidden" } })));
+    const response = await forwardDemoJson(
+      new Request("http://127.0.0.1/api"),
+      { method: "GET", upstreamPath: "/api/v1/cases/40000000-0000-0000-0000-000000000002/advisor-ledger", mutation: false },
+      { ...loadDemoBffConfig(env), jsonTimeoutMs: 5 },
+    );
+    expect(response.status).toBe(504);
+    expect((await response.json()).code).toBe("bff_upstream_timeout");
+    expect(cancelled).toBe(true);
+    expect(response.headers.get("Server")).toBeNull();
+  });
+
   it("forwards only request/response allowlists", async () => {
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
       const headers = new Headers(init.headers);
       expect(headers.get("Cookie")).toBe("night_voyager_session=opaque");
+      expect(headers.get("Content-Type")).toBeNull();
+      expect(headers.get("X-CSRF-Token")).toBeNull();
+      expect(headers.get("Idempotency-Key")).toBeNull();
+      expect(headers.get("Last-Event-ID")).toBeNull();
       expect(headers.get("X-Private-Debug")).toBeNull();
       return new Response("{}", { headers: { "Content-Type": "application/json", Server: "hidden", "X-Trace": "hidden" } });
     }));
     const response = await forwardDemoJson(
-      new Request("http://127.0.0.1/api", { headers: { Cookie: "night_voyager_session=opaque", "X-Private-Debug": "secret" } }),
+      new Request("http://127.0.0.1/api", { headers: { Cookie: "night_voyager_session=opaque", "Content-Type": "application/json", "X-CSRF-Token": "csrf", "Idempotency-Key": "key", "Last-Event-ID": "9", "X-Private-Debug": "secret" } }),
       { method: "GET", upstreamPath: "/api/v1/tasks/40000000-0000-0000-0000-000000000002", mutation: false },
       loadDemoBffConfig(env),
     );
@@ -161,11 +183,27 @@ describe("demo BFF transport", () => {
     expect(response.headers.get("Cache-Control")).toBe("no-store");
   });
 
+  it("forwards mutation headers but never forwards Last-Event-ID to JSON", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      expect(headers.get("Origin")).toBe(env.NIGHT_VOYAGER_PUBLIC_ORIGIN);
+      expect(headers.get("Cookie")).toBe("night_voyager_session=opaque");
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(headers.get("X-CSRF-Token")).toBe("csrf");
+      expect(headers.get("Idempotency-Key")).toBe("key");
+      expect(headers.get("Last-Event-ID")).toBeNull();
+      return Response.json({});
+    }));
+    await forwardDemoJson(new Request("http://127.0.0.1/api", { method: "POST", headers: { Origin: env.NIGHT_VOYAGER_PUBLIC_ORIGIN, Cookie: "night_voyager_session=opaque", "Content-Type": "application/json", "X-CSRF-Token": "csrf", "Idempotency-Key": "key", "Last-Event-ID": "9" }, body: "{}" }), { method: "POST", upstreamPath: "/api/v1/demo/sessions", mutation: true }, loadDemoBffConfig(env));
+  });
+
   it("returns the SSE body directly and maps cursor precedence", async () => {
     const bytes = new TextEncoder().encode("id: 2\ndata: {}\n\n");
     const body = new ReadableStream({ start(controller) { controller.enqueue(bytes); controller.close(); } });
     const fetchMock = vi.fn(async (_url: string, init: RequestInit) => {
       expect(new Headers(init.headers).get("Last-Event-ID")).toBe("7");
+      expect(new Headers(init.headers).get("X-CSRF-Token")).toBeNull();
+      expect(new Headers(init.headers).get("Idempotency-Key")).toBeNull();
       return new Response(body, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-store" },
       });

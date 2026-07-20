@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import struct
 from pathlib import Path
 
 import pytest
@@ -180,6 +181,45 @@ def test_release_verifier_checks_the_collaboration_authority_surface(
     )
 
 
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "web/app/demo/collaboration/page.tsx",
+        "web/app/api/demo/cases/[caseId]/collaboration-thread/route.ts",
+        "web/app/api/demo/collaboration-threads/[threadId]/messages/route.ts",
+        "web/app/api/demo/messages/[messageId]/memory-candidates/route.ts",
+        "web/app/api/demo/cases/[caseId]/memory-candidates/route.ts",
+        "web/app/api/demo/memory-candidates/[candidateId]/verification-decisions/route.ts",
+        "web/app/api/demo/cases/[caseId]/confirmed-facts/route.ts",
+        "web/app/api/demo/cases/[caseId]/planning-skill-inspector/route.ts",
+        "web/components/collaboration-demo/CollaborationDemo.tsx",
+        "web/components/skill-inspector/PlanningSkillInspector.tsx",
+        "web/lib/collaboration-demo/use-collaboration-demo.ts",
+        "web/e2e/collaboration-demo.spec.ts",
+        "web/playwright.compose.config.ts",
+        "docs/assets/collaboration-confirmed-fact.png",
+        "README.md",
+        "README_CN.md",
+    ),
+)
+def test_pr_c_browser_verifier_rejects_each_missing_critical_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative: str,
+) -> None:
+    verifier = load_verifier()
+    for item in verifier.PR_C_BROWSER_SURFACE:
+        source = ROOT / item
+        target = tmp_path / item
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+    (tmp_path / relative).unlink()
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+
+    with pytest.raises(SystemExit, match="PR C browser proof surface incomplete"):
+        verifier.verify_pr_c_browser_surface()
+
+
 def test_release_verifier_freezes_the_cross_runtime_lock_order() -> None:
     source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
     assert '"CREATE OR REPLACE FUNCTION app.persist_planning_result("' in source
@@ -229,9 +269,34 @@ def test_release_verifier_checks_the_versioned_skill_surface(
 
     output = capsys.readouterr().out
     assert (
-        "proof Skill surface: six governed definitions, packaged runtime pins, "
-        "and deferred PR C confirmed"
+        "proof Skill surface: six governed definitions and packaged runtime pins confirmed"
     ) in output
+
+
+def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> None:
+    walkthrough_path = ROOT / "docs/operations/collaboration-walkthrough.md"
+    screenshot_path = ROOT / "docs/assets/collaboration-confirmed-fact.png"
+
+    assert walkthrough_path.is_file()
+    assert screenshot_path.is_file()
+
+    png = screenshot_path.read_bytes()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", png[16:24])
+    assert width == 1440
+    assert height >= 900
+
+    readmes = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in ("README.md", "README_CN.md")
+    )
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    assert "/demo" in readmes and "primary" in readmes
+    assert "/demo/collaboration" in readmes and "secondary" in readmes
+    assert "collaboration-confirmed-fact.png" in readmes
+    assert "collaboration-walkthrough.md" in docs_index
+    assert "PR C" in docs_index and "implemented" in docs_index
+    assert "post-v0.1.1" in docs_index and "unreleased" in docs_index
 
 
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:

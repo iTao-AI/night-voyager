@@ -5,13 +5,16 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ConnectedDemoApiError, createConnectedDemoApi } from "./api";
 import type { FamilyDecisionBody } from "./contracts";
 import { idempotencyFor } from "./idempotency";
+import { createCollaborationDemoApi } from "../collaboration-demo/api";
+import type { PlanningSkillInspector } from "../skill-inspector/contracts";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
-  clearRecoveryMetadata, loadRecoveryMetadata, saveRecoveryMetadata, withMutation,
+  clearRecoveryMetadata, loadDemoJourneyEnvelope, loadRecoveryMetadata, saveRecoveryMetadata, withMutation,
   type MutationOperation, type RecoveryMetadata,
 } from "./session-storage";
 
 const api = createConnectedDemoApi();
+const inspectorApi = createCollaborationDemoApi();
 const initial: DemoDisplayState = { value: "bootstrapping" };
 const CASE_ID = "40000000-0000-0000-0000-000000000002";
 
@@ -25,11 +28,42 @@ function failure(error: unknown): RecoveryCode {
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
+  const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
+  const [journeyConflict, setJourneyConflict] = useState<"collaboration" | null>(() => {
+    if (typeof window === "undefined") return null;
+    return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
+  });
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
+  const inspectorGeneration = useRef(0);
+
+  const clearInspector = useCallback(() => {
+    inspectorGeneration.current += 1;
+    setInspector(null);
+  }, []);
+
+  const refreshInspector = useCallback(async (caseId: string) => {
+    const generation = inspectorGeneration.current + 1;
+    inspectorGeneration.current = generation;
+    setInspector(null);
+    try {
+      const projection = await inspectorApi.planningSkillInspector(caseId);
+      const current = loadRecoveryMetadata();
+      if (inspectorGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) setInspector(projection);
+    } catch {
+      const current = loadRecoveryMetadata();
+      if (inspectorGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) setInspector(null);
+    }
+  }, []);
 
   const connectAdvisor = useCallback(async () => {
+    const existing = loadDemoJourneyEnvelope();
+    if (existing?.journey === "collaboration") {
+      setJourneyConflict("collaboration");
+      return;
+    }
     try {
+      clearInspector();
       const { csrf_token: bootstrapCsrf } = await api.bootstrap();
       const session = await api.mint("advisor", bootstrapCsrf);
       const ledger = await api.advisorLedger(CASE_ID);
@@ -37,14 +71,20 @@ export function useConnectedDemo() {
       const taskId = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase)
         ? ledger.task?.task_id ?? null
         : null;
-      saveRecoveryMetadata({ role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
+      saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
       dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
+      void refreshInspector(CASE_ID);
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
     }
-  }, []);
+  }, [clearInspector, refreshInspector]);
 
   const recover = useCallback(async () => {
+    const journey = loadDemoJourneyEnvelope();
+    if (journey?.journey === "collaboration") {
+      setJourneyConflict("collaboration");
+      return;
+    }
     const metadata = loadRecoveryMetadata();
     if (!metadata) {
       await connectAdvisor();
@@ -52,6 +92,7 @@ export function useConnectedDemo() {
     }
     try {
       if (metadata.role === "parent") {
+        clearInspector();
         try {
           await api.advisorLedger(metadata.caseId);
           throw new Error("role projection mismatch");
@@ -68,18 +109,20 @@ export function useConnectedDemo() {
         const taskPhase = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase);
         if ((taskPhase && metadata.taskId !== projectedTaskId) || (!taskPhase && metadata.taskId !== null && projectedTaskId !== metadata.taskId)) throw new Error("projection identity mismatch");
         dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
+        if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
       }
     } catch (error) {
       const code = failure(error);
       if (code === "session_expired") clearRecoveryMetadata();
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [connectAdvisor]);
+  }, [clearInspector, connectAdvisor, refreshInspector]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
     recoveryStarted.current = true;
-    if (loadRecoveryMetadata()) void recover();
+    const journey = loadDemoJourneyEnvelope();
+    if (journey?.journey === "advisor-family") queueMicrotask(() => { void recover(); });
   }, [recover]);
 
   const streamingTaskId = state.value === "task_streaming" ? state.taskId : null;
@@ -107,6 +150,7 @@ export function useConnectedDemo() {
           if (!current || current.taskId !== streamingTaskId) throw new Error("projection identity mismatch");
           saveRecoveryMetadata({ ...current, cursor: Math.max(current.cursor, cursor) });
           dispatch({ type: "TASK_REFRESHED", ledger, after: cursor });
+          if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
         } while (pending && !closed);
       } catch (error) {
         if (!closed) dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
@@ -119,7 +163,7 @@ export function useConnectedDemo() {
     };
     for (const code of ["queued", "lease_acquired", "execution_started", "heartbeat_recorded", "retry_scheduled", "lease_reclaimed", "waiting_review", "succeeded", "blocked", "timed_out", "failed", "cancelled"]) events.addEventListener(code, refresh);
     return () => { closed = true; events.close(); };
-  }, [streamingTaskId]);
+  }, [refreshInspector, streamingTaskId]);
 
   const mutationRecord = useCallback(async (metadata: RecoveryMetadata, operation: MutationOperation, body: unknown) => {
     const record = await idempotencyFor(body, metadata.mutations[operation]);
@@ -142,6 +186,7 @@ export function useConnectedDemo() {
         saveRecoveryMetadata({ ...updated, taskId: task.task_id, cursor: 0 });
         retryAction.current = null;
         dispatch({ type: "TASK_ACCEPTED", taskId: task.task_id });
+        void refreshInspector(current.caseId);
       } catch (error) {
         const code = failure(error);
         if (code === "session_expired") { retryAction.current = null; clearRecoveryMetadata(); }
@@ -151,22 +196,23 @@ export function useConnectedDemo() {
     retryAction.current = attempt;
     dispatch({ type: "CREATE_TASK" });
     await attempt();
-  }, [mutationRecord, recover, state]);
+  }, [mutationRecord, recover, refreshInspector, state]);
 
   const rotateToParent = useCallback(async (caseId: string) => {
     const metadata = loadRecoveryMetadata();
     if (!metadata || metadata.role !== "advisor" || metadata.caseId !== caseId) { dispatch({ type: "RECOVERABLE_FAILURE", code: "session_recovery_required" }); return; }
     try {
+      clearInspector();
       await api.revoke(metadata.csrf);
       clearRecoveryMetadata();
       const bootstrap = await api.bootstrap();
       const parent = await api.mint("parent", bootstrap.csrf_token);
       const brief = await api.currentBrief(caseId);
       if (brief.case_id !== caseId) throw new Error("projection identity mismatch");
-      saveRecoveryMetadata({ role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
+      saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
       dispatch({ type: "PARENT_SESSION_READY", brief });
     } catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
-  }, []);
+  }, [clearInspector]);
 
   const approve = useCallback(async () => {
     if (state.value !== "advisor_review" || !state.ledger.review_inputs) return;
@@ -230,5 +276,25 @@ export function useConnectedDemo() {
     else await recover();
   }, [recover]);
 
-  return { state, confirmed, setConfirmed, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
+  const endConflictingJourney = useCallback(async () => {
+    const existing = loadDemoJourneyEnvelope();
+    if (!existing || existing.journey !== "collaboration") { setJourneyConflict(null); return; }
+    try {
+      await api.revoke(existing.csrf);
+      clearRecoveryMetadata();
+      setJourneyConflict(null);
+      await connectAdvisor();
+    } catch (error) {
+      if (error instanceof ConnectedDemoApiError && error.status === 401) {
+        clearRecoveryMetadata();
+        setJourneyConflict(null);
+        await connectAdvisor();
+      } else {
+        setJourneyConflict("collaboration");
+        dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
+      }
+    }
+  }, [connectAdvisor]);
+
+  return { state, confirmed, setConfirmed, inspector, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
 }

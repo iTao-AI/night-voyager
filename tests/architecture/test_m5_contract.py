@@ -104,12 +104,34 @@ def test_m5_adds_no_database_ddl_or_grants() -> None:
     assert "advisor_ledger" not in migration_source
 
 
-def test_m5_bff_has_only_explicit_route_handlers() -> None:
+def test_demo_bff_has_only_explicit_route_handlers() -> None:
     route_root = ROOT / "web/app/api/demo"
-    routes = sorted(
+    routes = {
         route.relative_to(route_root).as_posix() for route in route_root.rglob("route.ts")
-    )
-    assert len(routes) == 11
+    }
+    m5_routes = {
+        "cases/[caseId]/advisor-ledger/route.ts",
+        "cases/[caseId]/advisor-reviews/route.ts",
+        "cases/[caseId]/agent-tasks/route.ts",
+        "cases/[caseId]/current-decision-brief/route.ts",
+        "decision-briefs/[briefId]/family-decisions/route.ts",
+        "session-bootstrap/route.ts",
+        "session/route.ts",
+        "sessions/route.ts",
+        "tasks/[taskId]/cancel/route.ts",
+        "tasks/[taskId]/events/route.ts",
+        "tasks/[taskId]/route.ts",
+    }
+    collaboration_routes = {
+        "cases/[caseId]/collaboration-thread/route.ts",
+        "cases/[caseId]/confirmed-facts/route.ts",
+        "cases/[caseId]/memory-candidates/route.ts",
+        "cases/[caseId]/planning-skill-inspector/route.ts",
+        "collaboration-threads/[threadId]/messages/route.ts",
+        "memory-candidates/[candidateId]/verification-decisions/route.ts",
+        "messages/[messageId]/memory-candidates/route.ts",
+    }
+    assert routes == m5_routes | collaboration_routes
     assert not any("[..." in route for route in routes)
     assert all('dynamic = "force-dynamic"' in (route_root / route).read_text() for route in routes)
 

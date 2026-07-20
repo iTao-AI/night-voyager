@@ -40,4 +40,17 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert "docker compose --profile browser-proof run --rm --build browser-proof" in script
+    assert "docker compose --profile browser-proof run --rm --build" in script
+
+
+def test_browser_proof_includes_governed_collaboration_and_screenshot_capture() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    proof = Path("web/e2e/collaboration-demo.spec.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert '"collaboration-demo.spec.ts"' in config
+    assert "UPDATE_COLLABORATION_SCREENSHOT" in proof
+    assert "memory_candidate_stale" in proof
+    assert "memory_candidate_expired" in proof
+    assert "active_task_blocks_revision" in proof
+    assert "UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}" in script

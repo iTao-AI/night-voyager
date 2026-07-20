@@ -1,8 +1,12 @@
 # Connected demo operations
 
-M5 connects `/demo` to the local synthetic FastAPI, worker, SSE, and PostgreSQL
+M5 connects the primary `/demo` route to the local synthetic FastAPI, worker, SSE, and PostgreSQL
 paths. It proves an advisor-to-parent workflow; it is not production tenancy,
 live institutional coverage, or admissions advice.
+
+The secondary `/demo/collaboration` route is documented in the
+[governed collaboration walkthrough](collaboration-walkthrough.md). It shares the
+session envelope and read-only inspector but does not create a task or open SSE.
 
 ## Run the walkthrough
 
@@ -56,6 +60,11 @@ The family Brief projects the selected Australia route, `CNY`, pinned cost, hard
 ceiling, and the exact required trade-off `budget_elasticity` from persisted
 rows and policy. The client may confirm these facts but cannot hard-code them.
 
+The shared Planning Skill inspector is a server-owned, `no-store` projection. It
+starts as `not_created` and becomes `matched` after the real planning task is
+materialized; `legacy_unpinned` is explicit rather than inferred. The browser performs
+no client-side relational join and has no Skill mutation authority.
+
 ## Recovery and proof
 
 The browser reconnects SSE with the latest durable `Last-Event-ID`; heartbeat
@@ -63,6 +72,11 @@ comments are not stored events. Role and CSRF metadata in `sessionStorage`
 support reload only in the same tab. If an opaque cookie exists while recovery
 metadata is missing or inconsistent, the UI fails closed: it does not mutate,
 guess a role, silently revoke, or show parent presentation.
+
+The shared `schema_version=2` journey envelope distinguishes
+`advisor-family|collaboration`; an existing other journey must be explicitly revoked,
+so a tab cannot run the two workflows concurrently. `/demo` preserves its single
+`EventSource` and monotonic durable cursor.
 
 Run the real browser-to-database proof with:
 
