@@ -62,6 +62,47 @@ def test_compose_proof_cleans_task_owned_images_and_ignores_local_build_state() 
         assert "**/*.tsbuildinfo" in ignored, relative
 
 
+def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
+    dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
+    normalized = " ".join(dockerfile.replace("\\", "").split())
+
+    browser_path = dockerfile.index("ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright")
+    install = dockerfile.index("playwright install --with-deps chromium")
+    assert browser_path < install
+    assert "cp -R /root/.cache/ms-playwright" not in dockerfile
+    assert "chown -R browser:browser /workspace" not in dockerfile
+    assert "mkdir -p /workspace/docs/assets /workspace/web/test-results" in normalized
+    assert (
+        "chown browser:browser /workspace/docs/assets /workspace/web /workspace/web/test-results"
+        in normalized
+    )
+    assert "COPY --chown=browser:browser web ./" in dockerfile
+
+
+def test_dockerfiles_keep_dependency_work_ahead_of_frequently_changed_source() -> None:
+    api = Path("Dockerfile.api").read_text(encoding="utf-8")
+    proof = Path("Dockerfile.proof").read_text(encoding="utf-8")
+    web = Path("web/Dockerfile").read_text(encoding="utf-8")
+
+    dependency_wheels = api.index("pip wheel")
+    assert dependency_wheels < api.index("COPY src ./src")
+    assert dependency_wheels < api.index("COPY fixtures/skills ./fixtures/skills")
+    assert "/wheels/dependencies" in api
+    assert "/wheels/project" in api
+    assert "--mount=type=cache,target=/root/.cache/uv" in api
+    assert "pip install --no-cache-dir uv==0.11.7" in api
+    assert "pip wheel --no-cache-dir --wheel-dir /wheels/dependencies" in api
+
+    dependency_sync = proof.index("uv sync --locked --no-install-project")
+    assert dependency_sync < proof.index("COPY . .")
+    assert proof.count("--mount=type=cache,target=/root/.cache/uv") == 2
+
+    assert "--mount=type=cache,target=/root/.npm" in web
+
+    for content in (api, proof, web):
+        assert not content.startswith("# syntax=docker/dockerfile:1\n")
+
+
 def test_browser_proof_includes_governed_collaboration_and_screenshot_capture() -> None:
     config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
     proof = Path("web/e2e/collaboration-demo.spec.ts").read_text(encoding="utf-8")

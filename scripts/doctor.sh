@@ -6,15 +6,56 @@ fail() {
     exit 1
 }
 
-check_ports() {
-    ports=${NIGHT_VOYAGER_DOCTOR_PORTS:-"${WEB_PORT:-3000} ${API_PORT:-8000} ${POSTGRES_PORT:-55432}"}
-    probe_image=${NIGHT_VOYAGER_DOCTOR_PROBE_IMAGE:-python:3.12.13-slim}
+probe_image=${NIGHT_VOYAGER_DOCTOR_PROBE_IMAGE:-python:3.12.13-slim}
+probe_image_ready=0
+
+ensure_probe_image() {
+    if [ "$probe_image_ready" -eq 1 ]; then
+        return
+    fi
     if ! docker image inspect "$probe_image" >/dev/null 2>&1; then
         docker pull "$probe_image" >/dev/null 2>&1 || fail \
-            "port probe image" "$probe_image is locally available" \
+            "Docker probe image" "$probe_image is locally available" \
             "Docker could not pull the probe image" \
             "run docker pull $probe_image, then rerun make doctor"
     fi
+    probe_image_ready=1
+}
+
+check_docker_space() {
+    minimum_kb=${NIGHT_VOYAGER_DOCKER_MINIMUM_KB:-8388608}
+    case "$minimum_kb" in
+        ''|*[!0-9]*)
+            fail "Docker VM filesystem threshold" "a positive integer KiB value" \
+                "NIGHT_VOYAGER_DOCKER_MINIMUM_KB=$minimum_kb" \
+                "set NIGHT_VOYAGER_DOCKER_MINIMUM_KB to a positive integer, then rerun make doctor"
+            ;;
+    esac
+    ensure_probe_image
+    if ! available_kb=$(docker run --rm --network none --read-only "$probe_image" \
+        python -c 'import os; fs = os.statvfs("/"); print(fs.f_bavail * fs.f_frsize // 1024)' \
+        2>&1); then
+        fail "Docker VM filesystem probe" "a numeric available-space result" \
+            "probe failed: $available_kb" \
+            "restart Docker Desktop or inspect its disk allocation; this check does not delete Docker resources automatically"
+    fi
+    case "$available_kb" in
+        ''|*[!0-9]*)
+            fail "Docker VM filesystem probe" "a numeric available-space result" \
+                "malformed probe output: $available_kb" \
+                "inspect Docker Desktop storage; this check does not delete Docker resources automatically"
+            ;;
+    esac
+    [ "$available_kb" -ge "$minimum_kb" ] || fail \
+        "Docker VM filesystem space" "at least $minimum_kb KiB available" \
+        "$available_kb KiB available" \
+        "inspect task-owned Docker images and build cache; this check does not delete Docker resources automatically"
+    printf 'PASSED CHECK: Docker VM filesystem %s KiB available\n' "$available_kb"
+}
+
+check_ports() {
+    ports=${NIGHT_VOYAGER_DOCTOR_PORTS:-"${WEB_PORT:-3000} ${API_PORT:-8000} ${POSTGRES_PORT:-55432}"}
+    ensure_probe_image
     for port in $ports; do
         probe_name="night-voyager-port-probe-$$-$port"
         if probe_output=$(docker run --detach --rm --name "$probe_name" \
@@ -35,6 +76,11 @@ if [ "${NIGHT_VOYAGER_DOCTOR_ONLY:-}" = "ports" ]; then
     exit 0
 fi
 
+if [ "${NIGHT_VOYAGER_DOCTOR_ONLY:-}" = "docker-space" ]; then
+    check_docker_space
+    exit 0
+fi
+
 command -v docker >/dev/null 2>&1 || fail \
     "Docker CLI" "docker command available" "docker command not found" \
     "install Docker Desktop, then rerun make doctor"
@@ -52,9 +98,10 @@ printf 'PASSED CHECK: Docker daemon and Compose --wait are available\n'
 available_kb=$(df -Pk . | awk 'NR == 2 {print $4}')
 minimum_kb=5242880
 [ "$available_kb" -ge "$minimum_kb" ] || fail \
-    "disk space" "at least 5 GiB available" "${available_kb} KiB available" \
+    "host project filesystem space" "at least 5 GiB available" "${available_kb} KiB available" \
     "free at least 5 GiB on the project filesystem, then rerun make doctor"
-printf 'PASSED CHECK: disk space %s KiB available\n' "$available_kb"
+printf 'PASSED CHECK: host project filesystem %s KiB available\n' "$available_kb"
+check_docker_space
 check_ports
 
 mode=${MODE:-evaluator}
