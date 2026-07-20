@@ -3,8 +3,9 @@
 The governed collaboration boundary is an unreleased post-`v0.1.1` local synthetic
 backend capability. It proves assigned-participant conversation, typed fact
 proposal, assigned-advisor verification, and atomic confirmed-fact revision
-publication. It does not provide the deferred PR C browser walkthrough, PR B Skill
-governance, an external message transport, or live-provider execution.
+publication. The PR C browser walkthrough is documented separately. PR B Skill
+governance, external message transport, and live-provider execution retain their own
+boundaries.
 
 ## Deterministic checks
 

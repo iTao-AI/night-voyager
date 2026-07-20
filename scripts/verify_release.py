@@ -333,6 +333,8 @@ def verify_collaboration_surface() -> None:
     adr = (ROOT / COLLABORATION_SURFACE[4]).read_text(encoding="utf-8")
     reference = (ROOT / COLLABORATION_SURFACE[5]).read_text(encoding="utf-8")
     operations = (ROOT / COLLABORATION_SURFACE[6]).read_text(encoding="utf-8")
+    walkthrough_path = ROOT / "docs/operations/collaboration-walkthrough.md"
+    walkthrough = walkthrough_path.read_text(encoding="utf-8") if walkthrough_path.is_file() else ""
     migration = (ROOT / COLLABORATION_SURFACE[0]).read_text(encoding="utf-8")
     if (
         "collaboration-check:" not in makefile
@@ -350,6 +352,9 @@ def verify_collaboration_surface() -> None:
         or "Case FOR UPDATE -> superseded PlanningRun update" not in reference
         or "make collaboration-db-check SUITE=authority" not in operations
         or "PR C browser walkthrough" not in operations
+        or "/demo/collaboration" not in walkthrough
+        or "does not create" not in walkthrough
+        or "server-owned" not in walkthrough
         or 'revision = "0007"' not in migration
         or 'down_revision = "0006"' not in migration
         or "CREATE OR REPLACE FUNCTION app.persist_planning_result(" not in migration
@@ -482,13 +487,13 @@ def verify_skill_surface() -> None:
         or "p_result IS DISTINCT FROM version.expected_evaluation_projection"
         not in migration
         or "**Implementation status:** Implemented locally" not in plan
-        or "PR A and PR B are implemented" not in spec
-        or "PR C has not started" not in spec
+        or "PR A, PR B, and PR C are implemented" not in spec
+        or "PR C has not started" in spec
     ):
         raise SystemExit("versioned Skill command, status, or documentation drift")
     print(
         "proof Skill surface: six governed definitions, packaged runtime pins, "
-        "and deferred PR C confirmed"
+        "and read-only browser inspector confirmed"
     )
 
 

@@ -127,8 +127,9 @@ refuses downgrade before history is removed.
 
 ## Deferred and rejected alternatives
 
-PR C's `/demo/collaboration` walkthrough and technical inspector UI remain deferred.
-There is no Skill management UI, dynamic plugin loader, database prompt registry, new
+PR C now consumes the inspector as a read-only server projection on `/demo` and
+`/demo/collaboration`; it adds no Skill management or mutation authority. There is no
+dynamic plugin loader, database prompt registry, new
 queue, new worker, provider transport, live-provider proof, release, or deployment in
 this decision. Catalog-only Skills require a later explicit runtime design before they
 can execute.

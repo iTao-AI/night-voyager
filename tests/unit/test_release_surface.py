@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import shutil
+import struct
 from pathlib import Path
 
 import pytest
@@ -230,8 +231,34 @@ def test_release_verifier_checks_the_versioned_skill_surface(
     output = capsys.readouterr().out
     assert (
         "proof Skill surface: six governed definitions, packaged runtime pins, "
-        "and deferred PR C confirmed"
+        "and read-only browser inspector confirmed"
     ) in output
+
+
+def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> None:
+    walkthrough_path = ROOT / "docs/operations/collaboration-walkthrough.md"
+    screenshot_path = ROOT / "docs/assets/collaboration-confirmed-fact.png"
+
+    assert walkthrough_path.is_file()
+    assert screenshot_path.is_file()
+
+    png = screenshot_path.read_bytes()
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+    width, height = struct.unpack(">II", png[16:24])
+    assert width == 1440
+    assert height >= 900
+
+    readmes = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in ("README.md", "README_CN.md")
+    )
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    assert "/demo" in readmes and "primary" in readmes
+    assert "/demo/collaboration" in readmes and "secondary" in readmes
+    assert "collaboration-confirmed-fact.png" in readmes
+    assert "collaboration-walkthrough.md" in docs_index
+    assert "PR C" in docs_index and "implemented" in docs_index
+    assert "post-v0.1.1" in docs_index and "unreleased" in docs_index
 
 
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:

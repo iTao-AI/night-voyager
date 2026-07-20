@@ -113,5 +113,10 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
     expect(shortTargets).toBe(0);
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  if (process.env.UPDATE_COLLABORATION_SCREENSHOT === "1") await page.screenshot({ path: "/workspace/docs/assets/collaboration-confirmed-fact.png", fullPage: true });
+  if (process.env.UPDATE_COLLABORATION_SCREENSHOT === "1") {
+    const skipLink = page.getByRole("link", { name: "Skip to collaboration workflow" });
+    await skipLink.evaluate((node) => node.setAttribute("hidden", ""));
+    await expect(skipLink).toBeHidden();
+    await page.screenshot({ path: "/workspace/docs/assets/collaboration-confirmed-fact.png", fullPage: true });
+  }
 });

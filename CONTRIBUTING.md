@@ -17,6 +17,7 @@ behavior is the connected M5 local synthetic walkthrough.
 | Optional MKE contract or process adapter | `make mke-check`; maintainers additionally run the exact-artifact proof runbook |
 | Governed DRA candidate, promotion, or mixed-planning authority | `make dra-check`, `make db-check`, and `make compose-proof`; live provider proof requires separate authorization |
 | Governed collaboration, confirmed fact, or revision authority | `make collaboration-check`, the focused `collaboration-db-check` suite, `make db-check`, and `make compose-proof` |
+| Collaboration walkthrough, shared journey recovery, explicit BFF routes, or Skill inspector | Focused Vitest and architecture tests, then frontend gates and the real `make compose-proof` Chromium lanes |
 | Versioned Skill, evaluation, activation, runtime pin, or persisted planning materialization | `make skills-check`, the focused `skills-db-check` suites, `make db-check`, and `make compose-proof` |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
@@ -38,7 +39,7 @@ an external artifact, while the real candidate proof remains maintainer-operated
 ## Guardrails
 
 - Migrations and RLS changes require `make db-check` using runtime-equivalent roles. The connected `/demo` must continue to consume role-scoped backend projections rather than reproduce authority in the BFF or client.
-- Connected-demo transport or UI changes require focused backend/frontend tests plus the real `make compose-proof` Chromium flow; mocks and static screenshots are not browser-to-database evidence.
+- Connected-demo transport or UI changes require focused backend/frontend tests plus the real `make compose-proof` Chromium flow; mocks and static screenshots are not browser-to-database evidence. Keep `/demo` primary, `/demo/collaboration` task-free, and the shared `schema_version=2` journey fail-closed.
 - M3A fixtures must pass offline `scripts/seed_demo.py --validate-only`; `accepted_synthetic_demo` must never be described as externally verified Evidence.
 - Fixtures must be synthetic, provenance-labelled, deterministic, and pass `make fixtures-check`; real student records are prohibited.
 - Public claims must match reproducible repository evidence and must not imply production use, real users, admissions outcomes, or measured business impact.

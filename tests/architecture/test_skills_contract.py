@@ -182,7 +182,7 @@ def test_versioned_skill_public_contract_is_accepted_and_discoverable() -> None:
     assert "skill-governance.md" in docs_index
     assert "0009-versioned-skill-runtime-pinning.md" in docs_index
     assert "PR B" in readmes and "implemented" in readmes and "已实现" in readmes
-    assert "PR C" in readmes and "deferred" in readmes
+    assert "PR C" in readmes and "implemented" in readmes and "已实现" in readmes
 
 
 def test_versioned_skill_reference_freezes_runtime_and_pin_boundaries() -> None:
@@ -235,8 +235,30 @@ def test_versioned_skill_plan_and_design_status_match_implementation() -> None:
         ROOT / "docs/superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md"
     ).read_text(encoding="utf-8")
 
-    assert "PR A and PR B are implemented" in spec
-    assert "PR C has not started" in spec
+    assert "PR A, PR B, and PR C are implemented" in spec
+    assert "PR C has not started" not in spec
     assert "**Implementation status:** Implemented locally" in plan
     assert "FastAPI 0.139.2" in plan
     assert "fastapi>=0.139,<0.140" in plan
+
+
+def test_planning_skill_inspector_is_documented_as_read_only_projection() -> None:
+    walkthrough = (ROOT / "docs/operations/collaboration-walkthrough.md").read_text(
+        encoding="utf-8"
+    )
+    connected = (ROOT / "docs/operations/connected-demo.md").read_text(encoding="utf-8")
+    http = (ROOT / "docs/reference/http-api-v1.md").read_text(encoding="utf-8")
+    combined = "\n".join((walkthrough, connected, http))
+
+    for token in (
+        "server-owned",
+        "no-store",
+        "not_created",
+        "matched",
+        "legacy_unpinned",
+        "client-side relational join",
+        "mutation authority",
+    ):
+        assert token in combined
+    assert "/demo" in connected and "matched" in connected
+    assert "/demo/collaboration" in walkthrough and "not_created" in walkthrough

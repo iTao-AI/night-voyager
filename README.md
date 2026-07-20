@@ -6,6 +6,8 @@ Night Voyager turns a synthetic study-abroad comparison into a traceable advisor
 
 ![Family decision receipt and timeline](docs/assets/m5-family-receipt-timeline.png)
 
+![Governed collaboration confirmed fact](docs/assets/collaboration-confirmed-fact.png)
+
 ## Engineering proof
 
 - **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the exact `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008` migration graph.
@@ -14,7 +16,7 @@ Night Voyager turns a synthetic study-abroad comparison into a traceable advisor
 - **Governed DRA mixed planning:** an optional offline proof imports only `UNTRUSTED_CANDIDATE` rows, keeps assigned-advisor verification and promotion in one atomic database gate, and materializes one governed mixed PlanningRun through the existing durable worker.
 - **Governed collaboration authority:** an unreleased backend boundary separates shared `MessageEvent` communication, typed `MemoryCandidate` proposals, assigned-advisor verification, and atomic versioned `ConfirmedFact` publication.
 - **Versioned Skill runtime:** an unreleased backend boundary governs an exact six-key catalog, deterministic evaluation, owner activation/rollback, five-field task/execution pins, and pre-start packaged-registry validation.
-- **Browser to database:** the connected `/demo` drives the real Next.js BFF, FastAPI, worker, SSE, and PostgreSQL synthetic flow in Chromium.
+- **Browser to database:** the primary `/demo` drives the real Next.js BFF, FastAPI, worker, SSE, and PostgreSQL synthetic flow; the secondary `/demo/collaboration` proves parent proposal, advisor confirmation, and authoritative fact/revision reload without creating a task. Both run in real Chromium.
 
 ## Evaluate the release
 
@@ -28,7 +30,7 @@ make proof
 make down
 ```
 
-Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow the [connected demo runbook](docs/operations/connected-demo.md) for the advisor-to-family walkthrough, or use the [v0.1.1 release/source-archive verification guide](docs/how-to/verify-v0.1.1-release.md) after publication.
+Open the primary connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow the [connected demo runbook](docs/operations/connected-demo.md) for the advisor-to-family walkthrough. The secondary governed-memory walkthrough is at `http://127.0.0.1:3000/demo/collaboration` and has its own [runbook](docs/operations/collaboration-walkthrough.md). The [v0.1.1 release/source-archive verification guide](docs/how-to/verify-v0.1.1-release.md) continues to describe the current published release.
 
 `make doctor` checks Docker, Compose capability, disk space, and local ports. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
@@ -38,7 +40,7 @@ Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow 
 - The repository contains no real student records and makes no admissions outcome, real-user, SLA, availability, or business-impact claim.
 - The worker and SSE evidence is deterministic local proof, not distributed high availability.
 - Live DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. Deterministic offline DRA candidate import and atomic promotion are implemented locally; governed mixed PlanningRun generation is implemented locally through the existing durable worker. Live provider proof was not run and still requires separate authorization. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
-- Governed collaboration PR A and versioned Skill governance PR B are implemented as unreleased local synthetic backend capabilities. PR C and its `/demo/collaboration` browser walkthrough remain deferred; the existing `/demo` route and frontend are unchanged.
+- Governed collaboration PR A, versioned Skill governance PR B, and browser walkthrough/inspector PR C are implemented as post-v0.1.1 unreleased local synthetic capabilities. `/demo` remains the primary advisor-family route; `/demo/collaboration` is secondary and creates no `AgentTask`.
 
 ## Milestones and history
 
@@ -50,8 +52,8 @@ Open the connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow 
 - M5 connected advisor-to-family demo: implemented as the local synthetic walkthrough documented in the [runbook](docs/operations/connected-demo.md).
 - [M4B optional read-only MKE candidate proof](docs/operations/mke-candidate-proof.md); outputs remain `UNTRUSTED_CANDIDATE`.
 - [Governed DRA mixed-evidence proof](docs/operations/dra-consumer-proof.md); candidate import, atomic human promotion, and governed mixed PlanningRun generation are implemented as a deterministic local closure. The connected synthetic `/demo` remains unchanged.
-- [Governed collaboration and confirmed-fact reference](docs/reference/collaboration-and-confirmed-facts.md) and [authority runbook](docs/operations/collaboration-authority.md); PR A is implemented as an unreleased backend boundary.
-- [Versioned Skills and runtime pins](docs/reference/versioned-skills-and-runtime-pins.md) and [Skill governance runbook](docs/operations/skill-governance.md); PR B is implemented as an unreleased backend boundary, while PR C remains deferred.
+- [Governed collaboration and confirmed-fact reference](docs/reference/collaboration-and-confirmed-facts.md), [authority runbook](docs/operations/collaboration-authority.md), and [browser walkthrough](docs/operations/collaboration-walkthrough.md); PR A and PR C are implemented as unreleased authority and presentation layers.
+- [Versioned Skills and runtime pins](docs/reference/versioned-skills-and-runtime-pins.md) and [Skill governance runbook](docs/operations/skill-governance.md); PR B is implemented as an unreleased backend boundary, and PR C renders its read-only server projection.
 
 ## Contributor lane
 

@@ -370,6 +370,29 @@ def test_collaboration_proof_and_documentation_surface_is_registered() -> None:
     assert "0008-governed-collaboration-and-memory-authority.md" in docs_index
 
 
+def test_collaboration_walkthrough_documents_browser_authority_boundaries() -> None:
+    walkthrough_path = ROOT / "docs/operations/collaboration-walkthrough.md"
+    assert walkthrough_path.is_file()
+
+    walkthrough = walkthrough_path.read_text(encoding="utf-8")
+    for token in (
+        "/demo/collaboration",
+        "parent proposal",
+        "advisor confirmation",
+        "confirmed fact",
+        "Case revision",
+        "role switch",
+        "synthetic",
+        "non-production",
+        "AgentTask",
+        "EventSource",
+        "polling",
+        "collaboration-confirmed-fact.png",
+    ):
+        assert token in walkthrough
+    assert "does not create" in walkthrough
+
+
 def test_public_contract_documents_freeze_capacity_and_fact_paging() -> None:
     documents = (
         "docs/superpowers/specs/2026-07-16-governed-collaboration-core-design.md",

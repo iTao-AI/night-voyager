@@ -2,9 +2,11 @@
 
 ## Status
 
-Approved design. PR A and PR B are implemented as unreleased backend boundaries;
-PR C has not started. The inspected baseline below remains the historical design
-snapshot rather than a statement about the current migration head.
+Approved design. PR A, PR B, and PR C are implemented as post-v0.1.1 unreleased
+capabilities. PR C adds the secondary browser walkthrough and read-only inspector
+without backend authority or migration changes. The inspected baseline below remains
+the historical design snapshot rather than a statement about the current migration
+head.
 
 This document defines the bounded Night Voyager product increment after the
 governed mixed-planning closure. It is a public-neutral design source intended to be

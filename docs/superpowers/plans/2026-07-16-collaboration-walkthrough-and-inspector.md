@@ -1,14 +1,13 @@
 # Collaboration Walkthrough and Skill Inspector Implementation Plan
 
-**Implementation status:** Approved but not implemented. The tasks below remain the
-approved execution recipe.
+**Implementation status:** Implemented locally on 2026-07-20 from exact base
+`8283b8df0b955712baf7b24a7d0b19996007fd1b`; all Tasks C1-C7 and local acceptance
+gates are complete. The capability remains post-v0.1.1 and unreleased.
 
-> **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
-> `superpowers:dispatching-parallel-agents` only for the isolated frontend/BFF lanes
-> declared below; otherwise use `superpowers:executing-plans`. Use exactly one
-> primary controller for this PR. Every BFF, session, reducer, UI, recovery, browser,
-> and documentation slice follows test-first RED -> GREEN. Steps use checkbox
-> (`- [ ]`) syntax for tracking.
+> **Execution record:** implementation used `superpowers:using-git-worktrees` and
+> `superpowers:executing-plans` as the only primary controllers. C2 followed C1, and
+> every BFF, session, reducer, UI, recovery, browser, and documentation slice followed
+> test-first RED -> GREEN.
 
 **Goal:** Add a secondary `/demo/collaboration` walkthrough that proves a
 parent-authored message can become a typed candidate and then an advisor-confirmed
@@ -22,7 +21,7 @@ state. PostgreSQL remains authoritative for thread, candidate, fact, revision, t
 execution, activation, and pin status. A shared no-store Skill inspector is rendered
 on both `/demo` and `/demo/collaboration` from the server-owned composite read model.
 
-**Tech Stack:** Next.js 16.2.10 App Router, React 19.2.3, TypeScript, Vitest,
+**Tech Stack:** Next.js 16.2.10 App Router, React 19.2.7, TypeScript, Vitest,
 Testing Library, Playwright/Chromium, existing transport-only BFF utilities,
 FastAPI/PostgreSQL/Compose contracts from PR A and PR B, and existing CSS with no new
 frontend dependency.
@@ -177,7 +176,7 @@ Both lanes stop before editing shared files.
   inspector. Validators reject extra fields, malformed UUID/timestamp/digest,
   unbounded strings, wrong candidate projection by role, and unknown pin status.
 
-- [ ] **Step 1: Write validator RED tests**
+- [x] **Step 1: Write validator RED tests**
 
   Cover every valid role projection plus missing/additive/wrong-type fields, candidate
   metadata hidden from student/parent, inspector
@@ -193,7 +192,7 @@ Both lanes stop before editing shared files.
   });
   ```
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   npm --prefix web run test -- collaboration-contracts skill-inspector-contracts
@@ -201,13 +200,13 @@ Both lanes stop before editing shared files.
 
   Expected: modules do not exist.
 
-- [ ] **Step 3: Implement closed validators**
+- [x] **Step 3: Implement closed validators**
 
   Use exact own-property checks and discriminated role projections. Do not accept a
   generic `Record<string, unknown>` after validation. Return immutable typed objects
   used by the API and components.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   npm --prefix web run test -- collaboration-contracts skill-inspector-contracts
@@ -244,7 +243,7 @@ Both lanes stop before editing shared files.
   Origin, CSRF, and idempotency helpers. Produces typed client calls for all eight
   methods and existing identity role-switch calls.
 
-- [ ] **Step 1: Write BFF/client RED tests**
+- [x] **Step 1: Write BFF/client RED tests**
 
   Test exact upstream paths/methods, query cursor forwarding, no arbitrary headers,
   server-configured Origin, mutation CSRF/idempotency forwarding, independent
@@ -262,7 +261,7 @@ Both lanes stop before editing shared files.
   repeated, unknown, non-integer, or out-of-range parameters and never forward the
   browser's raw query string.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   npm --prefix web run test -- demo-bff demo-bff-handlers collaboration-api
@@ -270,7 +269,7 @@ Both lanes stop before editing shared files.
 
   Expected: seven route modules and collaboration API are absent.
 
-- [ ] **Step 3: Implement explicit handlers and client**
+- [x] **Step 3: Implement explicit handlers and client**
 
   Each route hard-codes one approved upstream path template and method. Split the
   existing JSON and SSE header allowlists: JSON GET forwards only the server Origin
@@ -281,7 +280,7 @@ Both lanes stop before editing shared files.
   transport and direct transport-test edits after the bounded route lane is
   integrated; bounded lanes do not edit those shared files.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   npm --prefix web run test -- demo-bff demo-bff-handlers collaboration-api
@@ -316,7 +315,7 @@ Both lanes stop before editing shared files.
   nine-state collaboration reducer, recovery classifier, role switch, authoritative
   reload, and lost-ack replay behavior.
 
-- [ ] **Step 1: Write session/reducer/hook RED tests**
+- [x] **Step 1: Write session/reducer/hook RED tests**
 
   Freeze:
 
@@ -395,7 +394,7 @@ Both lanes stop before editing shared files.
   byte-equivalent body/key. A changed candidate revision, ledger revision, decision,
   or reason invalidates the retry and forces an authority reload.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   npm --prefix web run test -- collaboration-session collaboration-reducer \
@@ -404,7 +403,7 @@ Both lanes stop before editing shared files.
 
   Expected: schema v2 and collaboration state machine are absent.
 
-- [ ] **Step 3: Implement exact envelope and reducer**
+- [x] **Step 3: Implement exact envelope and reducer**
 
   The integration owner first replaces schema v1 with the discriminated schema v2,
   updates existing advisor-family restore, and implements `JourneyConflictNotice`
@@ -422,7 +421,7 @@ Both lanes stop before editing shared files.
   proposal status. After the real role switch, the advisor candidate read discovers
   and stores the server-projected candidate ID before verification.
 
-- [ ] **Step 4: Freeze exact problem mapping**
+- [x] **Step 4: Freeze exact problem mapping**
 
   Map:
 
@@ -445,7 +444,7 @@ Both lanes stop before editing shared files.
     -> transport_unavailable_or_timeout
   ```
 
-- [ ] **Step 5: Run GREEN and commit the two ownership slices**
+- [x] **Step 5: Run GREEN and commit the two ownership slices**
 
   ```bash
   npm --prefix web run test -- collaboration-session collaboration-reducer \
@@ -486,14 +485,14 @@ Both lanes stop before editing shared files.
   fact/revision provenance, closed recovery states, and visible `role=status` without
   generic chat, task controls, fake route actions, or raw JSON.
 
-- [ ] **Step 1: Write component RED tests**
+- [x] **Step 1: Write component RED tests**
 
   Assert six storyline beats, role switch, shared message history, one typed budget
   proposal, pending/confirmed status, advisor reason, confirmed fact version,
   incremented Case revision, `replan_required`, error categories, focus movement,
   empty/loading states, and absence of UUID-first/raw JSON/internal codes.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   npm --prefix web run test -- collaboration-demo
@@ -501,21 +500,21 @@ Both lanes stop before editing shared files.
 
   Expected: route and components are absent.
 
-- [ ] **Step 3: Implement semantic UI**
+- [x] **Step 3: Implement semantic UI**
 
   Use headings, landmarks, labelled controls, status text, and bounded human-readable
   copy. Display the source message sequence and fact provenance appropriate to the
   active role, not hidden advisor-only fields. Disable only the active mutation and
   keep recovery action explicit.
 
-- [ ] **Step 4: Implement responsive/focus behavior**
+- [x] **Step 4: Implement responsive/focus behavior**
 
   At 390 px, render thread, proposal, advisor decision, confirmed fact, revision, and
   collapsed Skill inspector in one readable column without horizontal scrolling. On role
   switch or recovery, send focus to the new state heading. Touch targets are at least
   44 px.
 
-- [ ] **Step 5: Run GREEN and commit**
+- [x] **Step 5: Run GREEN and commit**
 
   ```bash
   npm --prefix web run test -- collaboration-demo
@@ -545,13 +544,13 @@ Both lanes stop before editing shared files.
   identity, task pin, actual leaf adapter, bounded digest prefixes, and exact
   `pin_status`, with role-safe labels and no client-side relational join.
 
-- [ ] **Step 1: Write inspector RED tests**
+- [x] **Step 1: Write inspector RED tests**
 
   Prove `/demo` initial `not_created`, post-task `matched`, collaboration
   `not_created`, legacy projection, wrong-role absence, no raw digest/UUID-first
   output, and no mutation affordance.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   npm --prefix web run test -- planning-skill-inspector connected-demo \
@@ -560,7 +559,7 @@ Both lanes stop before editing shared files.
 
   Expected: shared inspector is absent and existing `/demo` does not fetch it.
 
-- [ ] **Step 3: Implement shared no-store read model**
+- [x] **Step 3: Implement shared no-store read model**
 
   Task C4/lane C2 must be fully integrated and no longer editing
   `CollaborationDemo.tsx` before the integration owner begins this task.
@@ -571,7 +570,7 @@ Both lanes stop before editing shared files.
   inspector before `/demo` switches to parent. No parent phase may call or retain an
   advisor-only inspector projection. Do not poll and do not open another stream.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
   ```bash
   npm --prefix web run test -- planning-skill-inspector connected-demo \
@@ -597,7 +596,7 @@ Both lanes stop before editing shared files.
 - Modify: `scripts/verify_compose.sh`
 - Modify: Compose/browser proof architecture regressions
 
-- [ ] **Step 1: Write Playwright/Compose RED proof**
+- [x] **Step 1: Write Playwright/Compose RED proof**
 
   Use real seeded PostgreSQL, FastAPI, Next BFF, cookies, Origin/CSRF,
   idempotency, and browser state. Cover:
@@ -616,7 +615,7 @@ Both lanes stop before editing shared files.
   12. existing `/demo` inspector reaches `matched` while one-EventSource cursor proof
       remains unchanged.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   make compose-proof
@@ -625,13 +624,13 @@ Both lanes stop before editing shared files.
   Expected: the new collaboration browser lane and inspector assertions fail before
   C1-C5 are integrated; all earlier backend lanes stay green up to that point.
 
-- [ ] **Step 3: Integrate deterministic proof without test injection**
+- [x] **Step 3: Integrate deterministic proof without test injection**
 
   Route negative cases to PR A's stable seeded identities. Do not mutate database
   state from Playwright except through approved HTTP operations. Capture evidence only
   after authoritative UI state is visible.
 
-- [ ] **Step 4: Run focused and full GREEN**
+- [x] **Step 4: Run focused and full GREEN**
 
   ```bash
   npm --prefix web run test
@@ -645,7 +644,7 @@ Both lanes stop before editing shared files.
 
   Expected: frontend gates and every existing/new browser lane pass; Compose is empty.
 
-- [ ] **Step 5: Commit browser proof**
+- [x] **Step 5: Commit browser proof**
 
   ```bash
   git add web/e2e/collaboration-demo.spec.ts web/playwright.compose.config.ts \
@@ -672,14 +671,14 @@ Both lanes stop before editing shared files.
 - Modify: `docs/superpowers/plans/2026-07-16-collaboration-walkthrough-and-inspector.md`
 - Modify: release/docs architecture regressions
 
-- [ ] **Step 1: Write documentation/evidence RED tests**
+- [x] **Step 1: Write documentation/evidence RED tests**
 
   Assert both demo routes, primary-vs-secondary narrative, accepted PR A/B authority,
   collaboration role switch, read-only inspector, no task creation on collaboration,
   screenshot dimensions/existence, post-v0.1.1 unreleased status, and unchanged
   local-synthetic/non-production claims.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   ```bash
   uv run pytest tests/unit/test_release_surface.py \
@@ -689,14 +688,14 @@ Both lanes stop before editing shared files.
 
   Expected: route/docs/screenshot/status assertions fail.
 
-- [ ] **Step 3: Capture and inspect the real screenshot**
+- [x] **Step 3: Capture and inspect the real screenshot**
 
   Generate `docs/assets/collaboration-confirmed-fact.png` from the real Chromium flow
   at 1440 px after fact/revision reload. Inspect the image for readable message,
   proposal, advisor decision, confirmed fact, revision and Skill inspector; reject
   raw JSON, UUID-first text, browser chrome, secrets, paths, clipping, or overflow.
 
-- [ ] **Step 4: Update public docs**
+- [x] **Step 4: Update public docs**
 
   Explain `/demo` as the primary advisor-family flow and `/demo/collaboration` as the
   governed memory walkthrough. ADR 0006 already records M5 as implemented; preserve that
@@ -704,7 +703,7 @@ Both lanes stop before editing shared files.
   status, and reviewer index. Do not claim deployment, real users, external routing, or
   v0.1.2 release.
 
-- [ ] **Step 5: Run fresh final verification**
+- [x] **Step 5: Run fresh final verification**
 
   ```bash
   make doctor MODE=dev
@@ -730,7 +729,7 @@ Both lanes stop before editing shared files.
   Expected: every command exits 0, screenshot/public-hygiene checks pass, no migration
   or dependency/lockfile delta exists, and Compose is empty.
 
-- [ ] **Step 6: Review and commit**
+- [x] **Step 6: Review and commit**
 
   Review the complete diff for exact eight BFF methods, schema-v2 envelope, closed
   reducer/error mappings, authority reads, one-EventSource preservation, responsive
@@ -741,7 +740,7 @@ Both lanes stop before editing shared files.
   git commit -m "docs: complete collaboration walkthrough evidence"
   ```
 
-- [ ] **Step 7: Stop at local authority-review handoff**
+- [x] **Step 7: Stop at local authority-review handoff**
 
   Report base/branch/worktree/HEAD/ordered commits, exact diff, RED -> GREEN evidence,
   BFF route matrix, session/recovery tests, viewport/focus evidence, screenshot hash,
@@ -751,19 +750,19 @@ Both lanes stop before editing shared files.
 
 ## PR C Acceptance Checklist
 
-- [ ] `/demo` remains the primary unchanged advisor-family journey; the secondary
+- [x] `/demo` remains the primary unchanged advisor-family journey; the secondary
   `/demo/collaboration` proves parent proposal -> advisor confirmation -> authoritative
   fact/revision reload without creating a task.
-- [ ] Exactly eight explicit BFF methods proxy only frozen PR A/B endpoints through
+- [x] Exactly eight explicit BFF methods proxy only frozen PR A/B endpoints through
   existing bounded transport, cookie, Origin, CSRF, idempotency, and no-store rules.
-- [ ] The schema-v2 journey envelope, exact mutation fingerprints, 401/409 recovery,
+- [x] The schema-v2 journey envelope, exact mutation fingerprints, 401/409 recovery,
   closed reducer, and seven error categories are fail-closed and fully tested.
-- [ ] Real PostgreSQL seed drives stale, expired, active-task, wrong-role, replay, and
+- [x] Real PostgreSQL seed drives stale, expired, active-task, wrong-role, replay, and
   confirmation paths; frontend injection does not manufacture authority.
-- [ ] Shared inspector is server-owned and no-store; collaboration shows
+- [x] Shared inspector is server-owned and no-store; collaboration shows
   `not_created`, default demo progresses to `matched`, and no client-side join or
   mutation authority exists.
-- [ ] 1440/768/390, keyboard/focus, landmarks, touch targets, no overflow, and one
+- [x] 1440/768/390, keyboard/focus, landmarks, touch targets, no overflow, and one
   public screenshot are verified through real Chromium.
-- [ ] Existing backend authority, task/SSE/reconnect, M1-M5, DRA, MKE, v0.1.1, and
+- [x] Existing backend authority, task/SSE/reconnect, M1-M5, DRA, MKE, v0.1.1, and
   release/public-neutral boundaries remain green with no migration/dependency change.

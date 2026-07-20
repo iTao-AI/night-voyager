@@ -56,21 +56,21 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "Governed Collaboration Core v1",
-        "PR A and PR B implemented post-v0.1.1; PR C approved but not implemented",
+        "PR A, PR B, and PR C implemented post-v0.1.1; unreleased",
         "2026-07-16-governed-conversation-memory-authority.md",
         "**Implementation status:** Complete.",
     ),
     (
         "Governed Collaboration Core v1",
-        "PR A and PR B implemented post-v0.1.1; PR C approved but not implemented",
+        "PR A, PR B, and PR C implemented post-v0.1.1; unreleased",
         "2026-07-16-versioned-skill-runtime-pinning.md",
         "**Implementation status:** Implemented locally",
     ),
     (
         "Governed Collaboration Core v1",
-        "PR A and PR B implemented post-v0.1.1; PR C approved but not implemented",
+        "PR A, PR B, and PR C implemented post-v0.1.1; unreleased",
         "2026-07-16-collaboration-walkthrough-and-inspector.md",
-        "**Implementation status:** Approved but not implemented.",
+        "**Implementation status:** Implemented locally",
     ),
 )
 
@@ -353,10 +353,8 @@ def test_pr_body_contract_requires_final_reconciliation() -> None:
 def test_current_documentation_release_and_planning_boundaries_do_not_drift() -> None:
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
     assert "DRA closure was released in v0.1.1" in docs_index
-    assert (
-        "collaboration PR A and versioned Skill PR B are implemented after v0.1.1"
-        in docs_index
-    )
+    assert "collaboration PR A, versioned Skill PR B" in docs_index
+    assert "browser walkthrough/inspector PR C are" in docs_index
     assert "connected [demo storyboard](design/demo-storyboard.md)" in docs_index
 
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
