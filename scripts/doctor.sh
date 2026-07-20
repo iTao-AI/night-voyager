@@ -25,12 +25,14 @@ ensure_probe_image() {
 check_docker_space() {
     minimum_kb=${NIGHT_VOYAGER_DOCKER_MINIMUM_KB:-8388608}
     case "$minimum_kb" in
-        ''|0|*[!0-9]*)
-            fail "Docker VM filesystem threshold" "a positive integer KiB value" \
-                "NIGHT_VOYAGER_DOCKER_MINIMUM_KB=$minimum_kb" \
-                "set NIGHT_VOYAGER_DOCKER_MINIMUM_KB to a positive integer, then rerun make doctor"
-            ;;
+        ''|*[!0-9]*) valid_minimum=0 ;;
+        *[1-9]*) valid_minimum=1 ;;
+        *) valid_minimum=0 ;;
     esac
+    [ "$valid_minimum" -eq 1 ] || fail \
+        "Docker VM filesystem threshold" "a positive integer KiB value" \
+        "NIGHT_VOYAGER_DOCKER_MINIMUM_KB=$minimum_kb" \
+        "set NIGHT_VOYAGER_DOCKER_MINIMUM_KB to a positive integer, then rerun make doctor"
     ensure_probe_image
     if ! available_kb=$(docker run --rm --network none --read-only "$probe_image" \
         python -c 'import os; fs = os.statvfs("/"); print(fs.f_bavail * fs.f_frsize // 1024)' \
