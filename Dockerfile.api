@@ -3,12 +3,15 @@ WORKDIR /build
 ENV UV_BUILD_CONSTRAINT=build-constraints.txt \
     UV_REQUIRE_HASHES=1
 COPY pyproject.toml uv.lock build-constraints.txt README.md ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    pip install --no-cache-dir uv==0.11.7 \
+    && uv export --frozen --no-dev --no-emit-project --output-file requirements.txt \
+    && pip wheel --no-cache-dir --wheel-dir /wheels/dependencies -r requirements.txt
 COPY src ./src
 COPY fixtures/skills ./fixtures/skills
-RUN pip install --no-cache-dir uv==0.11.7 \
-    && uv export --frozen --no-dev --no-emit-project --output-file requirements.txt \
-    && pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt \
-    && uv build --wheel --build-constraints build-constraints.txt --require-hashes --out-dir /wheels
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv build --wheel --build-constraints build-constraints.txt --require-hashes \
+    --out-dir /wheels/project
 
 FROM builder AS db-test
 COPY . .
@@ -18,7 +21,8 @@ CMD ["uv", "run", "pytest", "-q", "-m", "database"]
 FROM python:3.12.13-slim
 RUN useradd --create-home --uid 10001 app
 COPY --from=builder /wheels /wheels
-RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
+RUN pip install --no-cache-dir /wheels/dependencies/*.whl /wheels/project/*.whl \
+    && rm -rf /wheels
 WORKDIR /home/app
 COPY alembic.ini ./
 COPY migrations ./migrations

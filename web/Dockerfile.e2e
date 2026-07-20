@@ -1,18 +1,18 @@
 FROM node:24.18.0-bookworm-slim
 
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /workspace/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci && npx playwright install --with-deps chromium
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
-RUN cp -R /root/.cache/ms-playwright /ms-playwright \
-    && chmod -R a+rX /ms-playwright
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends socat \
     && rm -rf /var/lib/apt/lists/*
-COPY web ./
-RUN mkdir -p /workspace/docs/assets \
+RUN mkdir -p /workspace/docs/assets /workspace/web/test-results \
     && useradd --create-home --uid 10001 browser \
-    && chown -R browser:browser /workspace
+    && chown browser:browser /workspace/docs/assets \
+        /workspace/web \
+        /workspace/web/test-results
+COPY --chown=browser:browser web ./
 USER browser
 ENTRYPOINT ["sh", "-c", "socat TCP-LISTEN:3000,fork,reuseaddr TCP:web:3000 & exec \"$@\"", "--"]
 CMD ["npx", "playwright", "test", "--config", "playwright.compose.config.ts"]

@@ -6,12 +6,13 @@ UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
 export COMPOSE_PROJECT_NAME
 
 cleanup() {
-    docker compose down --volumes --remove-orphans
+    docker compose down --volumes --remove-orphans --rmi local
 }
 trap cleanup EXIT INT TERM
 
 docker compose config --quiet
-docker compose up --build --wait
+docker compose --profile browser-proof build
+docker compose up --no-build --wait
 
 for service in postgres api web; do
     container=$(docker compose ps -q "$service")
@@ -64,13 +65,13 @@ printf 'compose-proof: Web probe passed\n'
 # The M4A proof intentionally leaves the canonical task case at review_required.
 # Recreate the synthetic proof volume so the browser lane proves task creation too.
 docker compose down --volumes --remove-orphans
-docker compose up --build --wait
+docker compose up --no-build --wait
 printf 'compose-proof: fresh browser stack seeded\n'
 docker compose stop worker
-docker compose --profile browser-proof run --rm --build -e M5_TERMINAL_PROOF=1 browser-proof
+docker compose --profile browser-proof run --rm --no-deps -e M5_TERMINAL_PROOF=1 browser-proof
 printf 'compose-proof: native reconnect and terminal browser proof passed\n'
 docker compose down --volumes --remove-orphans
-docker compose up --build --wait
-docker compose --profile browser-proof run --rm --build \
+docker compose up --no-build --wait
+docker compose --profile browser-proof run --rm --no-deps \
     -e UPDATE_COLLABORATION_SCREENSHOT="$UPDATE_COLLABORATION_SCREENSHOT" browser-proof
 printf 'compose-proof: connected browser proof passed\n'

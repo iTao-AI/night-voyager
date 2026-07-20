@@ -34,7 +34,7 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     assert "-o addopts='' -m database" in runner
     assert "docker compose --profile db-test run --rm --build" in runner
     assert "docker compose --profile db-test \\" in runner
-    assert "down --volumes --remove-orphans" in runner
+    assert "down --volumes --remove-orphans --rmi local" in runner
     assert "label=com.docker.compose.project=$active_project" in runner
     assert "docker volume ls --quiet" in runner
     assert "docker network ls --quiet" in runner

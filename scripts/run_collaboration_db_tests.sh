@@ -75,7 +75,7 @@ active_project=
 cleanup() {
     if [ -n "$active_project" ]; then
         COMPOSE_PROJECT_NAME="$active_project" docker compose --profile db-test \
-            down --volumes --remove-orphans
+            down --volumes --remove-orphans --rmi local
     fi
 }
 trap cleanup EXIT INT TERM
@@ -86,7 +86,7 @@ run_project() {
     export COMPOSE_PROJECT_NAME="$active_project"
     docker compose --profile db-test config --quiet
     docker compose --profile db-test run --rm --build "$@"
-    docker compose --profile db-test down --volumes --remove-orphans
+    docker compose --profile db-test down --volumes --remove-orphans --rmi local
     active_project=
 }
 

@@ -102,7 +102,7 @@ ACTIVE_PROJECT_NAME=
 
 cleanup() {
     if [ -n "$ACTIVE_PROJECT_NAME" ]; then
-        COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test down --volumes --remove-orphans
+        COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test down --volumes --remove-orphans --rmi local
     fi
 }
 trap cleanup EXIT INT TERM
@@ -114,7 +114,7 @@ run_lane() {
     COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test config --quiet
     COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test run --rm --build db-test \
         sh scripts/run_db_tests.sh "$mode"
-    COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test down --volumes --remove-orphans
+    COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test down --volumes --remove-orphans --rmi local
     ACTIVE_PROJECT_NAME=
 }
 

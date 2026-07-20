@@ -32,7 +32,7 @@ make down
 
 primary connected local synthetic demo 位于 `http://127.0.0.1:3000/demo`，按 [connected demo runbook](docs/operations/connected-demo.md)完成 advisor-to-family walkthrough。Secondary governed-memory walkthrough 位于 `http://127.0.0.1:3000/demo/collaboration`，操作见[独立 runbook](docs/operations/collaboration-walkthrough.md)。[v0.1.2 release/source-archive verification guide](docs/how-to/verify-v0.1.2-release.md)描述当前 release。
 
-`make doctor` 检查 Docker、Compose capability、磁盘空间与本地端口。`make demo` 迁移并 seed fresh synthetic stack。`make proof` 验证配置、public hygiene 与隔离 installed wheel，不要求 host Python、uv、Node.js 或 npm。`make compose-proof` 还会在真实 Chromium 中执行 browser-to-database flow。
+`make doctor` 检查 Docker、Compose capability、本地端口、host project filesystem 至少 5 GiB，以及 Docker VM filesystem 至少 8 GiB。运维人员只能通过 `NIGHT_VOYAGER_DOCKER_MINIMUM_KB` 调整 Docker VM 门槛；检查会 fail closed，且绝不会自动删除 Docker 资源。`make demo` 迁移并 seed fresh synthetic stack。`make proof` 验证配置、public hygiene 与隔离 installed wheel，不要求 host Python、uv、Node.js 或 npm。`make compose-proof` 还会在真实 Chromium 中执行 browser-to-database flow。
 
 ## 合成与本地边界
 
