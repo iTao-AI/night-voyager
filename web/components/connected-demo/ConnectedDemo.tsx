@@ -8,6 +8,7 @@ import { DecisionReceiptTimeline } from "./DecisionReceiptTimeline";
 import { FamilyDecisionBrief } from "./FamilyDecisionBrief";
 import { RecoveryNotice } from "./RecoveryNotice";
 import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
+import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
 
 export function ConnectedDemo() {
   const demo = useConnectedDemo();
@@ -29,6 +30,7 @@ export function ConnectedDemo() {
         ) : null}
         {["advisor_ready", "advisor_review"].includes(state.value) && "ledger" in state ? <AdvisorLedger ledger={state.ledger} onPrimaryAction={advisorAction} /> : null}
         {["task_creating", "task_streaming", "review_submitting"].includes(state.value) && "ledger" in state ? <AdvisorLedger ledger={state.ledger} busy onPrimaryAction={() => undefined} /> : null}
+        {demo.inspector && !["family_review", "decision_submitting", "plan_ready", "role_switching"].includes(state.value) ? <PlanningSkillInspector inspector={demo.inspector} /> : null}
         {state.value === "role_switching" ? <section className="ledger-hero" aria-live="polite"><h1>Switching to family</h1><p>Advisor session revoked. Establishing the parent session.</p></section> : null}
         {state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => void demo.decide()} /> : null}
         {state.value === "decision_submitting" ? <section className="ledger-hero" aria-live="polite"><h1>Recording family decision</h1></section> : null}

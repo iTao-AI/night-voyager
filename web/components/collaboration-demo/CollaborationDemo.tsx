@@ -9,6 +9,7 @@ import { CollaborationRecoveryNotice } from "./CollaborationRecoveryNotice";
 import { ConfirmedFactSummary } from "./ConfirmedFactSummary";
 import { MemoryCandidateCard } from "./MemoryCandidateCard";
 import { SharedThread } from "./SharedThread";
+import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
 
 export function CollaborationDemo() {
   const demo = useCollaborationDemo();
@@ -59,6 +60,7 @@ export function CollaborationDemo() {
             {state.value === "message_submitting" ? <section className="collaboration-action" aria-live="polite"><h2>Recording parent message</h2><button type="button" disabled>Recording message…</button></section> : null}
 
             {context.candidate ? <MemoryCandidateCard candidate={context.candidate} /> : null}
+            {context.role === "advisor" && demo.inspector ? <PlanningSkillInspector inspector={demo.inspector} /> : null}
 
             {state.value === "proposal_pending" ? (
               <section className="collaboration-action" aria-labelledby="switch-title"><h2 id="switch-title">Move to advisor review</h2><p>The parent session must be revoked before an advisor session is minted.</p><button type="button" onClick={() => void demo.switchToAdvisor()}>Continue as assigned advisor</button></section>

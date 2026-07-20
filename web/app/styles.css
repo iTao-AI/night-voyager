@@ -106,6 +106,14 @@ footer p { margin: 0; }
 .replan-boundary { border-top-color: var(--attention); }
 .action-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
 .action-row a { min-height: 44px; display: inline-flex; align-items: center; font-weight: 800; }
+.skill-inspector { margin-top: 2rem; padding: 1rem; border: 1px solid var(--border); background: rgba(255,253,248,.75); }
+.skill-inspector > .status { margin: 0 0 .75rem; }
+.skill-inspector details { color: var(--muted); }
+.skill-inspector summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--ink); font-weight: 800; }
+.inspector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; margin: 1rem 0 0; background: var(--border); border: 1px solid var(--border); }
+.inspector-grid div { min-width: 0; padding: .85rem; background: var(--surface); }
+.inspector-grid dt { font-size: .75rem; font-weight: 800; text-transform: uppercase; }
+.inspector-grid dd { margin: .3rem 0 0; overflow-wrap: anywhere; color: var(--ink); }
 
 @media (max-width: 1279px) {
   .current-stage, .ledger-grid, .blocked-path { grid-template-columns: 1fr; }
@@ -137,6 +145,7 @@ footer p { margin: 0; }
   .brief-columns { grid-template-columns: 1fr; gap: 1rem; }
   .decision-requirements { grid-template-columns: 1fr; }
   .authority-steps, .collaboration-facts { grid-template-columns: 1fr; }
+  .inspector-grid { grid-template-columns: 1fr; }
   .collaboration-panel, .collaboration-action { padding: 1rem; }
   .collaboration-action button, .collaboration-action .primary-action { width: 100%; }
   .timeline li { grid-template-columns: 70px 1fr; }

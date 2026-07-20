@@ -5,6 +5,8 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { ConnectedDemoApiError, createConnectedDemoApi } from "./api";
 import type { FamilyDecisionBody } from "./contracts";
 import { idempotencyFor } from "./idempotency";
+import { createCollaborationDemoApi } from "../collaboration-demo/api";
+import type { PlanningSkillInspector } from "../skill-inspector/contracts";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
   clearRecoveryMetadata, loadDemoJourneyEnvelope, loadRecoveryMetadata, saveRecoveryMetadata, withMutation,
@@ -12,6 +14,7 @@ import {
 } from "./session-storage";
 
 const api = createConnectedDemoApi();
+const inspectorApi = createCollaborationDemoApi();
 const initial: DemoDisplayState = { value: "bootstrapping" };
 const CASE_ID = "40000000-0000-0000-0000-000000000002";
 
@@ -25,6 +28,7 @@ function failure(error: unknown): RecoveryCode {
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
+  const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
   const [journeyConflict, setJourneyConflict] = useState<"collaboration" | null>(() => {
     if (typeof window === "undefined") return null;
     return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
@@ -48,6 +52,7 @@ export function useConnectedDemo() {
         : null;
       saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
       dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
+      void inspectorApi.planningSkillInspector(CASE_ID).then(setInspector).catch(() => setInspector(null));
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
     }
@@ -82,6 +87,7 @@ export function useConnectedDemo() {
         const taskPhase = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase);
         if ((taskPhase && metadata.taskId !== projectedTaskId) || (!taskPhase && metadata.taskId !== null && projectedTaskId !== metadata.taskId)) throw new Error("projection identity mismatch");
         dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
+        if (ledger.phase !== "active-task") void inspectorApi.planningSkillInspector(metadata.caseId).then(setInspector).catch(() => setInspector(null));
       }
     } catch (error) {
       const code = failure(error);
@@ -122,6 +128,7 @@ export function useConnectedDemo() {
           if (!current || current.taskId !== streamingTaskId) throw new Error("projection identity mismatch");
           saveRecoveryMetadata({ ...current, cursor: Math.max(current.cursor, cursor) });
           dispatch({ type: "TASK_REFRESHED", ledger, after: cursor });
+          if (ledger.phase !== "active-task") void inspectorApi.planningSkillInspector(metadata.caseId).then(setInspector).catch(() => setInspector(null));
         } while (pending && !closed);
       } catch (error) {
         if (!closed) dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
@@ -157,6 +164,7 @@ export function useConnectedDemo() {
         saveRecoveryMetadata({ ...updated, taskId: task.task_id, cursor: 0 });
         retryAction.current = null;
         dispatch({ type: "TASK_ACCEPTED", taskId: task.task_id });
+        void inspectorApi.planningSkillInspector(current.caseId).then(setInspector).catch(() => setInspector(null));
       } catch (error) {
         const code = failure(error);
         if (code === "session_expired") { retryAction.current = null; clearRecoveryMetadata(); }
@@ -172,6 +180,7 @@ export function useConnectedDemo() {
     const metadata = loadRecoveryMetadata();
     if (!metadata || metadata.role !== "advisor" || metadata.caseId !== caseId) { dispatch({ type: "RECOVERABLE_FAILURE", code: "session_recovery_required" }); return; }
     try {
+      setInspector(null);
       await api.revoke(metadata.csrf);
       clearRecoveryMetadata();
       const bootstrap = await api.bootstrap();
@@ -265,5 +274,5 @@ export function useConnectedDemo() {
     }
   }, [connectAdvisor]);
 
-  return { state, confirmed, setConfirmed, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
+  return { state, confirmed, setConfirmed, inspector, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
 }

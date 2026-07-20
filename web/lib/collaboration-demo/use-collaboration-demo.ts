@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import type { PlanningSkillInspector } from "../skill-inspector/contracts";
 
 import { ConnectedDemoApiError, createConnectedDemoApi } from "../connected-demo/api";
 import { idempotencyFor } from "../connected-demo/idempotency";
@@ -61,6 +62,7 @@ export function useCollaborationDemo() {
     if (typeof window === "undefined") return null;
     return loadDemoJourneyEnvelope()?.journey === "advisor-family" ? "advisor-family" : null;
   });
+  const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
 
@@ -77,6 +79,7 @@ export function useCollaborationDemo() {
     const existing = loadDemoJourneyEnvelope();
     if (existing?.journey === "advisor-family") { setJourneyConflict("advisor-family"); return; }
     try {
+      setInspector(null);
       const bootstrap = await identity.bootstrap();
       const session = await identity.mint("parent", bootstrap.csrf_token);
       const thread = await api.thread(COLLABORATION_CASE_ID);
@@ -108,6 +111,7 @@ export function useCollaborationDemo() {
       if (stored.role === "advisor") {
         const ledger = await identity.advisorLedger(stored.caseId);
         caseRevision = ledger.case_revision;
+        setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
         if (stored.phase === "replan_required") {
           const facts = await api.confirmedFacts(stored.caseId);
           fact = findAdvisorFact(facts.current, stored.candidateId);
@@ -185,6 +189,7 @@ export function useCollaborationDemo() {
     if (!stored || stored.journey !== "collaboration" || stored.role !== "parent") return;
     saveCollaborationJourney({ ...stored, phase: "switching_to_advisor" });
     dispatch({ type: "ROLE_SWITCH" });
+    setInspector(null);
     try {
       await identity.revoke(stored.csrf);
       const bootstrap = await identity.bootstrap();
@@ -197,6 +202,7 @@ export function useCollaborationDemo() {
       const ledger = await identity.advisorLedger(stored.caseId);
       if (ledger.case_revision !== candidate.case_revision) throw new Error("candidate revision mismatch");
       const context: CollaborationContext = { role: "advisor", caseId: stored.caseId, thread, messages: messages.items, candidate, fact: null, caseRevision: ledger.case_revision };
+      setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
       saveCollaborationJourney(envelope(context, advisor.csrf_token, "advisor_reviewing", {}, { messageId: stored.messageId, candidateId: candidate.candidate_id }));
       dispatch({ type: "ADVISOR_RELOADED", context });
     } catch (error) { fail(error); }
@@ -218,6 +224,7 @@ export function useCollaborationDemo() {
       const refreshed = await identity.advisorLedger(stored.caseId);
       if (!candidate || candidate.state !== "confirmed" || !fact || refreshed.case_revision <= candidate.case_revision) throw new Error("authority proof mismatch");
       if (result && (fact.confirmed_fact_id !== result.result_fact_id || refreshed.case_revision !== result.result_revision)) throw new Error("authority proof mismatch");
+      setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
       const context = { ...state.context, candidate, fact, caseRevision: refreshed.case_revision };
       const current = loadDemoJourneyEnvelope();
       if (!current || current.journey !== "collaboration") throw new Error("session recovery required");
@@ -261,5 +268,5 @@ export function useCollaborationDemo() {
     }
   }, [connectParent, fail]);
 
-  return { state, journeyConflict, connectParent, appendMessage, proposeBudget, switchToAdvisor, confirmCandidate, recover, retry, endConflictingJourney };
+  return { state, inspector, journeyConflict, connectParent, appendMessage, proposeBudget, switchToAdvisor, confirmCandidate, recover, retry, endConflictingJourney };
 }
