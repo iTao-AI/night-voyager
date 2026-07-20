@@ -192,14 +192,22 @@ function parseAdvisorCandidate(value: unknown): MemoryCandidateAdvisor {
   return freeze(value as unknown as MemoryCandidateAdvisor);
 }
 
-export function parseMemoryCandidate(value: unknown): MemoryCandidateProjection {
-  if (!object(value)) invalid();
-  return Object.hasOwn(value, "candidate_id") ? parseAdvisorCandidate(value) : parseParticipantCandidate(value);
+export function parseParticipantMemoryCandidate(value: unknown): MemoryCandidateParticipant {
+  return parseParticipantCandidate(value);
 }
 
-export function parseMemoryCandidateList(value: unknown): readonly MemoryCandidateProjection[] {
+export function parseAdvisorMemoryCandidate(value: unknown): MemoryCandidateAdvisor {
+  return parseAdvisorCandidate(value);
+}
+
+export function parseParticipantMemoryCandidateList(value: unknown): readonly MemoryCandidateParticipant[] {
   if (!Array.isArray(value) || value.length > 100) invalid();
-  return freeze(value.map(parseMemoryCandidate));
+  return freeze(value.map(parseParticipantCandidate));
+}
+
+export function parseAdvisorMemoryCandidateList(value: unknown): readonly MemoryCandidateAdvisor[] {
+  if (!Array.isArray(value) || value.length > 100) invalid();
+  return freeze(value.map(parseAdvisorCandidate));
 }
 
 export function parseMemoryCandidateVerification(value: unknown): MemoryCandidateVerification {
@@ -222,12 +230,12 @@ function parseAdvisorFact(value: unknown): ConfirmedFactAdvisor {
   return freeze(value as unknown as ConfirmedFactAdvisor);
 }
 
-export function parseConfirmedFactPage(value: unknown): ConfirmedFactPage {
-  if (!object(value) || value.schema_version !== 1 || !Array.isArray(value.current)) invalid();
-  if (Object.hasOwn(value, "history") || Object.hasOwn(value, "next_cursor")) {
-    if (!exact(value, ["schema_version", "current", "history", "next_cursor"]) || !Array.isArray(value.history) || !(value.next_cursor === null || bounded(value.next_cursor, 512))) invalid();
-    return freeze({ schema_version: 1 as const, current: value.current.map(parseAdvisorFact), history: value.history.map(parseAdvisorFact), next_cursor: value.next_cursor as string | null });
-  }
-  if (!exact(value, ["schema_version", "current"])) invalid();
+export function parseParticipantConfirmedFactPage(value: unknown): { schema_version: 1; current: readonly ConfirmedFactParticipant[] } {
+  if (!object(value) || !exact(value, ["schema_version", "current"]) || value.schema_version !== 1 || !Array.isArray(value.current)) invalid();
   return freeze({ schema_version: 1 as const, current: value.current.map(parseParticipantFact) });
+}
+
+export function parseAdvisorConfirmedFactPage(value: unknown): { schema_version: 1; current: readonly ConfirmedFactAdvisor[]; history: readonly ConfirmedFactAdvisor[]; next_cursor: string | null } {
+  if (!object(value) || !exact(value, ["schema_version", "current", "history", "next_cursor"]) || value.schema_version !== 1 || !Array.isArray(value.current) || !Array.isArray(value.history) || !(value.next_cursor === null || bounded(value.next_cursor, 512))) invalid();
+  return freeze({ schema_version: 1 as const, current: value.current.map(parseAdvisorFact), history: value.history.map(parseAdvisorFact), next_cursor: value.next_cursor as string | null });
 }

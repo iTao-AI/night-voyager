@@ -55,6 +55,39 @@ async function readBoundedBody(
   }
 }
 
+async function readBoundedResponseBody(
+  response: Response,
+  maxBytes: number,
+  signal: AbortSignal,
+): Promise<Uint8Array | null> {
+  if (!response.body) return null;
+  const reader = response.body.getReader();
+  const cancel = () => { void reader.cancel("upstream response aborted"); };
+  signal.addEventListener("abort", cancel, { once: true });
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      const { done, value } = await reader.read();
+      if (signal.aborted) throw new DOMException("aborted", "AbortError");
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel("upstream response too large");
+        throw new Error("upstream response too large");
+      }
+      chunks.push(value);
+    }
+    const body = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.byteLength; }
+    return body;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
 function jsonHeaders(request: Request, config: DemoBffConfig, mutation: boolean): Headers {
   const headers = new Headers({ Origin: config.publicOrigin });
   for (const name of ["Cookie", ...(mutation ? ["Content-Type", "X-CSRF-Token", "Idempotency-Key"] : [])]) {
@@ -119,7 +152,11 @@ export async function forwardDemoJson(
       body: body ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer : undefined,
       signal: controller.signal,
     });
-    return new Response(upstream.body, {
+    const responseBody = await readBoundedResponseBody(upstream, config.maxJsonBytes, controller.signal);
+    const responseBytes = responseBody
+      ? responseBody.buffer.slice(responseBody.byteOffset, responseBody.byteOffset + responseBody.byteLength) as ArrayBuffer
+      : null;
+    return new Response(responseBytes, {
       status: upstream.status,
       headers: responseHeaders(upstream, false),
     });

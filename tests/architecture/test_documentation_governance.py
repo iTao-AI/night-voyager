@@ -374,3 +374,41 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
     assert "no fixed lane count" in spec
     assert "ADR 0006 already records M5 as implemented" in spec
     assert "ADR 0006 already records M5 as implemented" in plan
+
+
+def test_collaboration_state_matrix_matches_executable_and_approved_plan() -> None:
+    expected = {
+        "bootstrapping_parent",
+        "thread_ready",
+        "message_submitting",
+        "proposal_pending",
+        "switching_to_advisor",
+        "advisor_reviewing",
+        "confirmation_submitting",
+        "replan_required",
+        "recoverable_error",
+    }
+    session = (ROOT / "web/lib/connected-demo/session-storage.ts").read_text(encoding="utf-8")
+    reducer = (ROOT / "web/lib/collaboration-demo/reducer.ts").read_text(encoding="utf-8")
+    plan = (
+        ROOT
+        / "docs/superpowers/plans/2026-07-16-collaboration-walkthrough-and-inspector.md"
+    ).read_text(encoding="utf-8")
+    matrix = (ROOT / "docs/design/state-and-interaction-matrix.md").read_text(encoding="utf-8")
+    persisted_block = session.split("export type CollaborationPersistedPhase =", 1)[
+        1
+    ].split(";", 1)[0]
+    executable = set(re.findall(r'"([a-z_]+)"', persisted_block))
+    if '"recoverable_error"' in reducer:
+        executable.add("recoverable_error")
+    plan_block = plan.split("The collaboration reducer states are exactly", 1)[1].split(
+        "Do not enlarge", 1
+    )[0]
+    approved = set(re.findall(r"`([a-z_]+)`", plan_block))
+    matrix_block = matrix.split(
+        "The secondary collaboration route has its own closed lifecycle:", 1
+    )[1].split("The fresh UI defaults", 1)[0]
+    documented = set(re.findall(r"\| `([a-z_]+)` \|", matrix_block))
+    assert executable == expected
+    assert approved == expected
+    assert documented == expected

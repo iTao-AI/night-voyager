@@ -29,9 +29,9 @@ it("uses the exact eight collaboration/inspector methods with no-store", async (
   await api.messages(THREAD, 0, 50);
   await api.appendMessage(THREAD, { schema_version: 1, body: "Budget confirmed." }, "csrf", CASE);
   await api.proposeCandidate(MESSAGE, { schema_version: 1, case_revision: 1, proposal: { schema_version: 1, fact_key: "family.risk_tolerance", value: "high" } }, "csrf", CASE);
-  await api.candidates(CASE);
+  await api.candidates(CASE, "parent");
   await api.verifyCandidate(CANDIDATE, { schema_version: 1, expected_case_revision: 1, decision: "confirm", reason: "Confirmed." }, "csrf", CASE);
-  await api.confirmedFacts(CASE);
+  await api.confirmedFacts(CASE, "parent");
   await api.planningSkillInspector(CASE);
   expect(calls.map(({ path }) => path)).toEqual([
     `/api/demo/cases/${CASE}/collaboration-thread`,
@@ -49,4 +49,15 @@ it("uses the exact eight collaboration/inspector methods with no-store", async (
 it("fails closed on malformed success payloads", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ schema_version: 1, thread_id: THREAD })));
   await expect(createCollaborationDemoApi().thread(CASE)).rejects.toThrow("invalid response");
+});
+
+it("rejects wrong-role candidate projections in both directions", async () => {
+  const participant = { schema_version: 1, fact_key: "family.risk_tolerance", value: "high", state: "pending", created_at: AT, expires_at: "2026-07-27T01:02:03Z" };
+  const advisor = { ...participant, candidate_id: CANDIDATE, message_event_id: MESSAGE, source_message_sequence_no: 1, subject_actor_id: CASE, subject_role: "parent", case_revision: 1, verification_id: null, decision: null, reason: null, request_sha256: SHA, value_sha256: SHA };
+  const responses = [advisor, participant, [participant, advisor]];
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json([responses.shift()])));
+  const api = createCollaborationDemoApi();
+  await expect(api.candidates(CASE, "parent")).rejects.toThrow("invalid response");
+  await expect(api.candidates(CASE, "advisor")).rejects.toThrow("invalid response");
+  await expect(api.candidates(CASE, "parent")).rejects.toThrow("invalid response");
 });

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   parseCollaborationThread,
-  parseConfirmedFactPage,
-  parseMemoryCandidateList,
+  parseAdvisorMemoryCandidateList,
+  parseAdvisorConfirmedFactPage,
+  parseParticipantConfirmedFactPage,
+  parseParticipantMemoryCandidateList,
   parseMemoryCandidateVerification,
   parseMessageEvent,
   parseMessagePage,
@@ -85,14 +87,18 @@ describe("collaboration response contracts", () => {
   });
 
   it("keeps participant and advisor candidate projections closed", () => {
-    expect(parseMemoryCandidateList([participantCandidate])).toEqual([participantCandidate]);
-    expect(parseMemoryCandidateList([advisorCandidate])).toEqual([advisorCandidate]);
-    expect(() => parseMemoryCandidateList([{ ...participantCandidate, candidate_id: ID }])).toThrow("invalid response");
-    expect(() => parseMemoryCandidateList([{ ...advisorCandidate, request_sha256: undefined }])).toThrow("invalid response");
+    expect(parseParticipantMemoryCandidateList([participantCandidate])).toEqual([participantCandidate]);
+    expect(parseAdvisorMemoryCandidateList([advisorCandidate])).toEqual([advisorCandidate]);
+    expect(() => parseParticipantMemoryCandidateList([advisorCandidate])).toThrow("invalid response");
+    expect(() => parseAdvisorMemoryCandidateList([participantCandidate])).toThrow("invalid response");
+    expect(() => parseParticipantMemoryCandidateList([participantCandidate, advisorCandidate])).toThrow("invalid response");
+    expect(() => parseAdvisorMemoryCandidateList([advisorCandidate, participantCandidate])).toThrow("invalid response");
+    expect(() => parseParticipantMemoryCandidateList([{ ...participantCandidate, candidate_id: ID }])).toThrow("invalid response");
+    expect(() => parseAdvisorMemoryCandidateList([{ ...advisorCandidate, request_sha256: undefined }])).toThrow("invalid response");
   });
 
   it("validates typed proposal values and terminal verification identity", () => {
-    expect(() => parseMemoryCandidateList([{ ...participantCandidate, value: { ...participantCandidate.value, hard_ceiling_minor: "40000000" } }])).toThrow("invalid response");
+    expect(() => parseParticipantMemoryCandidateList([{ ...participantCandidate, value: { ...participantCandidate.value, hard_ceiling_minor: "40000000" } }])).toThrow("invalid response");
     expect(parseMemoryCandidateVerification({ schema_version: 1, verification_id: ID, candidate_id: ID2, decision: "confirm", result_fact_id: ID, result_revision: 2, replayed: false })).toMatchObject({ result_revision: 2 });
     expect(() => parseMemoryCandidateVerification({ schema_version: 1, verification_id: ID, candidate_id: ID2, decision: "confirm", result_fact_id: null, result_revision: null, replayed: false })).toThrow("invalid response");
   });
@@ -100,9 +106,11 @@ describe("collaboration response contracts", () => {
   it("discriminates participant and advisor confirmed-fact pages", () => {
     const participantFact = { schema_version: 1, fact_key: "family.budget", value: participantCandidate.value, fact_version: 1, confirmed_at: AT, subject_role: "parent", confirming_advisor_role: "advisor" };
     const advisorFact = { ...participantFact, confirmed_fact_id: ID, candidate_id: ID2, verification_id: ID, source_message_event_id: ID2, source_message_sequence_no: 1, source_message_sha256_prefix: "abcdef123456", confirming_advisor_actor_id: ID, reason: "Confirmed with the family.", supersedes_fact_id: null };
-    expect(parseConfirmedFactPage({ schema_version: 1, current: [participantFact] })).toMatchObject({ current: [participantFact] });
-    expect(parseConfirmedFactPage({ schema_version: 1, current: [advisorFact], history: [], next_cursor: null })).toMatchObject({ current: [advisorFact] });
-    expect(() => parseConfirmedFactPage({ schema_version: 1, current: [{ ...participantFact, candidate_id: ID }] })).toThrow("invalid response");
-    expect(() => parseConfirmedFactPage({ schema_version: 1, current: [{ ...advisorFact, source_message_sha256_prefix: SHA }] , history: [], next_cursor: null })).toThrow("invalid response");
+    expect(parseParticipantConfirmedFactPage({ schema_version: 1, current: [participantFact] })).toMatchObject({ current: [participantFact] });
+    expect(parseAdvisorConfirmedFactPage({ schema_version: 1, current: [advisorFact], history: [], next_cursor: null })).toMatchObject({ current: [advisorFact] });
+    expect(() => parseParticipantConfirmedFactPage({ schema_version: 1, current: [advisorFact], history: [], next_cursor: null })).toThrow("invalid response");
+    expect(() => parseAdvisorConfirmedFactPage({ schema_version: 1, current: [participantFact] })).toThrow("invalid response");
+    expect(() => parseParticipantConfirmedFactPage({ schema_version: 1, current: [{ ...participantFact, candidate_id: ID }] })).toThrow("invalid response");
+    expect(() => parseAdvisorConfirmedFactPage({ schema_version: 1, current: [{ ...advisorFact, source_message_sha256_prefix: SHA }] , history: [], next_cursor: null })).toThrow("invalid response");
   });
 });

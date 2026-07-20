@@ -19,6 +19,7 @@ export function ConnectedDemo() {
     else if (state.ledger.phase === "task-ready") void demo.createTask();
     else if (state.ledger.current_brief_id) void demo.rotateToParent(state.ledger.case_id);
   };
+  const inspectorVisible = ["advisor_ready", "task_creating", "task_streaming", "advisor_review", "review_submitting", "terminal_task_failure"].includes(state.value);
   return (
     <>
       <a className="skip-link" href="#demo-main">Skip to decision workflow</a>
@@ -30,7 +31,7 @@ export function ConnectedDemo() {
         ) : null}
         {["advisor_ready", "advisor_review"].includes(state.value) && "ledger" in state ? <AdvisorLedger ledger={state.ledger} onPrimaryAction={advisorAction} /> : null}
         {["task_creating", "task_streaming", "review_submitting"].includes(state.value) && "ledger" in state ? <AdvisorLedger ledger={state.ledger} busy onPrimaryAction={() => undefined} /> : null}
-        {demo.inspector && !["family_review", "decision_submitting", "plan_ready", "role_switching"].includes(state.value) ? <PlanningSkillInspector inspector={demo.inspector} /> : null}
+        {demo.inspector && inspectorVisible ? <PlanningSkillInspector inspector={demo.inspector} /> : null}
         {state.value === "role_switching" ? <section className="ledger-hero" aria-live="polite"><h1>Switching to family</h1><p>Advisor session revoked. Establishing the parent session.</p></section> : null}
         {state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => void demo.decide()} /> : null}
         {state.value === "decision_submitting" ? <section className="ledger-hero" aria-live="polite"><h1>Recording family decision</h1></section> : null}

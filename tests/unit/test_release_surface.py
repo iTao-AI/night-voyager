@@ -181,6 +181,45 @@ def test_release_verifier_checks_the_collaboration_authority_surface(
     )
 
 
+@pytest.mark.parametrize(
+    "relative",
+    (
+        "web/app/demo/collaboration/page.tsx",
+        "web/app/api/demo/cases/[caseId]/collaboration-thread/route.ts",
+        "web/app/api/demo/collaboration-threads/[threadId]/messages/route.ts",
+        "web/app/api/demo/messages/[messageId]/memory-candidates/route.ts",
+        "web/app/api/demo/cases/[caseId]/memory-candidates/route.ts",
+        "web/app/api/demo/memory-candidates/[candidateId]/verification-decisions/route.ts",
+        "web/app/api/demo/cases/[caseId]/confirmed-facts/route.ts",
+        "web/app/api/demo/cases/[caseId]/planning-skill-inspector/route.ts",
+        "web/components/collaboration-demo/CollaborationDemo.tsx",
+        "web/components/skill-inspector/PlanningSkillInspector.tsx",
+        "web/lib/collaboration-demo/use-collaboration-demo.ts",
+        "web/e2e/collaboration-demo.spec.ts",
+        "web/playwright.compose.config.ts",
+        "docs/assets/collaboration-confirmed-fact.png",
+        "README.md",
+        "README_CN.md",
+    ),
+)
+def test_pr_c_browser_verifier_rejects_each_missing_critical_artifact(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    relative: str,
+) -> None:
+    verifier = load_verifier()
+    for item in verifier.PR_C_BROWSER_SURFACE:
+        source = ROOT / item
+        target = tmp_path / item
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+    (tmp_path / relative).unlink()
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+
+    with pytest.raises(SystemExit, match="PR C browser proof surface incomplete"):
+        verifier.verify_pr_c_browser_surface()
+
+
 def test_release_verifier_freezes_the_cross_runtime_lock_order() -> None:
     source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
     assert '"CREATE OR REPLACE FUNCTION app.persist_planning_result("' in source
@@ -230,8 +269,7 @@ def test_release_verifier_checks_the_versioned_skill_surface(
 
     output = capsys.readouterr().out
     assert (
-        "proof Skill surface: six governed definitions, packaged runtime pins, "
-        "and read-only browser inspector confirmed"
+        "proof Skill surface: six governed definitions and packaged runtime pins confirmed"
     ) in output
 
 

@@ -35,6 +35,25 @@ export function useConnectedDemo() {
   });
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
+  const inspectorGeneration = useRef(0);
+
+  const clearInspector = useCallback(() => {
+    inspectorGeneration.current += 1;
+    setInspector(null);
+  }, []);
+
+  const refreshInspector = useCallback(async (caseId: string) => {
+    const generation = inspectorGeneration.current + 1;
+    inspectorGeneration.current = generation;
+    try {
+      const projection = await inspectorApi.planningSkillInspector(caseId);
+      const current = loadRecoveryMetadata();
+      if (inspectorGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) setInspector(projection);
+    } catch {
+      const current = loadRecoveryMetadata();
+      if (inspectorGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) setInspector(null);
+    }
+  }, []);
 
   const connectAdvisor = useCallback(async () => {
     const existing = loadDemoJourneyEnvelope();
@@ -43,6 +62,7 @@ export function useConnectedDemo() {
       return;
     }
     try {
+      clearInspector();
       const { csrf_token: bootstrapCsrf } = await api.bootstrap();
       const session = await api.mint("advisor", bootstrapCsrf);
       const ledger = await api.advisorLedger(CASE_ID);
@@ -52,11 +72,11 @@ export function useConnectedDemo() {
         : null;
       saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
       dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
-      void inspectorApi.planningSkillInspector(CASE_ID).then(setInspector).catch(() => setInspector(null));
+      void refreshInspector(CASE_ID);
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
     }
-  }, []);
+  }, [clearInspector, refreshInspector]);
 
   const recover = useCallback(async () => {
     const journey = loadDemoJourneyEnvelope();
@@ -71,6 +91,7 @@ export function useConnectedDemo() {
     }
     try {
       if (metadata.role === "parent") {
+        clearInspector();
         try {
           await api.advisorLedger(metadata.caseId);
           throw new Error("role projection mismatch");
@@ -87,14 +108,14 @@ export function useConnectedDemo() {
         const taskPhase = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase);
         if ((taskPhase && metadata.taskId !== projectedTaskId) || (!taskPhase && metadata.taskId !== null && projectedTaskId !== metadata.taskId)) throw new Error("projection identity mismatch");
         dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
-        if (ledger.phase !== "active-task") void inspectorApi.planningSkillInspector(metadata.caseId).then(setInspector).catch(() => setInspector(null));
+        if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
       }
     } catch (error) {
       const code = failure(error);
       if (code === "session_expired") clearRecoveryMetadata();
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [connectAdvisor]);
+  }, [clearInspector, connectAdvisor, refreshInspector]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -128,7 +149,7 @@ export function useConnectedDemo() {
           if (!current || current.taskId !== streamingTaskId) throw new Error("projection identity mismatch");
           saveRecoveryMetadata({ ...current, cursor: Math.max(current.cursor, cursor) });
           dispatch({ type: "TASK_REFRESHED", ledger, after: cursor });
-          if (ledger.phase !== "active-task") void inspectorApi.planningSkillInspector(metadata.caseId).then(setInspector).catch(() => setInspector(null));
+          if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
         } while (pending && !closed);
       } catch (error) {
         if (!closed) dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
@@ -141,7 +162,7 @@ export function useConnectedDemo() {
     };
     for (const code of ["queued", "lease_acquired", "execution_started", "heartbeat_recorded", "retry_scheduled", "lease_reclaimed", "waiting_review", "succeeded", "blocked", "timed_out", "failed", "cancelled"]) events.addEventListener(code, refresh);
     return () => { closed = true; events.close(); };
-  }, [streamingTaskId]);
+  }, [refreshInspector, streamingTaskId]);
 
   const mutationRecord = useCallback(async (metadata: RecoveryMetadata, operation: MutationOperation, body: unknown) => {
     const record = await idempotencyFor(body, metadata.mutations[operation]);
@@ -164,7 +185,7 @@ export function useConnectedDemo() {
         saveRecoveryMetadata({ ...updated, taskId: task.task_id, cursor: 0 });
         retryAction.current = null;
         dispatch({ type: "TASK_ACCEPTED", taskId: task.task_id });
-        void inspectorApi.planningSkillInspector(current.caseId).then(setInspector).catch(() => setInspector(null));
+        void refreshInspector(current.caseId);
       } catch (error) {
         const code = failure(error);
         if (code === "session_expired") { retryAction.current = null; clearRecoveryMetadata(); }
@@ -174,13 +195,13 @@ export function useConnectedDemo() {
     retryAction.current = attempt;
     dispatch({ type: "CREATE_TASK" });
     await attempt();
-  }, [mutationRecord, recover, state]);
+  }, [mutationRecord, recover, refreshInspector, state]);
 
   const rotateToParent = useCallback(async (caseId: string) => {
     const metadata = loadRecoveryMetadata();
     if (!metadata || metadata.role !== "advisor" || metadata.caseId !== caseId) { dispatch({ type: "RECOVERABLE_FAILURE", code: "session_recovery_required" }); return; }
     try {
-      setInspector(null);
+      clearInspector();
       await api.revoke(metadata.csrf);
       clearRecoveryMetadata();
       const bootstrap = await api.bootstrap();
@@ -190,7 +211,7 @@ export function useConnectedDemo() {
       saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
       dispatch({ type: "PARENT_SESSION_READY", brief });
     } catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
-  }, []);
+  }, [clearInspector]);
 
   const approve = useCallback(async () => {
     if (state.value !== "advisor_review" || !state.ledger.review_inputs) return;

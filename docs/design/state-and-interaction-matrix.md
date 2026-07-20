@@ -14,14 +14,14 @@ The secondary collaboration route has its own closed lifecycle:
 | Phase | Visible truth | Primary action | Forbidden action |
 | --- | --- | --- | --- |
 | `bootstrapping_parent` | no inferred identity or thread | start parent walkthrough | guess role or authority |
-| `parent_composing` | shared thread, no proposal | append the bounded message | treat message as fact |
-| `parent_proposing` | persisted message | create the typed budget candidate | mutate the Case |
-| `awaiting_advisor` | pending candidate survives reload | real parent-to-advisor role switch | client-only role flip |
+| `thread_ready` | shared thread and current parent-safe messages | append the bounded message or explicitly propose it | treat message as fact |
+| `message_submitting` | exact append fingerprint and key persisted | reconcile authority; retry only after an unknown outcome | generate a new body or key |
+| `proposal_pending` | typed parent-safe candidate survives reload | real parent-to-advisor role switch | mutate the Case |
+| `switching_to_advisor` | stored parent phase coordinated against the server role projection | complete the real revoke/bootstrap sequence or recover explicitly | trust the stored role over server authority |
 | `advisor_reviewing` | advisor-safe candidate projection | confirm once | confirm as parent |
-| `reloading_authority` | committed response may have been lost | reload with the same fingerprint | invent success |
+| `confirmation_submitting` | exact verification fingerprint and key persisted | reconcile candidate, confirmed facts, and advisor ledger; explicitly retry only if still pending | infer success from a mutation response |
 | `replan_required` | confirmed fact and Case revision | return to primary `/demo` | create a task implicitly |
 | `recoverable_error` | closed public recovery category | explicit retry or re-auth | expose raw error detail |
-| `blocked` | stale, expired, or active-task conflict | stop safely | weaken currentness gates |
 
 The fresh UI defaults to advisor and offers no client-only role selector. Normal
 family transition requires successful revoke, cookie expiry, bootstrap, and

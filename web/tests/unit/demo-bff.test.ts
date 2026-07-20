@@ -144,6 +144,24 @@ describe("demo BFF transport", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("keeps the JSON deadline active until the upstream response body is complete", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new TextEncoder().encode("{")); },
+      cancel() { cancelled = true; },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { headers: { "Content-Type": "application/json", Server: "hidden" } })));
+    const response = await forwardDemoJson(
+      new Request("http://127.0.0.1/api"),
+      { method: "GET", upstreamPath: "/api/v1/cases/40000000-0000-0000-0000-000000000002/advisor-ledger", mutation: false },
+      { ...loadDemoBffConfig(env), jsonTimeoutMs: 5 },
+    );
+    expect(response.status).toBe(504);
+    expect((await response.json()).code).toBe("bff_upstream_timeout");
+    expect(cancelled).toBe(true);
+    expect(response.headers.get("Server")).toBeNull();
+  });
+
   it("forwards only request/response allowlists", async () => {
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
       const headers = new Headers(init.headers);

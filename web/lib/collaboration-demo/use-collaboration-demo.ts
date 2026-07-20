@@ -15,13 +15,15 @@ import {
   type CollaborationPersistedPhase,
 } from "../connected-demo/session-storage";
 import { CollaborationDemoApiError, createCollaborationDemoApi, type VerificationBody } from "./api";
-import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor } from "./contracts";
+import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor, MemoryCandidateParticipant } from "./contracts";
 import { classifyCollaborationProblem, collaborationReducer, initialCollaborationState, type CollaborationContext, type CollaborationErrorCategory } from "./reducer";
 
 export const COLLABORATION_CASE_ID = "41000000-0000-0000-0000-000000000001";
 const MESSAGE_BODY = "Our confirmed program budget is 300,000 to 400,000 CNY.";
 const BUDGET = { schema_version: 1 as const, currency: "CNY" as const, period: "program_total" as const, preferred_minor: 30_000_000, hard_ceiling_minor: 40_000_000, elasticity_bps: 1000, refused: false };
 const VERIFICATION_REASON = "The family confirmed this bounded program budget.";
+const MESSAGE_REQUEST = { schema_version: 1 as const, body: MESSAGE_BODY };
+const PROPOSAL_REQUEST = { schema_version: 1 as const, case_revision: 1, proposal: { schema_version: 1 as const, fact_key: "family.budget", value: BUDGET } };
 const identity = createConnectedDemoApi();
 const api = createCollaborationDemoApi();
 
@@ -32,7 +34,10 @@ function findAdvisorFact(items: readonly unknown[], candidateId: string | null):
   return null;
 }
 function category(error: unknown): CollaborationErrorCategory {
-  if (error instanceof CollaborationDemoApiError) return classifyCollaborationProblem(error.code);
+  if (error instanceof CollaborationDemoApiError) {
+    if (error.status === 401) return "session_recovery_required";
+    return classifyCollaborationProblem(error.code);
+  }
   if (error instanceof ConnectedDemoApiError) {
     if (error.status === 401) return "session_recovery_required";
     return classifyCollaborationProblem(error.code);
@@ -40,6 +45,15 @@ function category(error: unknown): CollaborationErrorCategory {
   return "transport_unavailable_or_timeout";
 }
 function conflict(error: unknown): boolean { return error instanceof CollaborationDemoApiError && error.status === 409; }
+function verificationBody(caseRevision: number): VerificationBody {
+  return { schema_version: 1, expected_case_revision: caseRevision, decision: "confirm", reason: VERIFICATION_REASON };
+}
+function participantBudget(items: readonly MemoryCandidateParticipant[]): MemoryCandidateParticipant | null {
+  return items.find((item) => item.fact_key === "family.budget") ?? null;
+}
+function matchingMessage(messages: CollaborationContext["messages"], messageId: string | null) {
+  return messages.find((item) => item.message_event_id === messageId || (messageId === null && item.actor_role === "parent" && item.body === MESSAGE_BODY)) ?? null;
+}
 
 function envelope(context: CollaborationContext, csrf: string, phase: CollaborationPersistedPhase, mutations: CollaborationJourneyEnvelopeV2["mutations"], ids?: { messageId?: string | null; candidateId?: string | null }): CollaborationJourneyEnvelopeV2 {
   return {
@@ -65,6 +79,7 @@ export function useCollaborationDemo() {
   const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
+  const recoverRef = useRef<(conflictError?: CollaborationDemoApiError) => Promise<void>>(async () => undefined);
 
   const fail = useCallback((error: unknown) => {
     const mapped = category(error);
@@ -90,38 +105,188 @@ export function useCollaborationDemo() {
     } catch (error) { fail(error); }
   }, [fail]);
 
-  const recover = useCallback(async () => {
+  const recover = useCallback(async (conflictError?: CollaborationDemoApiError) => {
     const stored = loadDemoJourneyEnvelope();
-    if (!stored) return;
+    if (!stored) {
+      const reset = initialCollaborationState(COLLABORATION_CASE_ID);
+      setInspector(null);
+      dispatch({ type: "HYDRATE", phase: "bootstrapping_parent", context: reset.context });
+      await connectParent();
+      return;
+    }
     if (stored.journey === "advisor-family") { setJourneyConflict("advisor-family"); return; }
     try {
       if (stored.phase === "bootstrapping_parent") { await connectParent(); return; }
       const thread = await api.thread(stored.caseId);
       if (thread.thread_id !== stored.threadId) throw new Error("projection identity mismatch");
       const messages = await api.messages(thread.thread_id);
-      if (stored.messageId !== null && !messages.items.some((item) => item.message_event_id === stored.messageId)) throw new Error("projection identity mismatch");
-      const candidates = stored.messageId === null ? [] : await api.candidates(stored.caseId);
-      const candidate = stored.role === "advisor"
-        ? candidates.find((item) => advisorCandidate(item) && item.candidate_id === stored.candidateId) ?? null
-        : candidates.find((item) => item.fact_key === "family.budget") ?? null;
-      if (stored.role === "advisor" && !advisorCandidate(candidate)) throw new Error("projection identity mismatch");
-      const advisorProjection = advisorCandidate(candidate) ? candidate : null;
-      let fact: ConfirmedFactAdvisor | null = null;
-      let caseRevision = advisorCandidate(candidate) ? candidate.case_revision : 1;
-      if (stored.role === "advisor") {
-        const ledger = await identity.advisorLedger(stored.caseId);
-        caseRevision = ledger.case_revision;
-        setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
-        if (stored.phase === "replan_required") {
-          const facts = await api.confirmedFacts(stored.caseId);
-          fact = findAdvisorFact(facts.current, stored.candidateId);
-          if (!fact || !advisorProjection || advisorProjection.state !== "confirmed" || ledger.case_revision <= advisorProjection.case_revision) throw new Error("authority proof mismatch");
+      const baseContext: CollaborationContext = { role: stored.role, caseId: stored.caseId, thread, messages: messages.items, candidate: null, fact: null, caseRevision: 1 };
+
+      if (stored.phase === "switching_to_advisor") {
+        try {
+          const participants = await api.candidates(stored.caseId, "parent");
+          const candidate = participantBudget(participants);
+          if (!candidate || !matchingMessage(messages.items, stored.messageId)) throw new Error("projection identity mismatch");
+          const context = { ...baseContext, role: "parent" as const, candidate };
+          const stable = withCollaborationMutation({ ...stored, role: "parent", phase: "proposal_pending" }, "propose-memory-candidate", undefined);
+          saveCollaborationJourney(stable);
+          retryAction.current = null;
+          dispatch({ type: "HYDRATE", phase: "proposal_pending", context });
+          return;
+        } catch (parentError) {
+          try {
+            const advisors = await api.candidates(stored.caseId, "advisor");
+            if (!advisors.some((item) => item.message_event_id === stored.messageId)) throw new Error("projection identity mismatch");
+          } catch {
+            throw parentError;
+          }
+          retryAction.current = null;
+          clearDemoJourneyEnvelope();
+          dispatch({ type: "HYDRATE", phase: "switching_to_advisor", context: baseContext });
+          dispatch({ type: "FAILURE", category: "session_recovery_required" });
+          return;
         }
       }
-      const context: CollaborationContext = { role: stored.role, caseId: stored.caseId, thread, messages: messages.items, candidate, fact, caseRevision };
-      dispatch({ type: "HYDRATE", phase: stored.phase === "confirmation_submitting" && advisorCandidate(candidate) && candidate.state === "confirmed" ? "replan_required" : stored.phase, context });
+
+      if (stored.role === "parent") {
+        const projectedMessage = matchingMessage(messages.items, stored.messageId);
+        const participants = projectedMessage ? await api.candidates(stored.caseId, "parent") : [];
+        const candidate = participantBudget(participants);
+        const context: CollaborationContext = { ...baseContext, role: "parent", candidate };
+
+        if (stored.phase === "message_submitting") {
+          if (projectedMessage) {
+            const stable = withCollaborationMutation({ ...stored, messageId: projectedMessage.message_event_id, phase: "thread_ready" }, "append-message", undefined);
+            saveCollaborationJourney(stable);
+            retryAction.current = null;
+            dispatch({ type: "HYDRATE", phase: "thread_ready", context });
+            return;
+          }
+          const record = stored.mutations["append-message"];
+          if (!record) throw new Error("missing mutation recovery record");
+          await idempotencyFor(MESSAGE_REQUEST, record);
+          if (conflictError) {
+            const stable = withCollaborationMutation({ ...stored, phase: "thread_ready" }, "append-message", undefined);
+            saveCollaborationJourney(stable);
+            dispatch({ type: "HYDRATE", phase: "thread_ready", context });
+            fail(conflictError);
+            return;
+          }
+          retryAction.current = async () => {
+            try {
+              const current = loadDemoJourneyEnvelope();
+              if (!current || current.journey !== "collaboration") throw new Error("session recovery required");
+              const exact = current.mutations["append-message"];
+              if (!exact) throw new Error("missing mutation recovery record");
+              await idempotencyFor(MESSAGE_REQUEST, exact);
+              await api.appendMessage(current.threadId!, MESSAGE_REQUEST, current.csrf, exact.idempotencyKey);
+              await recoverRef.current();
+            } catch (error) { if (conflict(error)) await recoverRef.current(error as CollaborationDemoApiError); else fail(error); }
+          };
+          dispatch({ type: "HYDRATE", phase: "message_submitting", context });
+          dispatch({ type: "FAILURE", category: "transport_unavailable_or_timeout" });
+          return;
+        }
+
+        const proposalRecord = stored.mutations["propose-memory-candidate"];
+        if (stored.phase === "thread_ready" && proposalRecord) {
+          await idempotencyFor(PROPOSAL_REQUEST, proposalRecord);
+          if (candidate) {
+            const stable = withCollaborationMutation({ ...stored, phase: "proposal_pending" }, "propose-memory-candidate", undefined);
+            saveCollaborationJourney(stable);
+            retryAction.current = null;
+            dispatch({ type: "HYDRATE", phase: "proposal_pending", context });
+            return;
+          }
+          if (conflictError) {
+            const stable = withCollaborationMutation(stored, "propose-memory-candidate", undefined);
+            saveCollaborationJourney(stable);
+            dispatch({ type: "HYDRATE", phase: "thread_ready", context });
+            fail(conflictError);
+            return;
+          }
+          retryAction.current = async () => {
+            try {
+              const current = loadDemoJourneyEnvelope();
+              if (!current || current.journey !== "collaboration" || !current.messageId) throw new Error("session recovery required");
+              const exact = current.mutations["propose-memory-candidate"];
+              if (!exact) throw new Error("missing mutation recovery record");
+              await idempotencyFor(PROPOSAL_REQUEST, exact);
+              await api.proposeCandidate(current.messageId, PROPOSAL_REQUEST, current.csrf, exact.idempotencyKey);
+              await recoverRef.current();
+            } catch (error) { if (conflict(error)) await recoverRef.current(error as CollaborationDemoApiError); else fail(error); }
+          };
+          dispatch({ type: "HYDRATE", phase: "thread_ready", context });
+          dispatch({ type: "FAILURE", category: "transport_unavailable_or_timeout" });
+          return;
+        }
+        if (stored.phase === "proposal_pending" && !candidate) throw new Error("projection identity mismatch");
+        dispatch({ type: "HYDRATE", phase: stored.phase, context });
+        return;
+      }
+
+      const candidates = await api.candidates(stored.caseId, "advisor");
+      const candidate = candidates.find((item) => item.candidate_id === stored.candidateId) ?? null;
+      if (!candidate || candidate.message_event_id !== stored.messageId) throw new Error("projection identity mismatch");
+      if (stored.phase === "confirmation_submitting" || stored.phase === "replan_required") {
+        const facts = await api.confirmedFacts(stored.caseId, "advisor");
+        const fact = findAdvisorFact(facts.current, stored.candidateId);
+        const ledger = await identity.advisorLedger(stored.caseId);
+        const context: CollaborationContext = { ...baseContext, role: "advisor", candidate, fact, caseRevision: ledger.case_revision };
+        if (candidate.state === "confirmed" && fact && ledger.case_revision > candidate.case_revision) {
+          const stable = withCollaborationMutation({ ...stored, phase: "replan_required" }, "verify-memory-candidate", undefined);
+          saveCollaborationJourney(stable);
+          retryAction.current = null;
+          setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
+          dispatch({ type: "HYDRATE", phase: "replan_required", context });
+          return;
+        }
+        if (stored.phase === "replan_required") throw new Error("authority proof mismatch");
+        const body = verificationBody(candidate.case_revision);
+        const record = stored.mutations["verify-memory-candidate"];
+        if (!record || candidate.state !== "pending" || ledger.case_revision !== candidate.case_revision) {
+          const stable = withCollaborationMutation({ ...stored, phase: "advisor_reviewing" }, "verify-memory-candidate", undefined);
+          saveCollaborationJourney(stable);
+          retryAction.current = null;
+          dispatch({ type: "HYDRATE", phase: "advisor_reviewing", context });
+          dispatch({ type: "FAILURE", category: conflictError ? category(conflictError) : (candidate.state === "pending" ? "stale" : "expired_or_terminal") });
+          return;
+        }
+        await idempotencyFor(body, record);
+        if (conflictError) {
+          const stable = withCollaborationMutation({ ...stored, phase: "advisor_reviewing" }, "verify-memory-candidate", undefined);
+          saveCollaborationJourney(stable);
+          retryAction.current = null;
+          dispatch({ type: "HYDRATE", phase: "advisor_reviewing", context });
+          fail(conflictError);
+          return;
+        }
+        retryAction.current = async () => {
+          try {
+            const current = loadDemoJourneyEnvelope();
+            if (!current || current.journey !== "collaboration" || !current.candidateId) throw new Error("session recovery required");
+            const exact = current.mutations["verify-memory-candidate"];
+            if (!exact) throw new Error("missing mutation recovery record");
+            await idempotencyFor(body, exact);
+            await api.verifyCandidate(current.candidateId, body, current.csrf, exact.idempotencyKey);
+            await recoverRef.current();
+          } catch (error) { if (conflict(error)) await recoverRef.current(error as CollaborationDemoApiError); else fail(error); }
+        };
+        dispatch({ type: "HYDRATE", phase: "confirmation_submitting", context });
+        dispatch({ type: "FAILURE", category: "transport_unavailable_or_timeout" });
+        return;
+      }
+
+      const ledger = await identity.advisorLedger(stored.caseId);
+      const context: CollaborationContext = { ...baseContext, role: "advisor", candidate, caseRevision: ledger.case_revision };
+      setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
+      dispatch({ type: "HYDRATE", phase: "advisor_reviewing", context });
     } catch (error) { fail(error); }
   }, [connectParent, fail]);
+
+  useEffect(() => {
+    recoverRef.current = recover;
+  }, [recover]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -141,7 +306,7 @@ export function useCollaborationDemo() {
     if (state.value !== "thread_ready" || !state.context.thread) return;
     const stored = loadDemoJourneyEnvelope();
     if (!stored || stored.journey !== "collaboration" || stored.role !== "parent") return;
-    const body = { schema_version: 1 as const, body: MESSAGE_BODY };
+    const body = MESSAGE_REQUEST;
     const attempt = async () => {
       try {
         const current = loadDemoJourneyEnvelope();
@@ -153,7 +318,7 @@ export function useCollaborationDemo() {
         saveCollaborationJourney({ ...updated, phase: "thread_ready", messageId: message.message_event_id });
         retryAction.current = null;
         dispatch({ type: "PARENT_RELOADED", context });
-      } catch (error) { if (conflict(error)) await recover(); fail(error); }
+      } catch (error) { if (conflict(error)) await recover(error as CollaborationDemoApiError); else fail(error); }
     };
     retryAction.current = attempt;
     dispatch({ type: "MESSAGE_SUBMIT" });
@@ -164,20 +329,20 @@ export function useCollaborationDemo() {
     if (state.value !== "thread_ready") return;
     const stored = loadDemoJourneyEnvelope();
     if (!stored || stored.journey !== "collaboration" || stored.role !== "parent" || !stored.messageId) return;
-    const body = { schema_version: 1 as const, case_revision: 1, proposal: { schema_version: 1 as const, fact_key: "family.budget", value: BUDGET } };
+    const body = PROPOSAL_REQUEST;
     const attempt = async () => {
       try {
         const current = loadDemoJourneyEnvelope();
         if (!current || current.journey !== "collaboration") throw new Error("session recovery required");
         const { record, updated } = await persistMutation(current, "propose-memory-candidate", body, "thread_ready");
         await api.proposeCandidate(current.messageId!, body, current.csrf, record.idempotencyKey);
-        const candidate = (await api.candidates(current.caseId)).find((item) => item.fact_key === "family.budget") ?? null;
+        const candidate = participantBudget(await api.candidates(current.caseId, "parent"));
         if (!candidate) throw new Error("authority projection missing");
         const context = { ...state.context, candidate };
         saveCollaborationJourney({ ...updated, phase: "proposal_pending", candidateId: null });
         retryAction.current = null;
         dispatch({ type: "PROPOSAL_RELOADED", context });
-      } catch (error) { if (conflict(error)) await recover(); fail(error); }
+      } catch (error) { if (conflict(error)) await recover(error as CollaborationDemoApiError); else fail(error); }
     };
     retryAction.current = attempt;
     await attempt();
@@ -196,8 +361,8 @@ export function useCollaborationDemo() {
       const advisor = await identity.mint("advisor", bootstrap.csrf_token);
       const thread = await api.thread(stored.caseId);
       const messages = await api.messages(thread.thread_id);
-      const candidates = await api.candidates(stored.caseId);
-      const candidate = candidates.find((item): item is MemoryCandidateAdvisor => advisorCandidate(item) && item.message_event_id === stored.messageId) ?? null;
+      const candidates = await api.candidates(stored.caseId, "advisor");
+      const candidate = candidates.find((item) => item.message_event_id === stored.messageId) ?? null;
       if (!candidate) throw new Error("candidate projection missing");
       const ledger = await identity.advisorLedger(stored.caseId);
       if (ledger.case_revision !== candidate.case_revision) throw new Error("candidate revision mismatch");
@@ -215,11 +380,11 @@ export function useCollaborationDemo() {
     const projected = state.context.candidate;
     const ledger = await identity.advisorLedger(stored.caseId).catch((error) => { fail(error); return null; });
     if (!ledger || ledger.case_revision !== projected.case_revision) { if (ledger) dispatch({ type: "FAILURE", category: "stale" }); return; }
-    const body: VerificationBody = { schema_version: 1, expected_case_revision: projected.case_revision, decision: "confirm", reason: VERIFICATION_REASON };
+    const body = verificationBody(projected.case_revision);
     const prove = async (result?: { result_fact_id: string | null; result_revision: number | null }) => {
-      const candidates = await api.candidates(stored.caseId);
-      const candidate = candidates.find((item): item is MemoryCandidateAdvisor => advisorCandidate(item) && item.candidate_id === stored.candidateId) ?? null;
-      const facts = await api.confirmedFacts(stored.caseId);
+      const candidates = await api.candidates(stored.caseId, "advisor");
+      const candidate = candidates.find((item) => item.candidate_id === stored.candidateId) ?? null;
+      const facts = await api.confirmedFacts(stored.caseId, "advisor");
       const fact = findAdvisorFact(facts.current, stored.candidateId);
       const refreshed = await identity.advisorLedger(stored.caseId);
       if (!candidate || candidate.state !== "confirmed" || !fact || refreshed.case_revision <= candidate.case_revision) throw new Error("authority proof mismatch");
@@ -241,7 +406,8 @@ export function useCollaborationDemo() {
         await prove(result);
       } catch (error) {
         if (conflict(error)) {
-          try { await prove(); return; } catch { /* retain the original bounded category */ }
+          await recover(error as CollaborationDemoApiError);
+          return;
         }
         fail(error);
       }
@@ -249,7 +415,7 @@ export function useCollaborationDemo() {
     retryAction.current = attempt;
     dispatch({ type: "CONFIRM_SUBMIT" });
     await attempt();
-  }, [fail, persistMutation, state]);
+  }, [fail, persistMutation, recover, state]);
 
   const retry = useCallback(async () => { if (retryAction.current) await retryAction.current(); else await recover(); }, [recover]);
 

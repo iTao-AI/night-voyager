@@ -7,6 +7,24 @@ import { CASE_ID, BRIEF_ID, TASK_ID, brief, ledger, standaloneTask } from "./con
 
 const advisorMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "advisor" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: null, cursor: 0, mutations: {} });
 const parentMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "parent" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: BRIEF_ID, cursor: 0, mutations: {} });
+const inspector = (pinStatus: "not_created" | "matched") => ({
+  schema_version: 1,
+  case_id: CASE_ID,
+  operation: pinStatus === "matched" ? "generate_planning_run_v1" : null,
+  active_skill_key: "study-destination-compare",
+  active_version: "1.0.0",
+  activation_sequence: 1,
+  evaluator_id: "night-voyager.deterministic-skill-evaluator",
+  evaluator_version: "v1",
+  evaluation_dataset_id: "night-voyager.study-destination-compare.eval",
+  evaluation_dataset_version: "1.0.0",
+  task_request_sha256_prefix: pinStatus === "matched" ? "222222222222" : null,
+  version_content_sha256_prefix: "111111111111",
+  runtime_binding_sha256_prefix: "abcdef123456",
+  adapter_id: pinStatus === "matched" ? "deterministic_planning" : null,
+  adapter_version: pinStatus === "matched" ? "m4a-v1" : null,
+  pin_status: pinStatus,
+});
 
 afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
@@ -205,6 +223,25 @@ it("keeps one EventSource and coalesces out-of-order refreshes with a monotonic 
   await waitFor(() => expect(result.current.state.value).toBe("advisor_review"));
   expect(loadRecoveryMetadata()?.cursor).toBe(9);
   expect(sources).toHaveLength(1);
+});
+
+it("commits only the latest inspector request when responses complete out of order", async () => {
+  saveRecoveryMetadata(advisorMetadata());
+  const inspectors: Array<(response: Response) => void> = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("task-ready"));
+    if (path.endsWith("/planning-skill-inspector")) return await new Promise<Response>((resolve) => inspectors.push(resolve));
+    throw new Error(`unexpected ${path}`);
+  }));
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(inspectors).toHaveLength(1));
+  await act(async () => result.current.recover());
+  await waitFor(() => expect(inspectors).toHaveLength(2));
+  await act(async () => inspectors[1](Response.json(inspector("matched"))));
+  await waitFor(() => expect(result.current.inspector?.pin_status).toBe("matched"));
+  await act(async () => inspectors[0](Response.json(inspector("not_created"))));
+  expect(result.current.inspector?.pin_status).toBe("matched");
 });
 
 it("refreshes a real stale decision conflict and requires renewed confirmation", async () => {
