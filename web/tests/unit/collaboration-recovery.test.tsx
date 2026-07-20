@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { CollaborationDemoApiError } from "../../lib/collaboration-demo/api";
+import { ConnectedDemoApiError } from "../../lib/connected-demo/api";
 import { idempotencyFor } from "../../lib/connected-demo/idempotency";
 import { loadDemoJourneyEnvelope } from "../../lib/connected-demo/session-storage";
 
@@ -79,6 +80,62 @@ it("requires candidate, confirmed fact, and advisor ledger before recovering con
   expect(mocks.collaboration.confirmedFacts).toHaveBeenCalledWith(CASE, "advisor");
   expect(result.current.state.context.fact).toEqual(fact);
   expect(result.current.state.context.caseRevision).toBe(2);
+});
+
+it("recovers a parent session when mint succeeds before the first authority read fails", async () => {
+  let cookieRole: "parent" | null = null;
+  mocks.identity.bootstrap.mockImplementation(async () => {
+    if (cookieRole) throw new ConnectedDemoApiError(409, "bff_session_recovery_required");
+    return { csrf_token: "bootstrap" };
+  });
+  mocks.identity.mint.mockImplementation(async () => {
+    cookieRole = "parent";
+    return { role: "parent", proof_mode: "synthetic-demo", csrf_token: "parent-csrf" };
+  });
+  mocks.collaboration.thread.mockRejectedValueOnce(new Error("read failed"));
+  const { result } = renderHook(() => useCollaborationDemo());
+
+  await act(async () => result.current.connectParent());
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ role: "parent", csrf: "parent-csrf", phase: "bootstrapping_parent" });
+
+  await act(async () => result.current.retry());
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+  expect(mocks.identity.bootstrap).toHaveBeenCalledOnce();
+  expect(mocks.identity.mint).toHaveBeenCalledOnce();
+  expect(mocks.identity.revoke).not.toHaveBeenCalled();
+});
+
+it("recovers an advisor session when mint succeeds before an advisor authority read fails", async () => {
+  let cookieRole: "parent" | "advisor" | null = "parent";
+  save({ role: "parent", phase: "proposal_pending" });
+  mocks.collaboration.candidates.mockImplementation(async (_caseId: string, role?: string) => {
+    if (role !== cookieRole) throw new Error("wrong role projection");
+    return role === "advisor" ? [advisor] : [participant];
+  });
+  mocks.identity.revoke.mockImplementation(async () => { cookieRole = null; });
+  mocks.identity.bootstrap.mockImplementation(async () => {
+    if (cookieRole) throw new ConnectedDemoApiError(409, "bff_session_recovery_required");
+    return { csrf_token: "bootstrap" };
+  });
+  mocks.identity.mint.mockImplementation(async () => {
+    cookieRole = "advisor";
+    return { role: "advisor", proof_mode: "synthetic-demo", csrf_token: "advisor-csrf" };
+  });
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("proposal_pending"));
+  mocks.collaboration.candidates.mockRejectedValueOnce(new Error("advisor read failed"));
+
+  await act(async () => result.current.switchToAdvisor());
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ role: "advisor", csrf: "advisor-csrf", phase: "switching_to_advisor" });
+
+  await act(async () => result.current.retry());
+  await waitFor(() => expect(result.current.state.value).toBe("advisor_reviewing"));
+  expect(result.current.state.context.candidate).toEqual(advisor);
+  expect(mocks.identity.bootstrap).toHaveBeenCalledOnce();
+  expect(mocks.identity.mint).toHaveBeenCalledOnce();
+  expect(mocks.identity.revoke).toHaveBeenCalledOnce();
 });
 
 it("turns an unknown message outcome into an explicit exact-body/key retry", async () => {
@@ -186,4 +243,34 @@ it("discards a stale verification retry after 409 authority reload changes revis
   await act(async () => result.current.retry());
   expect(mocks.collaboration.verifyCandidate).toHaveBeenCalledOnce();
   expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "advisor_reviewing", mutations: {} });
+});
+
+it("does not append again after a 409 reload discards the append mutation", async () => {
+  save({ role: "parent", messageId: null, phase: "thread_ready" });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [], next_after_sequence: null });
+  mocks.collaboration.appendMessage.mockRejectedValueOnce(new CollaborationDemoApiError(409, "case_revision_stale"));
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+
+  await act(async () => result.current.appendMessage());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+  await act(async () => result.current.retry());
+
+  expect(mocks.collaboration.appendMessage).toHaveBeenCalledOnce();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "thread_ready", mutations: {} });
+});
+
+it("does not propose again after a 409 reload discards the proposal mutation", async () => {
+  save({ role: "parent", phase: "thread_ready" });
+  mocks.collaboration.proposeCandidate.mockRejectedValueOnce(new CollaborationDemoApiError(409, "case_revision_stale"));
+  mocks.collaboration.candidates.mockResolvedValue([]);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+
+  await act(async () => result.current.proposeBudget());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+  await act(async () => result.current.retry());
+
+  expect(mocks.collaboration.proposeCandidate).toHaveBeenCalledOnce();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "thread_ready", mutations: {} });
 });

@@ -45,6 +45,7 @@ export function useConnectedDemo() {
   const refreshInspector = useCallback(async (caseId: string) => {
     const generation = inspectorGeneration.current + 1;
     inspectorGeneration.current = generation;
+    setInspector(null);
     try {
       const projection = await inspectorApi.planningSkillInspector(caseId);
       const current = loadRecoveryMetadata();

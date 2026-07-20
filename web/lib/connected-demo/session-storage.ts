@@ -67,8 +67,9 @@ function collaboration(value: Record<string, unknown>): value is Record<string, 
   if (!exact(value, ["schema_version", "journey", "role", "csrf", "caseId", "threadId", "messageId", "candidateId", "phase", "mutations"]) || value.schema_version !== 2 || value.journey !== "collaboration" || !["parent", "advisor"].includes(String(value.role)) || typeof value.csrf !== "string" || !value.csrf || !uuid(value.caseId) || !nullableUuid(value.threadId) || !nullableUuid(value.messageId) || !nullableUuid(value.candidateId) || !COLLABORATION_PHASES.includes(value.phase as CollaborationPersistedPhase) || !validMutations(value.mutations, COLLABORATION_OPERATIONS)) return false;
   const phase = value.phase as CollaborationPersistedPhase;
   if (phase === "bootstrapping_parent") return value.role === "parent" && value.threadId === null && value.messageId === null && value.candidateId === null;
+  if (phase === "switching_to_advisor") return value.threadId !== null && value.messageId !== null && value.candidateId === null;
   if (value.threadId === null) return false;
-  if (["thread_ready", "message_submitting", "proposal_pending", "switching_to_advisor"].includes(phase)) {
+  if (["thread_ready", "message_submitting", "proposal_pending"].includes(phase)) {
     if (value.role !== "parent" || value.candidateId !== null) return false;
     return phase !== "proposal_pending" || value.messageId !== null;
   }

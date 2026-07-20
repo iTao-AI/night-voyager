@@ -97,6 +97,18 @@ export function useCollaborationDemo() {
       setInspector(null);
       const bootstrap = await identity.bootstrap();
       const session = await identity.mint("parent", bootstrap.csrf_token);
+      saveCollaborationJourney({
+        schema_version: 2,
+        journey: "collaboration",
+        role: "parent",
+        csrf: session.csrf_token,
+        caseId: COLLABORATION_CASE_ID,
+        threadId: null,
+        messageId: null,
+        candidateId: null,
+        phase: "bootstrapping_parent",
+        mutations: {},
+      });
       const thread = await api.thread(COLLABORATION_CASE_ID);
       const messages = await api.messages(thread.thread_id);
       const context: CollaborationContext = { role: "parent", caseId: COLLABORATION_CASE_ID, thread, messages: messages.items, candidate: null, fact: null, caseRevision: 1 };
@@ -116,7 +128,15 @@ export function useCollaborationDemo() {
     }
     if (stored.journey === "advisor-family") { setJourneyConflict("advisor-family"); return; }
     try {
-      if (stored.phase === "bootstrapping_parent") { await connectParent(); return; }
+      if (stored.phase === "bootstrapping_parent") {
+        const thread = await api.thread(stored.caseId);
+        const messages = await api.messages(thread.thread_id);
+        const context: CollaborationContext = { role: "parent", caseId: stored.caseId, thread, messages: messages.items, candidate: null, fact: null, caseRevision: 1 };
+        saveCollaborationJourney(envelope(context, stored.csrf, "thread_ready", {}));
+        retryAction.current = null;
+        dispatch({ type: "PARENT_RELOADED", context });
+        return;
+      }
       const thread = await api.thread(stored.caseId);
       if (thread.thread_id !== stored.threadId) throw new Error("projection identity mismatch");
       const messages = await api.messages(thread.thread_id);
@@ -136,15 +156,26 @@ export function useCollaborationDemo() {
         } catch (parentError) {
           try {
             const advisors = await api.candidates(stored.caseId, "advisor");
-            if (!advisors.some((item) => item.message_event_id === stored.messageId)) throw new Error("projection identity mismatch");
+            const candidate = advisors.find((item) => item.message_event_id === stored.messageId) ?? null;
+            if (!candidate) throw new Error("projection identity mismatch");
+            if (stored.role !== "advisor") {
+              retryAction.current = null;
+              clearDemoJourneyEnvelope();
+              dispatch({ type: "HYDRATE", phase: "switching_to_advisor", context: baseContext });
+              dispatch({ type: "FAILURE", category: "session_recovery_required" });
+              return;
+            }
+            const ledger = await identity.advisorLedger(stored.caseId);
+            if (ledger.case_revision !== candidate.case_revision) throw new Error("candidate revision mismatch");
+            const context: CollaborationContext = { ...baseContext, role: "advisor", candidate, caseRevision: ledger.case_revision };
+            setInspector(await api.planningSkillInspector(stored.caseId).catch(() => null));
+            saveCollaborationJourney(envelope(context, stored.csrf, "advisor_reviewing", {}, { messageId: stored.messageId, candidateId: candidate.candidate_id }));
+            retryAction.current = null;
+            dispatch({ type: "HYDRATE", phase: "advisor_reviewing", context });
+            return;
           } catch {
             throw parentError;
           }
-          retryAction.current = null;
-          clearDemoJourneyEnvelope();
-          dispatch({ type: "HYDRATE", phase: "switching_to_advisor", context: baseContext });
-          dispatch({ type: "FAILURE", category: "session_recovery_required" });
-          return;
         }
       }
 
@@ -168,6 +199,7 @@ export function useCollaborationDemo() {
           if (conflictError) {
             const stable = withCollaborationMutation({ ...stored, phase: "thread_ready" }, "append-message", undefined);
             saveCollaborationJourney(stable);
+            retryAction.current = null;
             dispatch({ type: "HYDRATE", phase: "thread_ready", context });
             fail(conflictError);
             return;
@@ -201,6 +233,7 @@ export function useCollaborationDemo() {
           if (conflictError) {
             const stable = withCollaborationMutation(stored, "propose-memory-candidate", undefined);
             saveCollaborationJourney(stable);
+            retryAction.current = null;
             dispatch({ type: "HYDRATE", phase: "thread_ready", context });
             fail(conflictError);
             return;
@@ -359,6 +392,7 @@ export function useCollaborationDemo() {
       await identity.revoke(stored.csrf);
       const bootstrap = await identity.bootstrap();
       const advisor = await identity.mint("advisor", bootstrap.csrf_token);
+      saveCollaborationJourney({ ...stored, role: "advisor", csrf: advisor.csrf_token, candidateId: null, phase: "switching_to_advisor" });
       const thread = await api.thread(stored.caseId);
       const messages = await api.messages(thread.thread_id);
       const candidates = await api.candidates(stored.caseId, "advisor");

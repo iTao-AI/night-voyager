@@ -5,6 +5,7 @@ const hook = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock("../../lib/connected-demo/use-connected-demo", () => ({ useConnectedDemo: () => hook.value }));
 
 import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
+import { ledger } from "./connected-demo-test-data";
 
 const inspector = {
   schema_version: 1 as const,
@@ -25,14 +26,20 @@ const inspector = {
   pin_status: "matched" as const,
 };
 
-function demo(state: Record<string, unknown>) {
-  return { state, inspector, journeyConflict: null, confirmed: false, setConfirmed: vi.fn(), endConflictingJourney: vi.fn(), connectAdvisor: vi.fn(), recover: vi.fn(), retry: vi.fn(), createTask: vi.fn(), approve: vi.fn(), rotateToParent: vi.fn(), decide: vi.fn() };
+function demo(state: Record<string, unknown>, currentInspector: typeof inspector | null = inspector) {
+  return { state, inspector: currentInspector, journeyConflict: null, confirmed: false, setConfirmed: vi.fn(), endConflictingJourney: vi.fn(), connectAdvisor: vi.fn(), recover: vi.fn(), retry: vi.fn(), createTask: vi.fn(), approve: vi.fn(), rotateToParent: vi.fn(), decide: vi.fn() };
 }
 
 afterEach(cleanup);
 
 it("hides stale advisor inspector data in recoverable error", () => {
   hook.value = demo({ value: "recoverable_error", code: "transport_failure" });
+  render(<ConnectedDemo />);
+  expect(screen.queryByText("Planning Skill inspector")).toBeNull();
+});
+
+it("does not render an invalidated inspector while a task-streaming refresh is pending", () => {
+  hook.value = demo({ value: "task_streaming", taskId: "70000000-0000-0000-0000-000000000001", ledger: ledger("active-task") }, null);
   render(<ConnectedDemo />);
   expect(screen.queryByText("Planning Skill inspector")).toBeNull();
 });

@@ -244,6 +244,35 @@ it("commits only the latest inspector request when responses complete out of ord
   expect(result.current.inspector?.pin_status).toBe("matched");
 });
 
+it("invalidates a committed inspector projection while the post-create projection is pending", async () => {
+  saveRecoveryMetadata(advisorMetadata());
+  class FakeEventSource { addEventListener() {} close() {} }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  let inspectorCalls = 0;
+  let resolveMatched: ((response: Response) => void) | undefined;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("task-ready"));
+    if (path.endsWith("/agent-tasks")) return Response.json(standaloneTask(false), { status: 202 });
+    if (path.endsWith("/planning-skill-inspector")) {
+      inspectorCalls += 1;
+      if (inspectorCalls === 1) return Response.json(inspector("not_created"));
+      return await new Promise<Response>((resolve) => { resolveMatched = resolve; });
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.inspector?.pin_status).toBe("not_created"));
+
+  await act(async () => result.current.createTask());
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+  await waitFor(() => expect(inspectorCalls).toBe(2));
+  expect(result.current.inspector).toBeNull();
+
+  await act(async () => resolveMatched?.(Response.json(inspector("matched"))));
+  await waitFor(() => expect(result.current.inspector?.pin_status).toBe("matched"));
+});
+
 it("refreshes a real stale decision conflict and requires renewed confirmation", async () => {
   saveRecoveryMetadata(parentMetadata());
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
