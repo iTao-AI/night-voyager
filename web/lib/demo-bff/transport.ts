@@ -5,6 +5,7 @@ export interface DemoRoute {
   method: "GET" | "POST" | "DELETE";
   upstreamPath: string;
   mutation: boolean;
+  validateBody?: (value: unknown) => boolean;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -54,15 +55,18 @@ async function readBoundedBody(
   }
 }
 
-function upstreamHeaders(request: Request, config: DemoBffConfig): Headers {
+function jsonHeaders(request: Request, config: DemoBffConfig, mutation: boolean): Headers {
   const headers = new Headers({ Origin: config.publicOrigin });
-  for (const name of [
-    "Cookie",
-    "Content-Type",
-    "X-CSRF-Token",
-    "Idempotency-Key",
-    "Last-Event-ID",
-  ]) {
+  for (const name of ["Cookie", ...(mutation ? ["Content-Type", "X-CSRF-Token", "Idempotency-Key"] : [])]) {
+    const value = request.headers.get(name);
+    if (value !== null) headers.set(name, value);
+  }
+  return headers;
+}
+
+function sseHeaders(request: Request, config: DemoBffConfig): Headers {
+  const headers = new Headers({ Origin: config.publicOrigin });
+  for (const name of ["Cookie", "Last-Event-ID"]) {
     const value = request.headers.get(name);
     if (value !== null) headers.set(name, value);
   }
@@ -104,9 +108,14 @@ export async function forwardDemoJson(
   try {
     const body = await readBoundedBody(request, config.maxJsonBytes, controller.signal);
     if (body instanceof Response) return body;
+    if (route.validateBody) {
+      if (!body) return demoBffProblem(400, "bff_invalid_request", "invalid request");
+      const parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+      if (!route.validateBody(parsed)) return demoBffProblem(400, "bff_invalid_request", "invalid request");
+    }
     const upstream = await fetch(`${config.apiOrigin}${route.upstreamPath}`, {
       method: route.method,
-      headers: upstreamHeaders(request, config),
+      headers: jsonHeaders(request, config, route.mutation),
       body: body ? body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength) as ArrayBuffer : undefined,
       signal: controller.signal,
     });
@@ -130,7 +139,7 @@ export async function forwardDemoSse(
   route: DemoRoute,
   config: DemoBffConfig = loadDemoBffConfig(),
 ): Promise<Response> {
-  const headers = upstreamHeaders(request, config);
+  const headers = sseHeaders(request, config);
   if (!headers.has("Last-Event-ID")) {
     const after = new URL(request.url).searchParams.get("after");
     if (after !== null) {
