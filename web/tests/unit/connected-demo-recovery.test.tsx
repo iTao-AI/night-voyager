@@ -3,13 +3,13 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, loadRecoveryMetadata, saveCollaborationJourney, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
-import { CASE_ID, BRIEF_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
+import { CASE_ID, BRIEF_ID, CONFIRMED_FACT, CONTINUED_CASE_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
 
 const advisorMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "advisor" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: null, cursor: 0, mutations: {} });
 const parentMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "parent" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: BRIEF_ID, cursor: 0, mutations: {} });
-const inspector = (pinStatus: "not_created" | "matched") => ({
+const inspector = (pinStatus: "not_created" | "matched", caseId = CASE_ID) => ({
   schema_version: 1,
-  case_id: CASE_ID,
+  case_id: caseId,
   operation: pinStatus === "matched" ? "generate_planning_run_v1" : null,
   active_skill_key: "study-destination-compare",
   active_version: "1.0.0",
@@ -79,6 +79,108 @@ it("recognizes the exact converted journey envelope as advisor-family recovery m
     cursor: 0,
     mutations: {},
   });
+});
+
+it("uses the continued non-default Case for authority reads, task creation, and streaming", async () => {
+  const continuedLedger = {
+    ...ledger("task-ready"),
+    case_id: CONTINUED_CASE_ID,
+    case_revision: 2,
+    case_state: "intake",
+    canonical_task_inputs: {
+      ...ledger("task-ready").canonical_task_inputs!,
+      case_id: CONTINUED_CASE_ID,
+      expected_case_revision: 2,
+    },
+  };
+  saveRecoveryMetadata({ ...advisorMetadata(), caseId: CONTINUED_CASE_ID });
+  const requests: string[] = [];
+  const sources: string[] = [];
+  class FakeEventSource {
+    constructor(readonly url: string) { sources.push(url); }
+    addEventListener() {}
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.endsWith("/advisor-ledger")) return Response.json(continuedLedger);
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [CONFIRMED_FACT], history: [], next_cursor: null });
+    if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("not_created", CONTINUED_CASE_ID));
+    if (path.endsWith("/agent-tasks")) return Response.json(standaloneTask(false), { status: 202 });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("advisor_ready"));
+  await waitFor(() => expect(result.current.currentFacts).toMatchObject({ caseId: CONTINUED_CASE_ID, caseRevision: 2 }));
+  expect(result.current.currentFacts?.facts).toEqual([CONFIRMED_FACT]);
+  await act(async () => result.current.createTask());
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+
+  expect(requests).toContain(`/api/demo/cases/${CONTINUED_CASE_ID}/advisor-ledger`);
+  expect(requests).toContain(`/api/demo/cases/${CONTINUED_CASE_ID}/confirmed-facts`);
+  expect(requests).toContain(`/api/demo/cases/${CONTINUED_CASE_ID}/planning-skill-inspector`);
+  expect(requests).toContain(`/api/demo/cases/${CONTINUED_CASE_ID}/agent-tasks`);
+  expect(requests.every((path) => !path.includes(CASE_ID))).toBe(true);
+  expect(sources).toEqual([`/api/demo/tasks/${TASK_ID}/events?after=0`]);
+  expect(loadRecoveryMetadata()).toMatchObject({ caseId: CONTINUED_CASE_ID, taskId: TASK_ID });
+});
+
+it.each([
+  ["active-task", "task_streaming"],
+  ["review-required", "advisor_review"],
+  ["terminal-task-failure", "terminal_task_failure"],
+] as const)("recovers the continued Case in %s without substituting the standalone seed", async (phase, expectedState) => {
+  const projected = {
+    ...ledger(phase, phase === "terminal-task-failure" ? "failed" : "preparing"),
+    case_id: CONTINUED_CASE_ID,
+    case_revision: 2,
+  };
+  saveRecoveryMetadata({ ...advisorMetadata(), caseId: CONTINUED_CASE_ID, taskId: TASK_ID, cursor: phase === "active-task" ? 7 : 0 });
+  const requests: string[] = [];
+  class FakeEventSource { addEventListener() {} close() {} }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.endsWith("/advisor-ledger")) return Response.json(projected);
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [CONFIRMED_FACT], history: [], next_cursor: null });
+    if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("matched", CONTINUED_CASE_ID));
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await waitFor(() => expect(result.current.state.value).toBe(expectedState));
+  await waitFor(() => expect(result.current.currentFacts?.caseId).toBe(CONTINUED_CASE_ID));
+  expect(requests).toContain(`/api/demo/cases/${CONTINUED_CASE_ID}/advisor-ledger`);
+  expect(requests).toContain(`/api/demo/cases/${CONTINUED_CASE_ID}/confirmed-facts`);
+  expect(requests.every((path) => !path.includes(CASE_ID))).toBe(true);
+  expect(loadRecoveryMetadata()).toMatchObject({ caseId: CONTINUED_CASE_ID, taskId: TASK_ID });
+});
+
+it("recovers the continued parent brief after role rotation without reading the seed Case", async () => {
+  saveRecoveryMetadata({ ...parentMetadata(), caseId: CONTINUED_CASE_ID });
+  const continuedBrief = { ...brief("family-review"), case_id: CONTINUED_CASE_ID };
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.endsWith("/advisor-ledger")) return Response.json({ code: "resource_unavailable" }, { status: 404 });
+    if (path.endsWith("/current-decision-brief")) return Response.json(continuedBrief);
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await waitFor(() => expect(result.current.state.value).toBe("family_review"));
+  expect(requests).toEqual([
+    `/api/demo/cases/${CONTINUED_CASE_ID}/advisor-ledger`,
+    `/api/demo/cases/${CONTINUED_CASE_ID}/current-decision-brief`,
+  ]);
+  expect(requests.every((path) => !path.includes(CASE_ID))).toBe(true);
 });
 
 it("classifies a residual-cookie bootstrap guard as session recovery without minting", async () => {
@@ -229,11 +331,14 @@ it("keeps one EventSource and coalesces out-of-order refreshes with a monotonic 
   vi.stubGlobal("EventSource", FakeEventSource);
   let resolveFirst: ((value: Response) => void) | undefined;
   let resolveSecond: ((value: Response) => void) | undefined;
-  let calls = 0;
-  vi.stubGlobal("fetch", vi.fn(async () => {
-    calls += 1;
-    if (calls === 1) return Response.json(ledger("active-task"));
-    return await new Promise<Response>((resolve) => { if (calls === 2) resolveFirst = resolve; else resolveSecond = resolve; });
+  let ledgerCalls = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [], history: [], next_cursor: null });
+    if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("matched"));
+    ledgerCalls += 1;
+    if (ledgerCalls === 1) return Response.json(ledger("active-task"));
+    return await new Promise<Response>((resolve) => { if (ledgerCalls === 2) resolveFirst = resolve; else resolveSecond = resolve; });
   }));
   const { result } = renderHook(() => useConnectedDemo());
   await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
@@ -243,9 +348,9 @@ it("keeps one EventSource and coalesces out-of-order refreshes with a monotonic 
     listeners.get("heartbeat_recorded")?.({ lastEventId: "9" } as MessageEvent);
     listeners.get("heartbeat_recorded")?.({ lastEventId: "6" } as MessageEvent);
   });
-  expect(calls).toBe(2);
+  expect(ledgerCalls).toBe(2);
   await act(async () => { resolveFirst?.(Response.json(ledger("active-task"))); });
-  await waitFor(() => expect(calls).toBe(3));
+  await waitFor(() => expect(ledgerCalls).toBe(3));
   await act(async () => { resolveSecond?.(Response.json(ledger("review-required"))); });
   await waitFor(() => expect(result.current.state.value).toBe("advisor_review"));
   expect(loadRecoveryMetadata()?.cursor).toBe(9);

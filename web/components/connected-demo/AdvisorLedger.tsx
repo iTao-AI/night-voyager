@@ -3,9 +3,11 @@
 import { useState } from "react";
 
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
+import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
 import { presentRouteOutcome, presentRouteReason } from "../../lib/connected-demo/presentation";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { TaskProgress } from "./TaskProgress";
+import { CurrentConfirmedFacts } from "./CurrentConfirmedFacts";
 
 function actionLabel(phase: Ledger["phase"]): string {
   if (phase === "task-ready") return "Create planning task";
@@ -16,10 +18,12 @@ function actionLabel(phase: Ledger["phase"]): string {
 
 export function AdvisorLedger({
   ledger,
+  confirmedFacts = [],
   onPrimaryAction,
   busy = false,
 }: {
   ledger: Ledger;
+  confirmedFacts?: readonly ConfirmedFactAdvisor[];
   onPrimaryAction: () => void;
   busy?: boolean;
 }) {
@@ -33,7 +37,9 @@ export function AdvisorLedger({
         <p className="overline">Advisor Ledger × Global Journey</p>
         <h1 id="advisor-ledger-title">Advisor Ledger</h1>
         <p>Current lifecycle stage: <strong>{ledger.phase}</strong>. Authority comes from the backend projection.</p>
+        <p>Case revision {ledger.case_revision}</p>
       </div>
+      <CurrentConfirmedFacts facts={confirmedFacts} caseRevision={ledger.case_revision} />
       {routes.length ? (
         <div className="table-wrap">
           <table aria-label="Route evidence comparison">

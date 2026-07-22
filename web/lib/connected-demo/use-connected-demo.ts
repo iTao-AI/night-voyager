@@ -6,6 +6,7 @@ import { ConnectedDemoApiError, createConnectedDemoApi } from "./api";
 import type { FamilyDecisionBody } from "./contracts";
 import { idempotencyFor } from "./idempotency";
 import { createCollaborationDemoApi } from "../collaboration-demo/api";
+import type { ConfirmedFactAdvisor } from "../collaboration-demo/contracts";
 import type { PlanningSkillInspector } from "../skill-inspector/contracts";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
@@ -18,6 +19,12 @@ const inspectorApi = createCollaborationDemoApi();
 const initial: DemoDisplayState = { value: "bootstrapping" };
 const CASE_ID = "40000000-0000-0000-0000-000000000002";
 
+export interface CurrentFactsProjection {
+  caseId: string;
+  caseRevision: number;
+  facts: readonly ConfirmedFactAdvisor[];
+}
+
 function failure(error: unknown): RecoveryCode {
   if (error instanceof ConnectedDemoApiError && error.status === 401) return "session_expired";
   if (error instanceof ConnectedDemoApiError && error.code === "bff_session_recovery_required") return "session_recovery_required";
@@ -29,6 +36,7 @@ export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
   const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
+  const [currentFacts, setCurrentFacts] = useState<CurrentFactsProjection | null>(null);
   const [journeyConflict, setJourneyConflict] = useState<"collaboration" | null>(() => {
     if (typeof window === "undefined") return null;
     return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
@@ -36,10 +44,34 @@ export function useConnectedDemo() {
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
   const inspectorGeneration = useRef(0);
+  const factsGeneration = useRef(0);
 
   const clearInspector = useCallback(() => {
     inspectorGeneration.current += 1;
     setInspector(null);
+  }, []);
+
+  const clearCurrentFacts = useCallback(() => {
+    factsGeneration.current += 1;
+    setCurrentFacts(null);
+  }, []);
+
+  const refreshCurrentFacts = useCallback(async (caseId: string, caseRevision: number) => {
+    const generation = factsGeneration.current + 1;
+    factsGeneration.current = generation;
+    setCurrentFacts(null);
+    try {
+      const projection = await inspectorApi.confirmedFacts(caseId, "advisor");
+      const current = loadRecoveryMetadata();
+      if (factsGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) {
+        setCurrentFacts({ caseId, caseRevision, facts: projection.current });
+      }
+    } catch {
+      const current = loadRecoveryMetadata();
+      if (factsGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) {
+        setCurrentFacts({ caseId, caseRevision, facts: [] });
+      }
+    }
   }, []);
 
   const refreshInspector = useCallback(async (caseId: string) => {
@@ -64,6 +96,7 @@ export function useConnectedDemo() {
     }
     try {
       clearInspector();
+      clearCurrentFacts();
       const { csrf_token: bootstrapCsrf } = await api.bootstrap();
       const session = await api.mint("advisor", bootstrapCsrf);
       const ledger = await api.advisorLedger(CASE_ID);
@@ -74,10 +107,11 @@ export function useConnectedDemo() {
       saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
       dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
       void refreshInspector(CASE_ID);
+      void refreshCurrentFacts(CASE_ID, ledger.case_revision);
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
     }
-  }, [clearInspector, refreshInspector]);
+  }, [clearCurrentFacts, clearInspector, refreshCurrentFacts, refreshInspector]);
 
   const recover = useCallback(async () => {
     const journey = loadDemoJourneyEnvelope();
@@ -93,6 +127,7 @@ export function useConnectedDemo() {
     try {
       if (metadata.role === "parent") {
         clearInspector();
+        clearCurrentFacts();
         try {
           await api.advisorLedger(metadata.caseId);
           throw new Error("role projection mismatch");
@@ -109,6 +144,7 @@ export function useConnectedDemo() {
         const taskPhase = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase);
         if ((taskPhase && metadata.taskId !== projectedTaskId) || (!taskPhase && metadata.taskId !== null && projectedTaskId !== metadata.taskId)) throw new Error("projection identity mismatch");
         dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
+        void refreshCurrentFacts(metadata.caseId, ledger.case_revision);
         if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
       }
     } catch (error) {
@@ -116,7 +152,7 @@ export function useConnectedDemo() {
       if (code === "session_expired") clearRecoveryMetadata();
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [clearInspector, connectAdvisor, refreshInspector]);
+  }, [clearCurrentFacts, clearInspector, connectAdvisor, refreshCurrentFacts, refreshInspector]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -150,7 +186,10 @@ export function useConnectedDemo() {
           if (!current || current.taskId !== streamingTaskId) throw new Error("projection identity mismatch");
           saveRecoveryMetadata({ ...current, cursor: Math.max(current.cursor, cursor) });
           dispatch({ type: "TASK_REFRESHED", ledger, after: cursor });
-          if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
+          if (ledger.phase !== "active-task") {
+            void refreshInspector(metadata.caseId);
+            void refreshCurrentFacts(metadata.caseId, ledger.case_revision);
+          }
         } while (pending && !closed);
       } catch (error) {
         if (!closed) dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
@@ -163,7 +202,7 @@ export function useConnectedDemo() {
     };
     for (const code of ["queued", "lease_acquired", "execution_started", "heartbeat_recorded", "retry_scheduled", "lease_reclaimed", "waiting_review", "succeeded", "blocked", "timed_out", "failed", "cancelled"]) events.addEventListener(code, refresh);
     return () => { closed = true; events.close(); };
-  }, [refreshInspector, streamingTaskId]);
+  }, [refreshCurrentFacts, refreshInspector, streamingTaskId]);
 
   const mutationRecord = useCallback(async (metadata: RecoveryMetadata, operation: MutationOperation, body: unknown) => {
     const record = await idempotencyFor(body, metadata.mutations[operation]);
@@ -203,6 +242,7 @@ export function useConnectedDemo() {
     if (!metadata || metadata.role !== "advisor" || metadata.caseId !== caseId) { dispatch({ type: "RECOVERABLE_FAILURE", code: "session_recovery_required" }); return; }
     try {
       clearInspector();
+      clearCurrentFacts();
       await api.revoke(metadata.csrf);
       clearRecoveryMetadata();
       const bootstrap = await api.bootstrap();
@@ -212,7 +252,7 @@ export function useConnectedDemo() {
       saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
       dispatch({ type: "PARENT_SESSION_READY", brief });
     } catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
-  }, [clearInspector]);
+  }, [clearCurrentFacts, clearInspector]);
 
   const approve = useCallback(async () => {
     if (state.value !== "advisor_review" || !state.ledger.review_inputs) return;
@@ -296,5 +336,5 @@ export function useConnectedDemo() {
     }
   }, [connectAdvisor]);
 
-  return { state, confirmed, setConfirmed, inspector, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
+  return { state, confirmed, setConfirmed, inspector, currentFacts, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
 }
