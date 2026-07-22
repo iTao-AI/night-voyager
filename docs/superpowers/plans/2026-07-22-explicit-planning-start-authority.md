@@ -2,10 +2,10 @@
 
 **Implementation status:** Implemented locally for authority review.
 
-Tasks 1–5 have executable local evidence on the isolated implementation branch. Task 6
-full verification and independent authority review remain the closeout gates. PR 2 and
-PR 3 remain approved but not implemented; no push, pull request, merge, release, or
-deployment is authorized by this status.
+Tasks 1–6 have executable local evidence on the isolated implementation branch.
+Independent authority review remains the closeout gate. PR 2 and PR 3 remain approved
+but not implemented; no push, pull request, merge, release, or deployment is authorized
+by this status.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation
@@ -499,7 +499,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
 **Files:** None expected. If a gate reveals a defect, return to the responsible Task,
 write a RED regression, fix it, and create a separate coherent follow-up commit.
 
-- [ ] **Step 1: Preflight**
+- [x] **Step 1: Preflight**
 
   ```bash
   git status --short
@@ -510,7 +510,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   Record host and Docker VM filesystem evidence. Stop at the documented threshold;
   do not override or clean unrelated Docker resources.
 
-- [ ] **Step 2: Focused and static gates**
+- [x] **Step 2: Focused and static gates**
 
   ```bash
   uv run pytest -q tests/architecture/test_fact_to_plan_contract.py \
@@ -520,7 +520,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   make db-check
   ```
 
-- [ ] **Step 3: Full repository gates**
+- [x] **Step 3: Full repository gates**
 
   ```bash
   make check
@@ -534,7 +534,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   repository's task-owned teardown; retain the approved data volume and unrelated
   resources.
 
-- [ ] **Step 4: Final diff and hygiene review**
+- [x] **Step 4: Final diff and hygiene review**
 
   ```bash
   BASE=$(git merge-base HEAD origin/main)
@@ -547,7 +547,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   Review every changed file against this plan. Confirm no frontend, dependency,
   lockfile, version, release, DRA/MKE, live-provider, or unrelated migration diff.
 
-- [ ] **Step 5: Handoff**
+- [x] **Step 5: Handoff**
 
   Keep the verified local branch/worktree clean for independent authority review.
   Report exact base/HEAD, ordered commits, RED -> GREEN evidence, migration and grant
@@ -565,7 +565,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
 - [x] Worker input uses the exact new Case revision and confirmed fact.
 - [x] Task and execution retain the complete five-field Skill pin.
 - [x] `0009 -> 0008 -> 0009` restores function/grant parity without rewriting data.
-- [ ] Full local gates, teardown, hygiene, and documentation audit are green.
+- [x] Full local gates, teardown, hygiene, and documentation audit are green.
 - [x] PR 2 and PR 3 remain unimplemented until this PR is merged and hosted-green.
 
 ## Not in Scope
