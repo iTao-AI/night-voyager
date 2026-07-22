@@ -1,8 +1,9 @@
 import { writeFile } from "node:fs/promises";
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const proofFile = process.env.FACT_TO_PLAN_PROOF_FILE;
+const workerReadyFile = process.env.FACT_TO_PLAN_WORKER_READY_FILE;
 const rawPublicData = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|schema_version|confirmed_fact_id|candidate_id|request_sha256|night_voyager_(?:api|worker|migrator)|\/Users\/|Traceback|csrf|cookie/i;
 
 async function expectPublicSurface(page: Page) {
@@ -12,7 +13,7 @@ async function expectPublicSurface(page: Page) {
   await expect(page.getByRole("main")).not.toContainText(rawPublicData);
 }
 
-async function expectResponsiveSurface(page: Page) {
+async function expectResponsiveSurface(page: Page, requiredVisible: readonly Locator[]) {
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 768, height: 900 },
@@ -22,11 +23,12 @@ async function expectResponsiveSurface(page: Page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const undersized = await page.locator("button:visible, a.primary-action:visible").evaluateAll((nodes) => nodes.filter((node) => node.getBoundingClientRect().height < 44).length);
     expect(undersized).toBe(0);
+    for (const required of requiredVisible) await expect(required).toBeVisible();
   }
 }
 
 test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database journey", async ({ page }) => {
-  test.skip(!proofFile, "runs only in the isolated fact-to-plan Compose lane");
+  test.skip(!proofFile || !workerReadyFile, "runs only in the isolated fact-to-plan Compose lane");
   let storageReplacements = 0;
   await page.exposeFunction("recordFactToPlanStorageWrite", () => { storageReplacements += 1; });
   await page.addInitScript(() => {
@@ -58,10 +60,16 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(page.getByText("Case revision 2")).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Re-plan required" })).toBeFocused();
-  await expectResponsiveSurface(page);
+  await expectResponsiveSurface(page, [
+    page.getByRole("heading", { name: "Re-plan required" }),
+    page.getByText("Fact version 1"),
+    page.getByText("Case revision 2"),
+  ]);
   await page.setViewportSize({ width: 1440, height: 900 });
 
   const caseId = await page.evaluate(() => JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "null").caseId as string);
+  const taskPostsForCase = (continuedCaseId: string) => mutations.filter((path) => path === `/api/demo/cases/${continuedCaseId}/agent-tasks`);
+  expect(taskPostsForCase(caseId)).toHaveLength(0);
   const handoffReads: string[] = [];
   const readListener = (request: import("@playwright/test").Request) => {
     const path = new URL(request.url()).pathname;
@@ -69,7 +77,6 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   };
   page.on("request", readListener);
   storageReplacements = 0;
-  const taskPostsBeforeHandoff = mutations.filter((path) => path.endsWith("/agent-tasks")).length;
   const eventsBeforeHandoff = eventRequests.length;
   let planningNavigations = 0;
   let planningNavigationSeen = false;
@@ -91,7 +98,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     `/api/demo/cases/${caseId}/advisor-ledger`,
     `/api/demo/cases/${caseId}/planning-skill-inspector`,
   ]);
-  expect(mutations.filter((path) => path.endsWith("/agent-tasks"))).toHaveLength(taskPostsBeforeHandoff);
+  expect(taskPostsForCase(caseId)).toHaveLength(0);
   expect(eventRequests).toHaveLength(eventsBeforeHandoff);
   expect(storageReplacements).toBe(1);
   expect(planningNavigations).toBe(1);
@@ -99,6 +106,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   const firstStream = page.waitForRequest((request) => request.url().includes("/events?after=0"));
   await page.getByRole("button", { name: "Create planning task" }).click();
   await firstStream;
+  await writeFile(workerReadyFile!, "task accepted and initial SSE observed\n", { encoding: "utf8", mode: 0o600 });
   await page.waitForFunction(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0);
   const storedCursor = await page.evaluate(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor));
   const reloadStream = page.waitForRequest((request) => request.url().includes("/events?after="));
@@ -107,7 +115,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(page.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled({ timeout: 60_000 });
   await expect(page.getByText("Pinned execution matched")).toBeVisible();
   await expect(page.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled();
-  expect(mutations.filter((path) => path.endsWith("/agent-tasks"))).toHaveLength(taskPostsBeforeHandoff + 1);
+  expect(taskPostsForCase(caseId)).toHaveLength(1);
   expect(eventRequests.filter((url) => new URL(url).searchParams.get("after") === "0")).toHaveLength(1);
   const taskId = await page.evaluate(() => JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "null").taskId as string);
 
@@ -121,7 +129,10 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(page.getByRole("heading", { name: "Timeline Plan" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Decision Receipt" })).toBeVisible();
-  await expectResponsiveSurface(page);
+  await expectResponsiveSurface(page, [
+    page.getByRole("heading", { name: "Decision Receipt" }),
+    page.getByRole("heading", { name: "Timeline Plan" }),
+  ]);
   await expectPublicSurface(page);
 
   await writeFile(proofFile!, `${JSON.stringify({ schema_version: 1, case_id: caseId, case_revision: 2, task_id: taskId })}\n`, { encoding: "utf8", mode: 0o600 });

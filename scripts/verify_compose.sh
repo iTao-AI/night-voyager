@@ -4,6 +4,7 @@ set -eu
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
 UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
 FACT_TO_PLAN_PROOF_FILE=docs/assets/.fact-to-plan-proof.json
+FACT_TO_PLAN_WORKER_READY_FILE=docs/assets/.fact-to-plan-worker-ready
 worker_start_pid=
 export COMPOSE_PROJECT_NAME
 
@@ -12,7 +13,7 @@ cleanup() {
         kill "$worker_start_pid" 2>/dev/null || true
         wait "$worker_start_pid" 2>/dev/null || true
     fi
-    rm -f "$FACT_TO_PLAN_PROOF_FILE"
+    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
     docker compose down --volumes --remove-orphans --rmi local
 }
 trap cleanup EXIT INT TERM
@@ -84,15 +85,23 @@ docker compose --profile browser-proof run --rm --no-deps \
 printf 'compose-proof: connected browser proof passed\n'
 docker compose down --volumes --remove-orphans
 docker compose up --no-build --wait
-rm -f "$FACT_TO_PLAN_PROOF_FILE"
+rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
 docker compose pause worker
 (
-    sleep 15
-    docker compose unpause worker
+    for attempt in $(seq 1 120); do
+        if test -f "$FACT_TO_PLAN_WORKER_READY_FILE"; then
+            docker compose unpause worker
+            exit 0
+        fi
+        sleep 1
+    done
+    printf 'compose-proof: timed out waiting for task acceptance and initial SSE\n' >&2
+    exit 1
 ) &
 worker_start_pid=$!
 docker compose --profile browser-proof run --rm --no-deps \
     -e FACT_TO_PLAN_PROOF_FILE=/workspace/docs/assets/.fact-to-plan-proof.json \
+    -e FACT_TO_PLAN_WORKER_READY_FILE=/workspace/docs/assets/.fact-to-plan-worker-ready \
     browser-proof npx playwright test --config playwright.compose.config.ts fact-to-plan.spec.ts
 wait "$worker_start_pid"
 worker_start_pid=
@@ -101,5 +110,5 @@ docker compose run --rm --no-deps \
     -v "$PWD/$FACT_TO_PLAN_PROOF_FILE:/tmp/fact-to-plan-proof.json:ro" \
     demo-seed python scripts/verify_fact_to_plan_flow.py \
     --proof-file /tmp/fact-to-plan-proof.json
-rm -f "$FACT_TO_PLAN_PROOF_FILE"
+rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
 printf 'compose-proof: governed fact-to-plan browser and database proof passed\n'

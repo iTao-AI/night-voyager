@@ -46,6 +46,10 @@ it("renders current Case revision and confirmed facts without internal provenanc
   rerender(<AdvisorLedger ledger={current} confirmedFacts={[]} onPrimaryAction={() => undefined} />);
   expect(screen.getByText("No current confirmed facts are projected for this Case revision.")).toBeVisible();
   expect(screen.queryByText("300,000–400,000 CNY")).toBeNull();
+
+  rerender(<AdvisorLedger ledger={current} confirmedFacts={null} onPrimaryAction={() => undefined} />);
+  expect(screen.queryByText("No current confirmed facts are projected for this Case revision.")).toBeNull();
+  expect(screen.getByText("Current confirmed facts are unavailable until the server projection is refreshed.")).toBeVisible();
 });
 
 it("keeps Malaysia blocked and discloses evidence", () => {

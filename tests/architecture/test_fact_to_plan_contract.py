@@ -110,7 +110,8 @@ def test_pr2_fact_to_plan_browser_contract_is_read_then_explicit_mutation() -> N
     )
     assert "continueCollaborationAsAdvisorFamily" in hook
     assert "createTask" not in handoff
-    assert "taskPostsBeforeHandoff" in browser
+    assert "taskPostsForCase(caseId)).toHaveLength(0)" in browser
+    assert "taskPostsForCase(caseId)).toHaveLength(1)" in browser
     assert "storageReplacements" in browser
     assert "planningNavigations" in browser
     for relation in (

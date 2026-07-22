@@ -20,7 +20,7 @@ export function ConnectedDemo() {
     else if (state.ledger.current_brief_id) void demo.rotateToParent(state.ledger.case_id);
   };
   const inspectorVisible = ["advisor_ready", "task_creating", "task_streaming", "advisor_review", "review_submitting", "terminal_task_failure"].includes(state.value);
-  const confirmedFactsFor = (caseId: string, caseRevision: number) => demo.currentFacts?.caseId === caseId && demo.currentFacts.caseRevision === caseRevision ? demo.currentFacts.facts : [];
+  const confirmedFactsFor = (caseId: string, caseRevision: number) => demo.currentFacts?.caseId === caseId && demo.currentFacts.caseRevision === caseRevision ? demo.currentFacts.facts : null;
   return (
     <>
       <a className="skip-link" href="#demo-main">Skip to decision workflow</a>

@@ -18,12 +18,12 @@ function actionLabel(phase: Ledger["phase"]): string {
 
 export function AdvisorLedger({
   ledger,
-  confirmedFacts = [],
+  confirmedFacts = null,
   onPrimaryAction,
   busy = false,
 }: {
   ledger: Ledger;
-  confirmedFacts?: readonly ConfirmedFactAdvisor[];
+  confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
   onPrimaryAction: () => void;
   busy?: boolean;
 }) {

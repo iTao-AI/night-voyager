@@ -161,6 +161,118 @@ it.each([
   expect(loadRecoveryMetadata()).toMatchObject({ caseId: CONTINUED_CASE_ID, taskId: TASK_ID });
 });
 
+it.each([
+  ["active-task", "task_streaming", 1],
+  ["review-required", "advisor_review", 0],
+  ["terminal-task-failure", "terminal_task_failure", 0],
+] as const)("atomically adopts a %s task created after handoff without posting", async (phase, expectedState, expectedStreams) => {
+  const projected = phase === "terminal-task-failure" ? ledger(phase, "failed") : ledger(phase);
+  const active = {
+    ...projected,
+    case_id: CONTINUED_CASE_ID,
+    case_revision: 2,
+    canonical_task_inputs: projected.canonical_task_inputs ? {
+      ...projected.canonical_task_inputs,
+      case_id: CONTINUED_CASE_ID,
+      expected_case_revision: 2,
+    } : null,
+    review_inputs: projected.review_inputs ? { ...projected.review_inputs, expected_case_revision: 2 } : null,
+  };
+  saveRecoveryMetadata({ ...advisorMetadata(), caseId: CONTINUED_CASE_ID });
+  const sources: string[] = [];
+  const taskPosts: string[] = [];
+  class FakeEventSource {
+    constructor(readonly url: string) { sources.push(url); }
+    addEventListener() {}
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/agent-tasks") && init?.method === "POST") taskPosts.push(path);
+    if (path.endsWith("/advisor-ledger")) return Response.json(active);
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [CONFIRMED_FACT], history: [], next_cursor: null });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await waitFor(() => expect(result.current.state.value).toBe(expectedState));
+  expect(loadRecoveryMetadata()).toMatchObject({ caseId: CONTINUED_CASE_ID, taskId: TASK_ID, cursor: 0 });
+  expect(sources).toHaveLength(expectedStreams);
+  if (expectedStreams) expect(sources).toEqual([`/api/demo/tasks/${TASK_ID}/events?after=0`]);
+  expect(taskPosts).toEqual([]);
+});
+
+it("fails closed when recovery metadata already names a different task", async () => {
+  const otherTask = "70000000-0000-0000-0000-000000000002";
+  saveRecoveryMetadata({ ...advisorMetadata(), taskId: otherTask });
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("active-task"));
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [], history: [], next_cursor: null });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+  expect(loadRecoveryMetadata()?.taskId).toBe(otherTask);
+});
+
+it.each(["unavailable", "malformed"] as const)("does not present confirmed facts as empty when the projection is %s", async (kind) => {
+  saveRecoveryMetadata(advisorMetadata());
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("task-ready"));
+    if (path.endsWith("/confirmed-facts")) {
+      return kind === "unavailable"
+        ? Response.json({ code: "bff_upstream_unavailable" }, { status: 503 })
+        : Response.json({ schema_version: 1, current: "not-an-array" });
+    }
+    if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("not_created"));
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await waitFor(() => expect(result.current.state.value).toBe("advisor_ready"));
+  expect(result.current.currentFacts).toBeNull();
+});
+
+it("re-reads facts until the ledger revision is stable across the projection", async () => {
+  const atRevision = (revision: number) => ({
+    ...ledger("task-ready"),
+    case_revision: revision,
+    canonical_task_inputs: { ...ledger("task-ready").canonical_task_inputs!, expected_case_revision: revision },
+  });
+  const advancedFact = { ...CONFIRMED_FACT, fact_version: 2 };
+  saveRecoveryMetadata(advisorMetadata());
+  let ledgerReads = 0;
+  let factReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/advisor-ledger")) {
+      ledgerReads += 1;
+      return Response.json(atRevision(ledgerReads === 1 ? 2 : 3));
+    }
+    if (path.endsWith("/confirmed-facts")) {
+      factReads += 1;
+      return Response.json({ schema_version: 1, current: [factReads === 1 ? CONFIRMED_FACT : advancedFact], history: [], next_cursor: null });
+    }
+    if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("not_created"));
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+
+  await waitFor(() => expect(result.current.currentFacts?.caseRevision).toBe(3));
+  expect(result.current.state).toMatchObject({ value: "advisor_ready", ledger: { case_revision: 3 } });
+  expect(result.current.currentFacts?.facts).toEqual([advancedFact]);
+  expect(ledgerReads).toBe(3);
+  expect(factReads).toBe(2);
+});
+
 it("recovers the continued parent brief after role rotation without reading the seed Case", async () => {
   saveRecoveryMetadata({ ...parentMetadata(), caseId: CONTINUED_CASE_ID });
   const continuedBrief = { ...brief("family-review"), case_id: CONTINUED_CASE_ID };
@@ -337,8 +449,9 @@ it("keeps one EventSource and coalesces out-of-order refreshes with a monotonic 
     if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [], history: [], next_cursor: null });
     if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("matched"));
     ledgerCalls += 1;
-    if (ledgerCalls === 1) return Response.json(ledger("active-task"));
-    return await new Promise<Response>((resolve) => { if (ledgerCalls === 2) resolveFirst = resolve; else resolveSecond = resolve; });
+    if (ledgerCalls <= 2) return Response.json(ledger("active-task"));
+    if (ledgerCalls <= 4) return await new Promise<Response>((resolve) => { if (ledgerCalls === 3) resolveFirst = resolve; else resolveSecond = resolve; });
+    return Response.json(ledger("review-required"));
   }));
   const { result } = renderHook(() => useConnectedDemo());
   await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
@@ -348,9 +461,9 @@ it("keeps one EventSource and coalesces out-of-order refreshes with a monotonic 
     listeners.get("heartbeat_recorded")?.({ lastEventId: "9" } as MessageEvent);
     listeners.get("heartbeat_recorded")?.({ lastEventId: "6" } as MessageEvent);
   });
-  expect(ledgerCalls).toBe(2);
+  expect(ledgerCalls).toBe(3);
   await act(async () => { resolveFirst?.(Response.json(ledger("active-task"))); });
-  await waitFor(() => expect(ledgerCalls).toBe(3));
+  await waitFor(() => expect(ledgerCalls).toBe(4));
   await act(async () => { resolveSecond?.(Response.json(ledger("review-required"))); });
   await waitFor(() => expect(result.current.state.value).toBe("advisor_review"));
   expect(loadRecoveryMetadata()?.cursor).toBe(9);

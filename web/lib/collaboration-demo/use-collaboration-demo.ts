@@ -358,6 +358,20 @@ export function useCollaborationDemo() {
     return { record, updated };
   }, []);
 
+  const refreshHandoffInspector = useCallback(async (request: Promise<PlanningSkillInspector>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const unavailable = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), 1_000);
+      });
+      setInspector(await Promise.race([request, unavailable]));
+    } catch {
+      setInspector(null);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }, []);
+
   const appendMessage = useCallback(async () => {
     if (state.value !== "thread_ready" || !state.context.thread) return;
     const stored = loadDemoJourneyEnvelope();
@@ -527,21 +541,27 @@ export function useCollaborationDemo() {
           throw new HandoffValidationError("stale");
         }
 
-        const refreshedInspector = await api.planningSkillInspector(stored.caseId);
-        setInspector(refreshedInspector);
+        await refreshHandoffInspector(api.planningSkillInspector(stored.caseId));
         const converted = continueCollaborationAsAdvisorFamily(stored, taskId);
         saveRecoveryMetadata(converted);
         retryAction.current = null;
         collaborationNavigation.toPlanning();
       } catch (error) {
-        dispatch({ type: "FAILURE", category: handoffFailure(error) });
+        const mapped = handoffFailure(error);
+        if (mapped === "stale" || mapped === "session_recovery_required") retryAction.current = null;
+        if (
+          mapped === "session_recovery_required"
+          && (error instanceof CollaborationDemoApiError || error instanceof ConnectedDemoApiError)
+          && error.status === 401
+        ) fail(error);
+        else dispatch({ type: "FAILURE", category: mapped });
       } finally {
         handoffInFlight.current = false;
       }
     };
     retryAction.current = attempt;
     await attempt();
-  }, [state]);
+  }, [fail, refreshHandoffInspector, state]);
 
   const retry = useCallback(async () => { if (retryAction.current) await retryAction.current(); else await recover(); }, [recover]);
 

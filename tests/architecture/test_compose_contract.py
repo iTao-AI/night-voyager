@@ -143,3 +143,29 @@ def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> Non
     assert "docker compose pause worker" in script
     assert "docker compose unpause worker" in script
     assert "--no-build" in script
+
+
+def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_content() -> None:
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "taskPostsForCase(caseId)).toHaveLength(0)" in browser
+    assert "taskPostsForCase(caseId)).toHaveLength(1)" in browser
+    assert "FACT_TO_PLAN_WORKER_READY_FILE" in browser
+    assert "await firstStream" in browser
+    assert browser.index("await firstStream") < browser.index("writeFile(workerReadyFile")
+    assert "requiredVisible: readonly Locator[]" in browser
+    assert "for (const required of requiredVisible)" in browser
+    for content in (
+        'page.getByRole("heading", { name: "Re-plan required" })',
+        'page.getByText("Fact version 1")',
+        'page.getByText("Case revision 2")',
+        'page.getByRole("heading", { name: "Decision Receipt" })',
+        'page.getByRole("heading", { name: "Timeline Plan" })',
+    ):
+        assert content in browser
+
+    assert "FACT_TO_PLAN_WORKER_READY_FILE=docs/assets/.fact-to-plan-worker-ready" in script
+    assert 'test -f "$FACT_TO_PLAN_WORKER_READY_FILE"' in script
+    assert "sleep 15" not in script
+    assert "seq 1 120" in script

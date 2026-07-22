@@ -184,10 +184,11 @@ server-owned composite projection with
 activation, task, and execution records into an authority claim.
 
 During the controlled same-Case handoff, the collaboration page re-reads this
-inspector only to validate current authority. The handoff itself never resolves a
-Skill pin, creates a task, or transports pin fields. `/demo` re-reads its advisor
-ledger, and task creation atomically persists the exact active five-field pin through
-the existing backend authority.
+inspector only for bounded visible proof; inspector data is not conversion authority,
+and an unavailable or malformed inspector does not block the handoff. The handoff
+itself never resolves a Skill pin, creates a task, or transports pin fields. `/demo`
+re-reads its advisor ledger, and task creation atomically persists the exact active
+five-field pin through the existing backend authority.
 
 ## Downgrade
 

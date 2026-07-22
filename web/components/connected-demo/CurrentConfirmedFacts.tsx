@@ -5,14 +5,14 @@ export function CurrentConfirmedFacts({
   facts,
   caseRevision,
 }: {
-  facts: readonly ConfirmedFactAdvisor[];
+  facts: readonly ConfirmedFactAdvisor[] | null;
   caseRevision: number;
 }) {
   return (
     <section className="collaboration-panel confirmed-fact" aria-labelledby="current-confirmed-facts-title">
       <p className="overline">Current server-owned Case authority</p>
       <h2 id="current-confirmed-facts-title">Current confirmed Case facts</h2>
-      {facts.length === 0 ? <p>No current confirmed facts are projected for this Case revision.</p> : (
+      {facts === null ? <p>Current confirmed facts are unavailable until the server projection is refreshed.</p> : facts.length === 0 ? <p>No current confirmed facts are projected for this Case revision.</p> : (
         <div className="current-confirmed-facts">
           {facts.map((fact) => (
             <dl className="collaboration-facts" key={`${fact.fact_key}-${fact.fact_version}`}>
