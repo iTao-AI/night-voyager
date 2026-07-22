@@ -257,6 +257,15 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
                 json=create_payload(source_pack_version=2),
             )
             assert mismatch.status_code == 409
+            assert mismatch.headers["content-type"].startswith(
+                "application/problem+json"
+            )
+            assert mismatch.json()["code"] == "idempotency_conflict"
+            assert (
+                mismatch.json()["type"]
+                == "https://night-voyager.invalid/problems/idempotency_conflict"
+            )
+            assert "nv008" not in mismatch.text.lower()
             duplicate = await client.post(
                 f"/api/v1/cases/{CASE}/agent-tasks",
                 headers=mutation_headers(advisor, "duplicate-effective"),
