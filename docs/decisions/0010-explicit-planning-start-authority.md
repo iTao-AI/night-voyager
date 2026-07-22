@@ -26,8 +26,11 @@ Migration `0009` replaces only the existing
 `app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,jsonb,text,text)`
 function. Its public HTTP request and response contract remains unchanged.
 
-For a new request, the function keeps idempotency replay first, locks the Case row,
-and validates actor, assignment, operation, exact revision, source pack, active
+After trusted advisor context is established, the function takes a transaction-scoped
+advisory lock keyed by organization, actor, operation, and idempotency key before it
+reads the idempotency ledger. Replay therefore remains before new-write validation even
+when same-key requests overlap. It then locks the Case row and validates assignment,
+operation, exact revision, source pack, active
 SkillVersion, complete manifest, five-field runtime pin, and effective-task uniqueness.
 It then accepts `intake` only for `generate_planning_run_v1`. In the same PostgreSQL
 transaction it writes the `intake -> planning` transition, pinned `AgentTask`,
@@ -40,19 +43,22 @@ transition, so there is no automatic planning and no separate planning-start end
 
 The function remains owned by `night_voyager_migrator`. `PUBLIC` is revoked and only
 `night_voyager_api` receives `EXECUTE`; `night_voyager_worker` receives no creation
-authority or direct task DML. Existing forced-RLS tables and tenant context remain the
-data boundary.
+authority or direct task DML. Migration `0009` also revokes the API grant on the legacy
+`app.transition_case(uuid,uuid,text,text)` function, so no runtime role can submit
+`intake -> planning` outside the complete task authority transaction. Existing
+forced-RLS tables and tenant context remain the data boundary.
 
-Downgrade to `0008` restores the exact prior function definition, owner, signature, and
-grant boundary without rewriting Case or task history. Re-upgrade reapplies the same
-single-owner `0009` authority.
+Downgrade to `0008` restores the exact prior task function definition, owner, signature,
+and grant boundary plus the legacy API transition grant, without rewriting Case or task
+history. Re-upgrade removes that legacy grant again and reapplies the same single-owner
+`0009` authority.
 
 ## Consequences
 
 - One assigned-advisor action either persists the complete planning-start authority set
   or rolls back the Case transition and every task-side write.
-- Same-key replay returns the original task without repeating the transition; a changed
-  request under the same key remains a bounded idempotency conflict.
+- Overlapping same-key requests serialize before ledger lookup. An identical request
+  returns the original task with `replayed=true`; a changed request remains `NV008`.
 - Concurrent first requests serialize on the Case row; exactly one may create the
   effective task.
 - The worker still begins authority only at claim. It consumes the exact new Case

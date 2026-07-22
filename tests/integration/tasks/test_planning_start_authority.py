@@ -419,6 +419,75 @@ async def test_first_deterministic_task_atomically_starts_planning() -> None:
 
 
 @pytest.mark.asyncio
+async def test_api_cannot_bypass_planning_start_with_legacy_case_transition() -> None:
+    case_id = UUID("42000000-0000-0000-0000-000000000905")
+    task_id = UUID("85000000-0000-0000-0000-000000000905")
+    await seed_intake_case(case_id)
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with api.connect() as connection:
+            with pytest.raises(DBAPIError) as denied:
+                async with connection.begin():
+                    await set_api_context(connection)
+                    await connection.execute(
+                        text(
+                            "SELECT app.transition_case("
+                            ":org,:case,'intake','planning')"
+                        ),
+                        {"org": ORG, "case": case_id},
+                    )
+            assert getattr(denied.value.orig, "sqlstate", None) == "42501"
+
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            assert await authority_projection(connection, case_id) == {
+                "state": "intake",
+                "tasks": 0,
+                "pins": 0,
+                "dispatches": 0,
+                "events": 0,
+                "idempotency": 0,
+                "executions": 0,
+            }
+
+        async with api.begin() as connection:
+            await set_api_context(connection)
+            created = (
+                await create_task(
+                    connection,
+                    case_id=case_id,
+                    task_id=task_id,
+                    key_hash=planning_key("legacy-transition-denied"),
+                )
+            ).mappings().one()
+            assert created.task_id == task_id
+            assert created.replayed is False
+
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            assert await authority_projection(connection, case_id) == {
+                "state": "planning",
+                "tasks": 1,
+                "pins": 1,
+                "dispatches": 1,
+                "events": 1,
+                "idempotency": 1,
+                "executions": 0,
+            }
+        await cancel_task(task_id)
+    finally:
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
 async def test_replay_precedes_new_write_validation_and_mismatch_stays_bounded() -> None:
     case_id = UUID("42000000-0000-0000-0000-000000000903")
     task_id = UUID("85000000-0000-0000-0000-000000000903")
@@ -665,6 +734,135 @@ async def test_two_first_requests_serialize_to_one_complete_authority_set() -> N
         await cancel_task(winning_task)
     finally:
         await api.dispose()
+        await migrator.dispose()
+
+
+async def run_overlapping_same_key_requests(
+    *,
+    case_id: UUID,
+    first_task_id: UUID,
+    second_task_id: UUID,
+    first_request_hash: str,
+    second_request_hash: str,
+) -> tuple[Any | None, DBAPIError | None]:
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    key_hash = planning_key(f"overlap:{case_id}")
+    try:
+        async with api.connect() as first_connection, api.connect() as second_connection:
+            first_transaction = await first_connection.begin()
+            await set_api_context(first_connection)
+            first = (
+                await create_task(
+                    first_connection,
+                    case_id=case_id,
+                    task_id=first_task_id,
+                    key_hash=key_hash,
+                    request_hash=first_request_hash,
+                )
+            ).mappings().one()
+            assert first.task_id == first_task_id
+            assert first.replayed is False
+
+            async def second_attempt() -> tuple[Any | None, DBAPIError | None]:
+                try:
+                    async with second_connection.begin():
+                        await set_api_context(second_connection)
+                        result = (
+                            await create_task(
+                                second_connection,
+                                case_id=case_id,
+                                task_id=second_task_id,
+                                key_hash=key_hash,
+                                request_hash=second_request_hash,
+                            )
+                        ).mappings().one()
+                    return result, None
+                except DBAPIError as error:
+                    return None, error
+
+            second = asyncio.create_task(second_attempt())
+            await asyncio.sleep(0.1)
+            assert not second.done()
+            await first_transaction.commit()
+            return await asyncio.wait_for(second, timeout=5)
+    finally:
+        await api.dispose()
+
+
+@pytest.mark.asyncio
+async def test_overlapping_same_key_same_request_replays_after_first_commit() -> None:
+    case_id = UUID("42000000-0000-0000-0000-000000000922")
+    first_task_id = UUID("85000000-0000-0000-0000-000000000922")
+    second_task_id = UUID("85000000-0000-0000-0000-000000000923")
+    await seed_intake_case(case_id)
+    result, error = await run_overlapping_same_key_requests(
+        case_id=case_id,
+        first_task_id=first_task_id,
+        second_task_id=second_task_id,
+        first_request_hash="a" * 64,
+        second_request_hash="a" * 64,
+    )
+    assert error is None
+    assert result is not None
+    assert result.task_id == first_task_id
+    assert result.replayed is True
+
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            assert await authority_projection(connection, case_id) == {
+                "state": "planning",
+                "tasks": 1,
+                "pins": 1,
+                "dispatches": 1,
+                "events": 1,
+                "idempotency": 1,
+                "executions": 0,
+            }
+        await cancel_task(first_task_id)
+    finally:
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_overlapping_same_key_changed_request_returns_idempotency_conflict() -> None:
+    case_id = UUID("42000000-0000-0000-0000-000000000924")
+    first_task_id = UUID("85000000-0000-0000-0000-000000000924")
+    second_task_id = UUID("85000000-0000-0000-0000-000000000925")
+    await seed_intake_case(case_id)
+    result, error = await run_overlapping_same_key_requests(
+        case_id=case_id,
+        first_task_id=first_task_id,
+        second_task_id=second_task_id,
+        first_request_hash="a" * 64,
+        second_request_hash="b" * 64,
+    )
+    assert result is None
+    assert error is not None
+    assert getattr(error.orig, "sqlstate", None) == "NV008"
+
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            assert await authority_projection(connection, case_id) == {
+                "state": "planning",
+                "tasks": 1,
+                "pins": 1,
+                "dispatches": 1,
+                "events": 1,
+                "idempotency": 1,
+                "executions": 0,
+            }
+        await cancel_task(first_task_id)
+    finally:
         await migrator.dispose()
 
 

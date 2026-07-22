@@ -42,6 +42,13 @@ def test_0009_keeps_task_creation_as_the_single_narrow_runtime_authority() -> No
     assert f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC" in source
     assert f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_api" in source
     assert f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_worker" not in source
+    transition_signature = "app.transition_case(uuid,uuid,text,text)"
+    assert f"REVOKE ALL ON FUNCTION {transition_signature} FROM PUBLIC" in source
+    assert (
+        f"REVOKE ALL ON FUNCTION {transition_signature} FROM night_voyager_api"
+        in source
+    )
+    assert f"GRANT EXECUTE ON FUNCTION {transition_signature} TO night_voyager_api" in source
     assert "CREATE TABLE" not in source
     assert "ALTER TABLE" not in source
 

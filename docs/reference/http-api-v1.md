@@ -79,7 +79,10 @@ request and response schemas are unchanged. An assigned advisor's first valid
 `planning` and creates the complete pinned task authority set. Confirmation alone does
 not start planning, and `generate_governed_mixed_planning_run_v1` remains invalid from
 `intake`. No planning-start endpoint, request field, response field, or public error
-code is added.
+code is added. The API role cannot bypass the route's complete transaction through the
+legacy standalone Case-transition function. Overlapping same-key creates serialize
+before replay lookup, so identical requests return the original task and a changed
+request keeps the existing `idempotency_conflict` response.
 
 SSE uses task-local integer `event_sequence` as `id`. `Last-Event-ID` must be a
 non-negative integer; a cursor ahead of the durable maximum is a conflict.

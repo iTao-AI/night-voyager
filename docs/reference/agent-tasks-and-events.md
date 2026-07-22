@@ -47,11 +47,15 @@ event, and idempotency result. The first deterministic planning task therefore c
 exist without the transition, and the transition cannot commit without the complete
 task authority set.
 
-Idempotency replay remains before new-write validation and never repeats the transition.
-Concurrent first requests serialize on the Case row and only one effective task may be
-created. Confirmation alone still creates no task and does not enter `planning`; the
-mixed operation from `intake` remains rejected. Planning never starts automatically,
-and existing creation from `planning` keeps its prior behavior.
+Same-key transactions serialize on an advisory lock derived from organization, actor,
+operation, and key before ledger lookup. Idempotency replay therefore remains before
+new-write validation and never repeats the transition: identical overlapping requests
+return the original task, while a changed request returns `NV008`. Different-key first
+requests still serialize on the Case row and only one effective task may be created.
+The API role cannot execute the legacy standalone `transition_case` function at migration
+head. Confirmation alone still creates no task and does not enter `planning`; the mixed
+operation from `intake` remains rejected. Planning never starts automatically, and
+existing creation from `planning` keeps its prior behavior.
 
 ## Versioned Skill pin
 

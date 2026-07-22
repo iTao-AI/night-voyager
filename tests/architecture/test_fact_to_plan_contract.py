@@ -13,6 +13,7 @@ CREATE_TASK_SIGNATURE = (
     "app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,"
     "text,jsonb,text,text)"
 )
+TRANSITION_CASE_SIGNATURE = "app.transition_case(uuid,uuid,text,text)"
 
 
 def test_http_create_contract_remains_exact() -> None:
@@ -68,6 +69,23 @@ def test_0009_owns_only_the_explicit_first_planning_transition() -> None:
     assert f"REVOKE ALL ON FUNCTION {CREATE_TASK_SIGNATURE} FROM PUBLIC" in migration
     assert (
         f"GRANT EXECUTE ON FUNCTION {CREATE_TASK_SIGNATURE} TO night_voyager_api"
+        in migration
+    )
+    assert (
+        f"REVOKE ALL ON FUNCTION {TRANSITION_CASE_SIGNATURE} FROM PUBLIC"
+        in migration
+    )
+    assert (
+        f"REVOKE ALL ON FUNCTION {TRANSITION_CASE_SIGNATURE} FROM night_voyager_api"
+        in migration
+    )
+    assert (
+        f"GRANT EXECUTE ON FUNCTION {TRANSITION_CASE_SIGNATURE} TO night_voyager_api"
+        in migration
+    )
+    assert "pg_advisory_xact_lock" in migration
+    assert (
+        "p_org::text||':'||p_actor::text||':agent_task_create:'||p_key_hash"
         in migration
     )
 

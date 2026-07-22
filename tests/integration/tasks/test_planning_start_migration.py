@@ -20,6 +20,7 @@ PACK = UUID("50000000-0000-0000-0000-000000000001")
 SIGNATURE = (
     "uuid, uuid, uuid, uuid, text, integer, uuid, integer, text, jsonb, text, text"
 )
+TRANSITION_SIGNATURE = "uuid, uuid, text, text"
 
 
 def run_alembic(*arguments: str) -> None:
@@ -65,6 +66,30 @@ async def capture_function_contract() -> dict[str, object]:
         assert contract["api_execute"] is True
         assert contract["worker_execute"] is False
         return contract
+    finally:
+        await engine.dispose()
+
+
+async def capture_transition_grants() -> dict[str, object]:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT owner.rolname AS owner,"
+                        "has_function_privilege('public',p.oid,'EXECUTE') AS public_execute,"
+                        "has_function_privilege('night_voyager_api',p.oid,'EXECUTE') AS api_execute,"
+                        "has_function_privilege('night_voyager_worker',p.oid,'EXECUTE') AS worker_execute "
+                        "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
+                        "JOIN pg_roles owner ON owner.oid=p.proowner "
+                        "WHERE n.nspname='app' AND p.proname='transition_case' "
+                        "AND oidvectortypes(p.proargtypes)=:signature"
+                    ),
+                    {"signature": TRANSITION_SIGNATURE},
+                )
+            ).mappings().one()
+        return dict(row)
     finally:
         await engine.dispose()
 
@@ -164,12 +189,25 @@ async def test_0009_upgrade_downgrade_upgrade_restores_exact_0008_authority() ->
     second_case = UUID("42000000-0000-0000-0000-000000000972")
     second_task = UUID("85000000-0000-0000-0000-000000000972")
     baseline_0008 = await capture_function_contract()
+    baseline_transition_grants = await capture_transition_grants()
+    assert baseline_transition_grants == {
+        "owner": "night_voyager_migrator",
+        "public_execute": False,
+        "api_execute": True,
+        "worker_execute": False,
+    }
     try:
         run_alembic("upgrade", "0009")
         contract_0009 = await capture_function_contract()
         assert contract_0009["definition"] != baseline_0008["definition"]
         assert contract_0009["owner"] == baseline_0008["owner"]
         assert contract_0009["acl"] == baseline_0008["acl"]
+        assert await capture_transition_grants() == {
+            "owner": "night_voyager_migrator",
+            "public_execute": False,
+            "api_execute": False,
+            "worker_execute": False,
+        }
         first_projection = await prove_first_task(first_case, first_task, "7" * 64)
         assert first_projection == {
             "state": "planning",
@@ -182,9 +220,16 @@ async def test_0009_upgrade_downgrade_upgrade_restores_exact_0008_authority() ->
 
         run_alembic("downgrade", "0008")
         assert await capture_function_contract() == baseline_0008
+        assert await capture_transition_grants() == baseline_transition_grants
         assert await authority_projection(first_case, first_task) == first_projection
 
         run_alembic("upgrade", "0009")
+        assert await capture_transition_grants() == {
+            "owner": "night_voyager_migrator",
+            "public_execute": False,
+            "api_execute": False,
+            "worker_execute": False,
+        }
         assert await authority_projection(first_case, first_task) == first_projection
         assert await prove_first_task(second_case, second_task, "8" * 64) == {
             "state": "planning",

@@ -106,6 +106,7 @@ def test_release_verifier_includes_collaboration_roles_and_legacy_revocation() -
         assert token in verifier
     assert "runtime roles must not access collaboration authority tables" in verifier
     assert "legacy Case revision writer must not be executable by the API" in verifier
+    assert "legacy Case transition must not be executable by runtime roles" in verifier
     assert "policy_count != 38" in verifier
 
 

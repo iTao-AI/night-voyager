@@ -61,7 +61,9 @@ overwrite the requested revision.
 
 After an advisor confirms a fact, creation of the first deterministic task may move the
 same Case from `intake` to `planning` atomically under migration `0009`. The worker does
-not perform that transition and no execution exists before claim. On claim, it loads
+not perform that transition, and the API cannot invoke the legacy standalone transition
+function at migration head. Same-key task-create transactions serialize before replay
+lookup. No execution exists before claim. On claim, the worker loads
 the resulting revision N+1 snapshot, including the confirmed family fact, and copies
 the same five-field Skill pin from `AgentTask` to `AgentExecution`. A different or stale
 revision, source pack, policy, or pin fails closed before adapter start.

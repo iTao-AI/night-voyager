@@ -1084,7 +1084,6 @@ async def verify_database_catalog(database_url: str) -> None:
                 raise SystemExit("app functions violate narrow SECURITY DEFINER contract")
             api_functions = (
                 {
-                    "transition_case",
                     "persist_source_pack",
                     "persist_evidence_ref",
                     "persist_planning_result",
@@ -1285,6 +1284,13 @@ async def verify_database_catalog(database_url: str) -> None:
             )
             if legacy_writer["api_execute"]:
                 raise SystemExit("legacy Case revision writer must not be executable by the API")
+            legacy_transition = next(
+                row for row in app_functions if row["proname"] == "transition_case"
+            )
+            if legacy_transition["api_execute"] or legacy_transition["worker_execute"]:
+                raise SystemExit(
+                    "legacy Case transition must not be executable by runtime roles"
+                )
             if any(
                 (row["proname"] in api_functions) != row["api_execute"]
                 or (row["proname"] in worker_functions) != row["worker_execute"]

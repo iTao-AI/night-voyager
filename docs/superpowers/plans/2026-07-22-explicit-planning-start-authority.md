@@ -2,10 +2,15 @@
 
 **Implementation status:** Implemented locally for authority review.
 
+**Authority-review status:** Targeted P1 closure implemented locally; awaiting targeted
+re-review.
+
 Tasks 1–6 have executable local evidence on the isolated implementation branch.
-Independent authority review remains the closeout gate. PR 2 and PR 3 remain approved
-but not implemented; no push, pull request, merge, release, or deployment is authorized
-by this status.
+The initial authority review identified legacy transition-grant and overlapping same-key
+race findings; both now have targeted RED -> GREEN PostgreSQL regressions. Independent
+targeted re-review remains the closeout gate. PR 2 and PR 3 remain approved but not
+implemented; no push, pull request, merge, release, or deployment is authorized by this
+status.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation
@@ -18,12 +23,14 @@ changing the existing task HTTP request/response contract or weakening Skill,
 idempotency, tenant, revision, source-pack, and worker boundaries.
 
 **Architecture:** Migration `0009_explicit_planning_start_authority.py` replaces only
-the `app.create_agent_task(...)` function. It preserves the exact `0008` signature and
-grant, locks the Case row, accepts `intake` only for
+the `app.create_agent_task(...)` function. It preserves the exact `0008` task signature
+and grant, serializes same-key replay before ledger lookup, locks the Case row, accepts `intake` only for
 `generate_planning_run_v1`, and writes the Case transition, pinned `AgentTask`,
 dispatch, first event, and idempotency result in one PostgreSQL transaction. The
 existing FastAPI application service, repository call, worker, SSE, planning adapter,
-and browser contracts remain consumers of the same public surface.
+and browser contracts remain consumers of the same public surface. At `0009` head the
+API no longer executes the legacy standalone `transition_case(...)`; downgrade restores
+the `0008` grant and re-upgrade removes it again.
 
 **Tech Stack:** Python 3.12, PostgreSQL 18.4, Alembic, SQLAlchemy async, asyncpg,
 FastAPI, Pydantic, pytest, uv, Docker Compose, and the existing versioned-Skill and
@@ -51,11 +58,12 @@ durable AgentTask implementation.
   )
   ```
 
-- Preserve the existing API grant only to `night_voyager_api`; do not grant direct
-  runtime DML or broaden `PUBLIC`, worker, or migrator authority.
-- Keep idempotency replay before new-write validation. A same-key replay returns the
-  original task and never repeats the Case transition. A changed request under the
-  same key remains `NV008`.
+- Preserve the task function API grant only to `night_voyager_api`; do not grant direct
+  runtime DML or broaden `PUBLIC`, worker, or migrator authority. Revoke the legacy
+  standalone Case-transition API grant at `0009` head.
+- Serialize by organization, actor, operation, and key before reading idempotency.
+  Replay remains before new-write validation: an identical overlapping request returns
+  the original task and a changed request remains `NV008`.
 - For new writes, acquire `FOR UPDATE` on the target Case. Accept:
   - `planning` for both existing operations under their existing evidence rules;
   - `intake` only for `generate_planning_run_v1`.
@@ -301,6 +309,8 @@ No implementation lane may modify `0008_versioned_skills.py`.
 | assigned advisor, deterministic, current `intake` | success | `planning` | exactly one complete set |
 | same request/key replay | same task, `replayed=true` | `planning` | unchanged |
 | same key, changed request | `NV008` / `idempotency_conflict` | unchanged | none |
+| overlapping same request/key | waits, then same task with `replayed=true` | `planning` | one set |
+| overlapping changed request/key | waits, then `NV008` | `planning` | one set |
 | two first requests, different keys | one success, one effective conflict | `planning` | one set |
 | parent/student/unassigned/cross-tenant | non-enumerating denial | `intake` | none |
 | stale revision/source/manifest/pin | bounded conflict | `intake` | none |
@@ -554,6 +564,18 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   identity, full gate results, documentation impact, Docker inventory, and remaining
   risk. Do not push or create a PR without separate authorization.
 
+### Authority-review targeted closure
+
+- [x] Reproduced and removed API/PUBLIC/worker access to the legacy standalone Case
+  transition at `0009` head; `0009 -> 0008 -> 0009` restores and re-revokes the legacy
+  API grant.
+- [x] Reproduced overlapping same-key `NV009` drift and added transaction-scoped
+  advisory serialization before ledger lookup; identical requests replay and changed
+  requests return `NV008` after the first commit.
+- [x] Preserved different-key concurrency, rollback, RLS, task grant, worker, HTTP, and
+  public-contract boundaries.
+- [ ] Targeted authority re-review of the follow-up HEAD.
+
 ## Acceptance Checklist
 
 - [x] Existing task HTTP request and response shapes are unchanged.
@@ -565,6 +587,8 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
 - [x] Worker input uses the exact new Case revision and confirmed fact.
 - [x] Task and execution retain the complete five-field Skill pin.
 - [x] `0009 -> 0008 -> 0009` restores function/grant parity without rewriting data.
+- [x] No runtime role can execute the legacy standalone Case transition at `0009` head.
+- [x] Overlapping same-key requests preserve replay/`NV008` semantics and one authority set.
 - [x] Full local gates, teardown, hygiene, and documentation audit are green.
 - [x] PR 2 and PR 3 remain unimplemented until this PR is merged and hosted-green.
 

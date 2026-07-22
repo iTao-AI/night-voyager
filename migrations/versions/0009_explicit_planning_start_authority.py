@@ -14,14 +14,21 @@ CREATE_TASK_SIGNATURE = (
     "app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,"
     "text,jsonb,text,text)"
 )
+TRANSITION_CASE_SIGNATURE = "app.transition_case(uuid,uuid,text,text)"
 REVOKE_TASK_SQL = "REVOKE ALL ON FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,jsonb,text,text) FROM PUBLIC"
 GRANT_TASK_SQL = "GRANT EXECUTE ON FUNCTION app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,jsonb,text,text) TO night_voyager_api"
+REVOKE_TRANSITION_PUBLIC_SQL = (
+    "REVOKE ALL ON FUNCTION app.transition_case(uuid,uuid,text,text) FROM PUBLIC"
+)
+REVOKE_TRANSITION_API_SQL = "REVOKE ALL ON FUNCTION app.transition_case(uuid,uuid,text,text) FROM night_voyager_api"
+GRANT_TRANSITION_API_SQL = "GRANT EXECUTE ON FUNCTION app.transition_case(uuid,uuid,text,text) TO night_voyager_api"
 
 CREATE_TASK_SQL = r"""
 CREATE FUNCTION app.create_agent_task(p_org uuid,p_actor uuid,p_case uuid,p_task uuid,p_operation text,p_revision integer,p_pack uuid,p_pack_version integer,p_policy text,p_skill_manifest jsonb,p_request_hash text,p_key_hash text) RETURNS TABLE(task_id uuid,row_version integer,state text,attempt_count integer,replayed boolean) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE prior app.idempotency_records%ROWTYPE; selected app.agent_tasks%ROWTYPE; current_case app.student_cases%ROWTYPE; definition app.skill_definitions%ROWTYPE; activation app.skill_activation_events%ROWTYPE; version app.skill_versions%ROWTYPE; starts_planning boolean := false;
 BEGIN
   PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
+  PERFORM pg_advisory_xact_lock(hashtextextended(p_org::text||':'||p_actor::text||':agent_task_create:'||p_key_hash,0));
   SELECT * INTO prior FROM app.idempotency_records WHERE organization_id=p_org AND actor_id=p_actor AND operation='agent_task_create' AND key_sha256=p_key_hash;
   IF FOUND THEN
     IF prior.request_sha256<>p_request_hash THEN RAISE EXCEPTION USING ERRCODE='NV008', MESSAGE='idempotency request mismatch'; END IF;
@@ -206,7 +213,11 @@ def _replace(function_sql: str) -> None:
 
 def upgrade() -> None:
     _replace(CREATE_TASK_SQL)
+    op.execute(REVOKE_TRANSITION_PUBLIC_SQL)
+    op.execute(REVOKE_TRANSITION_API_SQL)
 
 
 def downgrade() -> None:
     _replace(_0008_CREATE_TASK_SQL)
+    op.execute(REVOKE_TRANSITION_PUBLIC_SQL)
+    op.execute(GRANT_TRANSITION_API_SQL)
