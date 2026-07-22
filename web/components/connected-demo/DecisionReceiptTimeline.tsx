@@ -1,47 +1,33 @@
+"use client";
+
 import type { CurrentDecisionBrief } from "../../lib/connected-demo/contracts";
-import { formatCnyRange, presentTradeOff } from "../../lib/connected-demo/presentation";
-
-const COUNTRY_COPY = new Map<string, string>([
-  ["australia", "Australia"],
-  ["japan", "Japan"],
-  ["malaysia", "Malaysia"],
-]);
-
-const MILESTONE_COPY = new Map<string, string>([
-  ["documents", "Documents"],
-  ["application", "Application"],
-  ["visa", "Visa"],
-  ["arrival", "Arrival"],
-]);
-
-function presentClosed(code: unknown, copy: ReadonlyMap<string, string>): string {
-  if (typeof code !== "string") throw new Error("unsupported_presentation_code");
-  const value = copy.get(code);
-  if (value === undefined) throw new Error("unsupported_presentation_code");
-  return value;
-}
+import { presentCode, presentTradeOff } from "../../lib/presentation/codes";
+import { usePresentation } from "../../lib/presentation/context";
+import { formatCnyRange, formatIsoDate } from "../../lib/presentation/format";
 
 export function DecisionReceiptTimeline({ brief }: { brief: CurrentDecisionBrief }) {
+  const { locale, copy } = usePresentation();
   const receipt = brief.receipt;
   const timeline = brief.timeline;
-  if (receipt === null || timeline === null) throw new Error("unsupported_presentation_code");
+  if (receipt === null || timeline === null) return null;
 
   return (
     <article className="family-frame decided-frame" aria-labelledby="receipt-title">
-      <p className="overline">Persistent decision trail</p>
-      <h1 id="receipt-title">Decision Receipt</h1>
-      <p>The family confirmed the Australia route from the reviewed, persisted Brief.</p>
+      <p className="overline">{copy("receiptOverline")}</p>
+      <h1 id="receipt-title">{copy("receiptTitle")}</h1>
+      <p>{copy("receiptSummary")}</p>
       <dl className="decision-requirements">
-        <div><dt>Accepted budget</dt><dd>{formatCnyRange(receipt.accepted_budget_min_minor, receipt.accepted_budget_max_minor, receipt.currency)}</dd></div>
-        <div><dt>Accepted trade-off</dt><dd>{receipt.accepted_trade_offs.map(presentTradeOff).join(", ")}</dd></div>
-        <div><dt>Decision source</dt><dd>Direct family confirmation</dd></div>
+        <div><dt>{copy("acceptedBudgetLabel")}</dt><dd>{formatCnyRange(locale, receipt.accepted_budget_min_minor, receipt.accepted_budget_max_minor, receipt.currency)}</dd></div>
+        <div><dt>{copy("acceptedTradeOffLabel")}</dt><dd>{receipt.accepted_trade_offs.map((item) => presentTradeOff(locale, item)).join(", ")}</dd></div>
+        <div><dt>{copy("decisionSourceLabel")}</dt><dd>{presentCode(locale, "decisionSource", receipt.source)}</dd></div>
       </dl>
-      <h2>Timeline Plan</h2>
-      <p>{presentClosed(timeline.country, COUNTRY_COPY)} · {timeline.intake} intake</p>
+      <h2>{copy("timelineTitle")}</h2>
+      <p>{presentCode(locale, "country", timeline.country)} · {timeline.intake} {copy("intakeLabel")}</p>
       <ol className="timeline">
         {timeline.milestones.map((milestone) => (
           <li key={`${milestone.key}-${milestone.due_date}`}>
-            <strong>{presentClosed(milestone.key, MILESTONE_COPY)}</strong><span>{milestone.due_date}</span>
+            <strong>{presentCode(locale, "milestone", milestone.key)}</strong>
+            <span>{formatIsoDate(locale, milestone.due_date)}</span>
           </li>
         ))}
       </ol>

@@ -5,6 +5,7 @@ const hook = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
 vi.mock("../../lib/connected-demo/use-connected-demo", () => ({ useConnectedDemo: () => hook.value }));
 
 import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
+import { PresentationProvider } from "../../lib/presentation/context";
 import { ledger } from "./connected-demo-test-data";
 
 const inspector = {
@@ -34,12 +35,12 @@ afterEach(cleanup);
 
 it("hides stale advisor inspector data in recoverable error", () => {
   hook.value = demo({ value: "recoverable_error", code: "transport_failure" });
-  render(<ConnectedDemo />);
-  expect(screen.queryByText("Planning Skill inspector")).toBeNull();
+  render(<ConnectedDemo />, { wrapper: PresentationProvider });
+  expect(screen.queryByText(/Planning Skill inspector|规划 Skill 检查器/)).toBeNull();
 });
 
 it("does not render an invalidated inspector while a task-streaming refresh is pending", () => {
   hook.value = demo({ value: "task_streaming", taskId: "70000000-0000-0000-0000-000000000001", ledger: ledger("active-task") }, null);
-  render(<ConnectedDemo />);
-  expect(screen.queryByText("Planning Skill inspector")).toBeNull();
+  render(<ConnectedDemo />, { wrapper: PresentationProvider });
+  expect(screen.queryByText(/Planning Skill inspector|规划 Skill 检查器/)).toBeNull();
 });
