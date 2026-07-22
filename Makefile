@@ -2,7 +2,7 @@
 export UV_BUILD_CONSTRAINT := build-constraints.txt
 export UV_REQUIRE_HASHES := 1
 
-.PHONY: help doctor demo proof compose-proof db-check collaboration-db-check collaboration-check skills-db-check skills-check check dra-check dra-consumer-proof \
+.PHONY: help doctor demo proof compose-proof db-check fact-to-plan-db-check collaboration-db-check collaboration-check skills-db-check skills-check check dra-check dra-consumer-proof \
 	mke-doctor mke-artifact-check mke-check mke-consumer-proof logs down fixtures-check reset-demo
 
 help: ## Show available commands
@@ -22,6 +22,9 @@ compose-proof: ## Prove M3B/M4A flows, restart durability, health, and teardown
 
 db-check: ## Prove migrations, roles, sessions, catalog, and forced RLS on a fresh database
 	@scripts/run_db_tests.sh
+
+fact-to-plan-db-check: ## Prove the isolated 0009 planning-start migration parity lane
+	@scripts/run_db_tests.sh fact-to-plan
 
 collaboration-db-check: ## Run one disposable governed-collaboration database suite
 	@SUITE="$(SUITE)" scripts/run_collaboration_db_tests.sh

@@ -9,23 +9,23 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
@@ -33,7 +33,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run alembic current | grep '0007'
     uv run --no-editable python scripts/seed_demo.py --without-skills
     uv run alembic upgrade head
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -43,6 +43,7 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
         tests/integration/connected_demo tests/integration/dra \
         tests/integration/collaboration \
+        --ignore=tests/integration/tasks/test_planning_start_migration.py \
         --ignore=tests/integration/tasks/test_mixed_downgrade.py \
         --ignore=tests/integration/collaboration/test_collaboration_downgrade.py \
         --ignore=tests/integration/dra/test_governed_closure.py
@@ -57,18 +58,30 @@ if [ "${1:-}" = "inside" ]; then
         exit 1
     fi
     grep -q 'refusing downgrade: Skill governance or runtime pin history exists' "$downgrade_output"
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0008'
+    uv run alembic current | grep '0009'
     uv run --no-editable python scripts/seed_demo.py --without-collaboration
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
+    uv run alembic current | grep '0009'
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-planning-start-migration" ]; then
+    uv run alembic downgrade base
+    uv run alembic upgrade 0008
     uv run alembic current | grep '0008'
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/tasks/test_planning_start_migration.py
+    uv run alembic current | grep '0009'
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
@@ -118,6 +131,12 @@ run_lane() {
     ACTIVE_PROJECT_NAME=
 }
 
+if [ "${1:-}" = "fact-to-plan" ]; then
+    run_lane "${BASE_PROJECT_NAME}-planning-start-migration" inside-planning-start-migration
+    exit 0
+fi
+
+run_lane "${BASE_PROJECT_NAME}-planning-start-migration" inside-planning-start-migration
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
 run_lane "${BASE_PROJECT_NAME}-main" inside

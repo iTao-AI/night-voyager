@@ -311,3 +311,68 @@ def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:
         "len(evaluator.manifest.datasets) == 7",
     ):
         assert token in source
+
+
+def copy_planning_start_gate_surface(destination: Path) -> None:
+    migrations = destination / "migrations/versions"
+    migrations.mkdir(parents=True)
+    for source in sorted((ROOT / "migrations/versions").glob("[0-9][0-9][0-9][0-9]_*.py")):
+        shutil.copyfile(source, migrations / source.name)
+    scripts = destination / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(ROOT / "scripts/run_db_tests.sh", scripts / "run_db_tests.sh")
+
+
+def test_release_verifier_accepts_exactly_one_0009_alembic_head(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_alembic_contract()
+
+    assert "proof migrations: exact Alembic head 0009" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("mutation", ("remove_0009", "add_second_head"))
+def test_release_verifier_rejects_alembic_head_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    verifier = load_verifier()
+    copy_planning_start_gate_surface(tmp_path)
+    if mutation == "remove_0009":
+        (tmp_path / "migrations/versions/0009_explicit_planning_start_authority.py").unlink()
+    else:
+        (tmp_path / "migrations/versions/0099_test_branch.py").write_text(
+            'revision = "0099"\ndown_revision = "0008"\n', encoding="utf-8"
+        )
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+
+    with pytest.raises(SystemExit, match="exactly one Alembic head 0009"):
+        verifier.verify_alembic_contract()
+
+
+@pytest.mark.parametrize(
+    "required",
+    (
+        "inside-planning-start-migration",
+        "tests/integration/tasks/test_planning_start_migration.py",
+        'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"',
+    ),
+)
+def test_release_verifier_rejects_missing_planning_start_gate_node(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    required: str,
+) -> None:
+    verifier = load_verifier()
+    copy_planning_start_gate_surface(tmp_path)
+    script = tmp_path / "scripts/run_db_tests.sh"
+    source = script.read_text(encoding="utf-8")
+    assert required in source
+    script.write_text(source.replace(required, "", 1), encoding="utf-8")
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+
+    with pytest.raises(SystemExit, match="planning-start migration gate drift"):
+        verifier.verify_alembic_contract()

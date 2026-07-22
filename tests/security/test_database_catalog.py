@@ -76,6 +76,20 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "policy_count != 38" in verifier
 
 
+def test_database_gate_requires_0009_planning_start_migration_lane() -> None:
+    script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "inside-planning-start-migration" in script
+    assert "tests/integration/tasks/test_planning_start_migration.py" in script
+    assert 'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"' in script
+    assert "uv run alembic upgrade head" in script
+    assert "uv run alembic current | grep '0009'" in script
+    assert "fact-to-plan-db-check:" in makefile
+    assert "scripts/run_db_tests.sh fact-to-plan" in makefile
+    assert "scripts/run_db_tests.sh" in makefile.split("db-check:", 1)[1]
+
+
 def test_release_verifier_includes_collaboration_roles_and_legacy_revocation() -> None:
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
 
