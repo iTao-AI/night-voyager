@@ -71,6 +71,20 @@ async def test_worker_cannot_insert_planning_runs_or_child_results() -> None:
 
 
 @pytest.mark.asyncio
+async def test_worker_cannot_start_planning_with_direct_case_dml() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            await assert_worker_denied(
+                connection,
+                "UPDATE app.student_cases SET state='planning' "
+                "WHERE organization_id='10000000-0000-0000-0000-000000000001'",
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_worker_cannot_execute_api_or_human_authority_functions() -> None:
     statements = (
         "SELECT app.create_agent_task(NULL::uuid,NULL::uuid,NULL::uuid,NULL::uuid,'generate_planning_run_v1',1,NULL::uuid,1,'m3a-policy-v1','{}'::jsonb,repeat('a',64),repeat('b',64))",

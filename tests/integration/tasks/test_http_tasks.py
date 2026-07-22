@@ -196,6 +196,13 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
                 "replayed",
             }
             assert "planning_started" not in intake_created.json()
+            intake_cancelled = await client.post(
+                f"/api/v1/tasks/{intake_created.json()['task_id']}/cancel",
+                headers=mutation_headers(advisor, "intake-cancel-task"),
+                json={"schema_version": 1, "expected_row_version": 1},
+            )
+            assert intake_cancelled.status_code == 200, intake_cancelled.text
+            assert intake_cancelled.json()["status"] == "cancelled"
 
             created = await client.post(
                 f"/api/v1/cases/{CASE}/agent-tasks",
