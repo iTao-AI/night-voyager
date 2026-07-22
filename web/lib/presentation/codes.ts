@@ -13,6 +13,7 @@ export const PRESENTATION_CODE_VALUES = {
   collaborationError: ["stale", "expired_or_terminal", "active_task_blocked", "unsafe_or_unsupported", "wrong_role_or_not_found", "session_recovery_required", "transport_unavailable_or_timeout"],
   skillPinStatus: ["not_created", "matched", "legacy_unpinned"],
   evidenceRisk: ["optional", "stale", "unverified"],
+  riskTolerance: ["low", "medium", "high"],
   decisionSource: ["direct", "family_consultation"],
   recoveryCode: ["invalid_transition", "session_expired", "session_recovery_required", "stale_conflict", "transport_failure"],
   evidenceClaim: ["australia_program_fit", "japan_program_fit", "malaysia_program_fit", "australia_tuition", "australia_living_cost", "australia_fx", "australia_ranking", "japan_tuition", "japan_living_cost", "japan_fx", "japan_ranking", "malaysia_tuition", "malaysia_living_cost", "malaysia_fx", "malaysia_ranking"],
@@ -83,6 +84,7 @@ const CODE_COPY_KEYS = {
     legacy_unpinned: "pinLegacyUnpinned",
   },
   evidenceRisk: { optional: "riskOptional", stale: "riskStale", unverified: "riskUnverified" },
+  riskTolerance: { low: "factValueRiskLow", medium: "factValueRiskMedium", high: "factValueRiskHigh" },
   decisionSource: { direct: "sourceDirect", family_consultation: "sourceFamilyConsultation" },
   recoveryCode: {
     invalid_transition: "recoveryInvalidTransition",

@@ -7,6 +7,11 @@ import { DecisionReceiptTimeline } from "../../components/connected-demo/Decisio
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
 import { JourneyConflictNotice } from "../../components/demo-session/JourneyConflictNotice";
+import type {
+  ConfirmedFactAdvisor,
+  FactKey,
+  FactValue,
+} from "../../lib/collaboration-demo/contracts";
 import type { CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
 import { PresentationProvider } from "../../lib/presentation/context";
 import { brief as briefFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "./connected-demo-test-data";
@@ -14,6 +19,23 @@ import { brief as briefFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "
 function renderPresentation(ui: ReactElement) {
   return render(ui, { wrapper: PresentationProvider });
 }
+
+function confirmedFact(
+  factKey: FactKey,
+  value: FactValue,
+  factVersion: number,
+): ConfirmedFactAdvisor {
+  return { ...CONFIRMED_FACT, fact_key: factKey, value, fact_version: factVersion };
+}
+
+const mixedConfirmedFacts = [
+  confirmedFact("student.intended_field", "Computer Science", 1),
+  confirmedFact("student.preferred_countries", ["australia", "japan"], 2),
+  confirmedFact("student.intake", "2027-02", 3),
+  confirmedFact("family.risk_tolerance", "medium", 4),
+  confirmedFact("family.japan_risk_accepted", true, 5),
+  confirmedFact("family.budget", CONFIRMED_FACT.value, 6),
+] satisfies readonly ConfirmedFactAdvisor[];
 
 afterEach(() => {
   cleanup();
@@ -51,6 +73,64 @@ it("renders current Case revision and confirmed facts without internal provenanc
 
   rerender(<AdvisorLedger ledger={current} confirmedFacts={null} onPrimaryAction={() => undefined} />);
   expect(screen.getByText("服务器事实投影刷新前，当前事实暂不可用。")).toBeVisible();
+});
+
+it("renders every exact confirmed-fact type in one Chinese mixed projection", () => {
+  const current = { ...ledgerFixture("task-ready"), case_revision: 7 };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={mixedConfirmedFacts} onPrimaryAction={() => undefined} />,
+  );
+
+  for (const visible of [
+    "Computer Science",
+    "澳大利亚、日本",
+    "2027-02",
+    "中等",
+    "已接受",
+    "¥300,000–400,000",
+  ]) expect(screen.getByText(visible)).toBeVisible();
+  for (const version of [1, 2, 3, 4, 5, 6]) {
+    expect(screen.getByText(`Fact version ${version}`)).toBeVisible();
+  }
+  expect(screen.getAllByText("Case revision 7")).toHaveLength(7);
+  expect(container).not.toHaveTextContent(/student\.|family\.|confirmed_fact_id|candidate_id|schema_version|\{"/i);
+});
+
+it("renders every exact confirmed-fact type in one explicit English mixed projection", async () => {
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  const current = { ...ledgerFixture("task-ready"), case_revision: 7 };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={mixedConfirmedFacts} onPrimaryAction={() => undefined} />,
+  );
+
+  await waitFor(() => expect(screen.getByText("Australia, Japan")).toBeVisible());
+  for (const visible of [
+    "Computer Science",
+    "2027-02",
+    "Medium",
+    "Accepted",
+    "CNY 300,000–400,000",
+  ]) expect(screen.getByText(visible)).toBeVisible();
+  for (const version of [1, 2, 3, 4, 5, 6]) {
+    expect(screen.getByText(`Fact version ${version}`)).toBeVisible();
+  }
+  expect(screen.getAllByText("Case revision 7")).toHaveLength(7);
+  expect(container).not.toHaveTextContent(/student\.|family\.|confirmed_fact_id|candidate_id|schema_version|\{"/i);
+});
+
+it("fails closed for malformed current facts without exposing raw values", () => {
+  const malformed = [
+    { ...CONFIRMED_FACT, fact_key: "student.intended_field", value: { raw: "raw-field-secret" } },
+    { ...CONFIRMED_FACT, fact_key: "student.preferred_countries", value: ["australia", "raw-country-secret"] },
+    { ...CONFIRMED_FACT, fact_key: "family.risk_tolerance", value: "raw-risk-secret" },
+  ] as unknown as readonly ConfirmedFactAdvisor[];
+  const current = { ...ledgerFixture("task-ready"), case_revision: 2 };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={malformed} onPrimaryAction={() => undefined} />,
+  );
+
+  expect(screen.getAllByText("状态暂不可用")).toHaveLength(3);
+  expect(container).not.toHaveTextContent(/raw-field-secret|raw-country-secret|raw-risk-secret|\{"/i);
 });
 
 it("orders route outcome, reason, eligibility and uses closed fallbacks", () => {

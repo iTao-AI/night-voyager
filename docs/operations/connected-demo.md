@@ -112,7 +112,11 @@ make down
 The proof exercises PostgreSQL roles/RLS, identity cookies and fixed Origin,
 worker/SSE replay, advisor review, real role rotation, family decision,
 idempotency/stale rejection, reload, 1440/768/390 layouts, keyboard focus, and
-semantic landmarks in Chromium. A stale retained local volume may be removed
+semantic landmarks in Chromium. The required gate runs that complete lane twice
+from isolated database baselines: first without locale injection to prove the
+deterministic Chinese default, then with `PRESENTATION_LOCALE=en` to prove the
+explicit English path. Both lanes finish with the same browser-to-database
+verifier. A stale retained local volume may be removed
 only through the existing protected reset:
 
 ```bash

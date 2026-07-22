@@ -26,6 +26,22 @@ interface PresentationContextValue {
 
 const PresentationContext = createContext<PresentationContextValue | null>(null);
 
+function readBrowserPresentationLocale(): PresentationLocale {
+  try {
+    return readPresentationLocale(window.localStorage);
+  } catch {
+    return DEFAULT_PRESENTATION_LOCALE;
+  }
+}
+
+function writeBrowserPresentationLocale(locale: PresentationLocale): void {
+  try {
+    writePresentationLocale(window.localStorage, locale);
+  } catch {
+    // Storage acquisition and writes are presentation-only and fail closed.
+  }
+}
+
 function applyDocumentPresentation(locale: PresentationLocale): void {
   document.documentElement.lang = locale;
   document.title = getPresentationCopy(locale, "documentTitle");
@@ -40,7 +56,7 @@ export function PresentationProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
-    const stored = readPresentationLocale(window.localStorage);
+    const stored = readBrowserPresentationLocale();
     applyDocumentPresentation(stored);
     let active = true;
     queueMicrotask(() => {
@@ -53,7 +69,7 @@ export function PresentationProvider({ children }: { children: ReactNode }) {
 
   const setLocale = useCallback((nextLocale: PresentationLocale) => {
     updateLocale(nextLocale);
-    writePresentationLocale(window.localStorage, nextLocale);
+    writeBrowserPresentationLocale(nextLocale);
     applyDocumentPresentation(nextLocale);
   }, []);
 

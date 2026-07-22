@@ -96,4 +96,41 @@ describe("PresentationProvider", () => {
     expect(screen.getByText("en")).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("en");
   });
+
+  it("falls back to deterministic Chinese when the localStorage getter throws during mount", async () => {
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("storage getter blocked");
+    });
+
+    expect(() => render(<PresentationProvider><Probe /></PresentationProvider>)).not.toThrow();
+    await waitFor(() => expect(screen.getByText("zh-CN")).toBeInTheDocument());
+    expect(document.documentElement.lang).toBe("zh-CN");
+    expect(document.title).toBe("Night Voyager｜把家庭事实变成可追溯的留学决策与行动计划");
+    expect(document.querySelector('meta[name="description"]')).toHaveAttribute(
+      "content",
+      "使用本地合成数据，从已确认家庭事实走到顾问审核、家庭决定与行动回执。",
+    );
+  });
+
+  it("keeps an explicit locale switch usable when the localStorage getter throws", () => {
+    const onMount = vi.fn();
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const pushState = vi.spyOn(history, "pushState");
+    const replaceState = vi.spyOn(history, "replaceState");
+    vi.spyOn(window, "localStorage", "get").mockImplementation(() => {
+      throw new Error("storage getter blocked");
+    });
+
+    render(<PresentationProvider><Probe onMount={onMount} /></PresentationProvider>);
+    expect(() => fireEvent.click(screen.getByRole("button", { name: "switch" }))).not.toThrow();
+
+    expect(screen.getByText("en")).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+    expect(document.title).toBe("Night Voyager | Traceable study-abroad decisions");
+    expect(onMount).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(pushState).not.toHaveBeenCalled();
+    expect(replaceState).not.toHaveBeenCalled();
+  });
 });

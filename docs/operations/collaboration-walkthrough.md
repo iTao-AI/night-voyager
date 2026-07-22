@@ -81,10 +81,13 @@ make down
 docker compose ps --all
 ```
 
-The Chromium lane uses the real PostgreSQL seed, FastAPI, BFF, opaque cookies,
-Origin/CSRF checks, idempotency, worker, and SSE. It proves one same-Case chain from
-parent message through receipt and timeline, with the explicit `/demo` task action
-as the only task-creation point. It covers 1440, 768, and 390 px, keyboard focus,
+Each Chromium lane uses the real PostgreSQL seed, FastAPI, BFF, opaque cookies,
+Origin/CSRF checks, idempotency, worker, and SSE. The required gate proves the
+same complete chain twice from isolated database baselines: the first lane uses
+the deterministic Chinese default without locale injection, and the second uses
+`PRESENTATION_LOCALE=en`. Both run the browser-to-database verifier after the
+parent message, receipt, and timeline flow, with the explicit `/demo` task action
+as the only task-creation point. They cover 1440, 768, and 390 px, keyboard focus,
 semantic landmarks, at least 44 px action targets, and horizontal-overflow checks.
 The screenshot above is the current Chinese capture from the same deterministic
 Chromium flow. It preserves server-authored synthetic message/reason text verbatim,
