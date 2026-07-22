@@ -2,6 +2,8 @@
 
 M5 turns the six-beat M1 visual intent into a real local synthetic walkthrough.
 
+The current story begins at the [Chinese-first portfolio entry](../assets/night-voyager-portfolio-entry.png): purpose, reason, next action, locale control, and the synthetic boundary precede technical proof. Exact `en` presents the same states without changing authority.
+
 1. **Task ready** — mint the advisor session, load canonical demo inputs, and
    create the first durable task.
 2. **Active task** — follow ordered SSE progress; a reconnect resumes from the
@@ -40,5 +42,6 @@ Case into that existing primary story:
 The shared Skill inspector consumes a server-owned `no-store` projection. It remains
 `not_created` on collaboration and reaches `matched` only after the primary demo's
 real task. The [captured Chromium evidence](../assets/collaboration-confirmed-fact.png)
-depicts the final collaboration state without replacing the M5 screenshots.
-It remains immutable v0.1.2 history; PR 3 owns refreshed walkthrough evidence.
+depicts the final collaboration state. The same real journey also produces the
+[advisor review](../assets/m5-advisor-ledger.png) and
+[family receipt/timeline](../assets/m5-family-receipt-timeline.png) captures.

@@ -2,9 +2,10 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The M5 `/demo` route is the primary connected local synthetic application: it creates a durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. The secondary `/demo/collaboration` route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority without creating a task. Both routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is the Chinese-first portfolio entry and routes into the complete collaboration journey or the focused advisor-family journey. The M5 `/demo` route is the primary connected local synthetic application: it creates a durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. The secondary `/demo/collaboration` route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority without creating a task. Both routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only.
 
-- **Primary route:** `/demo`
+- **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, focused secondary action to `/demo`)
+- **Connected application:** `/demo`
 - **Audience:** advisors first, then students and families
 - **Page boundary:** local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
@@ -37,8 +38,9 @@ Body text uses `ink` on `canvas` or `surface`. Muted text is reserved for second
 
 ## Typography
 
-- **UI and labels:** IBM Plex Sans intent, rendered with safe local fallbacks: `"IBM Plex Sans", "Aptos", "Segoe UI", sans-serif`.
-- **Family/editorial headings:** Source Serif 4 intent, rendered with safe local fallbacks: `"Source Serif 4", "Iowan Old Style", "Palatino Linotype", serif`.
+- **Chinese UI and labels:** local CJK stack headed by `"PingFang SC"`, then `"Hiragino Sans GB"`, `"Microsoft YaHei"`, and system sans fallbacks.
+- **English UI and labels:** IBM Plex Sans intent, rendered with safe local fallbacks: `"IBM Plex Sans", "Aptos", "Segoe UI", sans-serif`.
+- **Family/editorial headings:** local CJK serif intent for Chinese and Source Serif 4 intent for English, both with dependency-free system fallbacks.
 - **Body:** at least `16px`, with a comfortable `1.6` line height.
 - **Data:** UI stack with tabular numerals enabled.
 
@@ -63,6 +65,8 @@ The first screen contains exactly one current lifecycle stage, one required huma
 
 The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
+Presentation locale is a separate, dependency-free layer shared by `/`, `/demo`, and `/demo/collaboration`. SSR, missing, invalid, and storage-failure states resolve to exact `zh-CN`; exact `en` is selected explicitly and persisted only at `night-voyager:presentation-locale:v1`. Locale changes update copy and `html[lang]` while preserving mounted children, the journey envelope, requests, idempotency, EventSource URL/count, task state, and navigation.
+
 PR A and PR B are released in `v0.1.2`: PR A adds the governed-collaboration backend
 contract, while PR B adds the versioned Skill catalog, deterministic evaluation,
 owner-controlled activation/rollback, persisted planning-revision materialization, and
@@ -72,6 +76,8 @@ projections. It adds no backend authority, migration, task operation, polling, o
 EventSource. The existing `/demo` lifecycle remains the primary advisor-family flow
 and preserves one SSE connection. Catalog-only Skills are never presented as executing
 capabilities merely because they have versions or passing evaluations.
+
+Post-v0.1.2 PR 1 and PR 2 are merged. PR 3 is implemented locally for authority review and owns only the Chinese-first presentation catalog, shared shell, current root, responsive hierarchy, accessibility proof, and refreshed screenshots. It adds no backend, BFF, migration, task, worker, provider, version, release, or deployment authority.
 
 ## Accessibility
 
@@ -95,3 +101,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-17 | Keep PR A collaboration backend-only | Freezes conversation, candidate, and confirmed-fact authority without prebuilding the deferred PR C interface. |
 | 2026-07-18 | Keep PR B Skill governance backend-only | Pins checked-in runtime compatibility to durable tasks while leaving the deferred PR C inspector as a server-projected consumer. |
 | 2026-07-20 | Add PR C as a secondary governed walkthrough | Proves collaboration authority and a read-only Skill projection while preserving `/demo`, backend ownership, and the no-task boundary. |
+| 2026-07-22 | Make the portfolio presentation Chinese-first | Adds an exact `zh-CN`/`en` presentation-only layer and outcome-first root while preserving the same server authority and warm-paper direction. |

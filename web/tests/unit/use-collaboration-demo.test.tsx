@@ -12,7 +12,7 @@ const FACT = "45000000-0000-0000-0000-000000000001";
 const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 
-afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { sessionStorage.clear(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it("proves parent message through advisor confirmation and authoritative fact/revision reload", async () => {
   let role: "parent" | "advisor" = "parent";

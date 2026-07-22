@@ -3,8 +3,12 @@ set -eu
 
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
 UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
-FACT_TO_PLAN_PROOF_FILE=docs/assets/.fact-to-plan-proof.json
-FACT_TO_PLAN_WORKER_READY_FILE=docs/assets/.fact-to-plan-worker-ready
+FACT_TO_PLAN_ZH_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-proof.json
+FACT_TO_PLAN_ZH_WORKER_READY_FILE=docs/assets/.fact-to-plan-zh-CN-worker-ready
+FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json
+FACT_TO_PLAN_EN_WORKER_READY_FILE=docs/assets/.fact-to-plan-en-worker-ready
+FACT_TO_PLAN_PROOF_FILE=
+FACT_TO_PLAN_WORKER_READY_FILE=
 FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"
 worker_start_pid=
 export COMPOSE_PROJECT_NAME
@@ -14,8 +18,61 @@ cleanup() {
         kill "$worker_start_pid" 2>/dev/null || true
         wait "$worker_start_pid" 2>/dev/null || true
     fi
-    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    rm -f \
+        "$FACT_TO_PLAN_ZH_PROOF_FILE" "$FACT_TO_PLAN_ZH_WORKER_READY_FILE" \
+        "$FACT_TO_PLAN_EN_PROOF_FILE" "$FACT_TO_PLAN_EN_WORKER_READY_FILE"
     docker compose down --volumes --remove-orphans --rmi local
+}
+
+run_fact_to_plan_lane() {
+    lane_locale=$1
+    case "$lane_locale" in
+        zh-CN) set -- ;;
+        en) set -- -e PRESENTATION_LOCALE=en ;;
+        *) printf 'compose-proof: unsupported presentation locale %s\n' "$lane_locale" >&2; exit 1 ;;
+    esac
+    if [ "$lane_locale" = "zh-CN" ]; then
+        FACT_TO_PLAN_PROOF_FILE=$FACT_TO_PLAN_ZH_PROOF_FILE
+        FACT_TO_PLAN_WORKER_READY_FILE=$FACT_TO_PLAN_ZH_WORKER_READY_FILE
+    else
+        FACT_TO_PLAN_PROOF_FILE=$FACT_TO_PLAN_EN_PROOF_FILE
+        FACT_TO_PLAN_WORKER_READY_FILE=$FACT_TO_PLAN_EN_WORKER_READY_FILE
+    fi
+
+    docker compose down --volumes --remove-orphans
+    docker compose up --no-build --wait
+    printf 'compose-proof: fresh fact-to-plan baseline seeded locale=%s\n' "$lane_locale"
+    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    : > "$FACT_TO_PLAN_PROOF_FILE"
+    : > "$FACT_TO_PLAN_WORKER_READY_FILE"
+    chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    docker compose pause worker
+    (
+        for attempt in $(seq 1 120); do
+            if grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"; then
+                docker compose unpause worker
+                exit 0
+            fi
+            sleep 1
+        done
+        printf 'compose-proof: timed out waiting for task acceptance and initial SSE locale=%s\n' "$lane_locale" >&2
+        exit 1
+    ) &
+    worker_start_pid=$!
+    docker compose --profile browser-proof run --rm --no-deps "$@" \
+        -e FACT_TO_PLAN_PROOF_FILE="/workspace/$FACT_TO_PLAN_PROOF_FILE" \
+        -e FACT_TO_PLAN_WORKER_READY_FILE="/workspace/$FACT_TO_PLAN_WORKER_READY_FILE" \
+        -e FACT_TO_PLAN_WORKER_READY_SENTINEL="$FACT_TO_PLAN_WORKER_READY_SENTINEL" \
+        browser-proof npx playwright test --config playwright.compose.config.ts fact-to-plan.spec.ts
+    wait "$worker_start_pid"
+    worker_start_pid=
+    test -s "$FACT_TO_PLAN_PROOF_FILE"
+    docker compose run --rm --no-deps \
+        -v "$PWD/$FACT_TO_PLAN_PROOF_FILE:/tmp/fact-to-plan-proof.json:ro" \
+        demo-seed python scripts/verify_fact_to_plan_flow.py \
+        --proof-file /tmp/fact-to-plan-proof.json
+    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    printf 'compose-proof: governed fact-to-plan browser and database proof passed locale=%s\n' "$lane_locale"
 }
 trap cleanup EXIT INT TERM
 
@@ -84,36 +141,5 @@ docker compose up --no-build --wait
 docker compose --profile browser-proof run --rm --no-deps \
     -e UPDATE_COLLABORATION_SCREENSHOT="$UPDATE_COLLABORATION_SCREENSHOT" browser-proof
 printf 'compose-proof: connected browser proof passed\n'
-docker compose down --volumes --remove-orphans
-docker compose up --no-build --wait
-rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
-: > "$FACT_TO_PLAN_PROOF_FILE"
-: > "$FACT_TO_PLAN_WORKER_READY_FILE"
-chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
-docker compose pause worker
-(
-    for attempt in $(seq 1 120); do
-        if grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"; then
-            docker compose unpause worker
-            exit 0
-        fi
-        sleep 1
-    done
-    printf 'compose-proof: timed out waiting for task acceptance and initial SSE\n' >&2
-    exit 1
-) &
-worker_start_pid=$!
-docker compose --profile browser-proof run --rm --no-deps \
-    -e FACT_TO_PLAN_PROOF_FILE=/workspace/docs/assets/.fact-to-plan-proof.json \
-    -e FACT_TO_PLAN_WORKER_READY_FILE=/workspace/docs/assets/.fact-to-plan-worker-ready \
-    -e FACT_TO_PLAN_WORKER_READY_SENTINEL="$FACT_TO_PLAN_WORKER_READY_SENTINEL" \
-    browser-proof npx playwright test --config playwright.compose.config.ts fact-to-plan.spec.ts
-wait "$worker_start_pid"
-worker_start_pid=
-test -s "$FACT_TO_PLAN_PROOF_FILE"
-docker compose run --rm --no-deps \
-    -v "$PWD/$FACT_TO_PLAN_PROOF_FILE:/tmp/fact-to-plan-proof.json:ro" \
-    demo-seed python scripts/verify_fact_to_plan_flow.py \
-    --proof-file /tmp/fact-to-plan-proof.json
-rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
-printf 'compose-proof: governed fact-to-plan browser and database proof passed\n'
+run_fact_to_plan_lane "zh-CN"
+run_fact_to_plan_lane "en"

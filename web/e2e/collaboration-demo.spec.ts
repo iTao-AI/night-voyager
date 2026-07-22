@@ -40,6 +40,13 @@ async function verifyNegative(page: Page, caseId: string, key: string, expectedC
   expect((await response.json()).code).toBe(expectedCode);
 }
 
+async function expectCollapsedNoTaskInspector(page: Page) {
+  const details = page.locator(".skill-inspector details");
+  await expect(details.locator("summary")).toBeVisible();
+  await expect(details).not.toHaveAttribute("open", "");
+  await expect(details).toContainText(/尚未创建规划任务|Planning task not created/);
+}
+
 test("collaboration-demo.spec.ts proves governed memory authority without creating a task", async ({ page }) => {
   test.skip(terminalProof, "runs only in the normal worker-backed Compose lane");
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -48,29 +55,29 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByRole("contentinfo")).toBeVisible();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Skip to collaboration workflow" })).toBeFocused();
+  await expect(page.getByRole("link", { name: /跳到主要内容|Skip to main content/ })).toBeFocused();
 
-  await page.getByRole("button", { name: "Start parent walkthrough" }).click();
-  await expect(page.getByRole("heading", { name: "Shared Case thread" })).toBeVisible();
-  await expect(page.getByText("Role: Parent")).toBeVisible();
+  await page.getByRole("button", { name: /开始家长流程|Start parent flow/ }).click();
+  await expect(page.getByRole("heading", { name: /共享 Case 沟通记录|Shared Case communication record/ })).toBeVisible();
+  await expect(page.getByText(/当前角色：家长|Current role：Parent/)).toBeVisible();
   const parentInspector = await page.request.get(`/api/demo/cases/${PRIMARY_CASE}/planning-skill-inspector`);
   expect(parentInspector.status()).toBe(404);
 
   await createActiveTaskBlockedCandidate(page);
-  await page.getByRole("button", { name: "Add confirmed budget message" }).click();
+  await page.getByRole("button", { name: /添加已确认预算消息|Add confirmed budget message/ }).click();
   await expect(page.getByText("Our confirmed program budget is 300,000 to 400,000 CNY.")).toBeVisible();
-  await page.getByRole("button", { name: "Propose this budget for advisor review" }).click();
-  await expect(page.getByText("Pending advisor confirmation")).toBeVisible();
+  await page.getByRole("button", { name: /提交预算供顾问审核|Submit the budget for advisor review/ }).click();
+  await expect(page.getByText(/等待顾问确认|Awaiting advisor confirmation/)).toBeVisible();
   const participantCandidates = await page.request.get(`/api/demo/cases/${PRIMARY_CASE}/memory-candidates`);
   const [participantCandidate] = await participantCandidates.json();
   expect(participantCandidate.candidate_id).toBeUndefined();
 
   await page.reload();
-  await expect(page.getByText("Pending advisor confirmation")).toBeVisible();
-  await page.getByRole("button", { name: "Continue as assigned advisor" }).click();
-  await expect(page.getByRole("heading", { name: "Advisor confirmation" })).toBeFocused();
-  await expect(page.getByText("Role: Advisor")).toBeVisible();
-  await expect(page.getByText("No planning task created")).toBeVisible();
+  await expect(page.getByText(/等待顾问确认|Awaiting advisor confirmation/)).toBeVisible();
+  await page.getByRole("button", { name: /以指定顾问身份继续|Continue as assigned advisor/ }).click();
+  await expect(page.getByRole("heading", { name: /顾问确认|Advisor confirmation/ })).toBeFocused();
+  await expect(page.getByText(/当前角色：顾问|Current role：Advisor/)).toBeVisible();
+  await expectCollapsedNoTaskInspector(page);
 
   await verifyNegative(page, STALE_CASE, "00000000-0000-4000-8000-000000000603", "memory_candidate_stale");
   await verifyNegative(page, EXPIRED_CASE, "00000000-0000-4000-8000-000000000604", "memory_candidate_expired");
@@ -89,17 +96,17 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
     }
     await route.continue();
   });
-  await page.getByRole("button", { name: "Confirm family budget" }).click();
-  await expect(page.getByRole("heading", { name: "Collaboration paused safely" })).toBeVisible();
-  await page.getByRole("button", { name: "Reload collaboration authority" }).click();
-  await expect(page.getByRole("heading", { name: "Re-plan required" })).toBeFocused();
+  await page.getByRole("button", { name: /确认家庭预算|Confirm family budget/ }).click();
+  await expect(page.getByRole("heading", { name: /协作流程已安全暂停|Collaboration paused safely/ })).toBeVisible();
+  await page.getByRole("button", { name: /重新载入协作 authority|Reload collaboration authority/ }).click();
+  await expect(page.getByRole("heading", { name: /需要重新规划|Re-plan required/ })).toBeFocused();
   expect(confirmationKeys).toHaveLength(2);
   expect(confirmationKeys[0]).toBe(confirmationKeys[1]);
   await page.unroute("**/api/demo/memory-candidates/*/verification-decisions");
 
   await expect(page.getByText("Fact version 1")).toBeVisible();
   await expect(page.getByText("Case revision 2")).toBeVisible();
-  await expect(page.getByText("No planning task created")).toBeVisible();
+  await expectCollapsedNoTaskInspector(page);
   await expect(page.getByRole("button", { name: /create.*task/i })).toHaveCount(0);
   const raw = /schema_version|confirmed_fact_id|candidate_id|night_voyager_api|\/Users\/|41000000-/;
   await expect(page.getByRole("main")).not.toContainText(raw);
@@ -114,7 +121,7 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   if (process.env.UPDATE_COLLABORATION_SCREENSHOT === "1") {
-    const skipLink = page.getByRole("link", { name: "Skip to collaboration workflow" });
+    const skipLink = page.getByRole("link", { name: /跳到主要内容|Skip to main content/ });
     await skipLink.evaluate((node) => node.setAttribute("hidden", ""));
     await expect(skipLink).toBeHidden();
     await page.screenshot({ path: "/workspace/docs/assets/collaboration-confirmed-fact.png", fullPage: true });

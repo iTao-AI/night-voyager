@@ -1,6 +1,8 @@
 # Night Voyager
 
-Night Voyager turns a synthetic study-abroad comparison into a traceable advisor-to-family decision with durable Agent tasks, explicit human review, and a persisted receipt and timeline.
+Night Voyager turns a synthetic study-abroad comparison into a traceable advisor-to-family decision with durable Agent tasks, explicit human review, and a persisted receipt and timeline. The current portfolio entry is Chinese-first and outcome-led, with an explicit persistent English switch.
+
+![Chinese-first Night Voyager portfolio entry](docs/assets/night-voyager-portfolio-entry.png)
 
 ![Advisor Ledger at review-required](docs/assets/m5-advisor-ledger.png)
 
@@ -30,12 +32,12 @@ make proof
 make down
 ```
 
-Open the primary connected local synthetic demo at `http://127.0.0.1:3000/demo`. Follow the [connected demo runbook](docs/operations/connected-demo.md) for the advisor-to-family walkthrough. The secondary governed-memory walkthrough is at `http://127.0.0.1:3000/demo/collaboration` and has its own [runbook](docs/operations/collaboration-walkthrough.md). The [v0.1.2 release/source-archive verification guide](docs/how-to/verify-v0.1.2-release.md) describes the current release.
+Open `http://127.0.0.1:3000/` for the current portfolio entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. The primary connected local synthetic demo is `/demo`; follow the [connected demo runbook](docs/operations/connected-demo.md). The secondary governed-memory walkthrough is `/demo/collaboration` and has its own [runbook](docs/operations/collaboration-walkthrough.md). The [v0.1.2 release/source-archive verification guide](docs/how-to/verify-v0.1.2-release.md) describes the current release.
 
-For the unreleased same-Case development walkthrough, begin at `/demo/collaboration`,
-confirm the synthetic family fact, choose `Continue to governed planning`, and use
-the explicit task action on `/demo`. The handoff itself performs read-only validation
-and creates no task.
+For the current same-Case development walkthrough, begin at `/demo/collaboration`,
+confirm the synthetic family fact, choose `继续进入受治理规划` (`Continue to governed
+planning` in English), and use the explicit task action on `/demo`. The handoff itself
+performs read-only validation and creates no task.
 
 `make doctor` checks Docker, Compose capability, local ports, at least 5 GiB on the host project filesystem, and at least 8 GiB on the Docker VM filesystem. Operators may override only the Docker VM threshold with `NIGHT_VOYAGER_DOCKER_MINIMUM_KB`; the check fails closed and never removes Docker resources. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
@@ -46,7 +48,7 @@ and creates no task.
 - The worker and SSE evidence is deterministic local proof, not distributed high availability.
 - Live DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. Deterministic offline DRA candidate import and atomic promotion are implemented locally; governed mixed PlanningRun generation is implemented locally through the existing durable worker. Live provider proof was not run and still requires separate authorization. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
 - Governed collaboration PR A, versioned Skill governance PR B, and browser walkthrough/inspector PR C are released in v0.1.2 as local synthetic capabilities. `/demo` remains the primary advisor-family route; `/demo/collaboration` is secondary and creates no `AgentTask`.
-- The current development tree adds an unreleased, provider-free same-Case handoff and functional browser-to-database proof. It does not change the v0.1.2 release records or implement PR 3 localization and visual work.
+- PR 1 and PR 2 are merged post-v0.1.2. The current development tree implements PR 3 locally for authority review: exact `zh-CN`/`en` presentation, a current root entry, refreshed Chinese Chromium evidence, and the unchanged provider-free same-Case browser-to-database proof. It does not change v0.1.2 release records, version, backend authority, or deployment status.
 
 ## Milestones and history
 

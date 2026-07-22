@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, loadRecoveryMetadata, saveCollaborationJourney, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
+import { PresentationProvider, usePresentation } from "../../lib/presentation/context";
 import { CASE_ID, BRIEF_ID, CONFIRMED_FACT, CONTINUED_CASE_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
 
 const advisorMetadata = () => ({ schema_version: 2 as const, journey: "advisor-family" as const, role: "advisor" as const, csrf: "csrf", caseId: CASE_ID, taskId: null, briefId: null, cursor: 0, mutations: {} });
@@ -26,7 +27,49 @@ const inspector = (pinStatus: "not_created" | "matched", caseId = CASE_ID) => ({
   pin_status: pinStatus,
 });
 
-afterEach(() => { sessionStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { sessionStorage.clear(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it("keeps business state, calls, idempotency, journey, and EventSource unchanged across a locale switch", async () => {
+  saveRecoveryMetadata(advisorMetadata());
+  const requests: string[] = [];
+  const sources: string[] = [];
+  class FakeEventSource {
+    constructor(readonly url: string) { sources.push(url); }
+    addEventListener() {}
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("task-ready"));
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [CONFIRMED_FACT], history: [], next_cursor: null });
+    if (path.endsWith("/planning-skill-inspector")) return Response.json(inspector("not_created"));
+    if (path.endsWith("/agent-tasks")) return Response.json(standaloneTask(false), { status: 202 });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => ({ demo: useConnectedDemo(), presentation: usePresentation() }), { wrapper: PresentationProvider });
+  await waitFor(() => expect(result.current.demo.state.value).toBe("advisor_ready"));
+  await act(async () => result.current.demo.createTask());
+  await waitFor(() => expect(result.current.demo.state.value).toBe("task_streaming"));
+
+  const callsBefore = [...requests];
+  const sourcesBefore = [...sources];
+  const envelopeBefore = sessionStorage.getItem("night-voyager:m5");
+  const stateBefore = JSON.stringify(result.current.demo.state);
+  const idempotencyBefore = loadRecoveryMetadata()?.mutations["create-task"];
+
+  act(() => result.current.presentation.setLocale("en"));
+  await waitFor(() => expect(result.current.presentation.locale).toBe("en"));
+
+  expect(requests).toEqual(callsBefore);
+  expect(sources).toEqual(sourcesBefore);
+  expect(sources).toEqual([`/api/demo/tasks/${TASK_ID}/events?after=0`]);
+  expect(sessionStorage.getItem("night-voyager:m5")).toBe(envelopeBefore);
+  expect(JSON.stringify(result.current.demo.state)).toBe(stateBefore);
+  expect(loadRecoveryMetadata()?.mutations["create-task"]).toEqual(idempotencyBefore);
+});
 
 it("validates canonical role-specific recovery metadata", () => {
   expect(loadRecoveryMetadata()).toBeNull();

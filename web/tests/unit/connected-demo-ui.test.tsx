@@ -1,120 +1,243 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
 import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
-import type { AdvisorLedger as Ledger, CurrentDecisionBrief } from "../../lib/connected-demo/contracts";
+import { JourneyConflictNotice } from "../../components/demo-session/JourneyConflictNotice";
+import type {
+  ConfirmedFactAdvisor,
+  FactKey,
+  FactValue,
+} from "../../lib/collaboration-demo/contracts";
+import type { CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
+import { PresentationProvider } from "../../lib/presentation/context";
 import { brief as briefFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "./connected-demo-test-data";
 
-afterEach(cleanup);
+function renderPresentation(ui: ReactElement) {
+  return render(ui, { wrapper: PresentationProvider });
+}
 
-it("renders task-ready authority with one primary action", () => {
-  const ledger = {
-    schema_version: 1,
-    proof_mode: "synthetic-demo",
-    phase: "task-ready",
-    case_id: "case",
-    case_revision: 1,
-    case_state: "planning",
-    canonical_task_inputs: { schema_version: 1, operation: "generate_planning_run_v1" },
-    task: null,
-    planning_run: null,
-    routes: [],
-    evidence: [],
-    review_inputs: null,
-    current_brief_id: null,
-    recovery: null,
-  } as unknown as Ledger;
-  render(<AdvisorLedger ledger={ledger} onPrimaryAction={() => undefined} />);
-  expect(screen.getByRole("heading", { name: /Advisor Ledger/i })).toBeVisible();
-  expect(screen.getByRole("button", { name: /Create planning task/i })).toBeEnabled();
-  expect(screen.queryByText(/lease owner|organization_id|reviewer notes/i)).toBeNull();
+function confirmedFact(
+  factKey: FactKey,
+  value: FactValue,
+  factVersion: number,
+): ConfirmedFactAdvisor {
+  return { ...CONFIRMED_FACT, fact_key: factKey, value, fact_version: factVersion };
+}
+
+const mixedConfirmedFacts = [
+  confirmedFact("student.intended_field", "Computer Science", 1),
+  confirmedFact("student.preferred_countries", ["australia", "japan"], 2),
+  confirmedFact("student.intake", "2027-02", 3),
+  confirmedFact("family.risk_tolerance", "medium", 4),
+  confirmedFact("family.japan_risk_accepted", true, 5),
+  confirmedFact("family.budget", CONFIRMED_FACT.value, 6),
+] satisfies readonly ConfirmedFactAdvisor[];
+
+afterEach(() => {
+  cleanup();
+  localStorage.clear();
+});
+
+it("renders Chinese task-ready authority with one primary action and no raw phase", () => {
+  const ledger = ledgerFixture("task-ready");
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={ledger} onPrimaryAction={() => undefined} />,
+  );
+  expect(screen.getByRole("heading", { name: "当前决策阶段" })).toBeVisible();
+  expect(screen.getByText("可以开始规划")).toBeVisible();
+  expect(screen.getByRole("button", { name: "创建规划任务" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "创建规划任务" }).closest("details")).toBeNull();
+  expect(screen.getByText("Case revision 1")).toBeVisible();
+  expect(container).not.toHaveTextContent(/task-ready|lease owner|organization_id|reviewer notes/i);
 });
 
 it("renders current Case revision and confirmed facts without internal provenance", () => {
   const current = { ...ledgerFixture("task-ready"), case_revision: 2 };
-  const { container, rerender } = render(<AdvisorLedger ledger={current} confirmedFacts={[CONFIRMED_FACT]} onPrimaryAction={() => undefined} />);
+  const { container, rerender } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={[CONFIRMED_FACT]} onPrimaryAction={() => undefined} />,
+  );
   expect(screen.getAllByText("Case revision 2")).toHaveLength(2);
-  expect(screen.getByRole("heading", { name: "Current confirmed Case facts" })).toBeVisible();
-  expect(screen.getByText("family.budget")).toBeVisible();
-  expect(screen.getByText("300,000–400,000 CNY")).toBeVisible();
+  expect(screen.getByRole("heading", { name: "当前已确认家庭事实" })).toBeVisible();
+  expect(screen.getByText("家庭总预算")).toBeVisible();
+  expect(screen.getByText("¥300,000–400,000")).toBeVisible();
   expect(screen.getByText("Fact version 1")).toBeVisible();
-  expect(container).not.toHaveTextContent(/45000000|44000000|confirmed_fact_id|candidate_id|schema_version|\{"/i);
+  expect(container).not.toHaveTextContent(/family\.budget|45000000|44000000|confirmed_fact_id|candidate_id|schema_version|\{"/i);
 
   rerender(<AdvisorLedger ledger={current} confirmedFacts={[]} onPrimaryAction={() => undefined} />);
-  expect(screen.getByText("No current confirmed facts are projected for this Case revision.")).toBeVisible();
-  expect(screen.queryByText("300,000–400,000 CNY")).toBeNull();
+  expect(screen.getByText("此 Case revision 尚无已确认事实。")).toBeVisible();
+  expect(screen.queryByText("¥300,000–400,000")).toBeNull();
 
   rerender(<AdvisorLedger ledger={current} confirmedFacts={null} onPrimaryAction={() => undefined} />);
-  expect(screen.queryByText("No current confirmed facts are projected for this Case revision.")).toBeNull();
-  expect(screen.getByText("Current confirmed facts are unavailable until the server projection is refreshed.")).toBeVisible();
+  expect(screen.getByText("服务器事实投影刷新前，当前事实暂不可用。")).toBeVisible();
 });
 
-it("keeps Malaysia blocked and discloses evidence", () => {
-  const ledger = ledgerFixture("review-required");
-  const { container } = render(<AdvisorLedger ledger={ledger} onPrimaryAction={() => undefined} />);
-  expect(screen.queryByRole("button", { name: /Choose (Australia|Japan|Malaysia)/i })).toBeNull();
-  expect(screen.getAllByText("Not eligible").length).toBeGreaterThanOrEqual(2);
-  expect(screen.getAllByText("Recommended with budget condition").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("Conditional alternative").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("Blocked").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("Cost and FX evidence are within the approved boundary").length).toBeGreaterThan(0);
-  expect(screen.getAllByText("Higher-risk synthetic alternative").length).toBeGreaterThan(0);
-  fireEvent.click(screen.getByRole("button", { name: "Malaysia" }));
-  expect(screen.getByText("malaysia_gap")).toBeVisible();
-  expect(screen.getAllByText("Program-fit evidence is missing").length).toBeGreaterThan(0);
-  expect(screen.getByRole("button", { name: "Malaysia" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByText(/Synthetic publisher/i)).toBeVisible();
-  expect(container).not.toHaveTextContent(/recommended_with_condition|synthetic_high_risk_alternative|direct_program_fit_evidence_absent/);
+it("renders every exact confirmed-fact type in one Chinese mixed projection", () => {
+  const current = { ...ledgerFixture("task-ready"), case_revision: 7 };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={mixedConfirmedFacts} onPrimaryAction={() => undefined} />,
+  );
+
+  for (const visible of [
+    "Computer Science",
+    "澳大利亚、日本",
+    "2027-02",
+    "中等",
+    "已接受",
+    "¥300,000–400,000",
+  ]) expect(screen.getByText(visible)).toBeVisible();
+  for (const version of [1, 2, 3, 4, 5, 6]) {
+    expect(screen.getByText(`Fact version ${version}`)).toBeVisible();
+  }
+  expect(screen.getAllByText("Case revision 7")).toHaveLength(7);
+  expect(container).not.toHaveTextContent(/student\.|family\.|confirmed_fact_id|candidate_id|schema_version|\{"/i);
 });
 
-it("announces public task status outside the collapsed technical trail", () => {
-  render(<AdvisorLedger ledger={ledgerFixture("active-task")} busy onPrimaryAction={() => undefined} />);
-  const status = screen.getByRole("status");
-  expect(status).toBeVisible();
-  expect(status).toHaveTextContent(/Status: preparing/i);
-  expect(screen.getByText("Task trail").closest("details")).not.toHaveAttribute("open");
+it("renders every exact confirmed-fact type in one explicit English mixed projection", async () => {
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  const current = { ...ledgerFixture("task-ready"), case_revision: 7 };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={mixedConfirmedFacts} onPrimaryAction={() => undefined} />,
+  );
+
+  await waitFor(() => expect(screen.getByText("Australia, Japan")).toBeVisible());
+  for (const visible of [
+    "Computer Science",
+    "2027-02",
+    "Medium",
+    "Accepted",
+    "CNY 300,000–400,000",
+  ]) expect(screen.getByText(visible)).toBeVisible();
+  for (const version of [1, 2, 3, 4, 5, 6]) {
+    expect(screen.getByText(`Fact version ${version}`)).toBeVisible();
+  }
+  expect(screen.getAllByText("Case revision 7")).toHaveLength(7);
+  expect(container).not.toHaveTextContent(/student\.|family\.|confirmed_fact_id|candidate_id|schema_version|\{"/i);
 });
 
-it("renders only server-derived family constraints", () => {
-  const brief = briefFixture("family-review");
-  const { container } = render(<FamilyDecisionBrief brief={brief} confirmed={false} onConfirm={() => undefined} onSubmit={() => undefined} />);
-  expect(screen.getByText("305,500 CNY")).toBeVisible();
-  expect(screen.getByText("400,000 CNY")).toBeVisible();
-  expect(screen.getAllByText("Budget flexibility").length).toBeGreaterThan(0);
-  expect(screen.getByRole("button", { name: /Confirm Australia route/i })).toBeDisabled();
+it("fails closed for malformed current facts without exposing raw values", () => {
+  const malformed = [
+    { ...CONFIRMED_FACT, fact_key: "student.intended_field", value: { raw: "raw-field-secret" } },
+    { ...CONFIRMED_FACT, fact_key: "student.preferred_countries", value: ["australia", "raw-country-secret"] },
+    { ...CONFIRMED_FACT, fact_key: "family.risk_tolerance", value: "raw-risk-secret" },
+  ] as unknown as readonly ConfirmedFactAdvisor[];
+  const current = { ...ledgerFixture("task-ready"), case_revision: 2 };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={current} confirmedFacts={malformed} onPrimaryAction={() => undefined} />,
+  );
+
+  expect(screen.getAllByText("状态暂不可用")).toHaveLength(3);
+  expect(container).not.toHaveTextContent(/raw-field-secret|raw-country-secret|raw-risk-secret|\{"/i);
+});
+
+it("orders route outcome, reason, eligibility and uses closed fallbacks", () => {
+  const projected = ledgerFixture("review-required");
+  projected.routes[2] = {
+    ...projected.routes[2],
+    required_claims: ["malaysia_program_fit", "raw_claim_secret"],
+    known_gaps: ["malaysia_gap", "raw_gap_secret"],
+  };
+  projected.evidence[0] = { ...projected.evidence[0], claim: "raw_claim_secret" };
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={projected} onPrimaryAction={() => undefined} />,
+  );
+
+  expect(screen.getAllByText("不符合审核条件").length).toBeGreaterThanOrEqual(2);
+  expect(screen.getAllByText("在预算条件下推荐").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("有条件备选").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("暂不可选").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("成本与汇率证据均在已批准边界内").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole("button", { name: "马来西亚" }));
+  expect(screen.getByText(/缺少马来西亚项目匹配证据/)).toBeVisible();
+  expect(screen.getAllByText("缺少直接的项目匹配证据").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("状态暂不可用").length).toBeGreaterThan(0);
+  expect(container).not.toHaveTextContent(/recommended_with_condition|raw_claim_secret|raw_gap_secret|malaysia_gap|direct_program_fit_evidence_absent/);
+});
+
+it("renders an explicit no-route fallback", () => {
+  renderPresentation(
+    <AdvisorLedger ledger={ledgerFixture("task-ready")} onPrimaryAction={() => undefined} />,
+  );
+  expect(screen.getByText("路线比较尚未生成。")).toBeVisible();
+});
+
+it("renders the same route authority in explicit English", async () => {
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={ledgerFixture("review-required")} onPrimaryAction={() => undefined} />,
+  );
+  await waitFor(() => expect(screen.getAllByText("Recommended with budget condition").length).toBeGreaterThan(0));
+  expect(screen.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled();
+  expect(container).not.toHaveTextContent(/review-required|needs_advisor_review/);
+});
+
+it.each([
+  ["preparing", "正在准备"],
+  ["needs_advisor_review", "需要顾问审核"],
+  ["ready", "已完成"],
+  ["needs_evidence", "需要补充证据"],
+  ["timed_out", "已超时"],
+  ["failed", "未完成"],
+  ["cancelled", "已取消"],
+  ["outdated", "已有更新版本"],
+] satisfies Array<[TaskStatus, string]>)
+("announces localized task status %s outside the collapsed technical trail", (status, visible) => {
+  const phase = status === "preparing" ? "active-task" : status === "needs_advisor_review" ? "review-required" : "terminal-task-failure";
+  const projected = ledgerFixture(phase, status);
+  const { container } = renderPresentation(
+    <AdvisorLedger ledger={projected} busy onPrimaryAction={() => undefined} />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent(visible);
+  expect(screen.getByText("任务记录").closest("details")).not.toHaveAttribute("open");
+  expect(container).not.toHaveTextContent(status);
+});
+
+it("renders only server-derived family constraints before provenance", () => {
+  const { container } = renderPresentation(
+    <FamilyDecisionBrief brief={briefFixture("family-review")} confirmed={false} onConfirm={() => undefined} onSubmit={() => undefined} />,
+  );
+  expect(screen.getByText("¥305,500")).toBeVisible();
+  expect(screen.getByText("¥400,000")).toBeVisible();
+  expect(screen.getAllByText("预算弹性").length).toBeGreaterThan(0);
+  expect(screen.getByRole("button", { name: "确认澳大利亚路线" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "确认澳大利亚路线" }).closest("details")).toBeNull();
   expect(container).not.toHaveTextContent(/budget_elasticity|30,550,000|40,000,000/);
 });
 
-it("shows fail-closed recovery without parent presentation", () => {
-  render(<RecoveryNotice code="session_recovery_required" onReconnect={() => undefined} />);
-  expect(screen.getByRole("heading", { name: /Recovery required/i })).toBeVisible();
-  expect(screen.queryByText(/Decision Receipt/i)).toBeNull();
+it.each(["invalid_transition", "session_expired", "session_recovery_required", "stale_conflict", "transport_failure"] as const)(
+  "shows fail-closed recovery for %s without leaking the raw code",
+  (code) => {
+    const { container } = renderPresentation(
+      <RecoveryNotice code={code} onReconnect={() => undefined} />,
+    );
+    expect(screen.getByRole("heading", { name: "需要恢复" })).toBeVisible();
+    expect(screen.queryByText(/Decision Receipt/i)).toBeNull();
+    expect(container).not.toHaveTextContent(code);
+  },
+);
+
+it("localizes a journey conflict without changing the safe server action", () => {
+  const end = vi.fn();
+  renderPresentation(
+    <JourneyConflictNotice currentJourney="collaboration" returnHref="/demo/collaboration" onEnd={end} />,
+  );
+  expect(screen.getByRole("heading", { name: "另一个演示流程正在进行" })).toBeVisible();
+  expect(screen.getByRole("link", { name: "返回当前流程" })).toHaveAttribute("href", "/demo/collaboration");
+  fireEvent.click(screen.getByRole("button", { name: "结束当前流程并继续" }));
+  expect(end).toHaveBeenCalledOnce();
 });
 
-it("presents the parent receipt without internal identifiers or raw debug JSON", () => {
-  const brief = {
-    phase: "plan-ready",
-    receipt: {
-      decision_id: "hidden-decision-id",
-      receipt_id: "hidden-receipt-id",
-      selected_route_id: "hidden-route-id",
-      accepted_budget_min_minor: 30_550_000,
-      accepted_budget_max_minor: 40_000_000,
-      currency: "CNY",
-      accepted_trade_offs: ["budget_elasticity"],
-    },
-    timeline: {
-      country: "australia",
-      intake: "2027-02",
-      milestones: [{ key: "documents", due_date: "2026-09-01" }],
-    },
-  } as unknown as CurrentDecisionBrief;
-  render(<DecisionReceiptTimeline brief={brief} />);
-  expect(screen.getByText("305,500–400,000 CNY")).toBeVisible();
-  expect(screen.getByText("Budget flexibility")).toBeVisible();
-  expect(screen.getByText(/Documents/i)).toBeVisible();
-  expect(screen.queryByText(/hidden-|decision_id|receipt_id|selected_route_id|budget_elasticity|30,550,000|40,000,000/i)).toBeNull();
+it("presents the receipt then chronological timeline without internal identifiers", () => {
+  const brief = briefFixture("plan-ready") as CurrentDecisionBrief;
+  const { container } = renderPresentation(<DecisionReceiptTimeline brief={brief} />);
+  expect(screen.getByRole("heading", { name: "家庭决定回执" })).toBeVisible();
+  expect(screen.getByText("¥305,500–400,000")).toBeVisible();
+  expect(screen.getByText("预算弹性")).toBeVisible();
+  expect(screen.getByText("家庭协商确认")).toBeVisible();
+  expect(screen.getByText("文件准备")).toBeVisible();
+  expect(screen.getByText("2026年9月1日")).toBeVisible();
+  expect(container).not.toHaveTextContent(/decision_id|receipt_id|selected_route_id|budget_elasticity|30,550,000|40,000,000|family_consultation|documents/);
 });

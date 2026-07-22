@@ -146,6 +146,28 @@ def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> Non
     assert "docker compose pause worker" in script
     assert "docker compose unpause worker" in script
     assert "--no-build" in script
+    assert 'run_fact_to_plan_lane "zh-CN"' in script
+    assert 'run_fact_to_plan_lane "en"' in script
+    assert "-e PRESENTATION_LOCALE=en" in script
+
+
+def test_required_compose_gate_runs_both_locales_from_fresh_baselines() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    lane = script.split("run_fact_to_plan_lane() {", 1)[1].split("\n}", 1)[0]
+
+    assert 'case "$lane_locale" in' in lane
+    assert 'zh-CN) set -- ;;' in lane
+    assert 'en) set -- -e PRESENTATION_LOCALE=en ;;' in lane
+    assert "docker compose down --volumes --remove-orphans" in lane
+    assert "docker compose up --no-build --wait" in lane
+    assert "browser-proof npx playwright test" in lane
+    assert "verify_fact_to_plan_flow.py" in lane
+    assert "governed fact-to-plan browser and database proof passed locale=%s" in lane
+    assert script.count('run_fact_to_plan_lane "zh-CN"') == 1
+    assert script.count('run_fact_to_plan_lane "en"') == 1
+    zh_lane = script.index('run_fact_to_plan_lane "zh-CN"')
+    en_lane = script.index('run_fact_to_plan_lane "en"')
+    assert zh_lane < en_lane
 
 
 def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_content() -> None:
@@ -160,15 +182,27 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
     assert "requiredVisible: readonly Locator[]" in browser
     assert "for (const required of requiredVisible)" in browser
     for content in (
-        'page.getByRole("heading", { name: "Re-plan required" })',
+        'replan: "Re-plan required"',
+        'replan: "需要重新规划"',
+        'receipt: "Family Decision Receipt"',
+        'receipt: "家庭决定回执"',
+        'timeline: "Action timeline"',
+        'timeline: "行动时间线"',
+        'page.getByRole("heading", { name: presentationCopy.replan })',
         'page.getByText("Fact version 1")',
         'page.getByText("Case revision 2")',
-        'page.getByRole("heading", { name: "Decision Receipt" })',
-        'page.getByRole("heading", { name: "Timeline Plan" })',
+        'page.getByRole("heading", { name: presentationCopy.receipt })',
+        'page.getByRole("heading", { name: presentationCopy.timeline })',
     ):
         assert content in browser
 
-    assert "FACT_TO_PLAN_WORKER_READY_FILE=docs/assets/.fact-to-plan-worker-ready" in script
+    assert "FACT_TO_PLAN_ZH_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-proof.json" in script
+    assert (
+        "FACT_TO_PLAN_ZH_WORKER_READY_FILE="
+        "docs/assets/.fact-to-plan-zh-CN-worker-ready"
+    ) in script
+    assert "FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json" in script
+    assert "FACT_TO_PLAN_EN_WORKER_READY_FILE=docs/assets/.fact-to-plan-en-worker-ready" in script
     assert "sleep 15" not in script
     assert "seq 1 120" in script
 
@@ -180,9 +214,9 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     reset_prepare = (
-        'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"\n'
-        ': > "$FACT_TO_PLAN_PROOF_FILE"\n'
-        ': > "$FACT_TO_PLAN_WORKER_READY_FILE"'
+        '    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"\n'
+        '    : > "$FACT_TO_PLAN_PROOF_FILE"\n'
+        '    : > "$FACT_TO_PLAN_WORKER_READY_FILE"'
     )
     permission = 'chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"'
     sentinel = 'FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"'
@@ -232,6 +266,12 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     assert stat.S_IMODE(ready_target.stat().st_mode) == 0o640
 
     cleanup = script.split("cleanup() {", 1)[1].split("}", 1)[0]
-    assert 'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"' in cleanup
+    for path_variable in (
+        "FACT_TO_PLAN_ZH_PROOF_FILE",
+        "FACT_TO_PLAN_ZH_WORKER_READY_FILE",
+        "FACT_TO_PLAN_EN_PROOF_FILE",
+        "FACT_TO_PLAN_EN_WORKER_READY_FILE",
+    ):
+        assert f'"${path_variable}"' in cleanup
     assert "FACT_TO_PLAN_WORKER_READY_SENTINEL" in browser
     assert '`${workerReadySentinel}\\n`' in browser

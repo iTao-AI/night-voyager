@@ -10,6 +10,7 @@ export default defineConfig({
     browserName: "chromium",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    locale: "zh-CN",
   },
   workers: 1,
   retries: 0,

@@ -5,6 +5,11 @@ shows how a parent proposal becomes an authoritative Case fact only after assign
 advisor confirmation. It is non-production proof, not messaging, admissions advice,
 or a claim about real users.
 
+The route server-renders exact `zh-CN`; the shared header can explicitly persist
+exact `en` at `night-voyager:presentation-locale:v1`. Locale is presentation-only and
+cannot alter the journey envelope, authority reads, idempotency, role rotation,
+navigation, task count, or EventSource count/URL.
+
 ![Confirmed family fact and Case revision](../assets/collaboration-confirmed-fact.png)
 
 ## Run the walkthrough
@@ -21,7 +26,8 @@ Open `http://127.0.0.1:3000/demo/collaboration` and follow the seven visible sta
    session and mint the assigned advisor session.
 4. Record the advisor confirmation. A message or proposal alone is never authority.
 5. Reload the confirmed fact and Case revision from PostgreSQL authority.
-6. At `Re-plan required`, choose `Continue to governed planning`. The route
+6. At `需要重新规划` (`Re-plan required`), choose `继续进入受治理规划`
+   (`Continue to governed planning`). The route
    revalidates the current candidate, confirmed fact, Case revision, advisor ledger,
    and Skill inspector, then replaces the same-tab envelope and navigates once.
 7. On `/demo`, confirm the continued same Case and revision, then use the explicit
@@ -75,13 +81,17 @@ make down
 docker compose ps --all
 ```
 
-The Chromium lane uses the real PostgreSQL seed, FastAPI, BFF, opaque cookies,
-Origin/CSRF checks, idempotency, worker, and SSE. It proves one same-Case chain from
-parent message through receipt and timeline, with the explicit `/demo` task action
-as the only task-creation point. It covers 1440, 768, and 390 px, keyboard focus,
+Each Chromium lane uses the real PostgreSQL seed, FastAPI, BFF, opaque cookies,
+Origin/CSRF checks, idempotency, worker, and SSE. The required gate proves the
+same complete chain twice from isolated database baselines: the first lane uses
+the deterministic Chinese default without locale injection, and the second uses
+`PRESENTATION_LOCALE=en`. Both run the browser-to-database verifier after the
+parent message, receipt, and timeline flow, with the explicit `/demo` task action
+as the only task-creation point. They cover 1440, 768, and 390 px, keyboard focus,
 semantic landmarks, at least 44 px action targets, and horizontal-overflow checks.
-The screenshot above remains immutable v0.1.2 evidence captured before the handoff;
-PR 3 owns refreshed screenshots.
+The screenshot above is the current Chinese capture from the same deterministic
+Chromium flow. It preserves server-authored synthetic message/reason text verbatim,
+while all presentation-owned labels follow the selected locale.
 
 All fixtures are synthetic. Live providers, external message routing, production
 deployment, and release publication remain outside this walkthrough.

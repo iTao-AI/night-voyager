@@ -7,12 +7,19 @@ async function expectNoRawPresentation(page: Page) {
   await expect(page.getByRole("main")).not.toContainText(rawPresentation);
 }
 
+async function expectCollapsedNoTaskInspector(page: Page) {
+  const details = page.locator(".skill-inspector details");
+  await expect(details.locator("summary")).toBeVisible();
+  await expect(details).not.toHaveAttribute("open", "");
+  await expect(details).toContainText(/尚未创建规划任务|Planning task not created/);
+}
+
 test("connected-demo.spec.ts preserves the native SSE cursor and renders a live terminal task", async ({ page }) => {
   test.skip(!terminalProof, "runs in the worker-paused Compose lane");
   await page.goto("/demo");
-  await page.getByRole("button", { name: "Start advisor walkthrough" }).click();
-  await expect(page.getByRole("button", { name: "Create planning task" })).toBeEnabled();
-  await expect(page.getByText("No planning task created")).toBeVisible();
+  await page.getByRole("button", { name: /开始顾问流程|Start advisor flow/ }).click();
+  await expect(page.getByRole("button", { name: /创建规划任务|Create planning task/ })).toBeEnabled();
+  await expectCollapsedNoTaskInspector(page);
 
   let closedFirstStream = false;
   await page.route("**/api/demo/tasks/*/events?after=0", async (route) => {
@@ -26,7 +33,7 @@ test("connected-demo.spec.ts preserves the native SSE cursor and renders a live 
   });
   const initialSse = page.waitForRequest((request) => request.url().includes("/events?after="));
   const nativeReconnect = page.waitForRequest((request) => request.url().includes("/events?") && Boolean(request.headers()["last-event-id"]));
-  await page.getByRole("button", { name: "Create planning task" }).click();
+  await page.getByRole("button", { name: /创建规划任务|Create planning task/ }).click();
   expect(new URL((await initialSse).url()).searchParams.get("after")).toBe("0");
   await page.waitForFunction(() => {
     const stored = sessionStorage.getItem("night-voyager:m5");
@@ -40,7 +47,7 @@ test("connected-demo.spec.ts preserves the native SSE cursor and renders a live 
   const reloadSse = page.waitForRequest((request) => request.url().includes("/events?after="));
   await page.reload();
   expect(new URL((await reloadSse).url()).searchParams.get("after")).toBe(String(storedCursor));
-  await expect(page.getByRole("status")).toContainText(/preparing/i);
+  await expect(page.getByRole("status")).toContainText(/正在准备|Preparing/i);
 
   const cancelled = await page.evaluate(async () => {
     const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
@@ -58,57 +65,57 @@ test("connected-demo.spec.ts preserves the native SSE cursor and renders a live 
     return { status: response.status, body: await response.json() };
   });
   expect(cancelled.status).toBe(200);
-  await expect(page.getByRole("status")).toContainText(/cancelled/i);
-  await expect(page.getByText(/terminal-task-failure/i)).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(/已取消|Cancelled/i);
+  await expect(page.getByText(/规划任务已暂停|Planning task paused/i)).toBeVisible();
 });
 
 test("connected-demo.spec.ts connected golden flow proves the advisor-to-family database flow", async ({ page }) => {
   test.skip(terminalProof, "runs in the normal worker-backed Compose lane");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/demo");
-  await expect(page.getByRole("heading", { name: "Connected advisor-to-family demo" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /顾问到家庭的决策流程|Advisor-to-family decision flow/ })).toBeVisible();
   await expect(page.getByRole("banner")).toBeVisible();
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByRole("contentinfo")).toBeVisible();
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Skip to decision workflow" })).toBeFocused();
+  await expect(page.getByRole("link", { name: /跳到主要内容|Skip to main content/ })).toBeFocused();
 
-  await page.getByRole("button", { name: "Start advisor walkthrough" }).click();
-  await expect(page.getByRole("heading", { name: "Advisor Ledger" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create planning task" })).toBeEnabled();
+  await page.getByRole("button", { name: /开始顾问流程|Start advisor flow/ }).click();
+  await expect(page.getByRole("heading", { name: /当前决策阶段|Current decision stage/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /创建规划任务|Create planning task/ })).toBeEnabled();
 
   const initialSse = page.waitForRequest((request) => request.url().includes("/events?after="));
-  await page.getByRole("button", { name: "Create planning task" }).click();
+  await page.getByRole("button", { name: /创建规划任务|Create planning task/ }).click();
   const firstStream = await initialSse;
   expect(new URL(firstStream.url()).searchParams.get("after")).toBe("0");
   await page.reload();
   await expect(page.getByRole("status")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled({ timeout: 60_000 });
-  await expect(page.getByText("Recommended with budget condition").first()).toBeVisible();
-  await expect(page.getByText("Cost and FX evidence are within the approved boundary").first()).toBeVisible();
-  await expect(page.getByText("Conditional alternative").first()).toBeVisible();
-  await expect(page.getByText("Higher-risk synthetic alternative").first()).toBeVisible();
-  await expect(page.getByText("Blocked").first()).toBeVisible();
-  await expect(page.getByText(/Accepted synthetic evidence and limitations/i)).toBeVisible();
-  await expect(page.getByRole("status")).toContainText(/needs_advisor_review/i);
-  await expect(page.getByText("Pinned execution matched")).toBeVisible();
+  await expect(page.getByRole("button", { name: /批准澳大利亚进入家庭审核|Approve Australia for family review/ })).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByText(/在预算条件下推荐|Recommended with budget condition/).first()).toBeVisible();
+  await expect(page.getByText(/成本与汇率证据均在已批准边界内|Cost and FX evidence are within the approved boundary/).first()).toBeVisible();
+  await expect(page.getByText(/有条件备选|Conditional alternative/).first()).toBeVisible();
+  await expect(page.getByText(/较高风险的合成备选方案|Higher-risk synthetic alternative/).first()).toBeVisible();
+  await expect(page.getByText(/暂不可选|Blocked/).first()).toBeVisible();
+  await expect(page.getByText(/已接受的合成证据与限制|Accepted synthetic evidence and limitations/i)).toBeVisible();
+  await expect(page.getByRole("status")).toContainText(/需要顾问审核|Needs advisor review/i);
+  await expect(page.getByText(/运行时 Skill pin 已匹配|Runtime Skill pin matched/)).toBeVisible();
   await expectNoRawPresentation(page);
   await page.setViewportSize({ width: 768, height: 900 });
-  await expect(page.getByText("Recommended with budget condition").first()).toBeVisible();
-  await expect(page.getByText("Cost and FX evidence are within the approved boundary").first()).toBeVisible();
+  await expect(page.getByText(/在预算条件下推荐|Recommended with budget condition/).first()).toBeVisible();
+  await expect(page.getByText(/成本与汇率证据均在已批准边界内|Cost and FX evidence are within the approved boundary/).first()).toBeVisible();
   await expectNoRawPresentation(page);
   await page.setViewportSize({ width: 390, height: 844 });
   for (const [country, outcome, reason] of [
-    ["Australia", "Recommended with budget condition", "Cost and FX evidence are within the approved boundary"],
-    ["Japan", "Conditional alternative", "Higher-risk synthetic alternative"],
-    ["Malaysia", "Blocked", "Program-fit evidence is missing"],
+    ["澳大利亚", /在预算条件下推荐|Recommended with budget condition/, /成本与汇率证据均在已批准边界内|Cost and FX evidence are within the approved boundary/],
+    ["日本", /有条件备选|Conditional alternative/, /较高风险的合成备选方案|Higher-risk synthetic alternative/],
+    ["马来西亚", /暂不可选|Blocked/, /缺少直接的项目匹配证据|Program-fit evidence is missing/],
   ] as const) {
     await page.getByRole("button", { name: country, exact: true }).click();
     await expect(page.getByRole("button", { name: country, exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText(outcome).last()).toBeVisible();
     await expect(page.getByText(reason).last()).toBeVisible();
   }
-  await expect(page.getByText("Not eligible", { exact: true }).last()).toBeVisible();
+  await expect(page.getByText(/不符合审核条件|Not eligible for review/, { exact: true }).last()).toBeVisible();
   await expectNoRawPresentation(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -129,16 +136,16 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
     }
     await route.continue();
   });
-  await page.getByRole("button", { name: "Approve Australia for family review" }).click();
-  await expect(page.getByRole("heading", { name: "Recovery required" })).toBeVisible();
-  await page.getByRole("button", { name: "Reconnect advisor walkthrough" }).click();
-  await expect(page.getByRole("heading", { name: "Family Decision Brief" })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: /批准澳大利亚进入家庭审核|Approve Australia for family review/ }).click();
+  await expect(page.getByRole("heading", { name: /需要恢复|Recovery required/ })).toBeVisible();
+  await page.getByRole("button", { name: /重新连接顾问流程|Reconnect advisor flow/ }).click();
+  await expect(page.getByRole("heading", { name: /家庭决定简报|Family Decision Brief/ })).toBeVisible({ timeout: 30_000 });
   expect(reviewKeys).toHaveLength(2);
   expect(reviewKeys[0]).toBe(reviewKeys[1]);
   await page.unroute("**/api/demo/cases/*/advisor-reviews");
-  await expect(page.getByText("305,500 CNY")).toBeVisible();
-  await expect(page.getByText("400,000 CNY")).toBeVisible();
-  await expect(page.getByText("Budget flexibility").first()).toBeVisible();
+  await expect(page.getByText("¥305,500")).toBeVisible();
+  await expect(page.getByText("¥400,000")).toBeVisible();
+  await expect(page.getByText(/预算弹性|Budget flexibility/).first()).toBeVisible();
   await expectNoRawPresentation(page);
   const advisorDenied = await page.request.get(
     "/api/demo/cases/40000000-0000-0000-0000-000000000002/advisor-ledger",
@@ -165,9 +172,9 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
     staleObserved = true;
     await route.fulfill({ response: stale });
   });
-  await page.getByRole("button", { name: "Confirm Australia route" }).click();
-  await expect(page.getByRole("heading", { name: "Decision Receipt" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Timeline Plan" })).toBeVisible();
+  await page.getByRole("button", { name: /确认澳大利亚路线|Confirm Australia route/ }).click();
+  await expect(page.getByRole("heading", { name: /家庭决定回执|Family Decision Receipt/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /行动时间线|Action timeline/ })).toBeVisible();
   expect(staleObserved).toBe(true);
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await page.unroute("**/api/demo/decision-briefs/*/family-decisions");
@@ -179,15 +186,15 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   }
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Decision Receipt" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /家庭决定回执|Family Decision Receipt/ })).toBeVisible();
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 768, height: 900 },
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
-    await expect(page.getByText("305,500–400,000 CNY")).toBeVisible();
-    await expect(page.getByText("Budget flexibility")).toBeVisible();
+    await expect(page.getByText("¥305,500–400,000")).toBeVisible();
+    await expect(page.getByText(/预算弹性|Budget flexibility/)).toBeVisible();
     await expectNoRawPresentation(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   }
