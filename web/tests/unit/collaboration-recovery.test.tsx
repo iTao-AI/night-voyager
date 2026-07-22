@@ -5,6 +5,7 @@ import { CollaborationDemoApiError } from "../../lib/collaboration-demo/api";
 import { ConnectedDemoApiError } from "../../lib/connected-demo/api";
 import { idempotencyFor } from "../../lib/connected-demo/idempotency";
 import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
+import { PresentationProvider, usePresentation } from "../../lib/presentation/context";
 
 const mocks = vi.hoisted(() => ({
   identity: {
@@ -88,8 +89,31 @@ beforeEach(() => {
 
 afterEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+});
+
+it("switches locale without bootstrap, role, mutation, retry, handoff read, envelope, or navigation effects", async () => {
+  save({ role: "parent", messageId: null, phase: "thread_ready" });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [], next_after_sequence: null });
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => ({ demo: useCollaborationDemo(), presentation: usePresentation() }), { wrapper: PresentationProvider });
+  await waitFor(() => expect(result.current.demo.state.value).toBe("thread_ready"));
+
+  const callsBefore = Object.fromEntries(Object.entries(mocks.identity).map(([key, value]) => [key, value.mock.calls.length]));
+  const collaborationCallsBefore = Object.fromEntries(Object.entries(mocks.collaboration).map(([key, value]) => [key, value.mock.calls.length]));
+  const envelopeBefore = sessionStorage.getItem("night-voyager:m5");
+  const stateBefore = JSON.stringify(result.current.demo.state);
+
+  act(() => result.current.presentation.setLocale("en"));
+  await waitFor(() => expect(result.current.presentation.locale).toBe("en"));
+
+  expect(Object.fromEntries(Object.entries(mocks.identity).map(([key, value]) => [key, value.mock.calls.length]))).toEqual(callsBefore);
+  expect(Object.fromEntries(Object.entries(mocks.collaboration).map(([key, value]) => [key, value.mock.calls.length]))).toEqual(collaborationCallsBefore);
+  expect(sessionStorage.getItem("night-voyager:m5")).toBe(envelopeBefore);
+  expect(JSON.stringify(result.current.demo.state)).toBe(stateBefore);
+  expect(navigate).not.toHaveBeenCalled();
 });
 
 it("requires candidate, confirmed fact, and advisor ledger before recovering confirmation lost acknowledgement", async () => {
