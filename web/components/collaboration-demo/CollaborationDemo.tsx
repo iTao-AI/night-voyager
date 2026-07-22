@@ -17,7 +17,7 @@ export function CollaborationDemo() {
   const phaseHeading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    if (["advisor_reviewing", "replan_required", "recoverable_error"].includes(state.value)) phaseHeading.current?.focus();
+    if (["advisor_reviewing", "replan_required", "handoff_validating", "recoverable_error"].includes(state.value)) phaseHeading.current?.focus();
   }, [state.value]);
 
   const context = state.context;
@@ -74,8 +74,14 @@ export function CollaborationDemo() {
 
             {state.value === "confirmation_submitting" ? <section className="collaboration-action" aria-live="polite"><h2>Publishing confirmed authority</h2><button type="button" disabled>Confirming fact and Case revision…</button></section> : null}
 
+            {["replan_required", "handoff_validating"].includes(state.value) && context.fact ? <ConfirmedFactSummary fact={context.fact} caseRevision={context.caseRevision} /> : null}
+
             {state.value === "replan_required" && context.fact ? (
-              <><ConfirmedFactSummary fact={context.fact} caseRevision={context.caseRevision} /><section className="collaboration-action replan-boundary" aria-labelledby="replan-title"><h2 id="replan-title" ref={phaseHeading} tabIndex={-1}>Re-plan required</h2><p>The Case revision changed. This walkthrough does not create an Agent task; planning must be started explicitly in the primary demo.</p><Link className="primary-action" href="/demo">Return to primary advisor-family demo</Link></section></>
+              <section className="collaboration-action replan-boundary" aria-labelledby="replan-title"><h2 id="replan-title" ref={phaseHeading} tabIndex={-1}>Re-plan required</h2><p>The Case revision changed. This walkthrough creates no task; the destination will reload current authority before the advisor can explicitly start planning.</p><button className="primary-action" type="button" onClick={() => void demo.continueToPlanning()}>Continue to governed planning</button></section>
+            ) : null}
+
+            {state.value === "handoff_validating" && context.fact ? (
+              <section className="collaboration-action replan-boundary" aria-labelledby="handoff-title" aria-live="polite"><h2 id="handoff-title" ref={phaseHeading} tabIndex={-1}>Validating planning authority</h2><p>Reloading current candidate, fact, Case revision, and advisor ledger before navigation.</p><button className="primary-action" type="button" disabled>Validating authority…</button></section>
             ) : null}
 
             {state.value === "recoverable_error" ? <CollaborationRecoveryNotice category={state.category} onRetry={() => void demo.retry()} headingRef={phaseHeading} /> : null}
