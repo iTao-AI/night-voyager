@@ -33,6 +33,15 @@ server authority, creates a deterministic `generate_planning_run_v1` task agains
 the new Case revision, persists the exact active Skill pin, streams durable events,
 and completes the existing advisor-to-family decision path.
 
+The increment also closes a presentation gap in the public portfolio surface. The
+current visual system is coherent, but the browser walkthrough reads primarily as
+an English technical proof: oversized English headings consume the first viewport,
+internal lifecycle terms and Evidence keys compete with the user outcome, and the
+next human action appears later than the product value. The final presentation keeps
+the existing warm-paper visual identity while making Simplified Chinese the default,
+retaining an explicit English switch, front-loading the current decision and next
+action, and moving exact technical proof into secondary disclosure.
+
 The increment preserves three distinct human gates:
 
 1. a participant explicitly proposes a typed fact;
@@ -79,6 +88,13 @@ system may combine or bypass those gates.
   discriminated envelopes for `collaboration` and `advisor-family` journeys.
 - `/demo/collaboration` currently stops after authoritative fact/revision reload and
   tells the user that planning must be started explicitly elsewhere.
+- The root `/` route still presents the historical M0 bootstrap message and states
+  that product decision workflows are not implemented. That page is stale relative
+  to the released v0.1.2 browser product and is a misleading first evaluator entry.
+- `DESIGN.md` already defines the coherent `Advisor Ledger × Global Journey`
+  warm-paper visual system. The current demo implementation is English-only and
+  gives large hero copy and technical state labels more prominence than the product
+  outcome and next human decision.
 
 ## Problem
 
@@ -114,6 +130,20 @@ adding product authority.
 The correct design is a controlled same-Case journey handoff into the existing
 primary workflow.
 
+### The public entry and first viewport obscure the product value
+
+Opening `/` currently shows historical M0 foundation copy rather than the released
+product. Opening either demo then presents an English-first technical walkthrough
+whose largest headings describe internal surfaces. A technical evaluator can infer
+the authority model, but a family member, recruiter, or non-specialist reviewer must
+work too hard to understand the outcome, the evidence, and the next human action.
+
+The presentation must tell the truthful product story in plain language without
+removing the exact proof that technical reviewers need. This requires a current
+portfolio entry route, a Chinese-default surface, closed human-readable mappings,
+and a clearer distinction between the primary product narrative and secondary
+technical evidence.
+
 ## Goals
 
 1. Continue the confirmed collaboration Case into planning without changing Case,
@@ -136,6 +166,19 @@ primary workflow.
    credential, or network dependency beyond normal build inputs.
 10. Preserve the existing standalone `/demo` and `/demo/collaboration` entry points,
     recovery paths, public claim boundary, and synthetic labeling.
+11. Make `zh-CN` the default public presentation while preserving an explicit
+    `en` presentation for international evaluators.
+12. Translate user-visible lifecycle, route, Evidence, reason, recovery, action,
+    accessibility, receipt, and timeline copy through a closed project-owned catalog;
+    never surface an unknown backend code as fallback text.
+13. Make the first viewport answer what happened, why it matters, and what the human
+    must do next before presenting implementation detail.
+14. Preserve the existing semantic table, responsive country comparison, keyboard
+    flow, reduced-motion behavior, and public synthetic boundary while refining
+    hierarchy, density, typography, and responsive composition.
+15. Replace the stale M0 root page with a truthful, current portfolio entry that
+    explains the local synthetic product and routes reviewers into the complete
+    collaboration-to-decision journey or the focused advisor-family demo.
 
 ## Non-goals
 
@@ -155,6 +198,17 @@ primary workflow.
 - A new public deployment, production claim, real-user claim, SLA, admissions
   outcome, or business-impact claim.
 - Selecting or publishing a new project version as part of implementation.
+- Translating repository documentation, APIs, database values, logs, code symbols,
+  or persisted domain records into Chinese.
+- Simultaneously rendering every sentence in both languages, adding automatic
+  browser-language detection, or supporting locales other than exact `zh-CN` and
+  `en`.
+- Adding an i18n framework, remote font, icon library, component framework, or other
+  presentation dependency.
+- Replacing the approved `Advisor Ledger × Global Journey` visual identity with a
+  generic SaaS dashboard, KPI strip, chat-first product, or marketing landing page.
+- Adding adoption metrics, outcome claims, customer logos, testimonials, pricing,
+  signup, or any other unsupported marketing proof to the root portfolio entry.
 
 ## Product contract
 
@@ -202,6 +256,92 @@ Route outcomes, cost, eligibility, review inputs, receipt, and timeline remain t
 actual deterministic projections. The UI must not manufacture a before/after delta
 or claim that the budget update changed a route when the policy output does not prove
 that claim.
+
+### Presentation and locale contract
+
+Night Voyager remains the public product name in both locales. The default public
+presentation is exact locale `zh-CN`, with an explicit `English` switch for exact
+locale `en`. The Chinese first screen uses the plain-language product promise
+`把家庭事实变成可追溯的留学决策与行动计划`; it does not introduce a second Chinese
+product name.
+
+Locale is presentation metadata only:
+
+- a small project-owned `PresentationLocaleV1` contract accepts only `zh-CN` or
+  `en`;
+- the initial server-rendered document and `html[lang]` default to `zh-CN`;
+- an explicit `中文` / `English` header control changes the locale and updates
+  `html[lang]`;
+- a valid preference may be stored under exact `localStorage` key
+  `night-voyager:presentation-locale:v1`; missing values resolve to `zh-CN`, while
+  malformed or unknown values are removed and resolve to `zh-CN`;
+- locale is not added to either same-tab journey envelope, API or BFF requests,
+  idempotency fingerprints, PostgreSQL records, task pins, or domain projections;
+- switching locale performs no business mutation, session rotation, bootstrap,
+  polling, or EventSource creation.
+
+The copy system is a typed, closed, repository-owned catalog. It includes all
+visible headings, body copy, action labels, form labels, empty states, recovery
+messages, accessibility labels, supported country names, lifecycle stages, route
+outcomes, evidence labels, trade-offs, reasons, family receipt labels, timeline
+labels, and bounded public problem categories used by the three public routes. Dynamic
+values such as currency, dates, revision numbers, versions, and durations are
+formatted by locale-aware pure functions while preserving their canonical numeric
+or timestamp source.
+
+Known backend codes map to approved human-readable copy. Unknown, additive, or
+malformed values fail closed to a bounded localized "status unavailable" message;
+the raw value is never interpolated into the DOM, accessible name, toast, console,
+or screenshot. Approved exact technical identifiers needed for the Skill and task
+proof may remain available inside the secondary technical-evidence disclosure, but
+they never replace the main user explanation and never include internal UUIDs, raw
+JSON, request hashes, paths, or secrets.
+
+### Outcome-first visual hierarchy
+
+The existing warm canvas, paper surfaces, teal trust color, coral human-decision
+accent, restrained rules, semantic comparison, and editorial family narrative remain
+the visual foundation. The implementation evolves that system instead of introducing
+a competing theme.
+
+Chinese UI text uses a local/system CJK sans stack headed by `PingFang SC`, with
+`Microsoft YaHei`, `Noto Sans CJK SC`, and `WenQuanYi Zen Hei` fallbacks. Editorial
+Chinese headings may use an available local CJK serif, but must fall back cleanly to
+the approved CJK sans stack. English keeps the existing IBM Plex Sans and Source
+Serif intent. No route may depend on a downloaded font to render complete text.
+
+The root route and both demo routes use the same presentation shell:
+
+1. a compact header with `Night Voyager`, an explicit locale switch, and a visible
+   localized synthetic-demo label;
+2. a bounded first-screen outcome block that states the current situation, the
+   evidence-backed reason, and the single next human action;
+3. the main workflow content in decision order rather than implementation order;
+4. a collapsed or visually secondary technical-evidence region for revision, Skill,
+   task, provenance, and inspector proof;
+5. a final receipt/timeline surface that reads as a family decision record rather
+   than a developer response payload.
+
+The root `/` route becomes a concise product entry, not a second demo state machine.
+It explains the governed fact-to-plan journey, labels the experience as a local
+synthetic demonstration, links the primary action to the complete collaboration
+entry, and offers the focused advisor-family route as a secondary path. It contains
+no API call, session bootstrap, business mutation, fabricated metric, or claim of
+production deployment, real users, admission results, or business impact.
+
+Hero headings must not consume most of the desktop first viewport. Internal terms
+such as `review-required`, raw Evidence keys, adapter names, and state-machine labels
+do not appear in the primary narrative. Dense technical information remains
+inspectable without becoming the dominant visual layer. Desktop, tablet, and 390 px
+mobile layouts preserve one clear primary action, comfortable reading width, no
+horizontal overflow, minimum 44 px targets, visible keyboard focus, semantic
+landmarks, and reduced-motion behavior.
+
+The refinement avoids card grids and nested bordered boxes for every concept. It
+uses the existing ledger rules, route-line motif, asymmetric editorial composition,
+bounded reading widths, tabular numerals, and restrained semantic accents to create
+hierarchy. At most the current outcome and required human action receive dominant
+emphasis in one viewport; supporting facts and technical proof remain quieter.
 
 ## Authority model
 
@@ -253,8 +393,18 @@ No provider adapter participates in the required path.
    the atomic planning-start gate.** Selected because it preserves all three human
    decisions, keeps one public mutation contract, and places the state transition
    beside the task, Skill pin, dispatch, event, and idempotency writes it authorizes.
+5. **Render Chinese and English simultaneously throughout the page.** Rejected
+   because duplicated copy makes already dense evidence and comparison surfaces
+   harder to scan. An explicit locale switch keeps each view coherent.
+6. **Adopt a general i18n or design-system dependency.** Rejected because two closed
+   demo locales and the existing visual tokens do not justify a new runtime or build
+   dependency. A typed local catalog provides a smaller fail-closed surface.
+7. **Replace the current visual direction with a generic dashboard or marketing
+   redesign.** Rejected because the ledger and editorial journey already express
+   the product's evidence and human-authority story. The selected approach improves
+   hierarchy and language while preserving that identity.
 
-The implementation is split into two sequential pull requests:
+The implementation is split into three sequential pull requests:
 
 1. **PR 1 — explicit planning-start authority**
    - migration `0009`;
@@ -267,12 +417,20 @@ The implementation is split into two sequential pull requests:
    - same-Case controlled navigation;
    - current fact/revision presentation;
    - reuse of existing Task/SSE/review/family UI;
-   - Chromium golden flow, screenshots, operations docs, and design matrices.
+   - functional Chromium golden flow, operations docs, and design matrices.
+3. **PR 3 — Chinese-first presentation and visual refinement**
+   - closed `zh-CN` / `en` copy and formatting contracts;
+   - current Chinese-default root entry, shared presentation shell, and explicit
+     English switch;
+   - outcome-first information hierarchy and secondary technical disclosure;
+   - responsive, accessibility, locale-isolation, and visual-regression proof;
+   - refreshed real Chromium screenshots and design documentation.
 
 PR 2 starts from the merged, hosted-green PR 1 contract. Internal implementation
 may delegate independent bounded lanes, but migration ownership, shared composition,
 full database gates, Compose, and Chromium remain serialized under one integration
-owner per PR.
+owner per PR. PR 3 starts only after the merged, hosted-green PR 2 flow is stable;
+it changes presentation, not authority, persistence, transport, or task behavior.
 
 ## PR 1 — explicit planning-start authority
 
@@ -416,6 +574,71 @@ catch-all route, dynamic upstream path, arbitrary header forwarding, cookie join
 or a client-selected actor role. Origin, CSRF, opaque cookies, bounded bodies,
 deadlines, no-store behavior, and direct SSE byte forwarding remain unchanged.
 
+## PR 3 — Chinese-first presentation and visual refinement
+
+### Closed copy and formatting surface
+
+PR 3 introduces one presentation module shared by `/`, `/demo`, and
+`/demo/collaboration`. It owns the exact locale type, locale labels, the complete
+copy catalog, the approved dynamic-code maps, and pure formatting helpers. Components
+consume typed keys or validated public-code mappings rather than embedding parallel
+Chinese and English literal branches.
+
+The implementation must prove catalog parity: every required key exists exactly once
+in both locales, no extra locale is accepted, and every mapped dynamic code has a
+bounded unknown-value path. Currency remains integer CNY minor-unit authority and is
+formatted without changing amount, range, or currency. Dates and durations preserve
+the canonical source value. Revision, Skill, and task proof values remain identical
+across locale changes.
+
+The explicit locale preference uses a versioned presentation-only `localStorage` key.
+It is not read by server authority and is not combined with the existing
+`sessionStorage` journey envelope. Unit tests must prove that toggling or corrupting
+locale state cannot create, retry, cancel, approve, decide, bootstrap, revoke, or
+reconnect anything.
+
+### Existing design-system evolution
+
+PR 3 updates `DESIGN.md` and the affected design matrices to record the Chinese-first
+bilingual presentation contract. It keeps the approved palette, typography intent,
+spacing scale, semantic status colors, table behavior, and prohibited-pattern list.
+It may refine CSS tokens, responsive composition, typographic scale, whitespace,
+surface grouping, and technical-disclosure styling without adding a UI framework,
+remote font, or design dependency.
+
+The main hierarchy is outcome first:
+
+- the header establishes product, locale, and synthetic scope without a full-screen
+  marketing hero;
+- the root route gives a current plain-language product summary and two truthful
+  demo entry choices instead of the historical M0 bootstrap message;
+- the current outcome, evidence-backed explanation, and next human decision are
+  visible in the first desktop viewport;
+- country comparison and authority steps use localized public labels;
+- the collaboration route explains message, proposal, confirmation, revision, and
+  planning handoff in family-readable language;
+- the family route prioritizes decision, trade-off, receipt, and timeline;
+- exact Skill/task/revision/provenance proof remains available under localized
+  technical-evidence disclosure.
+
+No raw backend value is used as a translation key. No visual control is added unless
+it performs a real existing action or disclosure. Locale controls remain available
+at every responsive width and do not obscure the primary action.
+
+### Screenshot and review contract
+
+Public screenshots are generated from the real deterministic Chromium flow after
+PR 2 is merged. The default published evidence is Chinese and covers at least the
+portfolio entry, advisor outcome, family receipt/timeline, and governed collaboration
+handoff. English is exercised in browser tests across the same authority states even
+when duplicate English screenshots would add little reviewer value.
+
+Visual review checks hierarchy, copy fit, alignment, contrast, focus, 44 px targets,
+semantic landmarks, reduced motion, 1440 px, tablet, and 390 px layouts. Screenshot
+review must reject internal IDs, raw JSON, unmapped codes, browser chrome, private
+paths, credentials, clipped copy, misleading production claims, and horizontal
+overflow.
+
 ## Concurrency and failure handling
 
 ### Task start
@@ -464,8 +687,13 @@ Existing contracts remain authoritative:
 - Migration `0009` preserves the existing narrow function grant surface.
 - Session storage contains only the approved recovery envelope; it contains no raw
   provider output, source content, password, token, cookie value, or private path.
+- Local storage contains at most the versioned `zh-CN` or `en` presentation
+  preference and never contains a Case, actor, task, CSRF, cookie, decision, or
+  provider value.
 - Public UI and logs do not expose internal UUIDs, raw JSON, traceback, SQLSTATE,
   source payloads, request hashes, Skill manifest bodies, or credentials.
+- Unknown backend presentation values fail closed to bounded localized copy and are
+  not interpolated into rendered output or accessibility labels.
 - All public fixtures and screenshots remain explicitly synthetic.
 
 ## Testing strategy
@@ -508,6 +736,33 @@ Frontend and BFF tests must cover:
 - existing default `/demo` and standalone `/demo/collaboration` behavior remain
   compatible.
 
+### PR 3 focused proof
+
+Frontend tests must cover:
+
+- exact `zh-CN` and `en` catalog parity and compile-time key coverage;
+- Chinese default render, explicit English switch, `html[lang]`, persistence, reload,
+  and invalid-preference fallback;
+- current localized root entry, primary complete-journey link, secondary focused-demo
+  link, synthetic scope, and absence of the stale M0 claim;
+- no locale value enters the journey envelope, HTTP/BFF request, idempotency key,
+  EventSource URL, or business mutation;
+- closed maps for lifecycle, roles, countries, outcomes, Evidence labels,
+  trade-offs, reasons, recovery categories, receipt fields, and timeline fields;
+- unknown and malformed dynamic values render bounded localized fallback without
+  exposing the raw value;
+- exact CNY amount/range, date, duration, Case revision, and technical-proof identity
+  remain semantically identical in both locales;
+- first-screen outcome, reason, next action, locale control, and synthetic label are
+  present at desktop, tablet, and 390 px widths;
+- technical evidence is secondary but keyboard-accessible and contains only approved
+  public proof values;
+- existing mutations, role rotation, SSE connection count, recovery, and authority
+  calls are unchanged by locale switches;
+- all three public routes retain landmarks, semantic comparison where applicable,
+  visible focus, reduced-motion
+  behavior, minimum target size, and no horizontal overflow.
+
 ### Full proof
 
 The final browser lane starts from a fresh database and performs the entire flow:
@@ -529,10 +784,13 @@ execution, PlanningRun, review, brief, decision, receipt, and timeline. The task
 operation is exactly `generate_planning_run_v1`; no live-provider credential or DRA
 request participates in the lane.
 
-The lane must cover desktop, tablet, and 390 px mobile layout, keyboard focus,
-semantic landmarks, action-target size, and horizontal overflow. Public screenshots
-must be generated from the real Chromium flow and inspected for internal IDs, raw
-JSON, browser chrome, private paths, secrets, and misleading claims.
+The functional PR 2 lane must cover desktop, tablet, and 390 px mobile layout,
+keyboard focus, semantic landmarks, action-target size, and horizontal overflow.
+PR 3 reruns the complete real Chromium flow in both locales, refreshes the public
+Chinese screenshots, and verifies that presentation changes do not alter the
+database-observed authority chain. Public screenshots must be inspected for internal
+IDs, raw JSON, browser chrome, unmapped codes, private paths, secrets, clipped copy,
+and misleading claims.
 
 Required repository gates include the existing focused collaboration, Skill, task,
 database, frontend, release, proof, and Compose commands. Exact commands belong in
@@ -555,7 +813,20 @@ PR 2 updates:
 - demo storyboard, route map, projection matrix, and state/interaction matrix;
 - collaboration, confirmed-fact, AgentTask, and Skill references where behavior
   changes;
-- public Chromium evidence and the approved plan completion status.
+- the approved plan completion status and functional browser proof.
+
+PR 3 updates:
+
+- `DESIGN.md` bilingual and outcome-first presentation contract;
+- English and Chinese README portfolio entry copy where the public demo presentation
+  changes;
+- connected-demo and collaboration runbooks for the locale control and technical
+  disclosure;
+- affected storyboard, route, projection, state, interaction, and presentation
+  matrices;
+- refreshed Chinese-default Chromium screenshots and screenshot assertions;
+- the approved plan and documentation indexes when the presentation layer is
+  implemented.
 
 Published `v0.1.0`, `v0.1.1`, and `v0.1.2` release notes, verification guides, tags,
 GitHub Releases, and source-archive observations remain immutable history.
@@ -566,8 +837,8 @@ from production deployment, real users, provider execution, and admissions resul
 
 ## Acceptance criteria
 
-The increment is complete only when both sequential PRs are merged, exact merge-SHA
-hosted checks succeed, and the following statements are executable facts:
+The increment is complete only when all three sequential PRs are merged, exact
+merge-SHA hosted checks succeed, and the following statements are executable facts:
 
 1. the existing collaboration flow creates one authoritative confirmed fact and
    Case revision `N+1` before any planning task exists;
@@ -593,7 +864,18 @@ hosted checks succeed, and the following statements are executable facts:
 12. public documentation and screenshots accurately describe a local synthetic
     portfolio workflow and contain no private process or sensitive material;
 13. Compose teardown and task-owned Docker inventory are empty, while retained data
-    and unrelated resources remain untouched.
+    and unrelated resources remain untouched;
+14. `zh-CN` is the stable default demo presentation, `en` is explicitly selectable,
+    and locale changes cannot mutate or reconnect the governed journey;
+15. all user-visible dynamic codes use closed localized mappings, with unknown values
+    failing closed without exposing raw backend content;
+16. the first viewport explains the current outcome, evidence-backed reason, and next
+    human action before technical detail, while exact approved proof remains
+    inspectable in a secondary disclosure;
+17. refreshed real Chromium evidence proves Chinese desktop and responsive surfaces,
+    English compatibility, accessibility, and the unchanged database authority chain;
+18. `/` is a current localized portfolio entry with truthful demo routing and no
+    stale M0 statement, unsupported metric, or production claim.
 
 ## Deferred work
 
@@ -607,12 +889,14 @@ hosted checks succeed, and the following statements are executable facts:
 - Multi-case advisor operations and production tenancy remain separate product
   programs.
 - Public deployment remains a separate security and operations decision.
+- Repository-wide localization, automatic locale negotiation, and additional locales
+  remain separate presentation work.
 
 ## Release boundary
 
 This design does not change Python or Web package versions and does not authorize a
-release. After both implementation PRs are merged, post-merge hosted checks and fresh
-local/browser proof pass, and documentation evidence is complete, maintainers may
+release. After all three implementation PRs are merged, post-merge hosted checks and
+fresh local/browser proof pass, and documentation evidence is complete, maintainers may
 evaluate whether the increment merits a bounded patch/minor portfolio release.
 
 No version number, tag, GitHub Release, source-archive gate, or deployment is
