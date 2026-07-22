@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 
 import {
   clearDemoJourneyEnvelope,
+  continueCollaborationAsAdvisorFamily,
   loadDemoJourneyEnvelope,
   loadRecoveryMetadata,
   saveCollaborationJourney,
@@ -16,6 +17,50 @@ const CANDIDATE = "44000000-0000-0000-0000-000000000001";
 afterEach(() => sessionStorage.clear());
 
 const collaboration = () => ({ schema_version: 2 as const, journey: "collaboration" as const, role: "parent" as const, csrf: "csrf", caseId: CASE, threadId: THREAD, messageId: MESSAGE, candidateId: null, phase: "proposal_pending" as const, mutations: {} });
+const confirmedCollaboration = () => ({ ...collaboration(), role: "advisor" as const, candidateId: CANDIDATE, phase: "replan_required" as const });
+
+it("converts one exact confirmed collaboration envelope without mutating it", () => {
+  const current = confirmedCollaboration();
+  const snapshot = structuredClone(current);
+
+  expect(continueCollaborationAsAdvisorFamily(current, null)).toEqual({
+    schema_version: 2,
+    journey: "advisor-family",
+    role: "advisor",
+    csrf: current.csrf,
+    caseId: current.caseId,
+    taskId: null,
+    briefId: null,
+    cursor: 0,
+    mutations: {},
+  });
+  expect(current).toEqual(snapshot);
+  expect(continueCollaborationAsAdvisorFamily(current, CANDIDATE)).toMatchObject({ taskId: CANDIDATE });
+});
+
+it("rejects every non-terminal role/phase and malformed conversion input", () => {
+  const current = confirmedCollaboration();
+  for (const phase of [
+    "bootstrapping_parent", "thread_ready", "message_submitting", "proposal_pending",
+    "switching_to_advisor", "advisor_reviewing", "confirmation_submitting",
+  ] as const) {
+    expect(() => continueCollaborationAsAdvisorFamily({ ...current, phase } as unknown as typeof current, null)).toThrow();
+  }
+  for (const invalid of [
+    { ...current, role: "parent" },
+    { ...current, csrf: "" },
+    { ...current, caseId: "not-a-uuid" },
+    { ...current, extra: true },
+    { ...current, cursor: 1 },
+    { ...current, briefId: CANDIDATE },
+    { ...current, mutations: { "verify-memory-candidate": { fingerprint: "0".repeat(64), idempotencyKey: CANDIDATE } } },
+  ]) {
+    expect(() => continueCollaborationAsAdvisorFamily(invalid as typeof current, null)).toThrow();
+  }
+  for (const taskId of ["", "partial", `${CANDIDATE}0`]) {
+    expect(() => continueCollaborationAsAdvisorFamily(current, taskId)).toThrow();
+  }
+});
 
 it("stores and restores the exact schema-v2 journey union", () => {
   saveCollaborationJourney(collaboration());
@@ -54,6 +99,7 @@ it("enforces collaboration phase, role, and server-ID cross-field invariants", (
     { ...collaboration(), phase: "thread_ready", threadId: null },
     { ...collaboration(), phase: "replan_required", role: "advisor", candidateId: null },
     { ...collaboration(), phase: "recoverable_error" },
+    { ...collaboration(), role: "advisor", candidateId: CANDIDATE, phase: "handoff_validating" },
     { ...collaboration(), phase: "switching_to_advisor", candidateId: CANDIDATE },
   ]) {
     sessionStorage.setItem("night-voyager:m5", JSON.stringify(invalid));

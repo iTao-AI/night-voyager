@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CollaborationDemoApiError } from "../../lib/collaboration-demo/api";
 import { ConnectedDemoApiError } from "../../lib/connected-demo/api";
 import { idempotencyFor } from "../../lib/connected-demo/idempotency";
-import { loadDemoJourneyEnvelope } from "../../lib/connected-demo/session-storage";
+import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 
 const mocks = vi.hoisted(() => ({
   identity: {
@@ -80,6 +80,28 @@ it("requires candidate, confirmed fact, and advisor ledger before recovering con
   expect(mocks.collaboration.confirmedFacts).toHaveBeenCalledWith(CASE, "advisor");
   expect(result.current.state.context.fact).toEqual(fact);
   expect(result.current.state.context.caseRevision).toBe(2);
+});
+
+it("treats a completed conversion as the existing advisor-family journey on collaboration reload", async () => {
+  const current = {
+    schema_version: 2 as const,
+    journey: "collaboration" as const,
+    role: "advisor" as const,
+    csrf: "stored-csrf",
+    caseId: CASE,
+    threadId: THREAD,
+    messageId: MESSAGE,
+    candidateId: CANDIDATE,
+    phase: "replan_required" as const,
+    mutations: {},
+  };
+  saveRecoveryMetadata(continueCollaborationAsAdvisorFamily(current, null));
+
+  const { result } = renderHook(() => useCollaborationDemo());
+
+  await waitFor(() => expect(result.current.journeyConflict).toBe("advisor-family"));
+  expect(mocks.identity.bootstrap).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()?.journey).toBe("advisor-family");
 });
 
 it("recovers a parent session when mint succeeds before the first authority read fails", async () => {

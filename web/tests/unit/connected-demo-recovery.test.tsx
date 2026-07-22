@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { loadDemoJourneyEnvelope, loadRecoveryMetadata, saveCollaborationJourney, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
+import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, loadRecoveryMetadata, saveCollaborationJourney, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import { CASE_ID, BRIEF_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
 
@@ -52,6 +52,33 @@ it("preserves a valid collaboration journey instead of bootstrapping over it", a
   await waitFor(() => expect(result.current.journeyConflict).toBe("collaboration"));
   expect(fetchMock).not.toHaveBeenCalled();
   expect(loadDemoJourneyEnvelope()?.journey).toBe("collaboration");
+});
+
+it("recognizes the exact converted journey envelope as advisor-family recovery metadata", () => {
+  const collaboration = {
+    schema_version: 2 as const,
+    journey: "collaboration" as const,
+    role: "advisor" as const,
+    csrf: "continued-csrf",
+    caseId: CASE_ID,
+    threadId: "42000000-0000-0000-0000-000000000001",
+    messageId: "43000000-0000-0000-0000-000000000001",
+    candidateId: "44000000-0000-0000-0000-000000000001",
+    phase: "replan_required" as const,
+    mutations: {},
+  };
+  saveRecoveryMetadata(continueCollaborationAsAdvisorFamily(collaboration, TASK_ID));
+  expect(loadRecoveryMetadata()).toEqual({
+    schema_version: 2,
+    journey: "advisor-family",
+    role: "advisor",
+    csrf: "continued-csrf",
+    caseId: CASE_ID,
+    taskId: TASK_ID,
+    briefId: null,
+    cursor: 0,
+    mutations: {},
+  });
 });
 
 it("classifies a residual-cookie bootstrap guard as session recovery without minting", async () => {
