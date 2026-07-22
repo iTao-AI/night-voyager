@@ -59,6 +59,13 @@ adapter. Route, cost, ranking, route-to-Evidence, and advisor-eligibility produc
 rows are filtered to the selected non-empty country subset; fixture Case values cannot
 overwrite the requested revision.
 
+After an advisor confirms a fact, creation of the first deterministic task may move the
+same Case from `intake` to `planning` atomically under migration `0009`. The worker does
+not perform that transition and no execution exists before claim. On claim, it loads
+the resulting revision N+1 snapshot, including the confirmed family fact, and copies
+the same five-field Skill pin from `AgentTask` to `AgentExecution`. A different or stale
+revision, source pack, policy, or pin fails closed before adapter start.
+
 The worker polls once per second when idle. A lease lasts 60 seconds and is
 renewed every 15 seconds. An expired lease can be reclaimed; stale generation
 output is discarded. Allowlisted transient failures retry up to three total
