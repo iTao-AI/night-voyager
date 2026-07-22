@@ -37,6 +37,26 @@ The three application tables are migrator-owned and forced-RLS protected.
 Runtime roles have no direct task write authority. Narrow functions perform
 assigned-advisor creation/cancellation and worker lease transitions.
 
+## Explicit planning start
+
+Migration `0009` makes creation of the first deterministic planning task the assigned
+advisor's explicit planning-start authority. When the current exact Case revision is in
+`intake`, a valid `generate_planning_run_v1` request may atomically write the
+`intake -> planning` transition, pinned task, payload-free dispatch identity, first
+event, and idempotency result. The first deterministic planning task therefore cannot
+exist without the transition, and the transition cannot commit without the complete
+task authority set.
+
+Same-key transactions serialize on an advisory lock derived from organization, actor,
+operation, and key before ledger lookup. Idempotency replay therefore remains before
+new-write validation and never repeats the transition: identical overlapping requests
+return the original task, while a changed request returns `NV008`. Different-key first
+requests still serialize on the Case row and only one effective task may be created.
+The API role cannot execute the legacy standalone `transition_case` function at migration
+head. Confirmation alone still creates no task and does not enter `planning`; the mixed
+operation from `intake` remains rejected. Planning never starts automatically, and
+existing creation from `planning` keeps its prior behavior.
+
 ## Versioned Skill pin
 
 Every planning task created after migration `0008` stores exactly:

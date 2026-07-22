@@ -1,6 +1,16 @@
 # Explicit Planning-Start Authority Implementation Plan
 
-**Implementation status:** Approved plan. Implementation has not started.
+**Implementation status:** Implemented locally for authority review.
+
+**Authority-review status:** Targeted P1 closure implemented locally; awaiting targeted
+re-review.
+
+Tasks 1–6 have executable local evidence on the isolated implementation branch.
+The initial authority review identified legacy transition-grant and overlapping same-key
+race findings; both now have targeted RED -> GREEN PostgreSQL regressions. Independent
+targeted re-review remains the closeout gate. PR 2 and PR 3 remain approved but not
+implemented; no push, pull request, merge, release, or deployment is authorized by this
+status.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation
@@ -13,12 +23,14 @@ changing the existing task HTTP request/response contract or weakening Skill,
 idempotency, tenant, revision, source-pack, and worker boundaries.
 
 **Architecture:** Migration `0009_explicit_planning_start_authority.py` replaces only
-the `app.create_agent_task(...)` function. It preserves the exact `0008` signature and
-grant, locks the Case row, accepts `intake` only for
+the `app.create_agent_task(...)` function. It preserves the exact `0008` task signature
+and grant, serializes same-key replay before ledger lookup, locks the Case row, accepts `intake` only for
 `generate_planning_run_v1`, and writes the Case transition, pinned `AgentTask`,
 dispatch, first event, and idempotency result in one PostgreSQL transaction. The
 existing FastAPI application service, repository call, worker, SSE, planning adapter,
-and browser contracts remain consumers of the same public surface.
+and browser contracts remain consumers of the same public surface. At `0009` head the
+API no longer executes the legacy standalone `transition_case(...)`; downgrade restores
+the `0008` grant and re-upgrade removes it again.
 
 **Tech Stack:** Python 3.12, PostgreSQL 18.4, Alembic, SQLAlchemy async, asyncpg,
 FastAPI, Pydantic, pytest, uv, Docker Compose, and the existing versioned-Skill and
@@ -46,11 +58,12 @@ durable AgentTask implementation.
   )
   ```
 
-- Preserve the existing API grant only to `night_voyager_api`; do not grant direct
-  runtime DML or broaden `PUBLIC`, worker, or migrator authority.
-- Keep idempotency replay before new-write validation. A same-key replay returns the
-  original task and never repeats the Case transition. A changed request under the
-  same key remains `NV008`.
+- Preserve the task function API grant only to `night_voyager_api`; do not grant direct
+  runtime DML or broaden `PUBLIC`, worker, or migrator authority. Revoke the legacy
+  standalone Case-transition API grant at `0009` head.
+- Serialize by organization, actor, operation, and key before reading idempotency.
+  Replay remains before new-write validation: an identical overlapping request returns
+  the original task and a changed request remains `NV008`.
 - For new writes, acquire `FOR UPDATE` on the target Case. Accept:
   - `planning` for both existing operations under their existing evidence rules;
   - `intake` only for `generate_planning_run_v1`.
@@ -124,7 +137,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
 - Successful first task creation leaves one `planning` Case, one pinned task, one
   dispatch row, one initial event, and one idempotency record.
 
-- [ ] **Step 1: Add architecture RED assertions**
+- [x] **Step 1: Add architecture RED assertions**
 
   Assert that migration head is `0009`, only `0009` may replace the task function,
   the exact signature remains present, `FOR UPDATE` is required, the deterministic
@@ -141,7 +154,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
       assert "generate_governed_mixed_planning_run_v1" in migration
   ```
 
-- [ ] **Step 2: Add real PostgreSQL RED tests**
+- [x] **Step 2: Add real PostgreSQL RED tests**
 
   Build an `intake` Case with exact revision/source/assignment/Skill seed. Call the
   existing SQL function as the API role and assert the desired atomic result. Add a
@@ -159,12 +172,12 @@ No implementation lane may modify `0008_versioned_skills.py`.
   assert await task_authority_counts(api_connection, task_id) == (1, 1, 1, 1)
   ```
 
-- [ ] **Step 3: Add HTTP RED coverage**
+- [x] **Step 3: Add HTTP RED coverage**
 
   Use the existing opaque advisor session, CSRF, Origin, and idempotency headers.
   Prove response shape does not gain a transition flag or any new field.
 
-- [ ] **Step 4: Run RED**
+- [x] **Step 4: Run RED**
 
   ```bash
   uv run pytest -q tests/architecture/test_fact_to_plan_contract.py
@@ -174,7 +187,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
   Expected: architecture collection fails because `0009` is absent, and the
   PostgreSQL/HTTP cases fail with the existing stale-input conflict.
 
-- [ ] **Step 5: Commit tests only after the RED evidence is recorded**
+- [x] **Step 5: Commit tests only after the RED evidence is recorded**
 
   ```bash
   git add tests/architecture/test_fact_to_plan_contract.py \
@@ -244,14 +257,14 @@ No implementation lane may modify `0008_versioned_skills.py`.
   Use the actual Case column set from the migration schema. Do not invent a
   `row_version` change if the table does not own that field.
 
-- [ ] **Step 1: Implement upgrade and downgrade**
+- [x] **Step 1: Implement upgrade and downgrade**
 
   `upgrade()` drops the exact `0008` signature, creates the new function, revokes
   `PUBLIC`, and grants only `night_voyager_api`. `downgrade()` drops `0009`, restores
   the exact copied `0008` definition, applies the same revoke/grant boundary, and
   leaves all rows unchanged.
 
-- [ ] **Step 2: Run focused GREEN**
+- [x] **Step 2: Run focused GREEN**
 
   ```bash
   uv run pytest -q tests/architecture/test_fact_to_plan_contract.py
@@ -261,7 +274,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
   Expected: deterministic `intake` creation and existing `planning` paths pass;
   governed mixed from `intake` still fails.
 
-- [ ] **Step 3: Run static checks and commit**
+- [x] **Step 3: Run static checks and commit**
 
   ```bash
   uv run ruff check migrations/versions/0009_explicit_planning_start_authority.py \
@@ -296,6 +309,8 @@ No implementation lane may modify `0008_versioned_skills.py`.
 | assigned advisor, deterministic, current `intake` | success | `planning` | exactly one complete set |
 | same request/key replay | same task, `replayed=true` | `planning` | unchanged |
 | same key, changed request | `NV008` / `idempotency_conflict` | unchanged | none |
+| overlapping same request/key | waits, then same task with `replayed=true` | `planning` | one set |
+| overlapping changed request/key | waits, then `NV008` | `planning` | one set |
 | two first requests, different keys | one success, one effective conflict | `planning` | one set |
 | parent/student/unassigned/cross-tenant | non-enumerating denial | `intake` | none |
 | stale revision/source/manifest/pin | bounded conflict | `intake` | none |
@@ -303,33 +318,33 @@ No implementation lane may modify `0008_versioned_skills.py`.
 | deterministic from unsupported state | stale conflict | unchanged | none |
 | injected write failure | exception | `intake` | zero residue |
 
-- [ ] **Step 1: Add authority-negative RED cases**
+- [x] **Step 1: Add authority-negative RED cases**
 
   Exercise runtime-equivalent roles, not database owner shortcuts. Count task,
   dispatch, event, idempotency, execution, and state rows after every failure.
 
-- [ ] **Step 2: Add two-connection concurrency RED**
+- [x] **Step 2: Add two-connection concurrency RED**
 
   Hold the Case lock in connection A, start connection B with a different task/key,
   release A, and assert one success plus one existing bounded effective-task
   conflict. Prove one task/pin/dispatch/event/idempotency set and no execution before
   worker claim.
 
-- [ ] **Step 3: Add write-boundary rollback RED**
+- [x] **Step 3: Add write-boundary rollback RED**
 
   Use transaction-local failing triggers or the repository's established injection
   pattern at each write boundary: Case update, task insert, dispatch insert, event
   append, idempotency insert. Each case must roll back the earlier Case transition.
   Drop every injected object inside `finally` / fixture teardown.
 
-- [ ] **Step 4: Prove worker consumes revision N+1**
+- [x] **Step 4: Prove worker consumes revision N+1**
 
   Confirm a `family.budget` fact, create the task from the resulting `intake`
   revision, claim it as the worker, and inspect the loaded
   `PersistedSyntheticSnapshotV1`. Assert the exact Case ID/revision and confirmed
   family budget, plus identical five-field task/execution Skill pins.
 
-- [ ] **Step 5: Run GREEN**
+- [x] **Step 5: Run GREEN**
 
   ```bash
   make db-check
@@ -337,7 +352,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
     tests/unit/tasks tests/unit/test_api.py tests/architecture/test_fact_to_plan_contract.py
   ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add tests/integration/tasks/test_planning_start_authority.py \
@@ -378,13 +393,13 @@ No implementation lane may modify `0008_versioned_skills.py`.
   it must call a real checked-in script and be included in `make db-check` or
   `make check`, not exist as an unused vanity target.
 
-- [ ] **Step 1: Write RED gate tests**
+- [x] **Step 1: Write RED gate tests**
 
   Prove `make db-check` contains the exact new migration node and that the release
   verifier accepts exactly one Alembic head, `0009`. Mutation tests must fail if the
   focused downgrade/parity node is removed from the required command list.
 
-- [ ] **Step 2: Implement the isolated migration lane**
+- [x] **Step 2: Implement the isolated migration lane**
 
   Fresh database sequence:
 
@@ -399,7 +414,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
   re-run focused authority assertions
   ```
 
-- [ ] **Step 3: Run gates**
+- [x] **Step 3: Run gates**
 
   ```bash
   make db-check
@@ -409,7 +424,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
   uv run python scripts/verify_release.py --tree-mode development
   ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add scripts/run_db_tests.sh Makefile scripts/verify_release.py \
@@ -451,19 +466,19 @@ No implementation lane may modify `0008_versioned_skills.py`.
 - Status says PR 1 implemented only after executable evidence exists; PR 2 and PR 3
   remain approved but not implemented.
 
-- [ ] **Step 1: Add documentation RED assertions**
+- [x] **Step 1: Add documentation RED assertions**
 
   Extend governance tests for ADR discoverability, migration-head truth, exact
   implementation status, and forbidden claims such as automatic planning or a new
   endpoint.
 
-- [ ] **Step 2: Run targeted documentation audit**
+- [x] **Step 2: Run targeted documentation audit**
 
   Invoke GStack `document-release` against the affected contract. Use
   `document-generate` only if the audit finds a concrete missing document; do not
   generate empty Diataxis quadrants.
 
-- [ ] **Step 3: Update docs and run GREEN**
+- [x] **Step 3: Update docs and run GREEN**
 
   ```bash
   uv run pytest -q tests/architecture/test_documentation_governance.py \
@@ -472,7 +487,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
   git diff --check
   ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add docs/decisions/0010-explicit-planning-start-authority.md \
@@ -494,7 +509,7 @@ No implementation lane may modify `0008_versioned_skills.py`.
 **Files:** None expected. If a gate reveals a defect, return to the responsible Task,
 write a RED regression, fix it, and create a separate coherent follow-up commit.
 
-- [ ] **Step 1: Preflight**
+- [x] **Step 1: Preflight**
 
   ```bash
   git status --short
@@ -505,7 +520,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   Record host and Docker VM filesystem evidence. Stop at the documented threshold;
   do not override or clean unrelated Docker resources.
 
-- [ ] **Step 2: Focused and static gates**
+- [x] **Step 2: Focused and static gates**
 
   ```bash
   uv run pytest -q tests/architecture/test_fact_to_plan_contract.py \
@@ -515,7 +530,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   make db-check
   ```
 
-- [ ] **Step 3: Full repository gates**
+- [x] **Step 3: Full repository gates**
 
   ```bash
   make check
@@ -529,7 +544,7 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   repository's task-owned teardown; retain the approved data volume and unrelated
   resources.
 
-- [ ] **Step 4: Final diff and hygiene review**
+- [x] **Step 4: Final diff and hygiene review**
 
   ```bash
   BASE=$(git merge-base HEAD origin/main)
@@ -542,26 +557,40 @@ write a RED regression, fix it, and create a separate coherent follow-up commit.
   Review every changed file against this plan. Confirm no frontend, dependency,
   lockfile, version, release, DRA/MKE, live-provider, or unrelated migration diff.
 
-- [ ] **Step 5: Handoff**
+- [x] **Step 5: Handoff**
 
   Keep the verified local branch/worktree clean for independent authority review.
   Report exact base/HEAD, ordered commits, RED -> GREEN evidence, migration and grant
   identity, full gate results, documentation impact, Docker inventory, and remaining
   risk. Do not push or create a PR without separate authorization.
 
+### Authority-review targeted closure
+
+- [x] Reproduced and removed API/PUBLIC/worker access to the legacy standalone Case
+  transition at `0009` head; `0009 -> 0008 -> 0009` restores and re-revokes the legacy
+  API grant.
+- [x] Reproduced overlapping same-key `NV009` drift and added transaction-scoped
+  advisory serialization before ledger lookup; identical requests replay and changed
+  requests return `NV008` after the first commit.
+- [x] Preserved different-key concurrency, rollback, RLS, task grant, worker, HTTP, and
+  public-contract boundaries.
+- [ ] Targeted authority re-review of the follow-up HEAD.
+
 ## Acceptance Checklist
 
-- [ ] Existing task HTTP request and response shapes are unchanged.
-- [ ] Deterministic first task creation from current `intake` is atomic.
-- [ ] Confirmation alone does not create a task or enter `planning`.
-- [ ] Mixed planning from `intake` remains rejected.
-- [ ] Replay, conflict, authorization, concurrency, and rollback are proven against
+- [x] Existing task HTTP request and response shapes are unchanged.
+- [x] Deterministic first task creation from current `intake` is atomic.
+- [x] Confirmation alone does not create a task or enter `planning`.
+- [x] Mixed planning from `intake` remains rejected.
+- [x] Replay, conflict, authorization, concurrency, and rollback are proven against
   real PostgreSQL roles.
-- [ ] Worker input uses the exact new Case revision and confirmed fact.
-- [ ] Task and execution retain the complete five-field Skill pin.
-- [ ] `0009 -> 0008 -> 0009` restores function/grant parity without rewriting data.
-- [ ] Full local gates, teardown, hygiene, and documentation audit are green.
-- [ ] PR 2 and PR 3 remain unimplemented until this PR is merged and hosted-green.
+- [x] Worker input uses the exact new Case revision and confirmed fact.
+- [x] Task and execution retain the complete five-field Skill pin.
+- [x] `0009 -> 0008 -> 0009` restores function/grant parity without rewriting data.
+- [x] No runtime role can execute the legacy standalone Case transition at `0009` head.
+- [x] Overlapping same-key requests preserve replay/`NV008` semantics and one authority set.
+- [x] Full local gates, teardown, hygiene, and documentation audit are green.
+- [x] PR 2 and PR 3 remain unimplemented until this PR is merged and hosted-green.
 
 ## Not in Scope
 

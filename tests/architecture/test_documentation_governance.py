@@ -72,6 +72,12 @@ PLAN_STATUS_BINDINGS = (
         "2026-07-16-collaboration-walkthrough-and-inspector.md",
         "**Implementation status:** Complete and released in v0.1.2.",
     ),
+    (
+        "Governed Fact-to-Plan Closure and bilingual presentation",
+        "PR 1 implemented locally; PR 2 and PR 3 approved but not implemented",
+        "2026-07-22-explicit-planning-start-authority.md",
+        "**Implementation status:** Implemented locally for authority review.",
+    ),
 )
 
 
@@ -374,6 +380,100 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
     assert "no fixed lane count" in spec
     assert "ADR 0006 already records M5 as implemented" in spec
     assert "ADR 0006 already records M5 as implemented" in plan
+
+
+def test_explicit_planning_start_documents_match_0009_authority() -> None:
+    adr = (
+        ROOT / "docs/decisions/0010-explicit-planning-start-authority.md"
+    ).read_text(encoding="utf-8")
+    task_reference = (
+        ROOT / "docs/reference/agent-tasks-and-events.md"
+    ).read_text(encoding="utf-8")
+    http_reference = (ROOT / "docs/reference/http-api-v1.md").read_text(
+        encoding="utf-8"
+    )
+    database_roles = (ROOT / "docs/operations/database-roles.md").read_text(
+        encoding="utf-8"
+    )
+    worker = (ROOT / "docs/operations/worker-and-sse.md").read_text(
+        encoding="utf-8"
+    )
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    normalized_task_reference = " ".join(task_reference.split())
+    normalized_database_roles = " ".join(database_roles.split())
+    normalized_worker = " ".join(worker.split())
+
+    for token in (
+        "Status: Accepted",
+        "migration `0009`",
+        "task creation",
+        "`intake -> planning`",
+        "confirmation",
+        "no separate planning-start endpoint",
+    ):
+        assert token in adr
+    assert "decisions/0010-explicit-planning-start-authority.md" in docs_index
+    assert "first deterministic planning task" in normalized_task_reference
+    assert "confirmation alone" in normalized_task_reference.lower()
+    assert (
+        "mixed operation from `intake` remains rejected" in normalized_task_reference
+    )
+    assert "request and response schemas are unchanged" in http_reference
+    assert "No planning-start endpoint" in http_reference
+    assert "Migration `0009`" in normalized_database_roles
+    assert "night_voyager_api" in normalized_database_roles
+    assert (
+        "night_voyager_worker` and `PUBLIC` cannot execute it"
+        in normalized_database_roles
+    )
+    assert "`0009 -> 0008 -> 0009`" in normalized_database_roles
+    assert "revision N+1" in normalized_worker
+    assert "same five-field Skill pin" in normalized_worker
+
+
+def test_fact_to_plan_status_separates_pr1_from_unimplemented_pr2_and_pr3() -> None:
+    spec = (
+        ROOT
+        / "docs/superpowers/specs/2026-07-22-governed-fact-to-plan-closure-design.md"
+    ).read_text(encoding="utf-8")
+    plan = (
+        ROOT
+        / "docs/superpowers/plans/2026-07-22-explicit-planning-start-authority.md"
+    ).read_text(encoding="utf-8")
+    index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    normalized_spec = " ".join(spec.split())
+    normalized_plan = " ".join(plan.split())
+    normalized_docs_index = " ".join(docs_index.split())
+
+    assert "PR 1 is implemented locally for authority review" in normalized_spec
+    assert "PR 2 and PR 3 remain approved but not implemented" in normalized_spec
+    assert (
+        "**Implementation status:** Implemented locally for authority review."
+        in normalized_plan
+    )
+    assert "PR 2 and PR 3 remain approved but not implemented" in normalized_plan
+    assert (
+        "| Governed Fact-to-Plan Closure and bilingual presentation | "
+        "PR 1 implemented locally; PR 2 and PR 3 approved but not implemented |"
+    ) in index
+    assert "PR 1 is implemented locally for authority review" in normalized_docs_index
+    assert (
+        "PR 2 and PR 3 remain approved but not implemented" in normalized_docs_index
+    )
+
+    adr = (ROOT / "docs/decisions/0010-explicit-planning-start-authority.md").read_text(
+        encoding="utf-8"
+    )
+    task_reference = (
+        ROOT / "docs/reference/agent-tasks-and-events.md"
+    ).read_text(encoding="utf-8")
+    http_reference = (ROOT / "docs/reference/http-api-v1.md").read_text(
+        encoding="utf-8"
+    )
+    combined = "\n".join((adr, task_reference, http_reference))
+    assert "planning starts automatically after confirmation" not in combined
+    assert "POST /api/v1/cases/{case_id}/planning-start" not in combined
 
 
 def test_current_collaboration_documents_do_not_revert_to_unreleased_or_deferred() -> None:

@@ -36,6 +36,8 @@ from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
 pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
+STUDENT = UUID("20000000-0000-0000-0000-000000000002")
+PARENT = UUID("20000000-0000-0000-0000-000000000003")
 PACK = UUID("50000000-0000-0000-0000-000000000001")
 PLANNING_FIXTURE = validate_planning_fixture().planning_input
 
@@ -234,6 +236,262 @@ async def expire_lease(task_id: UUID) -> None:
             )
     finally:
         await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_worker_claim_loads_confirmed_revision_two_budget_and_exact_task_pin() -> None:
+    case_id = UUID("a4000000-0000-0000-0000-000000000407")
+    thread_id = UUID("a9000000-0000-0000-0000-000000000407")
+    message_id = UUID("a9100000-0000-0000-0000-000000000407")
+    candidate_id = UUID("a9200000-0000-0000-0000-000000000407")
+    verification_id = UUID("a9300000-0000-0000-0000-000000000407")
+    fact_id = UUID("a9400000-0000-0000-0000-000000000407")
+    task_id = UUID("a8000000-0000-0000-0000-000000000407")
+    budget = {
+        "schema_version": 1,
+        "currency": "CNY",
+        "period": "program_total",
+        "preferred_minor": 31_000_000,
+        "hard_ceiling_minor": 37_000_000,
+        "elasticity_bps": 750,
+        "refused": False,
+    }
+    body = "Synthetic family budget confirmation for the local pilot."
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker_engine = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    worker_sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+    factory = postgres_worker_repository_factory(worker_sessions)
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.publish_case_revision("
+                    ":org,:case,NULL,1,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": ORG,
+                    "case": case_id,
+                    "student": json.dumps(
+                        PLANNING_FIXTURE.case.student.model_dump(mode="json")
+                    ),
+                    "family": json.dumps(
+                        PLANNING_FIXTURE.case.family.model_dump(mode="json")
+                    ),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_case_participants("
+                    ":org,:case,:advisor,:student,:parent)"
+                ),
+                {
+                    "org": ORG,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                    "student": STUDENT,
+                    "parent": PARENT,
+                },
+            )
+
+        async with api.begin() as connection:
+            for name, value in (
+                ("night_voyager.organization_id", str(ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.create_collaboration_thread("
+                    ":org,:actor,'advisor',:case,:thread,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": ORG,
+                    "actor": ADVISOR,
+                    "case": case_id,
+                    "thread": thread_id,
+                    "request_hash": hashlib.sha256(b"revision-two-thread").hexdigest(),
+                    "key_hash": hashlib.sha256(b"revision-two-thread-key").hexdigest(),
+                },
+            )
+            for name, value in (
+                ("night_voyager.actor_id", str(PARENT)),
+                ("night_voyager.role", "parent"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.append_collaboration_message("
+                    ":org,:actor,'parent',:thread,:message,:body,:content_hash,"
+                    ":request_hash,:key_hash)"
+                ),
+                {
+                    "org": ORG,
+                    "actor": PARENT,
+                    "thread": thread_id,
+                    "message": message_id,
+                    "body": body,
+                    "content_hash": hashlib.sha256(body.encode()).hexdigest(),
+                    "request_hash": hashlib.sha256(b"revision-two-message").hexdigest(),
+                    "key_hash": hashlib.sha256(b"revision-two-message-key").hexdigest(),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.propose_memory_candidate("
+                    ":org,:actor,'parent',:message,:candidate,1,'family.budget',"
+                    "CAST(:value AS jsonb),:value_hash,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": ORG,
+                    "actor": PARENT,
+                    "message": message_id,
+                    "candidate": candidate_id,
+                    "value": json.dumps(budget),
+                    "value_hash": canonical_sha256(budget),
+                    "request_hash": hashlib.sha256(b"revision-two-candidate").hexdigest(),
+                    "key_hash": hashlib.sha256(b"revision-two-candidate-key").hexdigest(),
+                },
+            )
+            for name, value in (
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            confirmed = (
+                await connection.execute(
+                    text(
+                        "SELECT * FROM app.verify_memory_candidate("
+                        ":org,:actor,:candidate,1,'confirm',:reason,:verification,"
+                        ":fact,:request_hash,:key_hash)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "candidate": candidate_id,
+                        "reason": "Confirmed synthetic family budget for planning.",
+                        "verification": verification_id,
+                        "fact": fact_id,
+                        "request_hash": hashlib.sha256(b"revision-two-verify").hexdigest(),
+                        "key_hash": hashlib.sha256(b"revision-two-verify-key").hexdigest(),
+                    },
+                )
+            ).mappings().one()
+            assert confirmed.result_revision == 2
+            created = (
+                await connection.execute(
+                    text(
+                        "SELECT * FROM app.create_agent_task("
+                        ":org,:actor,:case,:task,'generate_planning_run_v1',2,"
+                        ":pack,1,'m3a-policy-v1',CAST(:manifest AS jsonb),"
+                        ":request_hash,:key_hash)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "case": case_id,
+                        "task": task_id,
+                        "pack": PACK,
+                        "manifest": skill_manifest(),
+                        "request_hash": hashlib.sha256(b"revision-two-task").hexdigest(),
+                        "key_hash": hashlib.sha256(b"revision-two-task-key").hexdigest(),
+                    },
+                )
+            ).mappings().one()
+            assert created.task_id == task_id
+            assert created.state == "queued"
+
+        worker_id = "worker-revision-two"
+        async with factory() as repository:
+            claim = await repository.claim(worker_id)
+            assert claim is not None
+            assert claim.task_id == task_id
+            task_input = await repository.load(claim)
+        assert task_input.request.case_id == case_id
+        assert task_input.request.case_revision == 2
+        assert task_input.skill_pin == skill_pin()
+        snapshot = await PersistedSyntheticSnapshotRepository(worker_sessions).load(
+            task_input.request
+        )
+        assert snapshot.case.case_id == case_id
+        assert snapshot.case.revision == 2
+        assert snapshot.case.family.budget.model_dump(mode="json") == budget
+        async with factory() as repository:
+            assert (
+                await repository.fail(
+                    claim,
+                    worker_id,
+                    "test_complete",
+                    retryable=False,
+                    fallback_used=False,
+                )
+                == "failed"
+            )
+
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(ORG)},
+            )
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT c.state AS case_state,c.current_revision,t.state AS task_state,"
+                        "t.case_revision,t.skill_definition_id,t.skill_version_id,"
+                        "t.skill_activation_event_id,t.skill_activation_sequence,"
+                        "t.runtime_binding_sha256,e.skill_definition_id AS e_definition,"
+                        "e.skill_version_id AS e_version,"
+                        "e.skill_activation_event_id AS e_activation,"
+                        "e.skill_activation_sequence AS e_sequence,"
+                        "e.runtime_binding_sha256 AS e_binding,e.status AS execution_status "
+                        "FROM app.student_cases c JOIN app.agent_tasks t "
+                        "ON t.organization_id=c.organization_id AND t.case_id=c.id "
+                        "JOIN app.agent_executions e ON e.organization_id=t.organization_id "
+                        "AND e.task_id=t.id WHERE c.organization_id=:org AND c.id=:case "
+                        "AND t.id=:task"
+                    ),
+                    {"org": ORG, "case": case_id, "task": task_id},
+                )
+            ).mappings().one()
+        expected_pin = tuple(skill_pin().model_dump().values())
+        assert row.case_state == "planning"
+        assert row.current_revision == row.case_revision == 2
+        assert row.task_state == row.execution_status == "failed"
+        assert tuple(
+            row[name]
+            for name in (
+                "skill_definition_id",
+                "skill_version_id",
+                "skill_activation_event_id",
+                "skill_activation_sequence",
+                "runtime_binding_sha256",
+            )
+        ) == expected_pin
+        assert (
+            row.e_definition,
+            row.e_version,
+            row.e_activation,
+            row.e_sequence,
+            row.e_binding,
+        ) == expected_pin
+    finally:
+        await migrator.dispose()
+        await api.dispose()
+        await worker_engine.dispose()
 
 
 @pytest.mark.asyncio

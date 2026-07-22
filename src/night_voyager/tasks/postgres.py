@@ -212,7 +212,9 @@ class PostgresTaskRepository:
     @staticmethod
     def _raise_mapped(error: DBAPIError) -> NoReturn:
         sqlstate = getattr(error.orig, "sqlstate", None)
-        if sqlstate in {"NV003", "NV006", "NV008", "NV009", "NV011", "23505"}:
+        if sqlstate == "NV008":
+            raise TaskConflictError("idempotency_conflict") from error
+        if sqlstate in {"NV003", "NV006", "NV009", "NV011", "23505"}:
             raise TaskConflictError(str(sqlstate)) from error
         if sqlstate == "NV015":
             raise TaskConflictError("skill_version_unavailable") from error

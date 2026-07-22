@@ -5,6 +5,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_PATH = ROOT / "migrations/versions/0004_agent_tasks_executions_events.py"
+PLANNING_START_MIGRATION_PATH = (
+    ROOT / "migrations/versions/0009_explicit_planning_start_authority.py"
+)
 TABLES = ("agent_tasks", "agent_executions", "agent_task_events")
 API_FUNCTIONS = ("create_agent_task", "cancel_agent_task")
 WORKER_FUNCTIONS = (
@@ -23,6 +26,31 @@ WORKER_FUNCTION_SIGNATURES = {
 def migration() -> str:
     assert MIGRATION_PATH.is_file()
     return MIGRATION_PATH.read_text(encoding="utf-8")
+
+
+def test_0009_keeps_task_creation_as_the_single_narrow_runtime_authority() -> None:
+    source = PLANNING_START_MIGRATION_PATH.read_text(encoding="utf-8")
+    signature = (
+        "app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,"
+        "text,jsonb,text,text)"
+    )
+
+    assert 'op.execute(f"DROP FUNCTION {CREATE_TASK_SIGNATURE}")' in source
+    assert "_replace(CREATE_TASK_SQL)" in source
+    assert "_replace(_0008_CREATE_TASK_SQL)" in source
+    assert source.count("CREATE FUNCTION app.create_agent_task(") == 2
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC" in source
+    assert f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_api" in source
+    assert f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_worker" not in source
+    transition_signature = "app.transition_case(uuid,uuid,text,text)"
+    assert f"REVOKE ALL ON FUNCTION {transition_signature} FROM PUBLIC" in source
+    assert (
+        f"REVOKE ALL ON FUNCTION {transition_signature} FROM night_voyager_api"
+        in source
+    )
+    assert f"GRANT EXECUTE ON FUNCTION {transition_signature} TO night_voyager_api" in source
+    assert "CREATE TABLE" not in source
+    assert "ALTER TABLE" not in source
 
 
 def test_m4a_migration_has_exact_graph_and_storage() -> None:

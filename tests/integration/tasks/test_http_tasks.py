@@ -25,6 +25,7 @@ ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
 CASE = UUID("40000000-0000-0000-0000-000000000220")
 UNASSIGNED_CASE = UUID("40000000-0000-0000-0000-000000000221")
+INTAKE_CASE = UUID("40000000-0000-0000-0000-000000000222")
 PACK = UUID("50000000-0000-0000-0000-000000000001")
 
 
@@ -51,24 +52,32 @@ async def seed_task_cases() -> None:
                 text("SELECT set_config('night_voyager.organization_id',:org,true)"),
                 {"org": str(ORG)},
             )
-            for case_id in (CASE, UNASSIGNED_CASE):
+            for case_id in (CASE, UNASSIGNED_CASE, INTAKE_CASE):
                 await connection.execute(
                     text(
                         "SELECT app.publish_case_revision(:org,:case,NULL,1,'{}'::jsonb,'{}'::jsonb)"
                     ),
                     {"org": ORG, "case": case_id},
                 )
-                await connection.execute(
-                    text("SELECT app.transition_case(:org,:case,'intake','planning')"),
-                    {"org": ORG, "case": case_id},
-                )
+                if case_id != INTAKE_CASE:
+                    await connection.execute(
+                        text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+                        {"org": ORG, "case": case_id},
+                    )
             await connection.execute(
                 text(
                     "INSERT INTO app.student_case_participants(organization_id,case_id,actor_id,role) "
-                    "VALUES(:org,:case,:advisor,'advisor'),(:org,:case,:parent,'parent') "
+                    "VALUES(:org,:case,:advisor,'advisor'),(:org,:case,:parent,'parent'),"
+                    "(:org,:intake_case,:advisor,'advisor'),(:org,:intake_case,:parent,'parent') "
                     "ON CONFLICT DO NOTHING"
                 ),
-                {"org": ORG, "case": CASE, "advisor": ADVISOR, "parent": PARENT},
+                {
+                    "org": ORG,
+                    "case": CASE,
+                    "intake_case": INTAKE_CASE,
+                    "advisor": ADVISOR,
+                    "parent": PARENT,
+                },
             )
     finally:
         await engine.dispose()
@@ -166,6 +175,35 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
             )
             assert stale.status_code == 409
 
+            intake_created = await client.post(
+                f"/api/v1/cases/{INTAKE_CASE}/agent-tasks",
+                headers=mutation_headers(advisor, "intake-create-task"),
+                json=create_payload(),
+            )
+            assert intake_created.status_code == 202, intake_created.text
+            assert set(intake_created.json()) == {
+                "schema_version",
+                "task_id",
+                "row_version",
+                "status",
+                "public_code",
+                "attempt_count",
+                "planning_run_id",
+                "created_at",
+                "updated_at",
+                "skill_pin",
+                "leaf_binding",
+                "replayed",
+            }
+            assert "planning_started" not in intake_created.json()
+            intake_cancelled = await client.post(
+                f"/api/v1/tasks/{intake_created.json()['task_id']}/cancel",
+                headers=mutation_headers(advisor, "intake-cancel-task"),
+                json={"schema_version": 1, "expected_row_version": 1},
+            )
+            assert intake_cancelled.status_code == 200, intake_cancelled.text
+            assert intake_cancelled.json()["status"] == "cancelled"
+
             created = await client.post(
                 f"/api/v1/cases/{CASE}/agent-tasks",
                 headers=mutation_headers(advisor, "create-task"),
@@ -219,6 +257,15 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
                 json=create_payload(source_pack_version=2),
             )
             assert mismatch.status_code == 409
+            assert mismatch.headers["content-type"].startswith(
+                "application/problem+json"
+            )
+            assert mismatch.json()["code"] == "idempotency_conflict"
+            assert (
+                mismatch.json()["type"]
+                == "https://night-voyager.invalid/problems/idempotency_conflict"
+            )
+            assert "nv008" not in mismatch.text.lower()
             duplicate = await client.post(
                 f"/api/v1/cases/{CASE}/agent-tasks",
                 headers=mutation_headers(advisor, "duplicate-effective"),

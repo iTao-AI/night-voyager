@@ -2,13 +2,19 @@
 
 ## Status
 
-Approved design. Implementation has not started.
+Approved design. PR 1 is implemented locally for authority review. PR 2 and PR 3
+remain approved but not implemented.
 
 This document defines the next bounded Night Voyager product increment after the
 `v0.1.2` Governed Collaboration Core release. Approval of this design authorizes
 the design record and subsequent implementation planning. It does not by itself
 authorize implementation, push, pull request creation, merge, tag, release,
 deployment, live-provider execution, or cleanup of unrelated resources.
+
+The PR 1 implementation is unreleased post-`v0.1.2` work. It adds migration `0009`
+and the explicit planning-start authority without changing the public HTTP schema.
+Independent review, hosted CI, push, pull request creation, and merge remain separate
+gates; this status does not authorize PR 2 or PR 3.
 
 ## Summary
 
@@ -439,23 +445,28 @@ it changes presentation, not authority, persistence, transport, or task behavior
 Migration `0009_explicit_planning_start_authority.py` changes no table, index, role,
 RLS policy, or public HTTP schema. It replaces the `0008` definition of
 `app.create_agent_task(...)` with a definition that preserves the exact signature and
-grants while adding one state transition.
+task-function grants while adding one state transition. It also removes the legacy
+`transition_case(uuid,uuid,text,text)` API grant at head; downgrade to `0008` restores
+that historical grant and re-upgrade removes it again.
 
 For a new request, the function performs these steps in one transaction:
 
-1. assert trusted advisor context and validate the strict task pins;
-2. resolve and validate the assigned-advisor relationship;
-3. resolve the exact active `study-destination-compare` SkillVersion, activation
+1. assert trusted advisor context;
+2. take the transaction-scoped organization/actor/operation/key advisory lock;
+3. read the idempotency ledger, returning an identical replay or `NV008` mismatch
+   before any new-write validation;
+4. validate strict task pins and resolve the assigned-advisor relationship;
+5. resolve the exact active `study-destination-compare` SkillVersion, activation
    event, complete manifest, and `runtime_binding_sha256`;
-4. lock the target Case and require the exact current revision;
-5. require the source-pack version and operation-specific evidence boundary;
-6. accept `planning` with existing behavior;
-7. accept `intake` only for `generate_planning_run_v1` and mark it for transition;
-8. reject every other state and continue requiring `planning` for
+6. lock the target Case and require the exact current revision;
+7. require the source-pack version and operation-specific evidence boundary;
+8. accept `planning` with existing behavior;
+9. accept `intake` only for `generate_planning_run_v1` and mark it for transition;
+10. reject every other state and continue requiring `planning` for
    `generate_governed_mixed_planning_run_v1`;
-9. enforce existing effective-task uniqueness and idempotency;
-10. when applicable, update the Case from `intake` to `planning`;
-11. insert the exact pinned task, dispatch row, first immutable event, and
+11. enforce existing effective-task uniqueness;
+12. when applicable, update the Case from `intake` to `planning`;
+13. insert the exact pinned task, dispatch row, first immutable event, and
     idempotency row.
 
 Any error after the Case update aborts the transaction, leaving the Case in `intake`
@@ -481,8 +492,9 @@ it is therefore the narrowest coherent authority boundary.
 - Activation and rollback still affect future task creation only.
 - Worker claim, pin validation, adapter routing, result persistence, SSE, review,
   brief, decision, and timeline functions do not gain authority.
-- `0009 -> 0008` restores the exact prior function definition and grants. No
-  historical rows are deleted or rewritten.
+- `0009 -> 0008` restores the exact prior task function definition and legacy API
+  transition grant. Re-upgrade removes that grant again. No historical rows are
+  deleted or rewritten.
 
 ### Error surface
 
@@ -645,8 +657,10 @@ overflow.
 
 - Two different first task requests serialize on the Case and effective task
   identity; exactly one succeeds.
-- A same-key replay returns the original task and pin.
-- A different payload under the same key remains an idempotency conflict.
+- Overlapping same-key transactions serialize before ledger lookup. An identical
+  request returns the original task and pin with `replayed=true` after the first commit.
+- A different payload under the same overlapping key returns `NV008` after the first
+  commit rather than falling through to effective-task conflict.
 - Wrong role, unassigned advisor, cross-tenant Case, stale revision, wrong source,
   invalid Skill, missing activation, malformed pin, and unsupported Case state fail
   without changing Case state.
@@ -684,7 +698,8 @@ Existing contracts remain authoritative:
 - Tenant identity and participant assignment come only from trusted server context.
 - All business tables remain forced-RLS protected.
 - Runtime roles gain no direct table DML.
-- Migration `0009` preserves the existing narrow function grant surface.
+- Migration `0009` narrows the runtime function grant surface by removing the API's
+  legacy standalone Case-transition authority; downgrade restores it only for `0008`.
 - Session storage contains only the approved recovery envelope; it contains no raw
   provider output, source content, password, token, cookie value, or private path.
 - Local storage contains at most the versioned `zh-CN` or `en` presentation
@@ -708,12 +723,14 @@ Pure/application and real PostgreSQL tests must cover:
 - governed mixed creation from `intake` remains rejected;
 - wrong role, unassigned actor, cross-tenant Case, stale revision, source mismatch,
   invalid manifest, missing activation, invalid pin, and unsupported Case state;
-- same-key replay, different-key effective conflict, and concurrent first creation;
+- committed and overlapping same-key replay, overlapping changed-request `NV008`,
+  different-key effective conflict, and concurrent first creation;
 - injected failure after each mutation boundary with zero partial residue;
 - exact five-field task pin and claim-time execution pin;
 - worker materialization consumes revision `N+1` and its confirmed fact rather than
   the checked-in fixture Case;
-- `0009 -> 0008 -> 0009` function/grant parity and compatibility.
+- `0009 -> 0008 -> 0009` task function parity, legacy transition grant restoration,
+  re-revocation, and compatibility.
 
 HTTP tests use the existing endpoint and prove that no new request field or public
 response field is required.

@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -18,8 +18,9 @@ downgrade against a retained demo volume.
 
 M3A grants runtime roles read access but no direct table-write privilege. The
 API alone can execute narrow migrator-owned functions for Case revision CAS,
-Case intake-to-planning transition, source/Evidence persistence and atomic PlanningRun result
-persistence. Those functions use the transaction tenant context. Triggers
+source/Evidence persistence and atomic PlanningRun result persistence. M3A originally
+granted a standalone Case intake-to-planning function, but migration `0009` removes
+that API grant at the current head. Those functions use the transaction tenant context. Triggers
 enforce allowed run transitions, terminal output immutability, exact source
 hashes and same-pack Evidence links. The worker has no M3A mutation function.
 Publishing a current `review_required` result also performs the revision-pinned
@@ -97,6 +98,23 @@ before any task-ready Case seed. An allowed downgrade requires that exact canoni
 seed and no task/execution pin; registered non-seed versions, governance history, or
 active/terminal pins refuse before history is removed. The current fresh data-free
 graph proves `0008 -> 0001 -> 0008`, including all earlier migrations.
+
+Migration `0009` adds no table, role, RLS policy, HTTP contract, or worker function. It
+replaces only the existing task-creation function so a valid first deterministic task
+may atomically own `intake -> planning` together with its complete task, dispatch,
+event, Skill pin, and idempotency writes. The function remains migrator-owned with
+`EXECUTE` granted only to `night_voyager_api`; `night_voyager_worker` and `PUBLIC`
+cannot execute it, and neither runtime role receives direct task DML. Migration `0009`
+also revokes `transition_case(uuid,uuid,text,text)` from the API, so `PUBLIC`, API, and
+worker cannot submit a standalone planning transition at head. Task creation takes a
+same-key transaction advisory lock before replay lookup.
+
+Use `make fact-to-plan-db-check` for the isolated `0009 -> 0008 -> 0009` parity lane.
+It proves the exact `0008` task function definition, owner, signature, ACL, runtime
+privileges, and legacy API transition grant are restored on downgrade without rewriting
+existing Case/task rows. Re-upgrade removes the transition grant again and re-proves the
+`0009` planning-start authority. `make db-check` includes this lane before the shared
+database suite.
 
 Use `make collaboration-check` for the deterministic offline contracts and
 `make collaboration-db-check SUITE=repository|http|authority` for focused disposable
