@@ -86,6 +86,7 @@ docker compose --profile browser-proof run --rm --no-deps \
 printf 'compose-proof: connected browser proof passed\n'
 docker compose down --volumes --remove-orphans
 docker compose up --no-build --wait
+rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
 : > "$FACT_TO_PLAN_PROOF_FILE"
 : > "$FACT_TO_PLAN_WORKER_READY_FILE"
 chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"

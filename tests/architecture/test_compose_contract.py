@@ -1,3 +1,6 @@
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 
@@ -170,25 +173,63 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
     assert "seq 1 120" in script
 
 
-def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content() -> None:
+def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
+    tmp_path: Path,
+) -> None:
     browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
-    prepare = ': > "$FACT_TO_PLAN_PROOF_FILE"\n: > "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    reset_prepare = (
+        'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"\n'
+        ': > "$FACT_TO_PLAN_PROOF_FILE"\n'
+        ': > "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    )
     permission = 'chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"'
     sentinel = 'FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"'
     watcher = 'grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"'
     browser_run = "browser-proof npx playwright test"
 
-    assert prepare in script
+    assert reset_prepare in script
     assert permission in script
     assert sentinel in script
     assert watcher in script
     assert 'test -f "$FACT_TO_PLAN_WORKER_READY_FILE"' not in script
     assert 'test -s "$FACT_TO_PLAN_PROOF_FILE"' in script
-    assert script.index(prepare) < script.index(permission) < script.index(watcher)
+    assert script.index(reset_prepare) < script.index(permission) < script.index(watcher)
     assert script.index(watcher) < script.index(browser_run)
     assert 'chmod 0666 docs/assets' not in script
+
+    proof_target = tmp_path / "proof-target"
+    ready_target = tmp_path / "ready-target"
+    proof_target.write_text("preserve proof target\n", encoding="utf-8")
+    ready_target.write_text("preserve ready target\n", encoding="utf-8")
+    proof_target.chmod(0o640)
+    ready_target.chmod(0o640)
+    proof_file = tmp_path / ".fact-to-plan-proof.json"
+    ready_file = tmp_path / ".fact-to-plan-worker-ready"
+    proof_file.symlink_to(proof_target)
+    ready_file.symlink_to(ready_target)
+    environment = os.environ.copy()
+    environment.update(
+        FACT_TO_PLAN_PROOF_FILE=str(proof_file),
+        FACT_TO_PLAN_WORKER_READY_FILE=str(ready_file),
+    )
+    subprocess.run(
+        ["sh", "-eu", "-c", f"{reset_prepare}\n{permission}"],
+        check=True,
+        env=environment,
+    )
+
+    assert not proof_file.is_symlink()
+    assert not ready_file.is_symlink()
+    assert proof_file.read_bytes() == b""
+    assert ready_file.read_bytes() == b""
+    assert stat.S_IMODE(proof_file.stat().st_mode) == 0o666
+    assert stat.S_IMODE(ready_file.stat().st_mode) == 0o666
+    assert proof_target.read_text(encoding="utf-8") == "preserve proof target\n"
+    assert ready_target.read_text(encoding="utf-8") == "preserve ready target\n"
+    assert stat.S_IMODE(proof_target.stat().st_mode) == 0o640
+    assert stat.S_IMODE(ready_target.stat().st_mode) == 0o640
 
     cleanup = script.split("cleanup() {", 1)[1].split("}", 1)[0]
     assert 'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"' in cleanup
