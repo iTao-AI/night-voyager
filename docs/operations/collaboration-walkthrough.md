@@ -13,7 +13,7 @@ or a claim about real users.
 make demo
 ```
 
-Open `http://127.0.0.1:3000/demo/collaboration` and follow the six visible stages:
+Open `http://127.0.0.1:3000/demo/collaboration` and follow the seven visible stages:
 
 1. Start the parent walkthrough and append the bounded budget message.
 2. Explicitly turn that message into a typed parent proposal.
@@ -21,12 +21,18 @@ Open `http://127.0.0.1:3000/demo/collaboration` and follow the six visible stage
    session and mint the assigned advisor session.
 4. Record the advisor confirmation. A message or proposal alone is never authority.
 5. Reload the confirmed fact and Case revision from PostgreSQL authority.
-6. Stop at `Re-plan required`; return to the primary `/demo` to start planning.
+6. At `Re-plan required`, choose `Continue to governed planning`. The route
+   revalidates the current candidate, confirmed fact, Case revision, advisor ledger,
+   and Skill inspector, then replaces the same-tab envelope and navigates once.
+7. On `/demo`, confirm the continued same Case and revision, then use the explicit
+   task action to start planning.
 
-The secondary route does not create an `AgentTask`, open an `EventSource`, or use
-polling. It has no role selector and no client-only identity change. Same-tab
-recovery uses the shared `schema_version=2` journey envelope; an existing other
-journey must be explicitly revoked before collaboration starts.
+The handoff sends zero task POST requests, creates no `AgentTask`, and opens no
+`EventSource`; the collaboration route does not use polling. It keeps the same
+opaque advisor cookie, CSRF value, and Case; it
+does not bootstrap, mint, revoke, or perform a client-only identity change. A
+successful handoff performs one exact `schema_version=2` storage replacement and
+one navigation. Standalone `/demo/collaboration` remains independently usable.
 
 ## Inspector and authority boundaries
 
@@ -36,6 +42,12 @@ does not create a planning task. The primary `/demo` progresses from `not_create
 to `matched` after its real task is materialized; `legacy_unpinned` remains an
 explicit historical status. The browser performs no client-side relational join and
 has no Skill mutation authority.
+
+Validation uses the existing `no-store` candidate, confirmed-facts, advisor-ledger,
+and Skill-inspector BFF reads in sequence. Candidate, fact, revision, Case, and
+advisor identity must still agree. Any active/review/terminal task identity is
+adopted only from `advisor-ledger`; the collaboration envelope transports no task
+inputs or Skill pin.
 
 Seven explicit BFF route modules expose exactly eight HTTP methods. They proxy only
 the frozen collaboration and inspector endpoints; there is no catch-all, dynamic
@@ -50,6 +62,11 @@ active-task-blocked candidates stop safely. Lost acknowledgement retries reuse t
 exact idempotency fingerprint, while a conflicting payload is rejected. Public
 errors remain closed to the documented seven browser categories.
 
+`handoff_validating` is transient and never persisted. A validation failure leaves
+the original collaboration envelope byte-for-byte intact; retry re-reads authority.
+If navigation is interrupted after replacement, `/demo` recovers the advisor-family
+envelope for the same Case rather than substituting the default fixture.
+
 Run the real browser-to-database proof with:
 
 ```bash
@@ -59,9 +76,12 @@ docker compose ps --all
 ```
 
 The Chromium lane uses the real PostgreSQL seed, FastAPI, BFF, opaque cookies,
-Origin/CSRF checks, and idempotency. It covers 1440, 768, and 390 px, keyboard focus,
+Origin/CSRF checks, idempotency, worker, and SSE. It proves one same-Case chain from
+parent message through receipt and timeline, with the explicit `/demo` task action
+as the only task-creation point. It covers 1440, 768, and 390 px, keyboard focus,
 semantic landmarks, at least 44 px action targets, and horizontal-overflow checks.
-The screenshot above is captured at 1440 px after authoritative fact/revision reload.
+The screenshot above remains immutable v0.1.2 evidence captured before the handoff;
+PR 3 owns refreshed screenshots.
 
 All fixtures are synthetic. Live providers, external message routing, production
 deployment, and release publication remain outside this walkthrough.

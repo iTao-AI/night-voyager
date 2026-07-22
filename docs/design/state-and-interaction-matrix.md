@@ -20,7 +20,8 @@ The secondary collaboration route has its own closed lifecycle:
 | `switching_to_advisor` | stored parent phase coordinated against the server role projection | complete the real revoke/bootstrap sequence or recover explicitly | trust the stored role over server authority |
 | `advisor_reviewing` | advisor-safe candidate projection | confirm once | confirm as parent |
 | `confirmation_submitting` | exact verification fingerprint and key persisted | reconcile candidate, confirmed facts, and advisor ledger; explicitly retry only if still pending | infer success from a mutation response |
-| `replan_required` | confirmed fact and Case revision | return to primary `/demo` | create a task implicitly |
+| `replan_required` | confirmed fact and Case revision | start read-only same-Case handoff | create a task implicitly |
+| `handoff_validating` | transient candidate/fact/revision/ledger/inspector validation | replace the envelope and navigate once, or return to `replan_required` unchanged | persist the transient phase or send a task POST |
 | `recoverable_error` | closed public recovery category | explicit retry or re-auth | expose raw error detail |
 
 The fresh UI defaults to advisor and offers no client-only role selector. Normal
@@ -37,3 +38,6 @@ The envelope is `schema_version=2` with the closed journey union
 `advisor-family|collaboration`; one tab never runs both journeys concurrently. The
 inspector is read-only and server-owned: `/demo` progresses `not_created -> matched`,
 while `/demo/collaboration` stays `not_created` because it creates no planning task.
+After a successful handoff, `/demo` re-reads the continued Case and adopts task
+identity only from its advisor ledger. The destination keeps one active EventSource
+and the existing monotonic cursor/recovery precedence.

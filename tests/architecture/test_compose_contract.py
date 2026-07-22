@@ -1,3 +1,6 @@
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 
@@ -40,14 +43,14 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 2
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 3
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     assert script.count("docker compose --profile browser-proof build") == 1
-    assert script.count("docker compose up --no-build --wait") == 3
+    assert script.count("docker compose up --no-build --wait") == 4
     assert "docker compose up --build --wait" not in script
     assert "run --rm --build" not in script
 
@@ -125,3 +128,110 @@ def test_browser_proof_includes_governed_collaboration_and_screenshot_capture() 
     assert "memory_candidate_expired" in proof
     assert "active_task_blocks_revision" in proof
     assert "UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}" in script
+
+
+def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    verifier = Path("scripts/verify_fact_to_plan_flow.py")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert '"fact-to-plan.spec.ts"' in config
+    assert "FACT_TO_PLAN_PROOF_FILE" in browser
+    assert "Continue to governed planning" in browser
+    assert "events?after=0" in browser
+    assert verifier.is_file()
+    assert "verify_fact_to_plan_flow.py" in script
+    assert "fact-to-plan.spec.ts" in script
+    assert "docker compose pause worker" in script
+    assert "docker compose unpause worker" in script
+    assert "--no-build" in script
+
+
+def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_content() -> None:
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "taskPostsForCase(caseId)).toHaveLength(0)" in browser
+    assert "taskPostsForCase(caseId)).toHaveLength(1)" in browser
+    assert "FACT_TO_PLAN_WORKER_READY_FILE" in browser
+    assert "await firstStream" in browser
+    assert browser.index("await firstStream") < browser.index("writeFile(workerReadyFile")
+    assert "requiredVisible: readonly Locator[]" in browser
+    assert "for (const required of requiredVisible)" in browser
+    for content in (
+        'page.getByRole("heading", { name: "Re-plan required" })',
+        'page.getByText("Fact version 1")',
+        'page.getByText("Case revision 2")',
+        'page.getByRole("heading", { name: "Decision Receipt" })',
+        'page.getByRole("heading", { name: "Timeline Plan" })',
+    ):
+        assert content in browser
+
+    assert "FACT_TO_PLAN_WORKER_READY_FILE=docs/assets/.fact-to-plan-worker-ready" in script
+    assert "sleep 15" not in script
+    assert "seq 1 120" in script
+
+
+def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
+    tmp_path: Path,
+) -> None:
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    reset_prepare = (
+        'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"\n'
+        ': > "$FACT_TO_PLAN_PROOF_FILE"\n'
+        ': > "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    )
+    permission = 'chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    sentinel = 'FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"'
+    watcher = 'grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    browser_run = "browser-proof npx playwright test"
+
+    assert reset_prepare in script
+    assert permission in script
+    assert sentinel in script
+    assert watcher in script
+    assert 'test -f "$FACT_TO_PLAN_WORKER_READY_FILE"' not in script
+    assert 'test -s "$FACT_TO_PLAN_PROOF_FILE"' in script
+    assert script.index(reset_prepare) < script.index(permission) < script.index(watcher)
+    assert script.index(watcher) < script.index(browser_run)
+    assert 'chmod 0666 docs/assets' not in script
+
+    proof_target = tmp_path / "proof-target"
+    ready_target = tmp_path / "ready-target"
+    proof_target.write_text("preserve proof target\n", encoding="utf-8")
+    ready_target.write_text("preserve ready target\n", encoding="utf-8")
+    proof_target.chmod(0o640)
+    ready_target.chmod(0o640)
+    proof_file = tmp_path / ".fact-to-plan-proof.json"
+    ready_file = tmp_path / ".fact-to-plan-worker-ready"
+    proof_file.symlink_to(proof_target)
+    ready_file.symlink_to(ready_target)
+    environment = os.environ.copy()
+    environment.update(
+        FACT_TO_PLAN_PROOF_FILE=str(proof_file),
+        FACT_TO_PLAN_WORKER_READY_FILE=str(ready_file),
+    )
+    subprocess.run(
+        ["sh", "-eu", "-c", f"{reset_prepare}\n{permission}"],
+        check=True,
+        env=environment,
+    )
+
+    assert not proof_file.is_symlink()
+    assert not ready_file.is_symlink()
+    assert proof_file.read_bytes() == b""
+    assert ready_file.read_bytes() == b""
+    assert stat.S_IMODE(proof_file.stat().st_mode) == 0o666
+    assert stat.S_IMODE(ready_file.stat().st_mode) == 0o666
+    assert proof_target.read_text(encoding="utf-8") == "preserve proof target\n"
+    assert ready_target.read_text(encoding="utf-8") == "preserve ready target\n"
+    assert stat.S_IMODE(proof_target.stat().st_mode) == 0o640
+    assert stat.S_IMODE(ready_target.stat().st_mode) == 0o640
+
+    cleanup = script.split("cleanup() {", 1)[1].split("}", 1)[0]
+    assert 'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"' in cleanup
+    assert "FACT_TO_PLAN_WORKER_READY_SENTINEL" in browser
+    assert '`${workerReadySentinel}\\n`' in browser

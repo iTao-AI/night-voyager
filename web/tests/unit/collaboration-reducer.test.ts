@@ -31,6 +31,33 @@ it("keeps recoverable_error reducer-only with a persisted resume phase", () => {
   expect(invalid).toMatchObject({ value: "recoverable_error", category: "transport_unavailable_or_timeout", resumePhase: "bootstrapping_parent" });
 });
 
+it("keeps handoff validation transient and failure recoverable from replan_required", () => {
+  const advisorContext = { ...context, role: "advisor" as const, caseRevision: 2 };
+  const replan = collaborationReducer(initialCollaborationState(CASE), {
+    type: "HYDRATE",
+    phase: "replan_required",
+    context: advisorContext,
+  });
+  const validating = collaborationReducer(replan, { type: "HANDOFF_VALIDATE" });
+  expect(validating).toEqual({ value: "handoff_validating", context: advisorContext });
+
+  const failed = collaborationReducer(validating, {
+    type: "FAILURE",
+    category: "stale",
+  });
+  expect(failed).toMatchObject({
+    value: "recoverable_error",
+    category: "stale",
+    resumePhase: "replan_required",
+    context: advisorContext,
+  });
+
+  expect(collaborationReducer(initialCollaborationState(CASE), { type: "HANDOFF_VALIDATE" })).toMatchObject({
+    value: "recoverable_error",
+    resumePhase: "bootstrapping_parent",
+  });
+});
+
 it("maps the complete public problem allowlist into seven bounded categories", () => {
   const cases = new Map([
     ["case_revision_stale", "stale"], ["memory_candidate_stale", "stale"],

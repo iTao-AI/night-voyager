@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
 import { ConnectedDemoApiError, createConnectedDemoApi } from "./api";
-import type { FamilyDecisionBody } from "./contracts";
+import type { AdvisorLedger, FamilyDecisionBody } from "./contracts";
 import { idempotencyFor } from "./idempotency";
 import { createCollaborationDemoApi } from "../collaboration-demo/api";
+import type { ConfirmedFactAdvisor } from "../collaboration-demo/contracts";
 import type { PlanningSkillInspector } from "../skill-inspector/contracts";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
@@ -18,6 +19,23 @@ const inspectorApi = createCollaborationDemoApi();
 const initial: DemoDisplayState = { value: "bootstrapping" };
 const CASE_ID = "40000000-0000-0000-0000-000000000002";
 
+export interface CurrentFactsProjection {
+  caseId: string;
+  caseRevision: number;
+  facts: readonly ConfirmedFactAdvisor[];
+}
+
+const TASK_LEDGER_PHASES = ["active-task", "review-required", "terminal-task-failure"] as const;
+
+function reconcileAdvisorTask(metadata: RecoveryMetadata, ledger: AdvisorLedger): RecoveryMetadata {
+  const taskId = TASK_LEDGER_PHASES.includes(ledger.phase as (typeof TASK_LEDGER_PHASES)[number])
+    ? ledger.task?.task_id ?? null
+    : null;
+  if (metadata.taskId === null && taskId !== null) return { ...metadata, taskId, cursor: 0 };
+  if (metadata.taskId !== taskId) throw new Error("projection identity mismatch");
+  return metadata;
+}
+
 function failure(error: unknown): RecoveryCode {
   if (error instanceof ConnectedDemoApiError && error.status === 401) return "session_expired";
   if (error instanceof ConnectedDemoApiError && error.code === "bff_session_recovery_required") return "session_recovery_required";
@@ -29,6 +47,7 @@ export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
   const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
+  const [currentFacts, setCurrentFacts] = useState<CurrentFactsProjection | null>(null);
   const [journeyConflict, setJourneyConflict] = useState<"collaboration" | null>(() => {
     if (typeof window === "undefined") return null;
     return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
@@ -36,10 +55,47 @@ export function useConnectedDemo() {
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
   const inspectorGeneration = useRef(0);
+  const factsGeneration = useRef(0);
 
   const clearInspector = useCallback(() => {
     inspectorGeneration.current += 1;
     setInspector(null);
+  }, []);
+
+  const clearCurrentFacts = useCallback(() => {
+    factsGeneration.current += 1;
+    setCurrentFacts(null);
+  }, []);
+
+  const refreshCurrentFacts = useCallback(async (caseId: string, initialLedger: AdvisorLedger): Promise<AdvisorLedger> => {
+    const generation = factsGeneration.current + 1;
+    factsGeneration.current = generation;
+    setCurrentFacts(null);
+    let ledger = initialLedger;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      let projection: { current: readonly ConfirmedFactAdvisor[] };
+      try {
+        projection = await inspectorApi.confirmedFacts(caseId, "advisor");
+      } catch {
+        return ledger;
+      }
+      let verified: AdvisorLedger;
+      try {
+        verified = await api.advisorLedger(caseId);
+      } catch {
+        return ledger;
+      }
+      if (verified.case_id !== caseId) throw new Error("projection identity mismatch");
+      if (verified.case_revision === ledger.case_revision) {
+        const current = loadRecoveryMetadata();
+        if (factsGeneration.current === generation && current?.role === "advisor" && current.caseId === caseId) {
+          setCurrentFacts({ caseId, caseRevision: verified.case_revision, facts: projection.current });
+        }
+        return verified;
+      }
+      ledger = verified;
+    }
+    return ledger;
   }, []);
 
   const refreshInspector = useCallback(async (caseId: string) => {
@@ -64,20 +120,25 @@ export function useConnectedDemo() {
     }
     try {
       clearInspector();
+      clearCurrentFacts();
       const { csrf_token: bootstrapCsrf } = await api.bootstrap();
       const session = await api.mint("advisor", bootstrapCsrf);
       const ledger = await api.advisorLedger(CASE_ID);
       if (ledger.case_id !== CASE_ID) throw new Error("invalid response");
-      const taskId = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase)
+      const taskId = TASK_LEDGER_PHASES.includes(ledger.phase as (typeof TASK_LEDGER_PHASES)[number])
         ? ledger.task?.task_id ?? null
         : null;
-      saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} });
-      dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
+      const metadata: RecoveryMetadata = { schema_version: 2, journey: "advisor-family", role: "advisor", csrf: session.csrf_token, caseId: CASE_ID, taskId, briefId: null, cursor: 0, mutations: {} };
+      saveRecoveryMetadata(metadata);
+      const stableLedger = await refreshCurrentFacts(CASE_ID, ledger);
+      const reconciled = reconcileAdvisorTask(metadata, stableLedger);
+      if (reconciled !== metadata) saveRecoveryMetadata(reconciled);
+      dispatch({ type: "AUTHORITATIVE_RELOAD", ledger: stableLedger });
       void refreshInspector(CASE_ID);
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
     }
-  }, [clearInspector, refreshInspector]);
+  }, [clearCurrentFacts, clearInspector, refreshCurrentFacts, refreshInspector]);
 
   const recover = useCallback(async () => {
     const journey = loadDemoJourneyEnvelope();
@@ -93,6 +154,7 @@ export function useConnectedDemo() {
     try {
       if (metadata.role === "parent") {
         clearInspector();
+        clearCurrentFacts();
         try {
           await api.advisorLedger(metadata.caseId);
           throw new Error("role projection mismatch");
@@ -103,11 +165,11 @@ export function useConnectedDemo() {
         if (brief.case_id !== metadata.caseId || brief.brief_id !== metadata.briefId) throw new Error("projection identity mismatch");
         dispatch({ type: "AUTHORITATIVE_RELOAD", brief });
       } else {
-        const ledger = await api.advisorLedger(metadata.caseId);
-        if (ledger.case_id !== metadata.caseId) throw new Error("projection identity mismatch");
-        const projectedTaskId = ledger.task?.task_id ?? null;
-        const taskPhase = ["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase);
-        if ((taskPhase && metadata.taskId !== projectedTaskId) || (!taskPhase && metadata.taskId !== null && projectedTaskId !== metadata.taskId)) throw new Error("projection identity mismatch");
+        const initialLedger = await api.advisorLedger(metadata.caseId);
+        if (initialLedger.case_id !== metadata.caseId) throw new Error("projection identity mismatch");
+        const ledger = await refreshCurrentFacts(metadata.caseId, initialLedger);
+        const reconciled = reconcileAdvisorTask(metadata, ledger);
+        if (reconciled !== metadata) saveRecoveryMetadata(reconciled);
         dispatch({ type: "AUTHORITATIVE_RELOAD", ledger });
         if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
       }
@@ -116,7 +178,7 @@ export function useConnectedDemo() {
       if (code === "session_expired") clearRecoveryMetadata();
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [clearInspector, connectAdvisor, refreshInspector]);
+  }, [clearCurrentFacts, clearInspector, connectAdvisor, refreshCurrentFacts, refreshInspector]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -144,13 +206,17 @@ export function useConnectedDemo() {
       try {
         do {
           pending = false;
-          const ledger = await api.advisorLedger(metadata.caseId);
+          let ledger = await api.advisorLedger(metadata.caseId);
           if (closed) return;
           const current = loadRecoveryMetadata();
           if (!current || current.taskId !== streamingTaskId) throw new Error("projection identity mismatch");
-          saveRecoveryMetadata({ ...current, cursor: Math.max(current.cursor, cursor) });
+          if (ledger.phase !== "active-task") {
+            ledger = await refreshCurrentFacts(metadata.caseId, ledger);
+            void refreshInspector(metadata.caseId);
+          }
+          const reconciled = reconcileAdvisorTask(current, ledger);
+          saveRecoveryMetadata({ ...reconciled, cursor: Math.max(reconciled.cursor, cursor) });
           dispatch({ type: "TASK_REFRESHED", ledger, after: cursor });
-          if (ledger.phase !== "active-task") void refreshInspector(metadata.caseId);
         } while (pending && !closed);
       } catch (error) {
         if (!closed) dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
@@ -163,7 +229,7 @@ export function useConnectedDemo() {
     };
     for (const code of ["queued", "lease_acquired", "execution_started", "heartbeat_recorded", "retry_scheduled", "lease_reclaimed", "waiting_review", "succeeded", "blocked", "timed_out", "failed", "cancelled"]) events.addEventListener(code, refresh);
     return () => { closed = true; events.close(); };
-  }, [refreshInspector, streamingTaskId]);
+  }, [refreshCurrentFacts, refreshInspector, streamingTaskId]);
 
   const mutationRecord = useCallback(async (metadata: RecoveryMetadata, operation: MutationOperation, body: unknown) => {
     const record = await idempotencyFor(body, metadata.mutations[operation]);
@@ -203,6 +269,7 @@ export function useConnectedDemo() {
     if (!metadata || metadata.role !== "advisor" || metadata.caseId !== caseId) { dispatch({ type: "RECOVERABLE_FAILURE", code: "session_recovery_required" }); return; }
     try {
       clearInspector();
+      clearCurrentFacts();
       await api.revoke(metadata.csrf);
       clearRecoveryMetadata();
       const bootstrap = await api.bootstrap();
@@ -212,7 +279,7 @@ export function useConnectedDemo() {
       saveRecoveryMetadata({ schema_version: 2, journey: "advisor-family", role: "parent", csrf: parent.csrf_token, caseId, taskId: null, briefId: brief.brief_id, cursor: 0, mutations: {} });
       dispatch({ type: "PARENT_SESSION_READY", brief });
     } catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
-  }, [clearInspector]);
+  }, [clearCurrentFacts, clearInspector]);
 
   const approve = useCallback(async () => {
     if (state.value !== "advisor_review" || !state.ledger.review_inputs) return;
@@ -296,5 +363,5 @@ export function useConnectedDemo() {
     }
   }, [connectAdvisor]);
 
-  return { state, confirmed, setConfirmed, inspector, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
+  return { state, confirmed, setConfirmed, inspector, currentFacts, journeyConflict, endConflictingJourney, connectAdvisor, recover, retry, createTask, approve, rotateToParent, decide };
 }

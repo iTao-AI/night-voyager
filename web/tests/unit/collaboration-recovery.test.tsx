@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CollaborationDemoApiError } from "../../lib/collaboration-demo/api";
 import { ConnectedDemoApiError } from "../../lib/connected-demo/api";
 import { idempotencyFor } from "../../lib/connected-demo/idempotency";
-import { loadDemoJourneyEnvelope } from "../../lib/connected-demo/session-storage";
+import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
 
 const mocks = vi.hoisted(() => ({
   identity: {
@@ -25,13 +25,15 @@ vi.mock("../../lib/collaboration-demo/api", async (importOriginal) => {
   return { ...actual, createCollaborationDemoApi: () => mocks.collaboration };
 });
 
-import { useCollaborationDemo } from "../../lib/collaboration-demo/use-collaboration-demo";
+import { collaborationNavigation, useCollaborationDemo } from "../../lib/collaboration-demo/use-collaboration-demo";
 
 const CASE = "41000000-0000-0000-0000-000000000001";
 const THREAD = "42000000-0000-0000-0000-000000000001";
 const MESSAGE = "43000000-0000-0000-0000-000000000001";
 const CANDIDATE = "44000000-0000-0000-0000-000000000001";
 const FACT = "45000000-0000-0000-0000-000000000001";
+const REPLACEMENT_FACT = "45000000-0000-0000-0000-000000000002";
+const TASK = "61000000-0000-0000-0000-000000000001";
 const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 const MESSAGE_BODY = "Our confirmed program budget is 300,000 to 400,000 CNY.";
@@ -44,6 +46,25 @@ const fact = { schema_version: 1 as const, fact_key: "family.budget" as const, v
 
 function ledger(caseRevision: number) {
   return { schema_version: 1 as const, proof_mode: "synthetic-demo" as const, phase: "task-ready" as const, case_id: CASE, case_revision: caseRevision, case_state: "intake" as const, canonical_task_inputs: { schema_version: 1 as const, operation: "generate_planning_run_v1" as const, case_id: CASE, expected_case_revision: caseRevision, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
+}
+
+function handoffLedger(phase: "task-ready" | "active-task" | "review-required" | "terminal-task-failure" | "family-review" | "plan-ready") {
+  return {
+    ...ledger(2),
+    phase,
+    task: ["active-task", "review-required", "terminal-task-failure"].includes(phase) ? { task_id: TASK } : null,
+    current_brief_id: ["family-review", "plan-ready"].includes(phase) ? FACT : null,
+  };
+}
+
+function confirmedCandidate() {
+  return { ...advisor, state: "confirmed" as const, verification_id: MESSAGE, decision: "confirm" as const, reason: "Confirmed by advisor." };
+}
+
+function saveConfirmed() {
+  save({ role: "advisor", candidateId: CANDIDATE, phase: "replan_required" });
+  mocks.collaboration.candidates.mockResolvedValue([confirmedCandidate()]);
+  mocks.identity.advisorLedger.mockResolvedValue(handoffLedger("task-ready"));
 }
 
 function save(value: Record<string, unknown>) {
@@ -68,6 +89,7 @@ beforeEach(() => {
 afterEach(() => {
   sessionStorage.clear();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 it("requires candidate, confirmed fact, and advisor ledger before recovering confirmation lost acknowledgement", async () => {
@@ -80,6 +102,174 @@ it("requires candidate, confirmed fact, and advisor ledger before recovering con
   expect(mocks.collaboration.confirmedFacts).toHaveBeenCalledWith(CASE, "advisor");
   expect(result.current.state.context.fact).toEqual(fact);
   expect(result.current.state.context.caseRevision).toBe(2);
+});
+
+it("treats a completed conversion as the existing advisor-family journey on collaboration reload", async () => {
+  const current = {
+    schema_version: 2 as const,
+    journey: "collaboration" as const,
+    role: "advisor" as const,
+    csrf: "stored-csrf",
+    caseId: CASE,
+    threadId: THREAD,
+    messageId: MESSAGE,
+    candidateId: CANDIDATE,
+    phase: "replan_required" as const,
+    mutations: {},
+  };
+  saveRecoveryMetadata(continueCollaborationAsAdvisorFamily(current, null));
+
+  const { result } = renderHook(() => useCollaborationDemo());
+
+  await waitFor(() => expect(result.current.journeyConflict).toBe("advisor-family"));
+  expect(mocks.identity.bootstrap).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()?.journey).toBe("advisor-family");
+});
+
+it.each([
+  ["task-ready", null],
+  ["active-task", TASK],
+  ["review-required", TASK],
+  ["terminal-task-failure", TASK],
+  ["family-review", null],
+  ["plan-ready", null],
+] as const)("validates exact authority and adopts %s task identity only from the ledger", async (phase, expectedTaskId) => {
+  saveConfirmed();
+  mocks.identity.advisorLedger.mockResolvedValue(handoffLedger(phase));
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  vi.clearAllMocks();
+  mocks.collaboration.candidates.mockResolvedValue([confirmedCandidate()]);
+  mocks.collaboration.confirmedFacts.mockResolvedValue({ schema_version: 1, current: [fact], history: [], next_cursor: null });
+  mocks.identity.advisorLedger.mockResolvedValue(handoffLedger(phase));
+  mocks.collaboration.planningSkillInspector.mockResolvedValue(null);
+  const writes = vi.spyOn(Storage.prototype, "setItem");
+
+  await act(async () => result.current.continueToPlanning());
+
+  expect(mocks.collaboration.candidates).toHaveBeenCalledWith(CASE, "advisor");
+  expect(mocks.collaboration.confirmedFacts).toHaveBeenCalledWith(CASE, "advisor");
+  expect(mocks.identity.advisorLedger).toHaveBeenCalledWith(CASE);
+  expect(mocks.collaboration.planningSkillInspector).toHaveBeenCalledWith(CASE);
+  expect(mocks.collaboration.candidates.mock.invocationCallOrder[0]).toBeLessThan(mocks.collaboration.confirmedFacts.mock.invocationCallOrder[0]);
+  expect(mocks.collaboration.confirmedFacts.mock.invocationCallOrder[0]).toBeLessThan(mocks.identity.advisorLedger.mock.invocationCallOrder[0]);
+  expect(mocks.identity.advisorLedger.mock.invocationCallOrder[0]).toBeLessThan(mocks.collaboration.planningSkillInspector.mock.invocationCallOrder[0]);
+  expect(loadDemoJourneyEnvelope()).toEqual({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: "stored-csrf", caseId: CASE, taskId: expectedTaskId, briefId: null, cursor: 0, mutations: {} });
+  expect(writes).toHaveBeenCalledOnce();
+  expect(navigate).toHaveBeenCalledOnce();
+  expect(mocks.identity.bootstrap).not.toHaveBeenCalled();
+  expect(mocks.identity.mint).not.toHaveBeenCalled();
+  expect(mocks.identity.revoke).not.toHaveBeenCalled();
+  expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["candidate missing", () => mocks.collaboration.candidates.mockResolvedValue([])],
+  ["candidate stale", () => mocks.collaboration.candidates.mockResolvedValue([{ ...confirmedCandidate(), state: "stale" }])],
+  ["fact missing", () => mocks.collaboration.confirmedFacts.mockResolvedValue({ schema_version: 1, current: [], history: [], next_cursor: null })],
+  ["fact provenance mismatch", () => mocks.collaboration.confirmedFacts.mockResolvedValue({ schema_version: 1, current: [{ ...fact, candidate_id: FACT }], history: [], next_cursor: null })],
+  ["Case drift", () => mocks.identity.advisorLedger.mockResolvedValue({ ...handoffLedger("task-ready"), case_id: FACT })],
+  ["revision drift", () => mocks.identity.advisorLedger.mockResolvedValue({ ...handoffLedger("task-ready"), case_revision: 3 })],
+  ["wrong role is non-enumerating", () => mocks.collaboration.candidates.mockRejectedValue(new CollaborationDemoApiError(404, "resource_unavailable"))],
+  ["malformed ledger phase", () => mocks.identity.advisorLedger.mockResolvedValue({ ...handoffLedger("task-ready"), phase: "unknown" })],
+  ["ledger unavailable", () => mocks.identity.advisorLedger.mockRejectedValue(new Error("unavailable"))],
+  ["unknown failure", () => mocks.collaboration.candidates.mockRejectedValue(new Error("unknown"))],
+] as const)("leaves the collaboration envelope byte-identical when %s", async (_name, mutate) => {
+  saveConfirmed();
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  vi.clearAllMocks();
+  mocks.collaboration.candidates.mockResolvedValue([confirmedCandidate()]);
+  mocks.collaboration.confirmedFacts.mockResolvedValue({ schema_version: 1, current: [fact], history: [], next_cursor: null });
+  mocks.identity.advisorLedger.mockResolvedValue(handoffLedger("task-ready"));
+  mocks.collaboration.planningSkillInspector.mockResolvedValue(null);
+  mutate();
+  const before = sessionStorage.getItem("night-voyager:m5");
+
+  await act(async () => result.current.continueToPlanning());
+
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(sessionStorage.getItem("night-voyager:m5")).toBe(before);
+  expect(navigate).not.toHaveBeenCalled();
+  expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
+  const readsBeforeRetry = mocks.collaboration.candidates.mock.calls.length;
+  await act(async () => result.current.retry());
+  expect(mocks.collaboration.candidates.mock.calls.length).toBe(readsBeforeRetry + 1);
+  expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
+});
+
+it.each(["unavailable", "malformed"] as const)("treats a %s Skill inspector as non-authoritative visible proof during handoff", async (failure) => {
+  saveConfirmed();
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  vi.clearAllMocks();
+  mocks.collaboration.candidates.mockResolvedValue([confirmedCandidate()]);
+  mocks.collaboration.confirmedFacts.mockResolvedValue({ schema_version: 1, current: [fact], history: [], next_cursor: null });
+  mocks.identity.advisorLedger.mockResolvedValue(handoffLedger("task-ready"));
+  mocks.collaboration.planningSkillInspector.mockRejectedValue(new Error(failure === "unavailable" ? "unavailable" : "invalid response"));
+  const writes = vi.spyOn(Storage.prototype, "setItem");
+
+  await act(async () => result.current.continueToPlanning());
+
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ journey: "advisor-family", caseId: CASE, taskId: null });
+  expect(writes).toHaveBeenCalledOnce();
+  expect(navigate).toHaveBeenCalledOnce();
+  expect(result.current.inspector).toBeNull();
+});
+
+it("clears an expired handoff session and retries through fresh server recovery", async () => {
+  saveConfirmed();
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  vi.clearAllMocks();
+  mocks.collaboration.candidates.mockRejectedValueOnce(new CollaborationDemoApiError(401, "unknown"));
+
+  await act(async () => result.current.continueToPlanning());
+
+  expect(result.current.state).toMatchObject({ value: "recoverable_error", category: "session_recovery_required" });
+  expect(loadDemoJourneyEnvelope()).toBeNull();
+  expect(navigate).not.toHaveBeenCalled();
+
+  await act(async () => result.current.retry());
+
+  expect(mocks.identity.bootstrap).toHaveBeenCalledOnce();
+  expect(mocks.identity.mint).toHaveBeenCalledOnce();
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+  expect(mocks.collaboration.candidates).toHaveBeenCalledOnce();
+});
+
+it("reloads drifted fact and revision authority before a separate handoff retry", async () => {
+  saveConfirmed();
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  vi.clearAllMocks();
+  const advancedCandidate = { ...confirmedCandidate(), case_revision: 2 };
+  const advancedFact = { ...fact, confirmed_fact_id: REPLACEMENT_FACT, fact_version: 2 };
+  mocks.collaboration.candidates.mockResolvedValue([advancedCandidate]);
+  mocks.collaboration.confirmedFacts.mockResolvedValue({ schema_version: 1, current: [advancedFact], history: [fact], next_cursor: null });
+  mocks.identity.advisorLedger.mockResolvedValue({
+    ...handoffLedger("task-ready"),
+    case_revision: 3,
+    canonical_task_inputs: { ...handoffLedger("task-ready").canonical_task_inputs!, expected_case_revision: 3 },
+  });
+
+  await act(async () => result.current.continueToPlanning());
+  expect(result.current.state).toMatchObject({ value: "recoverable_error", category: "stale" });
+
+  await act(async () => result.current.retry());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  expect(result.current.state.context).toMatchObject({ fact: advancedFact, caseRevision: 3 });
+  expect(navigate).not.toHaveBeenCalled();
+  expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
+
+  await act(async () => result.current.continueToPlanning());
+  expect(navigate).toHaveBeenCalledOnce();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ journey: "advisor-family", caseId: CASE });
 });
 
 it("recovers a parent session when mint succeeds before the first authority read fails", async () => {

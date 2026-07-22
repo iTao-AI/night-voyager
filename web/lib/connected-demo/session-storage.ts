@@ -98,6 +98,33 @@ export function clearDemoJourneyEnvelope(): void { sessionStorage.removeItem(KEY
 export const clearRecoveryMetadata = clearDemoJourneyEnvelope;
 export function loadRecoveryMetadata(): AdvisorFamilyJourneyEnvelopeV2 | null { const value = loadDemoJourneyEnvelope(); return value?.journey === "advisor-family" ? value : null; }
 
+export function continueCollaborationAsAdvisorFamily(
+  current: CollaborationJourneyEnvelopeV2,
+  taskId: string | null,
+): AdvisorFamilyJourneyEnvelopeV2 {
+  if (
+    !object(current)
+    || !collaboration(current)
+    || current.role !== "advisor"
+    || current.phase !== "replan_required"
+    || Object.keys(current.mutations).length !== 0
+    || !nullableUuid(taskId)
+  ) {
+    throw new Error("invalid collaboration handoff");
+  }
+  return {
+    schema_version: 2,
+    journey: "advisor-family",
+    role: "advisor",
+    csrf: current.csrf,
+    caseId: current.caseId,
+    taskId,
+    briefId: null,
+    cursor: 0,
+    mutations: {},
+  };
+}
+
 export function withMutation(metadata: AdvisorFamilyJourneyEnvelopeV2, operation: AdvisorFamilyMutationKind, record: IdempotencyRecord | undefined): AdvisorFamilyJourneyEnvelopeV2 {
   const mutations = { ...metadata.mutations };
   if (record) mutations[operation] = record; else delete mutations[operation];

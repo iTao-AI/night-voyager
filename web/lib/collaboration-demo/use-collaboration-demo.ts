@@ -7,8 +7,10 @@ import { ConnectedDemoApiError, createConnectedDemoApi } from "../connected-demo
 import { idempotencyFor } from "../connected-demo/idempotency";
 import {
   clearDemoJourneyEnvelope,
+  continueCollaborationAsAdvisorFamily,
   loadDemoJourneyEnvelope,
   saveCollaborationJourney,
+  saveRecoveryMetadata,
   withCollaborationMutation,
   type CollaborationJourneyEnvelopeV2,
   type CollaborationMutationKind,
@@ -26,6 +28,18 @@ const MESSAGE_REQUEST = { schema_version: 1 as const, body: MESSAGE_BODY };
 const PROPOSAL_REQUEST = { schema_version: 1 as const, case_revision: 1, proposal: { schema_version: 1 as const, fact_key: "family.budget", value: BUDGET } };
 const identity = createConnectedDemoApi();
 const api = createCollaborationDemoApi();
+
+export const collaborationNavigation = {
+  toPlanning(): void {
+    window.location.assign("/demo");
+  },
+};
+
+class HandoffValidationError extends Error {
+  constructor(readonly category: CollaborationErrorCategory) {
+    super("handoff authority validation failed");
+  }
+}
 
 function advisorCandidate(value: unknown): value is MemoryCandidateAdvisor { return typeof value === "object" && value !== null && "candidate_id" in value; }
 function advisorFact(value: unknown): value is ConfirmedFactAdvisor { return typeof value === "object" && value !== null && "confirmed_fact_id" in value; }
@@ -55,6 +69,14 @@ function matchingMessage(messages: CollaborationContext["messages"], messageId: 
   return messages.find((item) => item.message_event_id === messageId || (messageId === null && item.actor_role === "parent" && item.body === MESSAGE_BODY)) ?? null;
 }
 
+function handoffFailure(error: unknown): CollaborationErrorCategory {
+  return error instanceof HandoffValidationError ? error.category : category(error);
+}
+
+function requireHandoff(value: unknown, category: CollaborationErrorCategory = "stale"): asserts value {
+  if (!value) throw new HandoffValidationError(category);
+}
+
 function envelope(context: CollaborationContext, csrf: string, phase: CollaborationPersistedPhase, mutations: CollaborationJourneyEnvelopeV2["mutations"], ids?: { messageId?: string | null; candidateId?: string | null }): CollaborationJourneyEnvelopeV2 {
   return {
     schema_version: 2,
@@ -80,6 +102,7 @@ export function useCollaborationDemo() {
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
   const recoverRef = useRef<(conflictError?: CollaborationDemoApiError) => Promise<void>>(async () => undefined);
+  const handoffInFlight = useRef(false);
 
   const fail = useCallback((error: unknown) => {
     const mapped = category(error);
@@ -335,6 +358,20 @@ export function useCollaborationDemo() {
     return { record, updated };
   }, []);
 
+  const refreshHandoffInspector = useCallback(async (request: Promise<PlanningSkillInspector>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const unavailable = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), 1_000);
+      });
+      setInspector(await Promise.race([request, unavailable]));
+    } catch {
+      setInspector(null);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }, []);
+
   const appendMessage = useCallback(async () => {
     if (state.value !== "thread_ready" || !state.context.thread) return;
     const stored = loadDemoJourneyEnvelope();
@@ -427,7 +464,7 @@ export function useCollaborationDemo() {
       const context = { ...state.context, candidate, fact, caseRevision: refreshed.case_revision };
       const current = loadDemoJourneyEnvelope();
       if (!current || current.journey !== "collaboration") throw new Error("session recovery required");
-      saveCollaborationJourney({ ...current, phase: "replan_required" });
+      saveCollaborationJourney(withCollaborationMutation({ ...current, phase: "replan_required" }, "verify-memory-candidate", undefined));
       retryAction.current = null;
       dispatch({ type: "CONFIRMED_RELOADED", context });
     };
@@ -451,6 +488,81 @@ export function useCollaborationDemo() {
     await attempt();
   }, [fail, persistMutation, recover, state]);
 
+  const continueToPlanning = useCallback(async () => {
+    if (state.value !== "replan_required" || handoffInFlight.current) return;
+    const expectedContext = state.context;
+    const attempt = async () => {
+      if (handoffInFlight.current) return;
+      handoffInFlight.current = true;
+      dispatch({ type: "HANDOFF_VALIDATE" });
+      try {
+        const stored = loadDemoJourneyEnvelope();
+        requireHandoff(
+          stored?.journey === "collaboration"
+          && stored.role === "advisor"
+          && stored.phase === "replan_required"
+          && stored.caseId === expectedContext.caseId
+          && stored.candidateId !== null,
+          "session_recovery_required",
+        );
+
+        const candidates = await api.candidates(stored.caseId, "advisor");
+        const candidate = candidates.find((item) => item.candidate_id === stored.candidateId) ?? null;
+        requireHandoff(candidate, "stale");
+        requireHandoff(candidate.state === "confirmed", candidate.state === "stale" ? "stale" : "expired_or_terminal");
+        requireHandoff(candidate.message_event_id === stored.messageId, "stale");
+
+        const facts = await api.confirmedFacts(stored.caseId, "advisor");
+        const fact = findAdvisorFact(facts.current, stored.candidateId);
+        requireHandoff(fact, "stale");
+        requireHandoff(fact.source_message_event_id === stored.messageId, "stale");
+        requireHandoff(
+          advisorFact(expectedContext.fact)
+          && expectedContext.fact.confirmed_fact_id === fact.confirmed_fact_id,
+          "stale",
+        );
+
+        const ledger = await identity.advisorLedger(stored.caseId);
+        requireHandoff(ledger.case_id === stored.caseId, "stale");
+        requireHandoff(ledger.case_revision === expectedContext.caseRevision, "stale");
+        requireHandoff(ledger.case_revision === candidate.case_revision + 1, "stale");
+        if (ledger.canonical_task_inputs) {
+          requireHandoff(ledger.canonical_task_inputs.case_id === stored.caseId, "stale");
+          requireHandoff(ledger.canonical_task_inputs.expected_case_revision === ledger.case_revision, "stale");
+        }
+
+        let taskId: string | null;
+        if (["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase)) {
+          requireHandoff(ledger.task?.task_id, "stale");
+          taskId = ledger.task.task_id;
+        } else if (["task-ready", "family-review", "plan-ready"].includes(ledger.phase)) {
+          taskId = null;
+        } else {
+          throw new HandoffValidationError("stale");
+        }
+
+        await refreshHandoffInspector(api.planningSkillInspector(stored.caseId));
+        const converted = continueCollaborationAsAdvisorFamily(stored, taskId);
+        saveRecoveryMetadata(converted);
+        retryAction.current = null;
+        collaborationNavigation.toPlanning();
+      } catch (error) {
+        const mapped = handoffFailure(error);
+        if (mapped === "stale" || mapped === "session_recovery_required") retryAction.current = null;
+        if (
+          mapped === "session_recovery_required"
+          && (error instanceof CollaborationDemoApiError || error instanceof ConnectedDemoApiError)
+          && error.status === 401
+        ) fail(error);
+        else dispatch({ type: "FAILURE", category: mapped });
+      } finally {
+        handoffInFlight.current = false;
+      }
+    };
+    retryAction.current = attempt;
+    await attempt();
+  }, [fail, refreshHandoffInspector, state]);
+
   const retry = useCallback(async () => { if (retryAction.current) await retryAction.current(); else await recover(); }, [recover]);
 
   const endConflictingJourney = useCallback(async () => {
@@ -468,5 +580,5 @@ export function useCollaborationDemo() {
     }
   }, [connectParent, fail]);
 
-  return { state, inspector, journeyConflict, connectParent, appendMessage, proposeBudget, switchToAdvisor, confirmCandidate, recover, retry, endConflictingJourney };
+  return { state, inspector, journeyConflict, connectParent, appendMessage, proposeBudget, switchToAdvisor, confirmCandidate, continueToPlanning, recover, retry, endConflictingJourney };
 }

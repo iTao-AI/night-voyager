@@ -14,7 +14,10 @@ export interface CollaborationContext {
 }
 
 type PersistedState = { value: CollaborationPersistedPhase; context: CollaborationContext };
-export type CollaborationState = PersistedState | { value: "recoverable_error"; category: CollaborationErrorCategory; resumePhase: CollaborationPersistedPhase; context: CollaborationContext };
+export type CollaborationState =
+  | PersistedState
+  | { value: "handoff_validating"; context: CollaborationContext }
+  | { value: "recoverable_error"; category: CollaborationErrorCategory; resumePhase: CollaborationPersistedPhase; context: CollaborationContext };
 export type CollaborationEvent =
   | { type: "HYDRATE"; phase: CollaborationPersistedPhase; context: CollaborationContext }
   | { type: "PARENT_RELOADED"; context: CollaborationContext }
@@ -24,6 +27,7 @@ export type CollaborationEvent =
   | { type: "ADVISOR_RELOADED"; context: CollaborationContext }
   | { type: "CONFIRM_SUBMIT" }
   | { type: "CONFIRMED_RELOADED"; context: CollaborationContext }
+  | { type: "HANDOFF_VALIDATE" }
   | { type: "FAILURE"; category: CollaborationErrorCategory };
 
 export function initialCollaborationState(caseId: string): CollaborationState {
@@ -31,12 +35,26 @@ export function initialCollaborationState(caseId: string): CollaborationState {
 }
 
 function failure(state: CollaborationState, category: CollaborationErrorCategory): CollaborationState {
-  return { value: "recoverable_error", category, resumePhase: state.value === "recoverable_error" ? state.resumePhase : state.value, context: state.context };
+  const resumePhase = state.value === "recoverable_error"
+    ? state.resumePhase
+    : state.value === "handoff_validating"
+      ? "replan_required"
+      : state.value;
+  return { value: "recoverable_error", category, resumePhase, context: state.context };
 }
 
 export function collaborationReducer(state: CollaborationState, event: CollaborationEvent): CollaborationState {
   if (event.type === "FAILURE") return failure(state, event.category);
-  const current = state.value === "recoverable_error" ? state.resumePhase : state.value;
+  const current = state.value === "recoverable_error"
+    ? state.resumePhase
+    : state.value === "handoff_validating"
+      ? "replan_required"
+      : state.value;
+  if (event.type === "HANDOFF_VALIDATE") {
+    return current === "replan_required"
+      ? { value: "handoff_validating", context: state.context }
+      : failure(state, "transport_unavailable_or_timeout");
+  }
   switch (event.type) {
     case "HYDRATE":
       return { value: event.phase, context: event.context };

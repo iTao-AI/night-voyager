@@ -2,8 +2,9 @@
 
 ## Status
 
-Approved design. PR 1 is implemented locally for authority review. PR 2 and PR 3
-remain approved but not implemented.
+Approved design. PR 1 is merged through PR #57 at
+`a85190deb6261ec034979334bd3d953a3cf9d8d4`. PR 2 is implemented locally for
+authority review. PR 3 remains approved but not implemented.
 
 This document defines the next bounded Night Voyager product increment after the
 `v0.1.2` Governed Collaboration Core release. Approval of this design authorizes
@@ -11,10 +12,11 @@ the design record and subsequent implementation planning. It does not by itself
 authorize implementation, push, pull request creation, merge, tag, release,
 deployment, live-provider execution, or cleanup of unrelated resources.
 
-The PR 1 implementation is unreleased post-`v0.1.2` work. It adds migration `0009`
+PR 1 is unreleased post-`v0.1.2` work now merged to `main`. It adds migration `0009`
 and the explicit planning-start authority without changing the public HTTP schema.
-Independent review, hosted CI, push, pull request creation, and merge remain separate
-gates; this status does not authorize PR 2 or PR 3.
+PR 2 composes that authority into the local same-Case browser walkthrough without a
+new backend or BFF route. Its push, pull request creation, hosted CI, review, and merge
+remain separate gates; this status does not authorize PR 3.
 
 ## Summary
 

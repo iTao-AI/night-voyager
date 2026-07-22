@@ -6,7 +6,7 @@ import { DecisionReceiptTimeline } from "../../components/connected-demo/Decisio
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
 import type { AdvisorLedger as Ledger, CurrentDecisionBrief } from "../../lib/connected-demo/contracts";
-import { brief as briefFixture, ledger as ledgerFixture } from "./connected-demo-test-data";
+import { brief as briefFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "./connected-demo-test-data";
 
 afterEach(cleanup);
 
@@ -31,6 +31,25 @@ it("renders task-ready authority with one primary action", () => {
   expect(screen.getByRole("heading", { name: /Advisor Ledger/i })).toBeVisible();
   expect(screen.getByRole("button", { name: /Create planning task/i })).toBeEnabled();
   expect(screen.queryByText(/lease owner|organization_id|reviewer notes/i)).toBeNull();
+});
+
+it("renders current Case revision and confirmed facts without internal provenance", () => {
+  const current = { ...ledgerFixture("task-ready"), case_revision: 2 };
+  const { container, rerender } = render(<AdvisorLedger ledger={current} confirmedFacts={[CONFIRMED_FACT]} onPrimaryAction={() => undefined} />);
+  expect(screen.getAllByText("Case revision 2")).toHaveLength(2);
+  expect(screen.getByRole("heading", { name: "Current confirmed Case facts" })).toBeVisible();
+  expect(screen.getByText("family.budget")).toBeVisible();
+  expect(screen.getByText("300,000–400,000 CNY")).toBeVisible();
+  expect(screen.getByText("Fact version 1")).toBeVisible();
+  expect(container).not.toHaveTextContent(/45000000|44000000|confirmed_fact_id|candidate_id|schema_version|\{"/i);
+
+  rerender(<AdvisorLedger ledger={current} confirmedFacts={[]} onPrimaryAction={() => undefined} />);
+  expect(screen.getByText("No current confirmed facts are projected for this Case revision.")).toBeVisible();
+  expect(screen.queryByText("300,000–400,000 CNY")).toBeNull();
+
+  rerender(<AdvisorLedger ledger={current} confirmedFacts={null} onPrimaryAction={() => undefined} />);
+  expect(screen.queryByText("No current confirmed facts are projected for this Case revision.")).toBeNull();
+  expect(screen.getByText("Current confirmed facts are unavailable until the server projection is refreshed.")).toBeVisible();
 });
 
 it("keeps Malaysia blocked and discloses evidence", () => {

@@ -6,7 +6,8 @@ live institutional coverage, or admissions advice.
 
 The secondary `/demo/collaboration` route is documented in the
 [governed collaboration walkthrough](collaboration-walkthrough.md). It shares the
-session envelope and read-only inspector but does not create a task or open SSE.
+session envelope and read-only inspector. Its controlled handoff creates no task or
+SSE connection; `/demo` owns both only after explicit advisor action.
 
 ## Run the walkthrough
 
@@ -14,10 +15,13 @@ session envelope and read-only inspector but does not create a task or open SSE.
 make demo
 ```
 
-Open `http://127.0.0.1:3000/demo`, start the advisor walkthrough, create the
-planning task, wait for the durable stream to reach review, approve Australia,
-rotate into the parent session, confirm the server-derived trade-off, and retain
-the resulting receipt and timeline. Stop the stack with `make down`.
+Open `http://127.0.0.1:3000/demo` for the standalone seeded walkthrough, or continue
+from `/demo/collaboration` after confirming a fact. In the continued journey,
+`/demo` restores the same non-default Case, shows its current confirmed facts and
+revision, and re-reads task inputs from `ledger.canonical_task_inputs`. Use the
+explicit task action, wait for the durable stream to reach review, approve Australia,
+rotate into the parent session, confirm the server-derived trade-off, and retain the
+resulting receipt and timeline. Stop the stack with `make down`.
 
 The six backend phases expose one primary action:
 
@@ -56,6 +60,11 @@ checked-in validated fixture contract only restricts the canonical synthetic
 input identity and must match the existing source-pack row. The BFF and browser
 do not derive policy, route eligibility, or authority.
 
+The same-Case continuation adds no BFF route. The destination reuses the existing
+advisor-ledger, confirmed-facts, inspector, task, event, review, Brief, and decision
+handlers. Every later read and mutation uses the continued Case. Task identity comes
+only from `advisor-ledger`, never from the collaboration envelope or URL state.
+
 The family Brief projects the selected Australia route, `CNY`, pinned cost, hard
 ceiling, and the exact required trade-off `budget_elasticity` from persisted
 rows and policy. The client may confirm these facts but cannot hard-code them.
@@ -75,8 +84,11 @@ guess a role, silently revoke, or show parent presentation.
 
 The shared `schema_version=2` journey envelope distinguishes
 `advisor-family|collaboration`; an existing other journey must be explicitly revoked,
-so a tab cannot run the two workflows concurrently. `/demo` preserves its single
-`EventSource` and monotonic durable cursor.
+so a tab cannot run the two workflows concurrently. `/demo` preserves one active
+`EventSource` and a monotonic durable cursor. The explicit task action creates
+at most one task and opens exactly one initial `/events?after=0` stream. Reloads
+recover the stored cursor, review state, parent rotation, receipt, and timeline for
+the continued Case.
 
 Run the real browser-to-database proof with:
 

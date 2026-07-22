@@ -1,9 +1,28 @@
 import type { AdvisorLedger, CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
 
 export const CASE_ID = "40000000-0000-0000-0000-000000000002";
+export const CONTINUED_CASE_ID = "41000000-0000-0000-0000-000000000001";
 export const TASK_ID = "61000000-0000-0000-0000-000000000001";
 export const BRIEF_ID = "81000000-0000-0000-0000-000000000301";
 export const ROUTE_ID = "71000000-0000-0000-0000-000000000001";
+export const CONFIRMED_FACT = {
+  schema_version: 1 as const,
+  fact_key: "family.budget" as const,
+  value: { schema_version: 1 as const, currency: "CNY" as const, period: "program_total" as const, preferred_minor: 30_000_000, hard_ceiling_minor: 40_000_000, elasticity_bps: 1000, refused: false },
+  fact_version: 1,
+  confirmed_at: "2026-07-20T01:02:03Z",
+  subject_role: "parent" as const,
+  confirming_advisor_role: "advisor" as const,
+  confirmed_fact_id: "45000000-0000-0000-0000-000000000001",
+  candidate_id: "44000000-0000-0000-0000-000000000001",
+  verification_id: "46000000-0000-0000-0000-000000000001",
+  source_message_event_id: "43000000-0000-0000-0000-000000000001",
+  source_message_sequence_no: 1,
+  source_message_sha256_prefix: "aaaaaaaaaaaa",
+  confirming_advisor_actor_id: "20000000-0000-0000-0000-000000000001",
+  reason: "Confirmed by the assigned advisor.",
+  supersedes_fact_id: null,
+};
 
 const task = (status: TaskStatus) => ({ task_id: TASK_ID, row_version: 1, status, public_code: null, attempt_count: 1, planning_run_id: status === "preparing" ? null : "70000000-0000-0000-0000-000000000001", updated_at: "2026-07-14T00:00:00Z" });
 export function standaloneTask(replayed?: boolean) {

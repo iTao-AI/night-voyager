@@ -28,7 +28,7 @@ vi.mock("../../lib/collaboration-demo/use-collaboration-demo", async () => {
 });
 
 function setState(state: unknown) {
-  hook.current = { state, journeyConflict: null, connectParent: vi.fn(), appendMessage: vi.fn(), proposeBudget: vi.fn(), switchToAdvisor: vi.fn(), confirmCandidate: vi.fn(), retry: vi.fn(), endConflictingJourney: vi.fn() };
+  hook.current = { state, journeyConflict: null, connectParent: vi.fn(), appendMessage: vi.fn(), proposeBudget: vi.fn(), switchToAdvisor: vi.fn(), confirmCandidate: vi.fn(), continueToPlanning: vi.fn(), retry: vi.fn(), endConflictingJourney: vi.fn() };
 }
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
@@ -84,8 +84,22 @@ it("renders the six governed storyline beats and no task or generic-chat afforda
   view.rerender(<CollaborationDemo />);
   expect(screen.getByRole("heading", { name: "Re-plan required" })).toBeVisible();
   expect(screen.getByText("Case revision 2")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Continue to governed planning" }));
+  expect(hook.current.continueToPlanning).toHaveBeenCalledOnce();
   expect(screen.queryByRole("button", { name: /create.*task/i })).toBeNull();
   expect(screen.queryByText(/chat|agenttask|eventsource|schema_version|41000000/i)).toBeNull();
+});
+
+it("keeps the confirmed fact visible while validating one disabled handoff action", async () => {
+  setState({ value: "handoff_validating", context: { ...baseContext, role: "advisor", candidate: advisorCandidate, fact, caseRevision: 2 } });
+  render(<CollaborationDemo />);
+
+  expect(screen.getByText("Fact version 1")).toBeVisible();
+  expect(screen.getByRole("heading", { name: "Validating planning authority" })).toHaveFocus();
+  const liveStatus = screen.getByText(/reloading current candidate, fact, Case revision, and advisor ledger/i).closest("section");
+  expect(liveStatus).toHaveAttribute("aria-live", "polite");
+  expect(screen.getByRole("button", { name: "Validating authority…" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Continue to governed planning" })).toBeNull();
 });
 
 it("shows bounded recovery categories with an explicit retry", () => {
