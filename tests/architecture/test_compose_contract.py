@@ -40,14 +40,14 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 2
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 3
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     assert script.count("docker compose --profile browser-proof build") == 1
-    assert script.count("docker compose up --no-build --wait") == 3
+    assert script.count("docker compose up --no-build --wait") == 4
     assert "docker compose up --build --wait" not in script
     assert "run --rm --build" not in script
 
@@ -125,3 +125,21 @@ def test_browser_proof_includes_governed_collaboration_and_screenshot_capture() 
     assert "memory_candidate_expired" in proof
     assert "active_task_blocks_revision" in proof
     assert "UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}" in script
+
+
+def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    verifier = Path("scripts/verify_fact_to_plan_flow.py")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert '"fact-to-plan.spec.ts"' in config
+    assert "FACT_TO_PLAN_PROOF_FILE" in browser
+    assert "Continue to governed planning" in browser
+    assert "events?after=0" in browser
+    assert verifier.is_file()
+    assert "verify_fact_to_plan_flow.py" in script
+    assert "fact-to-plan.spec.ts" in script
+    assert "docker compose pause worker" in script
+    assert "docker compose unpause worker" in script
+    assert "--no-build" in script

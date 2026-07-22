@@ -3,9 +3,16 @@ set -eu
 
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
 UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
+FACT_TO_PLAN_PROOF_FILE=docs/assets/.fact-to-plan-proof.json
+worker_start_pid=
 export COMPOSE_PROJECT_NAME
 
 cleanup() {
+    if [ -n "$worker_start_pid" ]; then
+        kill "$worker_start_pid" 2>/dev/null || true
+        wait "$worker_start_pid" 2>/dev/null || true
+    fi
+    rm -f "$FACT_TO_PLAN_PROOF_FILE"
     docker compose down --volumes --remove-orphans --rmi local
 }
 trap cleanup EXIT INT TERM
@@ -75,3 +82,24 @@ docker compose up --no-build --wait
 docker compose --profile browser-proof run --rm --no-deps \
     -e UPDATE_COLLABORATION_SCREENSHOT="$UPDATE_COLLABORATION_SCREENSHOT" browser-proof
 printf 'compose-proof: connected browser proof passed\n'
+docker compose down --volumes --remove-orphans
+docker compose up --no-build --wait
+rm -f "$FACT_TO_PLAN_PROOF_FILE"
+docker compose pause worker
+(
+    sleep 15
+    docker compose unpause worker
+) &
+worker_start_pid=$!
+docker compose --profile browser-proof run --rm --no-deps \
+    -e FACT_TO_PLAN_PROOF_FILE=/workspace/docs/assets/.fact-to-plan-proof.json \
+    browser-proof npx playwright test --config playwright.compose.config.ts fact-to-plan.spec.ts
+wait "$worker_start_pid"
+worker_start_pid=
+test -f "$FACT_TO_PLAN_PROOF_FILE"
+docker compose run --rm --no-deps \
+    -v "$PWD/$FACT_TO_PLAN_PROOF_FILE:/tmp/fact-to-plan-proof.json:ro" \
+    demo-seed python scripts/verify_fact_to_plan_flow.py \
+    --proof-file /tmp/fact-to-plan-proof.json
+rm -f "$FACT_TO_PLAN_PROOF_FILE"
+printf 'compose-proof: governed fact-to-plan browser and database proof passed\n'
