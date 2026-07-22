@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import hashlib
 from pathlib import Path
 
@@ -31,6 +32,25 @@ def test_0008_remains_immutable_at_the_approved_pr_base() -> None:
     )
 
 
+def _literal_assignment(path: Path, name: str) -> str:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)
+        ):
+            value = ast.literal_eval(node.value)
+            assert isinstance(value, str)
+            return value
+    raise AssertionError(f"missing {name}")
+
+
+def test_0009_downgrade_copies_the_exact_0008_task_function() -> None:
+    assert _literal_assignment(MIGRATION_0009, "_0008_CREATE_TASK_SQL") == _literal_assignment(
+        MIGRATION_0008, "CREATE_TASK_SQL"
+    )
+
+
 def test_0009_owns_only_the_explicit_first_planning_transition() -> None:
     migration = MIGRATION_0009.read_text(encoding="utf-8")
 
@@ -43,6 +63,7 @@ def test_0009_owns_only_the_explicit_first_planning_transition() -> None:
     assert "p_operation='generate_planning_run_v1'" in migration
     assert "generate_governed_mixed_planning_run_v1" in migration
     assert "starts_planning" in migration
+    assert "SET state='planning',updated_at" not in migration
     assert CREATE_TASK_SIGNATURE in migration
     assert f"REVOKE ALL ON FUNCTION {CREATE_TASK_SIGNATURE} FROM PUBLIC" in migration
     assert (
