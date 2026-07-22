@@ -21,8 +21,9 @@ and claims must depict the connected Australia flow only.
 
 ## Secondary governed collaboration walkthrough
 
-The primary `/demo` story above remains unchanged. `/demo/collaboration` adds a
-separate six-beat local synthetic authority proof:
+The standalone primary `/demo` story above remains available. The governed
+fact-to-plan journey starts with six collaboration beats and then continues the same
+Case into that existing primary story:
 
 1. **Shared message** — a parent appends one bounded budget message.
 2. **Typed proposal** — an explicit action creates one revision-pinned candidate.
@@ -30,10 +31,14 @@ separate six-beat local synthetic authority proof:
    assigned advisor; no client-only selector exists.
 4. **Confirmed fact** — advisor confirmation publishes fact version 1.
 5. **Case revision** — authoritative reload shows Case revision 2 and provenance.
-6. **Re-plan required** — the route stops without creating an AgentTask, polling,
-   or opening an EventSource; planning remains explicit in `/demo`.
+6. **Re-plan required** — `Continue to governed planning` performs read-only
+   authority validation, one envelope replacement, and one navigation with zero
+   task mutations.
+7. **Governed planning** — `/demo` restores the same Case and revision; only its
+   explicit task action creates the pinned task and opens the durable EventSource.
 
 The shared Skill inspector consumes a server-owned `no-store` projection. It remains
 `not_created` on collaboration and reaches `matched` only after the primary demo's
 real task. The [captured Chromium evidence](../assets/collaboration-confirmed-fact.png)
 depicts the final collaboration state without replacing the M5 screenshots.
+It remains immutable v0.1.2 history; PR 3 owns refreshed walkthrough evidence.

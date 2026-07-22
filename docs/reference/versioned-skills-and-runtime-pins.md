@@ -183,6 +183,12 @@ server-owned composite projection with
 `pin_status=not_created|matched|legacy_unpinned`. The browser does not join catalog,
 activation, task, and execution records into an authority claim.
 
+During the controlled same-Case handoff, the collaboration page re-reads this
+inspector only to validate current authority. The handoff itself never resolves a
+Skill pin, creates a task, or transports pin fields. `/demo` re-reads its advisor
+ledger, and task creation atomically persists the exact active five-field pin through
+the existing backend authority.
+
 ## Downgrade
 
 `0008 -> 0007` succeeds only for the exact reproducible canonical seed with no task

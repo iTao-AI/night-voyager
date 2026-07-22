@@ -3,7 +3,9 @@
 Migration `0007` implements the PR A governed conversation and memory authority,
 released in `v0.1.2` for the local synthetic pilot.
 PR B Skill governance, PR C browser integration, external transports, and
-live-provider execution are not implemented by this boundary.
+live-provider execution are not implemented by migration `0007` itself. PR B and
+PR C are released in v0.1.2; the post-v0.1.2 fact-to-plan browser composition reuses
+their existing authority without changing this database contract.
 
 ## Authority model
 
@@ -198,6 +200,20 @@ is defined by successor verification revision at or below that immutable high-wa
 mark, preventing later commits from entering the cursor chain. Student and parent
 responses contain only `{schema_version, current}` and never expose history or cursor
 metadata.
+
+### Controlled same-Case browser handoff
+
+After advisor confirmation, `/demo/collaboration` may validate the current candidate,
+confirmed facts, Case revision, advisor ledger, and Planning Skill inspector through
+the existing `no-store` BFF reads. The handoff itself does not create a task, resolve
+task inputs, open SSE, or change database authority. It keeps the same Case and
+advisor session, replaces the strict `schema_version=2` journey envelope once, and
+navigates to `/demo` once.
+
+Validation failure preserves the original collaboration envelope. The destination
+re-reads the same Case and consumes only `ledger.canonical_task_inputs`; active,
+review, or terminal task identity is adopted only from the ledger. Confirmation
+therefore remains separate from the explicit advisor task action.
 
 ### Role-safe projections
 

@@ -57,6 +57,18 @@ head. Confirmation alone still creates no task and does not enter `planning`; th
 operation from `intake` remains rejected. Planning never starts automatically, and
 existing creation from `planning` keeps its prior behavior.
 
+### Browser adoption and stream identity
+
+The controlled collaboration handoff creates no task. On `/demo`, task identity only
+from `advisor-ledger` may be adopted for an active, review, or terminal state. When no
+effective task exists, the advisor must use the explicit task action; its request body
+comes only from `ledger.canonical_task_inputs` for the continued same Case.
+
+The browser keeps one active EventSource per adopted task and one monotonic durable
+cursor. A newly created task opens exactly one initial `/events?after=0` connection;
+reload resumes after the stored cursor without creating another task or replacing the
+continued Case with the default fixture.
+
 ## Versioned Skill pin
 
 Every planning task created after migration `0008` stores exactly:

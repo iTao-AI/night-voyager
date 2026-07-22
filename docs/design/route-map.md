@@ -4,7 +4,8 @@
 handlers connect it to the existing FastAPI identity, task, review, decision, SSE,
 and exactly two M5 read endpoints. `/demo/collaboration` is a secondary governed
 memory walkthrough with seven explicit BFF route files exposing exactly eight HTTP
-methods for frozen collaboration and Skill-inspector reads/mutations.
+methods for frozen collaboration and Skill-inspector reads/mutations. The same-Case
+handoff composes these existing routes; it adds no new BFF handler.
 
 ```text
 /demo
@@ -20,7 +21,9 @@ methods for frozen collaboration and Skill-inspector reads/mutations.
   -> parent message -> typed budget candidate
   -> revoke parent -> mint assigned advisor
   -> advisor confirmation -> ConfirmedFact + Case revision
-  -> re-plan required; no AgentTask, polling, or EventSource
+  -> read-only candidate/fact/ledger/inspector validation
+  -> one envelope replacement -> /demo with the same Case and advisor session
+  -> explicit task action -> pinned task -> one EventSource -> existing decision flow
 ```
 
 The BFF is transport only: no catch-all, no role selector, no task/route/policy

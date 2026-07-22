@@ -301,6 +301,35 @@ def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> N
     assert "released in v0.1.2" in docs_index
 
 
+def test_fact_to_plan_walkthrough_is_publicly_discoverable_and_evidenced() -> None:
+    required_artifacts = (
+        "scripts/verify_fact_to_plan_flow.py",
+        "tests/integration/connected_demo/test_fact_to_plan_flow.py",
+        "web/e2e/fact-to-plan.spec.ts",
+    )
+    assert all((ROOT / relative).is_file() for relative in required_artifacts)
+
+    readmes = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in ("README.md", "README_CN.md")
+    )
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    walkthrough = (
+        ROOT / "docs/operations/collaboration-walkthrough.md"
+    ).read_text(encoding="utf-8")
+    connected = (ROOT / "docs/operations/connected-demo.md").read_text(
+        encoding="utf-8"
+    )
+    combined = " ".join((readmes, docs_index, walkthrough, connected))
+
+    assert "same-Case" in combined
+    assert "Continue to governed planning" in combined
+    assert "local synthetic" in combined
+    assert "provider-free" in combined
+    assert "PR 3 remains approved but not implemented" in combined
+    assert "creates no task" in combined or "zero task" in combined
+
+
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:
     source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
 

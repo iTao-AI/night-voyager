@@ -74,9 +74,15 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "PR 1 implemented locally; PR 2 and PR 3 approved but not implemented",
+        "PR 1 merged; PR 2 implemented locally; PR 3 approved but not implemented",
         "2026-07-22-explicit-planning-start-authority.md",
         "**Implementation status:** Implemented locally for authority review.",
+    ),
+    (
+        "Governed Fact-to-Plan Closure and bilingual presentation",
+        "PR 1 merged; PR 2 implemented locally; PR 3 approved but not implemented",
+        "2026-07-22-governed-fact-to-plan-walkthrough.md",
+        "**Implementation status:** Complete locally for authority review.",
     ),
 )
 
@@ -431,7 +437,7 @@ def test_explicit_planning_start_documents_match_0009_authority() -> None:
     assert "same five-field Skill pin" in normalized_worker
 
 
-def test_fact_to_plan_status_separates_pr1_from_unimplemented_pr2_and_pr3() -> None:
+def test_fact_to_plan_status_tracks_merged_pr1_local_pr2_and_pending_pr3() -> None:
     spec = (
         ROOT
         / "docs/superpowers/specs/2026-07-22-governed-fact-to-plan-closure-design.md"
@@ -446,8 +452,9 @@ def test_fact_to_plan_status_separates_pr1_from_unimplemented_pr2_and_pr3() -> N
     normalized_plan = " ".join(plan.split())
     normalized_docs_index = " ".join(docs_index.split())
 
-    assert "PR 1 is implemented locally for authority review" in normalized_spec
-    assert "PR 2 and PR 3 remain approved but not implemented" in normalized_spec
+    assert "PR 1 is merged" in normalized_spec
+    assert "PR 2 is implemented locally for authority review" in normalized_spec
+    assert "PR 3 remains approved but not implemented" in normalized_spec
     assert (
         "**Implementation status:** Implemented locally for authority review."
         in normalized_plan
@@ -455,12 +462,11 @@ def test_fact_to_plan_status_separates_pr1_from_unimplemented_pr2_and_pr3() -> N
     assert "PR 2 and PR 3 remain approved but not implemented" in normalized_plan
     assert (
         "| Governed Fact-to-Plan Closure and bilingual presentation | "
-        "PR 1 implemented locally; PR 2 and PR 3 approved but not implemented |"
+        "PR 1 merged; PR 2 implemented locally; PR 3 approved but not implemented |"
     ) in index
-    assert "PR 1 is implemented locally for authority review" in normalized_docs_index
-    assert (
-        "PR 2 and PR 3 remain approved but not implemented" in normalized_docs_index
-    )
+    assert "PR 1 is merged" in normalized_docs_index
+    assert "PR 2 is implemented locally for authority review" in normalized_docs_index
+    assert "PR 3 remains approved but not implemented" in normalized_docs_index
 
     adr = (ROOT / "docs/decisions/0010-explicit-planning-start-authority.md").read_text(
         encoding="utf-8"
@@ -474,6 +480,69 @@ def test_fact_to_plan_status_separates_pr1_from_unimplemented_pr2_and_pr3() -> N
     combined = "\n".join((adr, task_reference, http_reference))
     assert "planning starts automatically after confirmation" not in combined
     assert "POST /api/v1/cases/{case_id}/planning-start" not in combined
+
+
+def test_fact_to_plan_walkthrough_documents_same_case_explicit_authority() -> None:
+    collaboration = (
+        ROOT / "docs/operations/collaboration-walkthrough.md"
+    ).read_text(encoding="utf-8")
+    connected = (ROOT / "docs/operations/connected-demo.md").read_text(
+        encoding="utf-8"
+    )
+    storyboard = (ROOT / "docs/design/demo-storyboard.md").read_text(
+        encoding="utf-8"
+    )
+    route_map = (ROOT / "docs/design/route-map.md").read_text(encoding="utf-8")
+    state_matrix = (
+        ROOT / "docs/design/state-and-interaction-matrix.md"
+    ).read_text(encoding="utf-8")
+    projection_matrix = (ROOT / "docs/design/projection-matrix.md").read_text(
+        encoding="utf-8"
+    )
+    facts_reference = (
+        ROOT / "docs/reference/collaboration-and-confirmed-facts.md"
+    ).read_text(encoding="utf-8")
+    task_reference = (ROOT / "docs/reference/agent-tasks-and-events.md").read_text(
+        encoding="utf-8"
+    )
+    skill_reference = (
+        ROOT / "docs/reference/versioned-skills-and-runtime-pins.md"
+    ).read_text(encoding="utf-8")
+
+    normalized = {
+        "collaboration": " ".join(collaboration.split()),
+        "connected": " ".join(connected.split()),
+        "storyboard": " ".join(storyboard.split()),
+        "route_map": " ".join(route_map.split()),
+        "state_matrix": " ".join(state_matrix.split()),
+        "projection_matrix": " ".join(projection_matrix.split()),
+        "facts_reference": " ".join(facts_reference.split()),
+        "task_reference": " ".join(task_reference.split()),
+        "skill_reference": " ".join(skill_reference.split()),
+    }
+
+    assert "Continue to governed planning" in normalized["collaboration"]
+    assert "same Case" in normalized["collaboration"]
+    assert "zero task" in normalized["collaboration"]
+    assert "continued Case" in normalized["connected"]
+    assert "ledger.canonical_task_inputs" in normalized["connected"]
+    assert "one active `EventSource`" in normalized["connected"]
+    assert "same Case" in normalized["storyboard"]
+    assert "explicit task action" in normalized["storyboard"]
+    assert "same-Case handoff" in normalized["route_map"]
+    assert "no new BFF" in normalized["route_map"]
+    assert "`handoff_validating`" in normalized["state_matrix"]
+    assert "transient" in normalized["state_matrix"]
+    assert "current confirmed facts" in normalized["projection_matrix"]
+    assert "Case revision" in normalized["projection_matrix"]
+    assert "does not create a task" in normalized["facts_reference"]
+    assert "same Case" in normalized["facts_reference"]
+    assert "task identity only from `advisor-ledger`" in normalized["task_reference"]
+    assert "handoff itself never resolves a Skill pin" in normalized["skill_reference"]
+
+    all_functional_docs = "\n".join(normalized.values())
+    assert "planning starts automatically after confirmation" not in all_functional_docs
+    assert "POST /api/v1/cases/{case_id}/planning-start" not in all_functional_docs
 
 
 def test_current_collaboration_documents_do_not_revert_to_unreleased_or_deferred() -> None:
@@ -501,7 +570,7 @@ def test_current_collaboration_documents_do_not_revert_to_unreleased_or_deferred
 
 
 def test_collaboration_state_matrix_matches_executable_and_approved_plan() -> None:
-    expected = {
+    expected_persisted = {
         "bootstrapping_parent",
         "thread_ready",
         "message_submitting",
@@ -533,6 +602,7 @@ def test_collaboration_state_matrix_matches_executable_and_approved_plan() -> No
         "The secondary collaboration route has its own closed lifecycle:", 1
     )[1].split("The fresh UI defaults", 1)[0]
     documented = set(re.findall(r"\| `([a-z_]+)` \|", matrix_block))
-    assert executable == expected
-    assert approved == expected
-    assert documented == expected
+    assert executable == expected_persisted
+    assert approved == expected_persisted
+    assert '"handoff_validating"' in reducer
+    assert documented == expected_persisted | {"handoff_validating"}

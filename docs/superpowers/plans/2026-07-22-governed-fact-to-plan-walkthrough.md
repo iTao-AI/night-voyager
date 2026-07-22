@@ -1,6 +1,11 @@
 # Governed Fact-to-Plan Walkthrough Implementation Plan
 
-**Implementation status:** Approved plan. Implementation has not started.
+**Implementation status:** Complete locally for authority review.
+
+Tasks 1–5 are implemented and committed on the isolated PR 2 branch. Task 6 records
+fresh full verification and leaves the clean local branch/worktree for independent
+authority review. No push, pull request, merge, release, provider run, or PR 3 work is
+authorized by this status.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation
@@ -122,7 +127,7 @@ but integration into shared hooks remains serialized.
   generic failure event cannot preserve the required resume phase. Prefer the
   smallest event surface that keeps `replan_required` recoverable.
 
-- [ ] **Step 1: Write conversion RED tests**
+- [x] **Step 1: Write conversion RED tests**
 
   Cover exact valid conversion and reject parent role, every non-terminal phase,
   partial/malformed IDs, extra fields, altered CSRF/Case, carried collaboration
@@ -143,13 +148,13 @@ but integration into shared hooks remains serialized.
   });
   ```
 
-- [ ] **Step 2: Write reducer RED tests**
+- [x] **Step 2: Write reducer RED tests**
 
   Assert `replan_required -> handoff_validating`; failure returns a closed
   recoverable state whose retry performs a read-only validation; reload hydration
   cannot persist `handoff_validating`.
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
   ```bash
   npm --prefix web run test -- collaboration-session collaboration-reducer \
@@ -159,12 +164,12 @@ but integration into shared hooks remains serialized.
 
   Expected: missing conversion function/state and type errors.
 
-- [ ] **Step 4: Implement minimal GREEN**
+- [x] **Step 4: Implement minimal GREEN**
 
   Keep the storage key `night-voyager:m5` and both existing envelope schemas
   unchanged. Export the pure conversion and transient reducer state only.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
   ```bash
   npm --prefix web run test -- collaboration-session collaboration-reducer \
@@ -233,34 +238,34 @@ Validation rules:
 - do not treat inspector data as authority for conversion; it is refreshed only for
   visible proof.
 
-- [ ] **Step 1: Write hook RED tests**
+- [x] **Step 1: Write hook RED tests**
 
   Cover the valid task-ready path, concurrent active-task adoption, review-required
   and terminal-task adoption, family-review and plan-ready conversion with a null
   task ID, no task POST, exact read order, one storage replacement, one navigation,
   unchanged CSRF/Case, empty mutation map, and cursor reset.
 
-- [ ] **Step 2: Add failure RED matrix**
+- [x] **Step 2: Add failure RED matrix**
 
   Candidate missing/stale/wrong, fact missing/mismatched, revision drift, Case drift,
   wrong role, expired session, unavailable ledger, malformed projection, and unknown
   failure must leave the collaboration envelope byte-identical. Retry invokes only
   authority reads, never a mutation.
 
-- [ ] **Step 3: Add component RED tests**
+- [x] **Step 3: Add component RED tests**
 
   Replace the old link with one primary button. During `handoff_validating`, show a
   disabled, live-region status and no second action. Keep the current confirmed fact
   visible. Focus the new phase heading after transition or failure.
 
-- [ ] **Step 4: Run RED**
+- [x] **Step 4: Run RED**
 
   ```bash
   npm --prefix web run test -- use-collaboration-demo collaboration-demo \
     collaboration-recovery collaboration-session
   ```
 
-- [ ] **Step 5: Implement and run GREEN**
+- [x] **Step 5: Implement and run GREEN**
 
   ```bash
   npm --prefix web run test -- use-collaboration-demo collaboration-demo \
@@ -269,7 +274,7 @@ Validation rules:
   npm --prefix web run typecheck
   ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add web/lib/collaboration-demo/use-collaboration-demo.ts \
@@ -314,25 +319,25 @@ Validation rules:
   fact summary; this PR keeps existing English presentation and excludes internal IDs,
   raw candidate/message bodies, actor IDs, request hashes, and history.
 
-- [ ] **Step 1: Write destination RED tests**
+- [x] **Step 1: Write destination RED tests**
 
   Build a non-default Case envelope. Assert every API call uses that Case and no call
   uses the default fixture. Cover task-ready, active task, review required, terminal,
   current brief, reload, and interrupted navigation.
 
-- [ ] **Step 2: Write fact-presentation RED tests**
+- [x] **Step 2: Write fact-presentation RED tests**
 
   Assert the current `family.budget`, fact version, and Case revision render; internal
   UUIDs and raw JSON do not. Missing facts render a bounded empty state, not a stale
   previous projection.
 
-- [ ] **Step 3: Preserve inspector and SSE invariants**
+- [x] **Step 3: Preserve inspector and SSE invariants**
 
   Assert handoff itself has zero task POST and zero EventSource. Explicit task create
   opens exactly one `/events?after=0`; recovery uses the stored task/cursor; inspector
   is `not_created` before creation and `matched` only after server proof.
 
-- [ ] **Step 4: Implement and run GREEN**
+- [x] **Step 4: Implement and run GREEN**
 
   ```bash
   npm --prefix web run test -- connected-demo-recovery connected-demo-ui \
@@ -342,7 +347,7 @@ Validation rules:
   npm --prefix web run build
   ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
   ```bash
   git add web/lib/connected-demo/use-connected-demo.ts \
@@ -388,13 +393,13 @@ Validation rules:
 10. Real advisor revoke/bootstrap/parent mint.
 11. Family confirms; database proves receipt and timeline for the same Case.
 
-- [ ] **Step 1: Write browser RED**
+- [x] **Step 1: Write browser RED**
 
   Use role/name selectors, not CSS implementation selectors. Capture all mutation
   requests and prove no task request occurs before the explicit destination action.
   Assert one EventSource and monotonic durable cursor.
 
-- [ ] **Step 2: Write database verifier RED**
+- [x] **Step 2: Write database verifier RED**
 
   Accept only the browser-observed Case/task identifiers through bounded command
   arguments or an owned proof file. Query PostgreSQL as an approved proof role and
@@ -402,20 +407,20 @@ Validation rules:
   execution, Skill pin, PlanningRun, review, brief, decision, receipt, and timeline
   relationships. Never print raw cookies, CSRF, or source contents.
 
-- [ ] **Step 3: Wire the real Compose lane**
+- [x] **Step 3: Wire the real Compose lane**
 
   Add `fact-to-plan.spec.ts` to `testMatch`. Run the database verifier after the
   browser flow. Preserve current connected and collaboration specs as independent
   compatibility lanes.
 
-- [ ] **Step 4: Add recovery and responsive cases**
+- [x] **Step 4: Add recovery and responsive cases**
 
   Cover reload before validation, after envelope replacement, during task streaming,
   during review, and after parent rotation. Exercise 1440, 768, and 390 px, keyboard
   focus, landmarks, 44 px action target, and no horizontal overflow. PR 3 later owns
   visual polish and bilingual screenshots.
 
-- [ ] **Step 5: Run focused and full browser GREEN**
+- [x] **Step 5: Run focused and full browser GREEN**
 
   ```bash
   npm --prefix web run test
@@ -428,7 +433,7 @@ Validation rules:
   docker compose ps --all
   ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
   ```bash
   git add web/e2e/fact-to-plan.spec.ts web/playwright.compose.config.ts \
@@ -475,17 +480,17 @@ Validation rules:
 - Existing v0.1.2 release docs/screenshots remain immutable history until PR 3
   creates new current screenshots; do not rewrite tagged records.
 
-- [ ] **Step 1: Add documentation RED assertions**
+- [x] **Step 1: Add documentation RED assertions**
 
   Test route/state/storyboard consistency, same-Case wording, no automatic planning,
   no new BFF, functional plan status, and PR 3 still pending.
 
-- [ ] **Step 2: Run GStack `document-release`**
+- [x] **Step 2: Run GStack `document-release`**
 
   Audit reference, operations/how-to, explanation, and evaluator entry points. Use
   `document-generate` only for a verified in-scope gap.
 
-- [ ] **Step 3: Update docs and run GREEN**
+- [x] **Step 3: Update docs and run GREEN**
 
   ```bash
   uv run pytest -q tests/architecture/test_documentation_governance.py \
@@ -494,7 +499,7 @@ Validation rules:
   git diff --check
   ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
   ```bash
   git add README.md README_CN.md docs/README.md docs/superpowers/README.md \
@@ -519,7 +524,7 @@ Validation rules:
 
 **Files:** None expected.
 
-- [ ] **Step 1: Preflight and deterministic gates**
+- [x] **Step 1: Preflight and deterministic gates**
 
   ```bash
   git status --short
@@ -532,14 +537,14 @@ Validation rules:
   npm --prefix web run build
   ```
 
-- [ ] **Step 2: Full backend and database gates**
+- [x] **Step 2: Full backend and database gates**
 
   ```bash
   make check
   make proof
   ```
 
-- [ ] **Step 3: Fresh Compose/Chromium proof and teardown**
+- [x] **Step 3: Fresh Compose/Chromium proof and teardown**
 
   ```bash
   make compose-proof
@@ -550,7 +555,7 @@ Validation rules:
   Record the task-owned project/image/cache/volume inventory before and after. Do
   not prune unrelated resources.
 
-- [ ] **Step 4: Final review**
+- [x] **Step 4: Final review**
 
   ```bash
   BASE=$(git merge-base HEAD origin/main)
@@ -563,7 +568,7 @@ Validation rules:
   Confirm no migration, backend authority, BFF route, dependency, lockfile, version,
   release, provider, DRA, or MKE diff.
 
-- [ ] **Step 5: Handoff**
+- [x] **Step 5: Handoff**
 
   Keep a clean local branch/worktree for independent authority review. Report exact
   base/HEAD, ordered commits, focused RED -> GREEN, one continuous browser-to-database
@@ -572,16 +577,16 @@ Validation rules:
 
 ## Acceptance Checklist
 
-- [ ] Handoff validates current candidate, fact, revision, ledger, and Case identity.
-- [ ] Handoff sends zero task mutations and performs one exact storage replacement.
-- [ ] `/demo` recovers the same non-default Case and never substitutes the seed Case.
-- [ ] Task inputs come only from destination `advisor-ledger`.
-- [ ] Concurrent current task identity is adopted only from the ledger.
-- [ ] Existing one-EventSource, cursor, retry, review, role, and decision contracts
+- [x] Handoff validates current candidate, fact, revision, ledger, and Case identity.
+- [x] Handoff sends zero task mutations and performs one exact storage replacement.
+- [x] `/demo` recovers the same non-default Case and never substitutes the seed Case.
+- [x] Task inputs come only from destination `advisor-ledger`.
+- [x] Concurrent current task identity is adopted only from the ledger.
+- [x] Existing one-EventSource, cursor, retry, review, role, and decision contracts
   remain green.
-- [ ] Real Chromium and PostgreSQL prove the full confirmed-fact-to-receipt chain.
-- [ ] Standalone `/demo` and `/demo/collaboration` remain independently usable.
-- [ ] PR 3 remains presentation-only and unimplemented until this PR is merged.
+- [x] Real Chromium and PostgreSQL prove the full confirmed-fact-to-receipt chain.
+- [x] Standalone `/demo` and `/demo/collaboration` remain independently usable.
+- [x] PR 3 remains presentation-only and unimplemented until this PR is merged.
 
 ## Not in Scope
 
