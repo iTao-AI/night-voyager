@@ -74,14 +74,20 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "PR 1 merged; PR 2 implemented locally; PR 3 approved but not implemented",
+        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review",
         "2026-07-22-explicit-planning-start-authority.md",
         "**Implementation status:** Implemented locally for authority review.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "PR 1 merged; PR 2 implemented locally; PR 3 approved but not implemented",
+        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review",
         "2026-07-22-governed-fact-to-plan-walkthrough.md",
+        "**Implementation status:** Complete locally for authority review.",
+    ),
+    (
+        "Governed Fact-to-Plan Closure and bilingual presentation",
+        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review",
+        "2026-07-22-chinese-first-portfolio-presentation.md",
         "**Implementation status:** Complete locally for authority review.",
     ),
 )
@@ -437,7 +443,7 @@ def test_explicit_planning_start_documents_match_0009_authority() -> None:
     assert "same five-field Skill pin" in normalized_worker
 
 
-def test_fact_to_plan_status_tracks_merged_pr1_local_pr2_and_pending_pr3() -> None:
+def test_fact_to_plan_status_tracks_merged_pr1_pr2_and_local_pr3() -> None:
     spec = (
         ROOT
         / "docs/superpowers/specs/2026-07-22-governed-fact-to-plan-closure-design.md"
@@ -453,20 +459,18 @@ def test_fact_to_plan_status_tracks_merged_pr1_local_pr2_and_pending_pr3() -> No
     normalized_docs_index = " ".join(docs_index.split())
 
     assert "PR 1 is merged" in normalized_spec
-    assert "PR 2 is implemented locally for authority review" in normalized_spec
-    assert "PR 3 remains approved but not implemented" in normalized_spec
+    assert "PR 2 is merged" in normalized_spec
+    assert "PR 3 is implemented locally for authority review" in normalized_spec
     assert (
         "**Implementation status:** Implemented locally for authority review."
         in normalized_plan
     )
-    assert "PR 2 and PR 3 remain approved but not implemented" in normalized_plan
     assert (
         "| Governed Fact-to-Plan Closure and bilingual presentation | "
-        "PR 1 merged; PR 2 implemented locally; PR 3 approved but not implemented |"
+        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review |"
     ) in index
-    assert "PR 1 is merged" in normalized_docs_index
-    assert "PR 2 is implemented locally for authority review" in normalized_docs_index
-    assert "PR 3 remains approved but not implemented" in normalized_docs_index
+    assert "PR 1 and PR 2 are merged" in normalized_docs_index
+    assert "PR 3 is implemented locally for authority review" in normalized_docs_index
 
     adr = (ROOT / "docs/decisions/0010-explicit-planning-start-authority.md").read_text(
         encoding="utf-8"
@@ -480,6 +484,44 @@ def test_fact_to_plan_status_tracks_merged_pr1_local_pr2_and_pending_pr3() -> No
     combined = "\n".join((adr, task_reference, http_reference))
     assert "planning starts automatically after confirmation" not in combined
     assert "POST /api/v1/cases/{case_id}/planning-start" not in combined
+
+
+def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
+    readmes = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in ("README.md", "README_CN.md")
+    )
+    docs = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "DESIGN.md",
+            "docs/README.md",
+            "docs/operations/connected-demo.md",
+            "docs/operations/collaboration-walkthrough.md",
+            "docs/design/demo-storyboard.md",
+            "docs/design/route-map.md",
+            "docs/design/state-and-interaction-matrix.md",
+            "docs/design/projection-matrix.md",
+        )
+    )
+    combined = " ".join((readmes, docs))
+
+    for asset in (
+        "night-voyager-portfolio-entry.png",
+        "m5-advisor-ledger.png",
+        "m5-family-receipt-timeline.png",
+        "collaboration-confirmed-fact.png",
+    ):
+        assert asset in combined
+    for token in (
+        "zh-CN",
+        "night-voyager:presentation-locale:v1",
+        "/demo",
+        "/demo/collaboration",
+        "local synthetic",
+        "provider-free",
+    ):
+        assert token in combined
 
 
 def test_fact_to_plan_walkthrough_documents_same_case_explicit_authority() -> None:

@@ -3,8 +3,9 @@
 ## Status
 
 Approved design. PR 1 is merged through PR #57 at
-`a85190deb6261ec034979334bd3d953a3cf9d8d4`. PR 2 is implemented locally for
-authority review. PR 3 remains approved but not implemented.
+`a85190deb6261ec034979334bd3d953a3cf9d8d4`. PR 2 is merged through PR #58 at
+`e7612c7adfd478dda3644706bffb4aed1f2c5b34`. PR 3 is implemented locally for
+authority review.
 
 This document defines the next bounded Night Voyager product increment after the
 `v0.1.2` Governed Collaboration Core release. Approval of this design authorizes
@@ -15,8 +16,9 @@ deployment, live-provider execution, or cleanup of unrelated resources.
 PR 1 is unreleased post-`v0.1.2` work now merged to `main`. It adds migration `0009`
 and the explicit planning-start authority without changing the public HTTP schema.
 PR 2 composes that authority into the local same-Case browser walkthrough without a
-new backend or BFF route. Its push, pull request creation, hosted CI, review, and merge
-remain separate gates; this status does not authorize PR 3.
+new backend or BFF route. PR 3 adds the Chinese-first presentation without changing
+that authority. PR 3 push, pull request creation, hosted CI, review, merge, release,
+and deployment remain separate gates.
 
 ## Summary
 

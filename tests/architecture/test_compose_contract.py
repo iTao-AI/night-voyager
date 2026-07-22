@@ -160,11 +160,17 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
     assert "requiredVisible: readonly Locator[]" in browser
     assert "for (const required of requiredVisible)" in browser
     for content in (
-        'page.getByRole("heading", { name: "Re-plan required" })',
+        'replan: "Re-plan required"',
+        'replan: "需要重新规划"',
+        'receipt: "Family Decision Receipt"',
+        'receipt: "家庭决定回执"',
+        'timeline: "Action timeline"',
+        'timeline: "行动时间线"',
+        'page.getByRole("heading", { name: presentationCopy.replan })',
         'page.getByText("Fact version 1")',
         'page.getByText("Case revision 2")',
-        'page.getByRole("heading", { name: "Decision Receipt" })',
-        'page.getByRole("heading", { name: "Timeline Plan" })',
+        'page.getByRole("heading", { name: presentationCopy.receipt })',
+        'page.getByRole("heading", { name: presentationCopy.timeline })',
     ):
         assert content in browser
 

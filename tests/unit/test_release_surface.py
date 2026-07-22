@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import shutil
 import struct
@@ -326,8 +327,54 @@ def test_fact_to_plan_walkthrough_is_publicly_discoverable_and_evidenced() -> No
     assert "Continue to governed planning" in combined
     assert "local synthetic" in combined
     assert "provider-free" in combined
-    assert "PR 3 remains approved but not implemented" in combined
+    assert "PR 3 is implemented locally for authority review" in combined
     assert "creates no task" in combined or "zero task" in combined
+
+
+def test_chinese_first_portfolio_screenshots_and_historical_release_artifacts() -> None:
+    screenshots = (
+        "docs/assets/night-voyager-portfolio-entry.png",
+        "docs/assets/m5-advisor-ledger.png",
+        "docs/assets/m5-family-receipt-timeline.png",
+        "docs/assets/collaboration-confirmed-fact.png",
+    )
+    for relative in screenshots:
+        png = (ROOT / relative).read_bytes()
+        assert png[:8] == b"\x89PNG\r\n\x1a\n"
+        width, height = struct.unpack(">II", png[16:24])
+        assert width == 1440
+        assert height >= 900
+
+    browser_source = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "web/e2e/fact-to-plan.spec.ts",
+            "web/e2e/connected-demo.spec.ts",
+            "web/e2e/collaboration-demo.spec.ts",
+        )
+    )
+    for token in (
+        "当前决策阶段",
+        "需要重新规划",
+        "家庭决定回执",
+        "行动时间线",
+        "night-voyager-portfolio-entry.png",
+        "m5-advisor-ledger.png",
+        "m5-family-receipt-timeline.png",
+        "collaboration-confirmed-fact.png",
+    ):
+        assert token in browser_source
+
+    immutable_hashes = {
+        "docs/releases/v0.1.2.md": (
+            "f09019619a086a8b548c3ab4a9c313a002c513308069b30162ab2816bb04e7fc"
+        ),
+        "docs/how-to/verify-v0.1.2-release.md": (
+            "5ffba625c4eb4dd78330a0a51b96065de763f5aab8f0a32928c3bf65cd0f3060"
+        ),
+    }
+    for relative, expected in immutable_hashes.items():
+        assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
 
 
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:

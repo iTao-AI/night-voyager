@@ -4,6 +4,17 @@ M5 connects the primary `/demo` route to the local synthetic FastAPI, worker, SS
 paths. It proves an advisor-to-parent workflow; it is not production tenancy,
 live institutional coverage, or admissions advice.
 
+The shared presentation shell server-renders exact `zh-CN`. The header's labelled
+`中文` / `English` control can persist exact `en` at
+`night-voyager:presentation-locale:v1`; invalid or unavailable storage falls back to
+Chinese. This preference changes only presentation copy and `html[lang]`. It does not
+bootstrap, mint, revoke, fetch, mutate, retry, create a task, reconnect SSE, navigate,
+or enter the `sessionStorage` journey envelope.
+
+![Chinese advisor review state](../assets/m5-advisor-ledger.png)
+
+![Chinese family receipt and timeline](../assets/m5-family-receipt-timeline.png)
+
 The secondary `/demo/collaboration` route is documented in the
 [governed collaboration walkthrough](collaboration-walkthrough.md). It shares the
 session envelope and read-only inspector. Its controlled handoff creates no task or
@@ -19,7 +30,8 @@ Open `http://127.0.0.1:3000/demo` for the standalone seeded walkthrough, or cont
 from `/demo/collaboration` after confirming a fact. In the continued journey,
 `/demo` restores the same non-default Case, shows its current confirmed facts and
 revision, and re-reads task inputs from `ledger.canonical_task_inputs`. Use the
-explicit task action, wait for the durable stream to reach review, approve Australia,
+explicit `创建规划任务` (`Create planning task`) action, wait for the durable stream
+to reach review, approve Australia,
 rotate into the parent session, confirm the server-derived trade-off, and retain the
 resulting receipt and timeline. Stop the stack with `make down`.
 

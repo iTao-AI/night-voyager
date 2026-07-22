@@ -1,5 +1,10 @@
 # State and interaction matrix
 
+Presentation state is orthogonal to both lifecycles. Exact `zh-CN` is the SSR,
+missing, invalid, and storage-failure default; exact `en` is explicitly selectable.
+Switching writes only `night-voyager:presentation-locale:v1` and leaves lifecycle
+state, requests, idempotency, journey storage, EventSource, and navigation unchanged.
+
 | Phase | Visible truth | Primary action | Forbidden action |
 | --- | --- | --- | --- |
 | `task-ready` | current Case and canonical inputs; no task/run | create task | approve or derive pins |

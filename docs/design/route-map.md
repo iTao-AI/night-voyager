@@ -29,5 +29,6 @@ handoff composes these existing routes; it adds no new BFF handler.
 The BFF is transport only: no catch-all, no role selector, no task/route/policy
 authority, and no client-computed decision requirements. The shared planning Skill
 inspector is a server-owned `no-store` projection; it performs no client-side
-relational join and grants no mutation authority. `/` remains the M0 bootstrap page.
-All connected state is local synthetic PostgreSQL state.
+relational join and grants no mutation authority. `/` is the current static
+Chinese-first portfolio entry and makes no API/session request. All connected state
+is local synthetic PostgreSQL state.

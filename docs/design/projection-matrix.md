@@ -12,6 +12,7 @@
 | `AgentTask` | task phase and progress | absent from main narrative | durable task/event rows |
 | `MemoryCandidate` | current handoff candidate | absent | current no-store candidate projection |
 | `ConfirmedFact` + Case revision | current confirmed facts, fact version, and revision | family-safe fact after role rotation | PostgreSQL current fact heads and Case |
+| presentation locale | exact `zh-CN` or `en` labels over the same projection | exact `zh-CN` or `en` labels over the same projection | presentation-only `localStorage`; no business authority |
 
 Before task creation, the checked-in fixture contract only limits the canonical
 synthetic input identity and must match the existing source-pack row. It is not
