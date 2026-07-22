@@ -4,6 +4,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const proofFile = process.env.FACT_TO_PLAN_PROOF_FILE;
 const workerReadyFile = process.env.FACT_TO_PLAN_WORKER_READY_FILE;
+const workerReadySentinel = process.env.FACT_TO_PLAN_WORKER_READY_SENTINEL;
 const rawPublicData = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|schema_version|confirmed_fact_id|candidate_id|request_sha256|night_voyager_(?:api|worker|migrator)|\/Users\/|Traceback|csrf|cookie/i;
 
 async function expectPublicSurface(page: Page) {
@@ -28,7 +29,7 @@ async function expectResponsiveSurface(page: Page, requiredVisible: readonly Loc
 }
 
 test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database journey", async ({ page }) => {
-  test.skip(!proofFile || !workerReadyFile, "runs only in the isolated fact-to-plan Compose lane");
+  test.skip(!proofFile || !workerReadyFile || !workerReadySentinel, "runs only in the isolated fact-to-plan Compose lane");
   let storageReplacements = 0;
   await page.exposeFunction("recordFactToPlanStorageWrite", () => { storageReplacements += 1; });
   await page.addInitScript(() => {
@@ -106,7 +107,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   const firstStream = page.waitForRequest((request) => request.url().includes("/events?after=0"));
   await page.getByRole("button", { name: "Create planning task" }).click();
   await firstStream;
-  await writeFile(workerReadyFile!, "task accepted and initial SSE observed\n", { encoding: "utf8", mode: 0o600 });
+  await writeFile(workerReadyFile!, `${workerReadySentinel}\n`, { encoding: "utf8", mode: 0o600 });
   await page.waitForFunction(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0);
   const storedCursor = await page.evaluate(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor));
   const reloadStream = page.waitForRequest((request) => request.url().includes("/events?after="));

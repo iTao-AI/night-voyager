@@ -166,6 +166,31 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
         assert content in browser
 
     assert "FACT_TO_PLAN_WORKER_READY_FILE=docs/assets/.fact-to-plan-worker-ready" in script
-    assert 'test -f "$FACT_TO_PLAN_WORKER_READY_FILE"' in script
     assert "sleep 15" not in script
     assert "seq 1 120" in script
+
+
+def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content() -> None:
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    prepare = ': > "$FACT_TO_PLAN_PROOF_FILE"\n: > "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    permission = 'chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    sentinel = 'FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"'
+    watcher = 'grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    browser_run = "browser-proof npx playwright test"
+
+    assert prepare in script
+    assert permission in script
+    assert sentinel in script
+    assert watcher in script
+    assert 'test -f "$FACT_TO_PLAN_WORKER_READY_FILE"' not in script
+    assert 'test -s "$FACT_TO_PLAN_PROOF_FILE"' in script
+    assert script.index(prepare) < script.index(permission) < script.index(watcher)
+    assert script.index(watcher) < script.index(browser_run)
+    assert 'chmod 0666 docs/assets' not in script
+
+    cleanup = script.split("cleanup() {", 1)[1].split("}", 1)[0]
+    assert 'rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"' in cleanup
+    assert "FACT_TO_PLAN_WORKER_READY_SENTINEL" in browser
+    assert '`${workerReadySentinel}\\n`' in browser
