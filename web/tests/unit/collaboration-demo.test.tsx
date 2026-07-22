@@ -125,6 +125,7 @@ it("keeps confirmed fact visible during one disabled handoff validation", async 
   expect(screen.getByText("Fact version 1")).toBeVisible();
   expect(screen.getByRole("heading", { name: "正在验证规划 authority" })).toHaveFocus();
   expect(screen.getByRole("button", { name: "正在验证 authority…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "正在验证 authority…" }).closest("details")).toBeNull();
   expect(screen.queryByRole("button", { name: "继续进入受治理规划" })).toBeNull();
 });
 

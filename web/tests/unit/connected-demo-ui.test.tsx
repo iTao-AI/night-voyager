@@ -28,6 +28,7 @@ it("renders Chinese task-ready authority with one primary action and no raw phas
   expect(screen.getByRole("heading", { name: "当前决策阶段" })).toBeVisible();
   expect(screen.getByText("可以开始规划")).toBeVisible();
   expect(screen.getByRole("button", { name: "创建规划任务" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "创建规划任务" }).closest("details")).toBeNull();
   expect(screen.getByText("Case revision 1")).toBeVisible();
   expect(container).not.toHaveTextContent(/task-ready|lease owner|organization_id|reviewer notes/i);
 });
@@ -122,6 +123,7 @@ it("renders only server-derived family constraints before provenance", () => {
   expect(screen.getByText("¥400,000")).toBeVisible();
   expect(screen.getAllByText("预算弹性").length).toBeGreaterThan(0);
   expect(screen.getByRole("button", { name: "确认澳大利亚路线" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "确认澳大利亚路线" }).closest("details")).toBeNull();
   expect(container).not.toHaveTextContent(/budget_elasticity|30,550,000|40,000,000/);
 });
 

@@ -21,9 +21,12 @@ async function expectResponsiveSurface(page: Page, requiredVisible: readonly Loc
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth === document.documentElement.clientWidth)).toBe(true);
     const undersized = await page.locator("button:visible, a.primary-action:visible").evaluateAll((nodes) => nodes.filter((node) => node.getBoundingClientRect().height < 44).length);
     expect(undersized).toBe(0);
+    const controls = await page.getByRole("group", { name: /展示语言|Presentation language/ }).boundingBox();
+    expect(controls).not.toBeNull();
+    expect((controls?.x ?? 0) + (controls?.width ?? 0)).toBeLessThanOrEqual(viewport.width);
     for (const required of requiredVisible) await expect(required).toBeVisible();
   }
 }
@@ -50,19 +53,19 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.goto("/demo/collaboration");
   await expectPublicSurface(page);
   await page.keyboard.press("Tab");
-  await expect(page.getByRole("link", { name: "Skip to collaboration workflow" })).toBeFocused();
-  await page.getByRole("button", { name: "Start parent walkthrough" }).click();
-  await page.getByRole("button", { name: "Add confirmed budget message" }).click();
-  await page.getByRole("button", { name: "Propose this budget for advisor review" }).click();
-  await page.getByRole("button", { name: "Continue as assigned advisor" }).click();
-  await page.getByRole("button", { name: "Confirm family budget" }).click();
-  await expect(page.getByRole("heading", { name: "Re-plan required" })).toBeFocused();
+  await expect(page.getByRole("link", { name: "跳到主要内容" })).toBeFocused();
+  await page.getByRole("button", { name: "开始家长流程" }).click();
+  await page.getByRole("button", { name: "添加已确认预算消息" }).click();
+  await page.getByRole("button", { name: "提交预算供顾问审核" }).click();
+  await page.getByRole("button", { name: "以指定顾问身份继续" }).click();
+  await page.getByRole("button", { name: "确认家庭预算" }).click();
+  await expect(page.getByRole("heading", { name: "需要重新规划" })).toBeFocused();
   await expect(page.getByText("Fact version 1")).toBeVisible();
   await expect(page.getByText("Case revision 2")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Re-plan required" })).toBeFocused();
+  await expect(page.getByRole("heading", { name: "需要重新规划" })).toBeFocused();
   await expectResponsiveSurface(page, [
-    page.getByRole("heading", { name: "Re-plan required" }),
+    page.getByRole("heading", { name: "需要重新规划" }),
     page.getByText("Fact version 1"),
     page.getByText("Case revision 2"),
   ]);
@@ -88,10 +91,10 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
       page.off("request", readListener);
     }
   });
-  await page.getByRole("button", { name: "Continue to governed planning" }).click();
+  await page.getByRole("button", { name: "继续进入受治理规划" }).click();
   await page.waitForURL("**/demo");
-  await expect(page.getByRole("heading", { name: "Advisor Ledger" })).toBeVisible();
-  await expect(page.getByText("family.budget")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "当前决策阶段" })).toBeVisible();
+  await expect(page.getByText("家庭总预算")).toBeVisible();
   await expect(page.getByText("Case revision 2").first()).toBeVisible();
   expect(handoffReads).toEqual([
     `/api/demo/cases/${caseId}/memory-candidates`,
@@ -105,7 +108,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   expect(planningNavigations).toBe(1);
 
   const firstStream = page.waitForRequest((request) => request.url().includes("/events?after=0"));
-  await page.getByRole("button", { name: "Create planning task" }).click();
+  await page.getByRole("button", { name: "创建规划任务" }).click();
   await firstStream;
   await writeFile(workerReadyFile!, `${workerReadySentinel}\n`, { encoding: "utf8", mode: 0o600 });
   await page.waitForFunction(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0);
@@ -113,26 +116,26 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   const reloadStream = page.waitForRequest((request) => request.url().includes("/events?after="));
   await page.reload();
   expect(new URL((await reloadStream).url()).searchParams.get("after")).toBe(String(storedCursor));
-  await expect(page.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled({ timeout: 60_000 });
-  await expect(page.getByText("Pinned execution matched")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "批准澳大利亚进入家庭审核" })).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByText("运行时 Skill pin 已匹配")).toBeVisible();
+  await expect(page.getByRole("button", { name: "批准澳大利亚进入家庭审核" })).toBeEnabled();
   expect(taskPostsForCase(caseId)).toHaveLength(1);
   expect(eventRequests.filter((url) => new URL(url).searchParams.get("after") === "0")).toHaveLength(1);
   const taskId = await page.evaluate(() => JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "null").taskId as string);
 
-  await page.getByRole("button", { name: "Approve Australia for family review" }).click();
-  await expect(page.getByRole("heading", { name: "Family Decision Brief" })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("button", { name: "批准澳大利亚进入家庭审核" }).click();
+  await expect(page.getByRole("heading", { name: "家庭决定简报" })).toBeVisible({ timeout: 30_000 });
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Family Decision Brief" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "家庭决定简报" })).toBeVisible();
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Confirm Australia route" }).click();
-  await expect(page.getByRole("heading", { name: "Decision Receipt" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Timeline Plan" })).toBeVisible();
+  await page.getByRole("button", { name: "确认澳大利亚路线" }).click();
+  await expect(page.getByRole("heading", { name: "家庭决定回执" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "行动时间线" })).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Decision Receipt" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "家庭决定回执" })).toBeVisible();
   await expectResponsiveSurface(page, [
-    page.getByRole("heading", { name: "Decision Receipt" }),
-    page.getByRole("heading", { name: "Timeline Plan" }),
+    page.getByRole("heading", { name: "家庭决定回执" }),
+    page.getByRole("heading", { name: "行动时间线" }),
   ]);
   await expectPublicSurface(page);
 

@@ -29,4 +29,17 @@ describe("PresentationShell", () => {
     expect(screen.getByText("Local synthetic demo")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
   });
+
+  it("supports a route-owned main target without changing landmark order", () => {
+    render(
+      <PresentationProvider>
+        <PresentationShell contextKey="contextAdvisorFamily" mainId="demo-main">
+          <h1>当前决策阶段</h1>
+        </PresentationShell>
+      </PresentationProvider>,
+    );
+    expect(screen.getByRole("link", { name: "跳到主要内容" })).toHaveAttribute("href", "#demo-main");
+    expect(screen.getByRole("main")).toHaveAttribute("id", "demo-main");
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
 });
