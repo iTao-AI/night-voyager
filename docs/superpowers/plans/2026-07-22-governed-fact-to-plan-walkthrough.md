@@ -1,10 +1,10 @@
 # Governed Fact-to-Plan Walkthrough Implementation Plan
 
-**Implementation status:** Complete and merged as PR #58.
+**Implementation status:** Complete, merged as PR #58, and released in v0.1.3.
 
 **Current status:** PR #58 is merged. Tasks 1–6 and independent authority review
-completed before merge. This plan remains the implementation record for unreleased
-post-v0.1.2 work; PR #59 was subsequently merged under its own plan.
+completed before merge. This plan remains the implementation record for work released
+in v0.1.3; PR #59 was subsequently merged under its own plan.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation

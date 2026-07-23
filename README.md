@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager turns a synthetic study-abroad comparison into a traceable advisor-to-family decision with durable Agent tasks, explicit human review, and a persisted receipt and timeline. The current post-v0.1.2 development tree opens at `/` with a high-end Chinese-first “Virtual Night Voyage” entry and an explicit persistent English switch. This root is a static, local synthetic, provider-free presentation: it performs no API, session, task, or EventSource work. Runtime imagery uses responsive AVIF and WebP assets; the checked-in source PNG is provenance only.
+Night Voyager turns a synthetic study-abroad comparison into a traceable advisor-to-family decision with durable Agent tasks, explicit human review, and a persisted receipt and timeline. The current v0.1.3 local synthetic portfolio release opens at `/` with a high-end Chinese-first “Virtual Night Voyage” entry and an explicit persistent English switch. This root is a static, local synthetic, provider-free presentation: it performs no API, session, task, or EventSource work. Runtime imagery uses responsive AVIF and WebP assets; the checked-in source PNG is provenance only.
 
 The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case into explicit planning. The focused advisor-family/evidence route remains at `/demo` and can also be used independently. Both governed demo routes retain the existing warm-paper ledger presentation.
 
@@ -20,7 +20,9 @@ The complete governed walkthrough begins at `/demo/collaboration` and continues 
 - **Governed DRA mixed planning:** an optional offline proof imports only `UNTRUSTED_CANDIDATE` rows, keeps assigned-advisor verification and promotion in one atomic database gate, and materializes one governed mixed PlanningRun through the existing durable worker.
 - **Governed collaboration authority:** the v0.1.2 release separates shared `MessageEvent` communication, typed `MemoryCandidate` proposals, assigned-advisor verification, and atomic versioned `ConfirmedFact` publication.
 - **Versioned Skill runtime:** the v0.1.2 release governs an exact six-key catalog, deterministic evaluation, owner activation/rollback, five-field task/execution pins, and pre-start packaged-registry validation.
-- **Browser to database:** `/demo/collaboration` now hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
+- **Explicit fact-to-plan authority:** v0.1.3 migration `0009` makes the first deterministic task creation the atomic `intake -> planning` authority with the pinned task, dispatch, first event, and idempotency result; legacy runtime transition authority stays revoked.
+- **Browser to database:** v0.1.3 `/demo/collaboration` hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
+- **Portfolio and dependency boundary:** v0.1.3 includes the responsive AVIF/WebP root presentation and Next.js / `eslint-config-next` `16.2.11`. The optional/transitive `sharp@0.34.5` advisory `GHSA-f88m-g3jw-g9cj` remains deferred, so this is not an audit-zero claim.
 
 ## Evaluate the release
 
@@ -34,7 +36,7 @@ make proof
 make down
 ```
 
-Open `http://127.0.0.1:3000/` for the current portfolio entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the complete governed walkthrough, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` into `/demo`. For the focused advisor-family/evidence route, use the [connected demo runbook](docs/operations/connected-demo.md) directly at `/demo`. v0.1.2 remains the latest published release; the new root and other current post-v0.1.2 work are unreleased. The [v0.1.2 release/source-archive verification guide](docs/how-to/verify-v0.1.2-release.md) describes that published release.
+Open `http://127.0.0.1:3000/` for the current portfolio entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the complete governed walkthrough, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` into `/demo`. For the focused advisor-family/evidence route, use the [connected demo runbook](docs/operations/connected-demo.md) directly at `/demo`. The [v0.1.3 release/source-archive verification guide](docs/how-to/verify-v0.1.3-release.md) defines the current release gates.
 
 For the current same-Case development walkthrough, begin at `/demo/collaboration`,
 confirm the synthetic family fact, choose `继续进入受治理规划` (`Continue to governed
@@ -45,16 +47,17 @@ performs read-only validation and creates no task.
 
 ## Synthetic and local limits
 
-- v0.1.2 is a local synthetic portfolio release with Governed Collaboration Core v1, deterministic offline governed DRA capability, and the existing advisor-to-family workflow. It is not a production deployment or tenancy claim.
+- v0.1.3 is a local synthetic portfolio release with Governed Collaboration Core v1, explicit fact-to-plan authority, Chinese-first bilingual presentation, the High-End Portfolio Entry, deterministic offline governed DRA capability, and the existing advisor-to-family workflow. It is not a production deployment or tenancy claim.
 - The repository contains no real student records and makes no admissions outcome, real-user, SLA, availability, or business-impact claim.
 - The worker and SSE evidence is deterministic local proof, not distributed high availability.
 - Live DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. Deterministic offline DRA candidate import and atomic promotion are implemented locally; governed mixed PlanningRun generation is implemented locally through the existing durable worker. Live provider proof was not run and still requires separate authorization. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
 - Governed collaboration PR A, versioned Skill governance PR B, and browser walkthrough/inspector PR C are released in v0.1.2 as local synthetic capabilities. `/demo/collaboration` itself creates no `AgentTask`; only the explicit action after the same-Case handoff to `/demo` starts the existing governed planning path.
-- Post-v0.1.2 PRs 1-3 are merged; the Chinese-first presentation work landed as PR #59. The current high-end root is a later local authority-review change and remains unreleased. It does not change v0.1.2 release records, version, backend authority, or deployment status.
+- The v0.1.3 release includes merged PRs #57–#62. It does not add live providers, production deployment, distributed HA, SLA, real student data, real school coverage, advisor-team adoption, or admissions outcomes.
 
 ## Milestones and history
 
-- [v0.1.2 release notes](docs/releases/v0.1.2.md)
+- [v0.1.3 release notes](docs/releases/v0.1.3.md)
+- [v0.1.2 historical release notes](docs/releases/v0.1.2.md)
 - [v0.1.1 historical release notes](docs/releases/v0.1.1.md)
 - [v0.1.0 historical release notes](docs/releases/v0.1.0.md)
 - [Architecture and milestone history](DESIGN.md)

@@ -2,8 +2,8 @@
 
 - Status: Accepted
 - Date: 2026-07-22
-- Implementation status: Implemented locally by migration `0009` for independent
-  authority review; not merged or released
+- Implementation status: Implemented by migration `0009`, merged as PR #57, and
+  released in `v0.1.3`
 
 ## Context
 

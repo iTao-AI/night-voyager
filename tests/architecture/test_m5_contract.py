@@ -140,9 +140,15 @@ def test_demo_bff_has_only_explicit_route_handlers() -> None:
 def test_m5_browser_proof_keeps_locked_runtime_and_dependencies() -> None:
     dockerfile = (ROOT / "web/Dockerfile.e2e").read_text(encoding="utf-8")
     package = (ROOT / "web/package.json").read_text(encoding="utf-8")
+    installer_package = ROOT / "web/docker/browser-installer/package.json"
+    installer_lock = ROOT / "web/docker/browser-installer/package-lock.json"
     assert "node:24.18.0-bookworm-slim" in dockerfile
-    assert "npm ci" in dockerfile
-    assert "playwright install --with-deps chromium" in dockerfile
+    assert dockerfile.count("npm ci") == 2
+    assert "ARG PLAYWRIGHT_VERSION=1.58.2" in dockerfile
+    assert installer_package.is_file()
+    assert installer_lock.is_file()
+    assert "./node_modules/.bin/playwright install --with-deps chromium" in dockerfile
+    assert "npx --yes playwright@" not in dockerfile
     assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in dockerfile
     assert "TCP-LISTEN:3000" in dockerfile
     assert "TCP:web:3000" in dockerfile
