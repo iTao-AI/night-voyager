@@ -1,8 +1,8 @@
 # Documentation
 
-v0.1.2 remains the latest published release of Night Voyager: a local synthetic
-portfolio release of the connected advisor-to-family workflow and Governed
-Collaboration Core v1, including versioned Skill governance and a task-free
+v0.1.2 remains the latest published release of Night Voyager: a
+local synthetic portfolio release of the connected advisor-to-family workflow and
+Governed Collaboration Core v1, including versioned Skill governance and a task-free
 collaboration route. The current high-end root is post-v0.1.2 and unreleased. Start with the
 [release notes](releases/v0.1.2.md) and
 [source-archive verification guide](how-to/verify-v0.1.2-release.md). The v0.1.1
