@@ -1,16 +1,10 @@
 # Explicit Planning-Start Authority Implementation Plan
 
-**Implementation status:** Implemented locally for authority review.
+**Implementation status:** Complete and merged as PR #57.
 
-**Authority-review status:** Targeted P1 closure implemented locally; awaiting targeted
-re-review.
-
-Tasks 1–6 have executable local evidence on the isolated implementation branch.
-The initial authority review identified legacy transition-grant and overlapping same-key
-race findings; both now have targeted RED -> GREEN PostgreSQL regressions. Independent
-targeted re-review remains the closeout gate. PR 2 and PR 3 remain approved but not
-implemented; no push, pull request, merge, release, or deployment is authorized by this
-status.
+**Current status:** PR #57 is merged. Its targeted P1 closure and independent re-review
+gates completed before merge. This plan remains the implementation record for unreleased
+post-v0.1.2 work; PR #58 and PR #59 were subsequently merged under their own plans.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation

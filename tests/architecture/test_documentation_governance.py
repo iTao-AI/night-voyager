@@ -77,13 +77,13 @@ PLAN_STATUS_BINDINGS = (
         "Governed Fact-to-Plan Closure and bilingual presentation",
         "Implemented; PRs 1-3 merged",
         "2026-07-22-explicit-planning-start-authority.md",
-        "**Implementation status:** Implemented locally for authority review.",
+        "**Implementation status:** Complete and merged as PR #57.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
         "Implemented; PRs 1-3 merged",
         "2026-07-22-governed-fact-to-plan-walkthrough.md",
-        "**Implementation status:** Complete locally for authority review.",
+        "**Implementation status:** Complete and merged as PR #58.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
@@ -97,6 +97,20 @@ PLAN_STATUS_BINDINGS = (
         "2026-07-23-high-end-portfolio-entry.md",
         "**Implementation status:** Complete locally for authority review.",
     ),
+)
+MERGED_FACT_TO_PLAN_BANNERS = {
+    "2026-07-22-explicit-planning-start-authority.md": (
+        "**Implementation status:** Complete and merged as PR #57."
+    ),
+    "2026-07-22-governed-fact-to-plan-walkthrough.md": (
+        "**Implementation status:** Complete and merged as PR #58."
+    ),
+}
+STALE_FACT_TO_PLAN_STATUS = (
+    "locally for authority review",
+    "awaiting targeted re-review",
+    "remain approved but not implemented",
+    "No push, pull request, merge",
 )
 
 
@@ -141,6 +155,22 @@ def relative_file_targets(source: Path) -> list[Path]:
     return targets
 
 
+def merged_fact_to_plan_status_errors(filename: str, plan: str) -> list[str]:
+    current_status = " ".join(
+        plan.split("> **For agentic workers:**", 1)[0].split()
+    )
+    errors: list[str] = []
+    expected_banner = MERGED_FACT_TO_PLAN_BANNERS[filename]
+    if expected_banner not in current_status:
+        errors.append(f"{filename}: missing merged PR banner")
+    if "unreleased post-v0.1.2" not in current_status:
+        errors.append(f"{filename}: missing unreleased post-v0.1.2 boundary")
+    for stale_status in STALE_FACT_TO_PLAN_STATUS:
+        if stale_status in current_status:
+            errors.append(f"{filename}: stale status {stale_status!r}")
+    return errors
+
+
 def superpowers_status_binding_errors(index: str) -> list[str]:
     rows: dict[str, tuple[str, str]] = {}
     for line in index.splitlines():
@@ -167,6 +197,8 @@ def superpowers_status_binding_errors(index: str) -> list[str]:
         plan = (plans_root / filename).read_text(encoding="utf-8")
         if expected_banner not in plan:
             errors.append(f"{scope}: plan banner drift for {filename}")
+        if filename in MERGED_FACT_TO_PLAN_BANNERS:
+            errors.extend(merged_fact_to_plan_status_errors(filename, plan))
     return errors
 
 
@@ -451,19 +483,44 @@ def test_explicit_planning_start_documents_match_0009_authority() -> None:
 
 
 def test_fact_to_plan_status_tracks_all_three_merged_prs() -> None:
-    plan = (
+    pr_1_plan = (
         ROOT
         / "docs/superpowers/plans/2026-07-22-explicit-planning-start-authority.md"
     ).read_text(encoding="utf-8")
+    pr_2_plan = (
+        ROOT
+        / "docs/superpowers/plans/2026-07-22-governed-fact-to-plan-walkthrough.md"
+    ).read_text(encoding="utf-8")
     index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
-    normalized_plan = " ".join(plan.split())
     normalized_docs_index = " ".join(docs_index.split())
 
-    assert (
-        "**Implementation status:** Implemented locally for authority review."
-        in normalized_plan
-    )
+    for filename, plan, pull_request in (
+        (
+            "2026-07-22-explicit-planning-start-authority.md",
+            pr_1_plan,
+            57,
+        ),
+        (
+            "2026-07-22-governed-fact-to-plan-walkthrough.md",
+            pr_2_plan,
+            58,
+        ),
+    ):
+        current_status = plan.split("> **For agentic workers:**", 1)[0]
+        normalized_status = " ".join(current_status.split())
+        assert merged_fact_to_plan_status_errors(filename, plan) == []
+
+        counterfactual = normalized_status.replace(
+            f"**Implementation status:** Complete and merged as PR #{pull_request}.",
+            "**Implementation status:** Complete locally for authority review.",
+            1,
+        )
+        counterfactual_errors = merged_fact_to_plan_status_errors(
+            filename, counterfactual
+        )
+        assert any("missing merged PR banner" in error for error in counterfactual_errors)
+        assert any("stale status" in error for error in counterfactual_errors)
     assert (
         "| Governed Fact-to-Plan Closure and bilingual presentation | "
         "Implemented; PRs 1-3 merged |"

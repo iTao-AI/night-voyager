@@ -4,9 +4,27 @@ import { usePresentation } from "../../lib/presentation/context";
 import { PORTFOLIO_ROUTE_STOPS } from "../../lib/presentation/portfolio";
 
 const DESTINATIONS = {
-  australia: { x: 770, y: 118, labelY: 95, reasonY: 124 },
-  japan: { x: 808, y: 326, labelY: 303, reasonY: 332 },
-  malaysia: { x: 774, y: 528, labelY: 505, reasonY: 534 },
+  australia: {
+    x: 770,
+    y: 118,
+    labelY: 95,
+    labelVeilX: 600,
+    reasonY: 124,
+  },
+  japan: {
+    x: 808,
+    y: 326,
+    labelY: 303,
+    labelVeilX: 600,
+    reasonY: 332,
+  },
+  malaysia: {
+    x: 774,
+    y: 528,
+    labelY: 505,
+    labelVeilX: 580,
+    reasonY: 534,
+  },
 } as const;
 
 export function PortfolioRouteAtlas() {
@@ -118,6 +136,22 @@ export function PortfolioRouteAtlas() {
               data-emphasis={stop.emphasis}
             >
               <circle cx={destination.x} cy={destination.y} r="5" />
+              <rect
+                x={destination.labelVeilX}
+                y={destination.labelY - 28}
+                width={896 - destination.labelVeilX}
+                height="40"
+                rx="6"
+                className="portfolio-route-copy-veil portfolio-route-label-veil"
+              />
+              <rect
+                x="540"
+                y={destination.reasonY - 19}
+                width="356"
+                height="28"
+                rx="8"
+                className="portfolio-route-copy-veil portfolio-route-reason-veil"
+              />
               <text
                 x="882"
                 y={destination.labelY}
