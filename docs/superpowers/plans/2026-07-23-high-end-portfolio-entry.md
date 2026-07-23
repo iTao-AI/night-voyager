@@ -74,8 +74,21 @@ snapshot.
   - FastAPI, BFF routes, HTTP schemas, problem codes, cookies, Origin/CSRF, or
     idempotency;
   - task, worker, Skill, SSE, recovery, DRA, MKE, or provider behavior;
-  - dependency manifests, lockfiles, CI, Compose services, Dockerfiles, package
-    version, tag, release, or deployment configuration.
+  - dependency manifests, lockfiles, CI, Compose services, package version, tag,
+    release, or deployment configuration;
+  - Dockerfiles, except for the exact standalone public-assets copy authorized
+    below.
+- Narrow Dockerfile amendment:
+  - Next.js standalone output does not copy `public` by default;
+  - `web/Dockerfile` may add exactly
+    `COPY --from=builder --chown=nextjs:nodejs /app/public ./public`;
+  - it must appear after the existing `.next/standalone` and `.next/static` copies
+    and before `USER nextjs`;
+  - architecture proof must lock the exact source, destination, ownership, and
+    pre-`USER` position;
+  - real Chromium must prove the selected AVIF/WebP has `naturalWidth > 0`;
+  - no other Dockerfile, Compose, build-context, user, permission, image, or
+    deployment change is authorized by this exception.
 - `/demo` and `/demo/collaboration` retain the current warm-paper/ledger visual
   system. Do not globally restyle `PresentationShell`, `.demo-shell`, ledger,
   collaboration, family record, task, or inspector surfaces.
@@ -904,6 +917,7 @@ This is an implementation example, not permission to change dependency files.
 
 **Files:**
 
+- Modify: `web/Dockerfile`
 - Modify: `web/e2e/bootstrap.spec.ts`
 - Modify: `web/e2e/fact-to-plan.spec.ts`
 - Modify: `tests/architecture/test_compose_contract.py`
@@ -928,6 +942,7 @@ This is an implementation example, not permission to change dependency files.
   - no clipped visible text;
   - keyboard skip-link focus;
   - reduced-motion context still shows all route results;
+  - the selected standalone AVIF/WebP completes with `naturalWidth > 0`;
   - a fresh 1440 px Chinese screenshot from the real Compose Chromium lane;
   - screenshot is a PNG, width 1440, height at least 900;
   - screenshot and page contain no raw UUID, JSON, traceback, credential, private
@@ -949,6 +964,11 @@ This is an implementation example, not permission to change dependency files.
   Expected: stale screenshot/copy/evidence assertions fail.
 
 - [ ] **Step 3: Extend real Chromium proof**
+
+  Add the exact approved `web/Dockerfile` public-assets copy before the runtime
+  `USER nextjs` boundary. This is required because Next.js standalone output does
+  not include `public` automatically. Do not copy the design-source PNG into the
+  runtime image and do not change the runtime user or permissions.
 
   In `fact-to-plan.spec.ts`, before entering the business flow:
 
@@ -1016,6 +1036,7 @@ This is an implementation example, not permission to change dependency files.
     tests/architecture/test_documentation_governance.py
   git diff --check
   git add \
+    web/Dockerfile \
     web/e2e/bootstrap.spec.ts \
     web/e2e/fact-to-plan.spec.ts \
     tests/architecture/test_compose_contract.py \
@@ -1189,8 +1210,8 @@ This is an implementation example, not permission to change dependency files.
 
   - root-only visual scope;
   - demo shell unchanged except intentionally shared catalog values;
-  - no dependency, lockfile, migration, API, BFF, worker, Docker, CI, or version
-    changes;
+  - no dependency, lockfile, migration, API, BFF, worker, CI, or version changes;
+  - no Docker change beyond the exact standalone `public` copy and its regression;
   - no private paths, design handoff metadata, credentials, secrets, raw codes,
     debug JSON, or real-person data;
   - screenshot and optimized assets are truthful;
@@ -1229,6 +1250,7 @@ This is an implementation example, not permission to change dependency files.
 | focused evidence CTA | exact `/demo` href |
 | route-only visual isolation | demo routes retain `PresentationShell` |
 | optimized imagery | source identity plus AVIF/WebP variants |
+| standalone delivery | exact non-root `public` copy plus Chromium decode |
 | responsive | 320/390/768/1440, no clipping/overflow |
 | accessibility | one H1, landmarks, skip link, focus, 44px targets |
 | reduced motion | all content visible without animated completion |
