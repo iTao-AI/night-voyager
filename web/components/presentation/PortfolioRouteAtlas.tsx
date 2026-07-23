@@ -8,22 +8,19 @@ const DESTINATIONS = {
     x: 770,
     y: 118,
     labelY: 95,
-    labelVeilX: 600,
-    reasonY: 124,
+    reasonY: 67,
   },
   japan: {
     x: 808,
     y: 326,
     labelY: 303,
-    labelVeilX: 600,
-    reasonY: 332,
+    reasonY: 358,
   },
   malaysia: {
     x: 774,
     y: 528,
     labelY: 505,
-    labelVeilX: 580,
-    reasonY: 534,
+    reasonY: 560,
   },
 } as const;
 
@@ -69,7 +66,49 @@ export function PortfolioRouteAtlas() {
               <feMergeNode in="SourceGraphic" />
             </feMerge>
           </filter>
+          <linearGradient
+            id="portfolio-route-dark-field-gradient"
+            x1="0"
+            y1="0"
+            x2="1"
+            y2="0"
+          >
+            <stop offset="0%" stopColor="#020a12" stopOpacity="0" />
+            <stop offset="28%" stopColor="#020a12" stopOpacity=".72" />
+            <stop offset="100%" stopColor="#020a12" stopOpacity=".88" />
+          </linearGradient>
+          <linearGradient
+            id="portfolio-route-dark-field-feather"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop offset="0%" stopColor="black" />
+            <stop offset="5%" stopColor="white" />
+            <stop offset="95%" stopColor="white" />
+            <stop offset="100%" stopColor="black" />
+          </linearGradient>
+          <mask id="portfolio-route-dark-field-mask">
+            <rect
+              x="465"
+              y="30"
+              width="455"
+              height="570"
+              fill="url(#portfolio-route-dark-field-feather)"
+            />
+          </mask>
         </defs>
+
+        <rect
+          className="portfolio-route-dark-field"
+          x="465"
+          y="30"
+          width="455"
+          height="570"
+          mask="url(#portfolio-route-dark-field-mask)"
+          aria-hidden="true"
+        />
 
         <g className="portfolio-atlas-origin">
           <text x="120" y="555" className="portfolio-svg-kicker">
@@ -136,22 +175,6 @@ export function PortfolioRouteAtlas() {
               data-emphasis={stop.emphasis}
             >
               <circle cx={destination.x} cy={destination.y} r="5" />
-              <rect
-                x={destination.labelVeilX}
-                y={destination.labelY - 28}
-                width={896 - destination.labelVeilX}
-                height="40"
-                rx="6"
-                className="portfolio-route-copy-veil portfolio-route-label-veil"
-              />
-              <rect
-                x="540"
-                y={destination.reasonY - 19}
-                width="356"
-                height="28"
-                rx="8"
-                className="portfolio-route-copy-veil portfolio-route-reason-veil"
-              />
               <text
                 x="882"
                 y={destination.labelY}

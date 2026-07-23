@@ -1,6 +1,13 @@
 # Night Voyager High-End Portfolio Entry Implementation Plan
 
-**Implementation status:** Complete locally for authority review.
+**Implementation status:** Complete and merged as PR #60; unreleased post-v0.1.2.
+
+> **Post-implementation correction (current runtime):** The high-end entry was
+> merged in PR #60. The homepage now uses the rounded presentation ranges
+> `30–40 万元` and `CNY 300,000–400,000`; detailed governed cost and Evidence
+> retain the exact `305,500–400,000 CNY` range. The task checklist and historical
+> approved examples below preserve the original implementation plan rather than
+> retroactively rewriting it as the current runtime contract.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. Follow every frontend, asset, browser, and
@@ -40,7 +47,8 @@ frontend, font, icon, animation, image, or component dependency.
   - SHA-256:
     `4fe73754e5180e725bfc7d734fc9a9039030da5ebef41f31aa1cf2f1ccff55fc`.
 - Design review: `A-`; AI-slop review: `A`.
-- Implementation: complete on a local, unreleased branch for authority review.
+- Implementation: merged as PR #60; current post-v0.1.2 presentation work
+  remains unreleased.
 
 The source image is supplied to the implementation owner as an approved input.
 Repository artifacts may record only the approved file identity, dimensions,

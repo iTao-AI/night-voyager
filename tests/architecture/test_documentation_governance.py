@@ -93,9 +93,9 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "High-End Portfolio Entry v1",
-        "Complete locally for authority review",
+        "Implemented; PR #60 merged",
         "2026-07-23-high-end-portfolio-entry.md",
-        "**Implementation status:** Complete locally for authority review.",
+        "**Implementation status:** Complete and merged as PR #60; unreleased post-v0.1.2.",
     ),
 )
 MERGED_FACT_TO_PLAN_BANNERS = {
@@ -647,16 +647,29 @@ def test_high_end_portfolio_docs_describe_the_current_unreleased_surface() -> No
         "Implemented; PRs 1-3 merged |"
     ) in plans_index
     assert (
-        "| High-End Portfolio Entry v1 | Complete locally for authority review |"
+        "| High-End Portfolio Entry v1 | Implemented; PR #60 merged |"
         in plans_index
     )
     assert (
         "**Implementation status:** Complete and merged as PR #59." in previous_plan
     )
-    assert (
-        "**Implementation status:** Complete locally for authority review."
-        in current_plan
-    )
+    current_status = current_plan.split("> **For agentic workers:**", 1)[0]
+    normalized_current_status = " ".join(current_status.replace(">", "").split())
+    for token in (
+        "**Implementation status:** Complete and merged as PR #60; "
+        "unreleased post-v0.1.2.",
+        "30–40 万元",
+        "CNY 300,000–400,000",
+        "305,500–400,000 CNY",
+        "historical approved examples",
+    ):
+        assert token in normalized_current_status
+    assert "Complete locally for authority review" not in current_status
+    assert "complete on a local, unreleased branch for authority review" not in current_plan
+    assert "completed [implementation plan]" in docs_index
+    assert "PR #60 is merged" in docs_index
+    assert "presentation follow-up remains unreleased post-v0.1.2" in docs_index
+    assert "complete locally for authority review" not in docs_index
 
 
 def test_current_guidance_uses_complete_and_focused_route_roles() -> None:
