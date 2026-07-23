@@ -377,6 +377,27 @@ def test_chinese_first_portfolio_screenshots_and_historical_release_artifacts() 
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
 
 
+def test_release_verifier_checks_the_high_end_portfolio_entry(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_portfolio_entry_surface()
+
+    assert (
+        "proof portfolio entry: static components, bounded imagery, "
+        "real Chromium screenshot, and README discovery confirmed"
+        in capsys.readouterr().out
+    )
+
+
+def test_high_end_portfolio_screenshot_replaces_the_superseded_capture() -> None:
+    screenshot = ROOT / "docs/assets/night-voyager-portfolio-entry.png"
+    assert hashlib.sha256(screenshot.read_bytes()).hexdigest() != (
+        "195c1a0d5fe1ff9d4c0ac3870b5b871419b7ac8b7f88daab0b5fc3513c756a81"
+    )
+
+
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:
     source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
 

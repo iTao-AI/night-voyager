@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 import subprocess
@@ -522,6 +523,23 @@ def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
         "provider-free",
     ):
         assert token in combined
+
+
+def test_high_end_portfolio_evidence_is_bounded_and_release_verifiable() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    screenshot = ROOT / "docs/assets/night-voyager-portfolio-entry.png"
+    screenshot_sha256 = hashlib.sha256(screenshot.read_bytes()).hexdigest()
+
+    for token in (
+        "PORTFOLIO_ENTRY_SURFACE",
+        "PORTFOLIO_SOURCE_SHA256",
+        "PORTFOLIO_PRODUCTION_ASSETS",
+        "verify_portfolio_entry_surface",
+    ):
+        assert token in verifier
+    assert screenshot_sha256 != (
+        "195c1a0d5fe1ff9d4c0ac3870b5b871419b7ac8b7f88daab0b5fc3513c756a81"
+    )
 
 
 def test_fact_to_plan_walkthrough_documents_same_case_explicit_authority() -> None:

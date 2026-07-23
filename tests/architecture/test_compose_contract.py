@@ -76,6 +76,13 @@ def test_root_browser_proof_context_ignores_local_playwright_artifacts() -> None
     assert "**/test-results" in ignored
 
 
+def test_local_playwright_uses_the_exact_ipv4_next_origin() -> None:
+    config = Path("web/playwright.config.ts").read_text(encoding="utf-8")
+
+    assert 'command: "npm run dev -- --hostname 127.0.0.1"' in config
+    assert 'url: "http://127.0.0.1:3000"' in config
+
+
 def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
     dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
     normalized = " ".join(dockerfile.replace("\\", "").split())
@@ -117,6 +124,16 @@ def test_dockerfiles_keep_dependency_work_ahead_of_frequently_changed_source() -
         assert not content.startswith("# syntax=docker/dockerfile:1\n")
 
 
+def test_web_standalone_image_includes_public_portfolio_assets() -> None:
+    dockerfile = Path("web/Dockerfile").read_text(encoding="utf-8")
+
+    public_copy = (
+        "COPY --from=builder --chown=nextjs:nodejs /app/public ./public"
+    )
+    assert public_copy in dockerfile
+    assert dockerfile.index(public_copy) < dockerfile.index("USER nextjs")
+
+
 def test_browser_proof_includes_governed_collaboration_and_screenshot_capture() -> None:
     config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
     proof = Path("web/e2e/collaboration-demo.spec.ts").read_text(encoding="utf-8")
@@ -149,6 +166,11 @@ def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> Non
     assert 'run_fact_to_plan_lane "zh-CN"' in script
     assert 'run_fact_to_plan_lane "en"' in script
     assert "-e PRESENTATION_LOCALE=en" in script
+    assert "UPDATE_PORTFOLIO_SCREENSHOTS=${UPDATE_PORTFOLIO_SCREENSHOTS:-0}" in script
+    assert (
+        '-e UPDATE_PORTFOLIO_SCREENSHOTS="$UPDATE_PORTFOLIO_SCREENSHOTS"'
+        in script
+    )
 
 
 def test_required_compose_gate_runs_both_locales_from_fresh_baselines() -> None:
@@ -156,7 +178,10 @@ def test_required_compose_gate_runs_both_locales_from_fresh_baselines() -> None:
     lane = script.split("run_fact_to_plan_lane() {", 1)[1].split("\n}", 1)[0]
 
     assert 'case "$lane_locale" in' in lane
-    assert 'zh-CN) set -- ;;' in lane
+    assert (
+        'zh-CN) set -- -e UPDATE_PORTFOLIO_SCREENSHOTS="$UPDATE_PORTFOLIO_SCREENSHOTS" ;;'
+        in lane
+    )
     assert 'en) set -- -e PRESENTATION_LOCALE=en ;;' in lane
     assert "docker compose down --volumes --remove-orphans" in lane
     assert "docker compose up --no-build --wait" in lane
@@ -168,6 +193,37 @@ def test_required_compose_gate_runs_both_locales_from_fresh_baselines() -> None:
     zh_lane = script.index('run_fact_to_plan_lane "zh-CN"')
     en_lane = script.index('run_fact_to_plan_lane "en"')
     assert zh_lane < en_lane
+
+
+def test_fact_to_plan_root_proof_locks_the_high_end_portfolio_contract() -> None:
+    browser = Path("web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    bootstrap = Path("web/e2e/bootstrap.spec.ts").read_text(encoding="utf-8")
+
+    for token in (
+        "Your study-abroad route should start with you",
+        "你的留学路线 应该从你出发",
+        '"/demo/collaboration"',
+        '"#route-atlas"',
+        "{ width: 1440, height: 1000 }",
+        "{ width: 768, height: 1024 }",
+        "{ width: 390, height: 844 }",
+        "{ width: 320, height: 720 }",
+        'reducedMotion: "reduce"',
+        "rootApiRequests",
+        "storageReplacements",
+        ".portfolio-button:visible",
+        "document.documentElement.scrollWidth",
+        "night-voyager-portfolio-entry.png",
+    ):
+        assert token in browser
+    for token in (
+        "apiRequests",
+        "eventRequests",
+        "sessionStorage.getItem",
+        "English",
+        "{ width: 320, height: 720 }",
+    ):
+        assert token in bootstrap
 
 
 def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_content() -> None:

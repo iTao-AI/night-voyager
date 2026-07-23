@@ -103,10 +103,51 @@ IGNORED_DIRECTORIES = {
     "dist",
     "node_modules",
 }
-BINARY_SUFFIXES = {".gif", ".ico", ".jpeg", ".jpg", ".pdf", ".png", ".webp"}
+BINARY_SUFFIXES = {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".pdf", ".png", ".webp"}
 M5_SCREENSHOTS = (
     "docs/assets/m5-advisor-ledger.png",
     "docs/assets/m5-family-receipt-timeline.png",
+)
+PORTFOLIO_SOURCE_SHA256 = (
+    "4fe73754e5180e725bfc7d734fc9a9039030da5ebef41f31aa1cf2f1ccff55fc"
+)
+PORTFOLIO_PRODUCTION_ASSETS = {
+    "web/public/portfolio/night-voyager-voyage-960.avif": (
+        "c8850328b09d17fe70f67fadc8a489bff94a5008af33436b4416a958129de028",
+        "avif",
+    ),
+    "web/public/portfolio/night-voyager-voyage-1680.avif": (
+        "41bdfcc5065c3d8cfa454005875f97e1a1befe4f49e6cfd239433e6c61a1edfc",
+        "avif",
+    ),
+    "web/public/portfolio/night-voyager-voyage-960.webp": (
+        "5dffa4256d757f0fbe05b401b0679fe11e5863ebeee4f06a212a8f81aa0d9ded",
+        "webp",
+    ),
+    "web/public/portfolio/night-voyager-voyage-1680.webp": (
+        "a5f71dca693e58916876a6f126d35c41aeaf21608935fe8c89b6dab09d5de806",
+        "webp",
+    ),
+}
+PORTFOLIO_ENTRY_SURFACE = (
+    "web/app/page.tsx",
+    "web/app/layout.tsx",
+    "web/components/presentation/PortfolioBackdrop.tsx",
+    "web/components/presentation/PortfolioEntry.tsx",
+    "web/components/presentation/PortfolioJourney.tsx",
+    "web/components/presentation/PortfolioRouteAtlas.tsx",
+    "web/components/presentation/PortfolioShell.tsx",
+    "web/lib/presentation/catalog.ts",
+    "web/lib/presentation/portfolio.ts",
+    "web/e2e/fact-to-plan.spec.ts",
+    "docs/assets/design/night-voyager-voyage-source.png",
+    *PORTFOLIO_PRODUCTION_ASSETS,
+    "docs/assets/night-voyager-portfolio-entry.png",
+    "README.md",
+    "README_CN.md",
+)
+SUPERSEDED_PORTFOLIO_SCREENSHOT_SHA256 = (
+    "195c1a0d5fe1ff9d4c0ac3870b5b871419b7ac8b7f88daab0b5fc3513c756a81"
 )
 RELEASE_DOCUMENTS = (
     f"docs/releases/v{VERSION}.md",
@@ -334,6 +375,96 @@ def verify_m5_public_evidence() -> None:
         if any(source.count(relative) != 1 for source in public_entries.values()):
             raise SystemExit(f"each README must reference the M5 screenshot once: {relative}")
     print("proof M5 evidence: connected runbook and two PNG screenshots present")
+
+
+def verify_portfolio_entry_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in PORTFOLIO_ENTRY_SURFACE):
+        raise SystemExit("portfolio entry proof surface incomplete")
+
+    source = (ROOT / "docs/assets/design/night-voyager-voyage-source.png").read_bytes()
+    if (
+        not source.startswith(b"\x89PNG\r\n\x1a\n")
+        or len(source) < 24
+        or int.from_bytes(source[16:20], "big") != 1672
+        or int.from_bytes(source[20:24], "big") != 941
+        or hashlib.sha256(source).hexdigest() != PORTFOLIO_SOURCE_SHA256
+    ):
+        raise SystemExit("portfolio source identity drift")
+
+    for relative, (expected_sha256, kind) in PORTFOLIO_PRODUCTION_ASSETS.items():
+        payload = (ROOT / relative).read_bytes()
+        valid_signature = (
+            payload[4:12] == b"ftypavif"
+            if kind == "avif"
+            else payload.startswith(b"RIFF") and payload[8:12] == b"WEBP"
+        )
+        if (
+            not valid_signature
+            or hashlib.sha256(payload).hexdigest() != expected_sha256
+        ):
+            raise SystemExit(f"portfolio production asset drift: {relative}")
+
+    screenshot = (ROOT / "docs/assets/night-voyager-portfolio-entry.png").read_bytes()
+    screenshot_sha256 = hashlib.sha256(screenshot).hexdigest()
+    if (
+        not screenshot.startswith(b"\x89PNG\r\n\x1a\n")
+        or len(screenshot) < 24
+        or int.from_bytes(screenshot[16:20], "big") != 1440
+        or int.from_bytes(screenshot[20:24], "big") < 900
+        or screenshot_sha256 == SUPERSEDED_PORTFOLIO_SCREENSHOT_SHA256
+    ):
+        raise SystemExit("portfolio Chromium screenshot identity drift")
+
+    root_page = (ROOT / "web/app/page.tsx").read_text(encoding="utf-8")
+    component_source = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in PORTFOLIO_ENTRY_SURFACE
+        if relative.startswith("web/components/presentation/Portfolio")
+    )
+    browser = (ROOT / "web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    if (
+        "PortfolioShell" not in root_page
+        or "PortfolioEntry" not in root_page
+        or any(
+            token in component_source
+            for token in (
+                "fetch(",
+                "new EventSource",
+                "sessionStorage",
+                "night-voyager:m5",
+            )
+        )
+        or any(
+            token not in browser
+            for token in (
+                "{ width: 1440, height: 1000 }",
+                "{ width: 768, height: 1024 }",
+                "{ width: 390, height: 844 }",
+                "{ width: 320, height: 720 }",
+                'reducedMotion: "reduce"',
+                "rootApiRequests",
+                "night-voyager-portfolio-entry.png",
+            )
+        )
+    ):
+        raise SystemExit("portfolio static browser contract drift")
+
+    for relative in ("README.md", "README_CN.md"):
+        readme = (ROOT / relative).read_text(encoding="utf-8")
+        if (
+            readme.count("docs/assets/night-voyager-portfolio-entry.png") != 1
+            or "/demo" not in readme
+            or "/demo/collaboration" not in readme
+            or "zh-CN" not in readme
+            or "local synthetic" not in readme
+            or "provider-free" not in readme
+        ):
+            raise SystemExit(f"portfolio README discovery drift: {relative}")
+
+    print(
+        "proof portfolio entry: static components, bounded imagery, "
+        "real Chromium screenshot, and README discovery confirmed"
+    )
 
 
 def verify_dra_surface() -> None:
@@ -1430,6 +1561,7 @@ def main() -> None:
     verify_tree_mode(args.tree_mode)
     verify_public_hygiene()
     verify_m5_public_evidence()
+    verify_portfolio_entry_surface()
     verify_dra_surface()
     verify_collaboration_surface()
     verify_skill_surface()
