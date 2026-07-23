@@ -8,20 +8,24 @@ const workerReadySentinel = process.env.FACT_TO_PLAN_WORKER_READY_SENTINEL;
 const presentationLocale = process.env.PRESENTATION_LOCALE === "en" ? "en" : "zh-CN";
 const updatePortfolioScreenshots = process.env.UPDATE_PORTFOLIO_SCREENSHOTS === "1";
 const portfolioCopy = presentationLocale === "en" ? {
+  budget: "Budget CNY 300,000–400,000",
   heading: "Your study-abroad route should start with you",
   primaryAction: "View the example plan",
   secondaryAction: "View route evidence",
-  routeDescription: "The student plans to study data science with a budget of CNY 305,500–400,000. Australia is recommended, Japan is the reserve route, and Malaysia is not recommended at present.",
+  routeDescription: "The student plans to study data science with a budget of CNY 300,000–400,000. Australia is recommended, Japan is the reserve route, and Malaysia is not recommended at present.",
+  supersededBudget: "305,500",
   routes: [
     ["australia", "Australia", "Recommended"],
     ["japan", "Japan", "Reserve"],
     ["malaysia", "Malaysia", "Not recommended at present"],
   ],
 } : {
+  budget: "预算 30–40 万元",
   heading: "你的留学路线 应该从你出发",
   primaryAction: "查看示例方案",
   secondaryAction: "查看路线依据",
-  routeDescription: "学生希望学习数据科学，预算 30.55–40 万元。澳大利亚为推荐路线，日本为备选路线，马来西亚暂不推荐。",
+  routeDescription: "学生希望学习数据科学，预算 30–40 万元。澳大利亚为推荐路线，日本为备选路线，马来西亚暂不推荐。",
+  supersededBudget: "30.55",
   routes: [
     ["australia", "澳大利亚", "推荐"],
     ["japan", "日本", "备选"],
@@ -90,6 +94,7 @@ async function expectResponsiveSurface(page: Page, requiredVisible: readonly Loc
 }
 
 async function expectPortfolioEntry(page: Page) {
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await expect(
     page.getByRole("heading", { level: 1, name: portfolioCopy.heading }),
   ).toBeVisible();
@@ -102,6 +107,8 @@ async function expectPortfolioEntry(page: Page) {
   await expect(page.locator("#portfolio-atlas-description")).toHaveText(
     portfolioCopy.routeDescription,
   );
+  await expect(page.getByText(portfolioCopy.budget, { exact: true })).toBeVisible();
+  await expect(page.getByRole("main")).not.toContainText(portfolioCopy.supersededBudget);
 
   for (const viewport of [
     { width: 1440, height: 1000 },

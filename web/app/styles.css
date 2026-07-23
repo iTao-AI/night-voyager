@@ -1359,6 +1359,10 @@ body:has(.portfolio-night) {
   filter: blur(7px);
 }
 
+.portfolio-route-dark-field {
+  fill: url("#portfolio-route-dark-field-gradient");
+}
+
 .portfolio-route-path {
   fill: none;
   stroke: rgba(240, 213, 139, .54);
@@ -1407,22 +1411,30 @@ body:has(.portfolio-night) {
   fill: var(--portfolio-ivory);
   font-family: var(--editorial);
   font-size: 17px;
-  font-weight: 700;
-}
-
-.portfolio-route-copy-veil {
-  fill: rgba(2, 10, 18, .94);
-  stroke: rgba(215, 185, 111, .16);
-  stroke-width: 1;
+  font-weight: 600;
+  filter: drop-shadow(0 2px 3px rgba(1, 7, 13, .72));
 }
 
 .portfolio-svg-route-reason {
   fill: rgba(247, 240, 223, .9);
   font-size: 12px;
+  filter: drop-shadow(0 1px 2px rgba(1, 7, 13, .78));
 }
 
 .portfolio-route-destination[data-emphasis="primary"] .portfolio-svg-route-label {
   fill: var(--portfolio-gold-bright);
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.portfolio-route-destination[data-emphasis="muted"] .portfolio-svg-route-label {
+  fill: rgba(232, 225, 208, .88);
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.portfolio-route-destination[data-emphasis="muted"] .portfolio-svg-route-reason {
+  fill: rgba(238, 231, 214, .82);
 }
 
 .portfolio-route-destination[data-emphasis="muted"] circle {

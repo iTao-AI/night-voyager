@@ -81,15 +81,6 @@ async function renderedTextContrast(
             : element.matches("em")
               ? "status"
               : "reason";
-          const supportingVeil = element
-            .closest(".portfolio-route-destination")
-            ?.querySelector(
-              role === "label"
-                ? ".portfolio-route-label-veil"
-                : ".portfolio-route-reason-veil",
-            );
-          const supportingVeilRect = supportingVeil?.getBoundingClientRect();
-
           return {
             alpha: (values[3] ? Number(values[3]) : 1) * inheritedOpacity,
             foreground: values.slice(0, 3).map(Number),
@@ -98,14 +89,6 @@ async function renderedTextContrast(
             width: rect.width,
             x: rect.left + window.scrollX,
             y: rect.top + window.scrollY,
-            supportingVeil: supportingVeilRect
-              ? {
-                  height: supportingVeilRect.height,
-                  width: supportingVeilRect.width,
-                  x: supportingVeilRect.left + window.scrollX,
-                  y: supportingVeilRect.top + window.scrollY,
-                }
-              : null,
           };
         })
         .filter((target) => target !== null),
@@ -208,7 +191,6 @@ async function renderedTextContrast(
             x: target.x,
             y: target.y,
           },
-          supportingVeil: target.supportingVeil,
         };
       });
     },
@@ -239,17 +221,40 @@ async function expectReadableRouteText(
         `${measurement.targetBounds.y.toFixed(0)},` +
         `${measurement.targetBounds.width.toFixed(0)}x` +
         `${measurement.targetBounds.height.toFixed(0)} ` +
-        `veil=${
-          measurement.supportingVeil
-            ? `${measurement.supportingVeil.x.toFixed(0)},` +
-              `${measurement.supportingVeil.y.toFixed(0)},` +
-              `${measurement.supportingVeil.width.toFixed(0)}x` +
-              `${measurement.supportingVeil.height.toFixed(0)}`
-            : "none"
-        } ` +
         `samples=${measurement.samples}`,
     ).toBeGreaterThanOrEqual(4.5);
   }
+}
+
+async function expectDesktopRouteHierarchy(page: Page) {
+  const hierarchy = await page
+    .locator(".portfolio-route-destination")
+    .evaluateAll((destinations) =>
+      destinations.map((destination) => {
+        const label = destination.querySelector(".portfolio-svg-route-label");
+        const route = destination.getAttribute("data-emphasis");
+        if (!label || !route) return null;
+        const style = getComputedStyle(label);
+        return {
+          fill: style.fill,
+          fontSize: Number.parseFloat(style.fontSize),
+          fontWeight: Number.parseInt(style.fontWeight, 10),
+          route,
+        };
+      }).filter((value) => value !== null),
+    );
+  const primary = hierarchy.find(({ route }) => route === "primary");
+  const secondary = hierarchy.find(({ route }) => route === "secondary");
+  const muted = hierarchy.find(({ route }) => route === "muted");
+
+  expect(primary).toBeDefined();
+  expect(secondary).toBeDefined();
+  expect(muted).toBeDefined();
+  expect(primary?.fontSize).toBeGreaterThan(secondary?.fontSize ?? Number.POSITIVE_INFINITY);
+  expect(primary?.fontWeight).toBeGreaterThan(secondary?.fontWeight ?? Number.POSITIVE_INFINITY);
+  expect(secondary?.fontWeight).toBeGreaterThan(muted?.fontWeight ?? Number.POSITIVE_INFINITY);
+  expect(primary?.fill).not.toBe(secondary?.fill);
+  expect(muted?.fill).not.toBe(secondary?.fill);
 }
 
 test("keeps the primary portfolio action readable in both locales", async ({ page }) => {
@@ -294,6 +299,14 @@ test("keeps every desktop route label and reason readable over the rendered back
       await page.getByRole("button", { name: "English", exact: true }).click();
       await expect(page.locator("html")).toHaveAttribute("lang", "en");
     }
+    await expect(page.locator(".portfolio-route-dark-field")).toHaveCount(1);
+    await expect(page.locator(".portfolio-route-copy-veil")).toHaveCount(0);
+    await expect(page.locator(".portfolio-route-label-veil")).toHaveCount(0);
+    await expect(page.locator(".portfolio-route-reason-veil")).toHaveCount(0);
+    await expect(
+      page.locator(".portfolio-route-destination rect"),
+    ).toHaveCount(0);
+    await expectDesktopRouteHierarchy(page);
     await expectReadableRouteText(
       page,
       DESKTOP_ROUTE_TEXT,
