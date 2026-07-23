@@ -1251,15 +1251,16 @@ body:has(.portfolio-night) {
   transform: translateY(-2px);
 }
 
-.portfolio-button-primary {
+.portfolio-night .portfolio-button-primary,
+.portfolio-night .portfolio-button-primary:visited {
   min-width: 178px;
   border-color: var(--portfolio-gold-bright);
   background: var(--portfolio-gold-bright);
   color: var(--portfolio-night-0);
 }
 
-.portfolio-button-primary:hover,
-.portfolio-button-primary:focus-visible {
+.portfolio-night .portfolio-button-primary:hover,
+.portfolio-night .portfolio-button-primary:focus-visible {
   background: #f7dfa0;
   color: var(--portfolio-night-0);
 }
