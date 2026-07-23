@@ -1,9 +1,10 @@
 # Governed collaboration walkthrough
 
-`/demo/collaboration` is Night Voyager's secondary local synthetic walkthrough. It
-shows how a parent proposal becomes an authoritative Case fact only after assigned
-advisor confirmation. It is non-production proof, not messaging, admissions advice,
-or a claim about real users.
+The complete governed walkthrough begins at `/demo/collaboration`. This local
+synthetic route shows how a parent proposal becomes an authoritative Case fact only
+after assigned advisor confirmation, then hands the same Case to the focused `/demo`
+route. It is non-production proof, not messaging, admissions advice, or a claim
+about real users.
 
 The route server-renders exact `zh-CN`; the shared header can explicitly persist
 exact `en` at `night-voyager:presentation-locale:v1`. Locale is presentation-only and
@@ -44,10 +45,10 @@ one navigation. Standalone `/demo/collaboration` remains independently usable.
 
 The collapsed Planning Skill inspector consumes one server-owned, `no-store`
 projection. It displays `not_created` on `/demo/collaboration` because this route
-does not create a planning task. The primary `/demo` progresses from `not_created`
-to `matched` after its real task is materialized; `legacy_unpinned` remains an
-explicit historical status. The browser performs no client-side relational join and
-has no Skill mutation authority.
+does not create a planning task. The task-owning `/demo` progresses from
+`not_created` to `matched` after its real task is materialized; `legacy_unpinned`
+remains an explicit historical status. The browser performs no client-side
+relational join and has no Skill mutation authority.
 
 Validation uses the existing `no-store` candidate, confirmed-facts, advisor-ledger,
 and Skill-inspector BFF reads in sequence. Candidate, fact, revision, Case, and

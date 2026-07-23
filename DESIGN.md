@@ -2,23 +2,23 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is the Chinese-first portfolio entry and routes into the complete collaboration journey or the focused advisor-family journey. The M5 `/demo` route is the primary connected local synthetic application: it creates a durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. The secondary `/demo/collaboration` route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority without creating a task. Both routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The focused advisor-family/evidence route at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only.
 
-- **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, focused secondary action to `/demo`)
-- **Connected application:** `/demo`
+- **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, route-evidence secondary action to `#route-atlas`)
+- **Complete governed walkthrough:** `/demo/collaboration` -> read-only same-Case handoff -> explicit task action on `/demo`
+- **Focused advisor-family/evidence route:** `/demo`
 - **Audience:** advisors first, then students and families
-- **Page boundary:** local synthetic data and real backend mutations/SSE only; no remote provider or real student data
+- **Page boundary:** root presentation has zero product-side network/session/task effects; demo routes use local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
 
 ## Aesthetic direction
 
-- **Direction:** Advisor Ledger × Global Journey
-- **Decoration:** intentional, restrained rules and route-line motifs
-- **Layout:** a ledger-like advisor frame followed by a linear editorial family story
-- **Color:** balanced neutrals with scarce semantic accents
-- **Motion:** minimal-functional; the page must remain complete with motion disabled
+Night Voyager intentionally has two visual layers:
 
-The system should feel calm, accountable, and readable. It must not resemble a generic chat product, a KPI dashboard, or an infrastructure control tower.
+1. **Root `/` — Virtual Night Voyage:** deep navy, ivory, and champagne frame a cinematic but legible voyage backdrop, an evidence-bearing route atlas, and one continuous student-first decision trajectory. Responsive AVIF/WebP files are runtime assets; the source PNG is provenance only.
+2. **Governed demo routes — warm-paper ledger:** `/demo` and `/demo/collaboration` retain the existing advisor ledger, family decision documents, restrained rules, and semantic status accents.
+
+The root may feel atmospheric; the governed application must feel calm, accountable, and readable. Neither layer should resemble a generic chat product, KPI dashboard, or infrastructure control tower.
 
 ## Color tokens
 
@@ -55,6 +55,9 @@ No remote font or font package is required.
 
 ## Responsive layout
 
+- **Root desktop (`1440 × 1000`):** thesis and origin remain primary while the full route atlas exposes recommendation, reserve, and current exclusion.
+- **Root tablet (`768 × 1024`):** the route atlas becomes a compact ordered summary without changing meaning.
+- **Root mobile (`390 × 844` and `320 × 720`):** actions stack, route evidence stays in document order, and no content depends on the cinematic crop or motion.
 - **Desktop (`>=1280px`):** advisor ledger uses a main comparison surface with a narrow decision rail. Family frames remain linear and editorial.
 - **Intermediate (`768–1279px`):** one-column reading order with the semantic table preserved.
 - **Mobile (`<=767px`):** the desktop table is visually replaced by a country switcher and dimension-by-dimension comparison. The semantic table remains available to assistive technology.
@@ -70,14 +73,14 @@ Presentation locale is a separate, dependency-free layer shared by `/`, `/demo`,
 PR A and PR B are released in `v0.1.2`: PR A adds the governed-collaboration backend
 contract, while PR B adds the versioned Skill catalog, deterministic evaluation,
 owner-controlled activation/rollback, persisted planning-revision materialization, and
-five-field task/execution pins. PR C implements the secondary `/demo/collaboration` walkthrough,
+five-field task/execution pins. PR C implements the task-free `/demo/collaboration` route,
 closed browser reducer, and shared read-only inspector from the frozen role-safe HTTP
 projections. It adds no backend authority, migration, task operation, polling, or
-EventSource. The existing `/demo` lifecycle remains the primary advisor-family flow
+EventSource. The existing task-owning `/demo` lifecycle remains the advisor-family flow
 and preserves one SSE connection. Catalog-only Skills are never presented as executing
 capabilities merely because they have versions or passing evaluations.
 
-Post-v0.1.2 PR 1 and PR 2 are merged. PR 3 is implemented locally for authority review and owns only the Chinese-first presentation catalog, shared shell, current root, responsive hierarchy, accessibility proof, and refreshed screenshots. It adds no backend, BFF, migration, task, worker, provider, version, release, or deployment authority.
+Post-v0.1.2 PRs 1-3 are merged; the Chinese-first presentation landed as PR #59. The current high-end root is a later local authority-review change and remains unreleased. It owns only the route-specific presentation shell, closed copy/data additions, responsive imagery, route atlas, continuous journey, accessibility proof, and refreshed root screenshot. It adds no backend, BFF, migration, task, worker, provider, version, release, or deployment authority.
 
 ## Accessibility
 
@@ -102,3 +105,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-18 | Keep PR B Skill governance backend-only | Pins checked-in runtime compatibility to durable tasks while leaving the deferred PR C inspector as a server-projected consumer. |
 | 2026-07-20 | Add PR C as a secondary governed walkthrough | Proves collaboration authority and a read-only Skill projection while preserving `/demo`, backend ownership, and the no-task boundary. |
 | 2026-07-22 | Make the portfolio presentation Chinese-first | Adds an exact `zh-CN`/`en` presentation-only layer and outcome-first root while preserving the same server authority and warm-paper direction. |
+| 2026-07-23 | Split the root from the governed demo visual layer | Gives `/` the Virtual Night Voyage entry while preserving the warm-paper ledger and every existing authority boundary on both demo routes. |

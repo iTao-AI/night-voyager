@@ -1,6 +1,6 @@
 # Connected demo operations
 
-M5 connects the primary `/demo` route to the local synthetic FastAPI, worker, SSE, and PostgreSQL
+M5 connects the focused `/demo` route to the local synthetic FastAPI, worker, SSE, and PostgreSQL
 paths. It proves an advisor-to-parent workflow; it is not production tenancy,
 live institutional coverage, or admissions advice.
 
@@ -15,10 +15,10 @@ or enter the `sessionStorage` journey envelope.
 
 ![Chinese family receipt and timeline](../assets/m5-family-receipt-timeline.png)
 
-The secondary `/demo/collaboration` route is documented in the
-[governed collaboration walkthrough](collaboration-walkthrough.md). It shares the
-session envelope and read-only inspector. Its controlled handoff creates no task or
-SSE connection; `/demo` owns both only after explicit advisor action.
+The complete governed walkthrough begins at `/demo/collaboration` and is documented
+in the [governed collaboration walkthrough](collaboration-walkthrough.md). It shares
+the session envelope and read-only inspector. Its controlled handoff creates no task
+or SSE connection; `/demo` owns both only after explicit advisor action.
 
 ## Run the walkthrough
 

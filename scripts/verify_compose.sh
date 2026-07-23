@@ -3,6 +3,7 @@ set -eu
 
 COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-compose-proof-$$}
 UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
+UPDATE_PORTFOLIO_SCREENSHOTS=${UPDATE_PORTFOLIO_SCREENSHOTS:-0}
 FACT_TO_PLAN_ZH_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-proof.json
 FACT_TO_PLAN_ZH_WORKER_READY_FILE=docs/assets/.fact-to-plan-zh-CN-worker-ready
 FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json
@@ -27,7 +28,7 @@ cleanup() {
 run_fact_to_plan_lane() {
     lane_locale=$1
     case "$lane_locale" in
-        zh-CN) set -- ;;
+        zh-CN) set -- -e UPDATE_PORTFOLIO_SCREENSHOTS="$UPDATE_PORTFOLIO_SCREENSHOTS" ;;
         en) set -- -e PRESENTATION_LOCALE=en ;;
         *) printf 'compose-proof: unsupported presentation locale %s\n' "$lane_locale" >&2; exit 1 ;;
     esac

@@ -15,9 +15,22 @@ describe("presentation catalog contract", () => {
   });
 
   it("keeps the exact approved Chinese promise and canonical product identity", () => {
-    expect(zhCN.productPromise).toBe("把家庭事实变成可追溯的留学决策与行动计划");
+    expect(zhCN.productPromise).toBe("你的留学路线应该从你出发");
     expect(zhCN.productName).toBe("Night Voyager");
     expect(en.productName).toBe("Night Voyager");
+  });
+
+  it("freezes the student-first portfolio thesis in both locales", () => {
+    expect(zhCN.rootTitleLineOne).toBe("你的留学路线");
+    expect(zhCN.rootTitleLineTwo).toBe("应该从你出发");
+    expect(zhCN.rootSummary).toBe(
+      "不只告诉你去哪留学，更要说清为什么适合你。看懂不同路线的理由与取舍，再把选择变成一份可以执行的计划。",
+    );
+    expect(en.rootTitleLineOne).toBe("Your study-abroad route");
+    expect(en.rootTitleLineTwo).toBe("should start with you");
+    expect(en.rootSummary).toMatch(/why.*fits.*trade-offs.*actionable plan/i);
+    expect(zhCN.rootPrimaryAction).toBe("查看示例方案");
+    expect(zhCN.rootSecondaryAction).toBe("查看路线依据");
   });
 
   it("does not use raw contract codes as visible copy", () => {

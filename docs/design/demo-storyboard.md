@@ -1,8 +1,15 @@
 # Connected demo storyboard
 
-M5 turns the six-beat M1 visual intent into a real local synthetic walkthrough.
+The complete governed walkthrough begins at `/demo/collaboration`, confirms a
+synthetic family fact under explicit human authority, and continues the same Case into
+the focused advisor-family/evidence route at `/demo`. The latter route remains
+independently usable. Both demo surfaces retain the warm-paper ledger visual system.
 
-The current story begins at the [Chinese-first portfolio entry](../assets/night-voyager-portfolio-entry.png): purpose, reason, next action, locale control, and the synthetic boundary precede technical proof. Exact `en` presents the same states without changing authority.
+The current story is introduced by the [Chinese-first portfolio entry](../assets/night-voyager-portfolio-entry.png): purpose, route evidence, next action, locale control, and the synthetic boundary precede technical proof. The static Virtual Night Voyage root uses optimized AVIF/WebP runtime imagery; its source PNG is provenance only. Exact `en` presents the same states without changing authority.
+
+## Focused advisor-family/evidence route
+
+M5 turns the six-beat M1 visual intent into a real local synthetic walkthrough:
 
 1. **Task ready** — mint the advisor session, load canonical demo inputs, and
    create the first durable task.
@@ -21,11 +28,11 @@ The current story begins at the [Chinese-first portfolio entry](../assets/night-
 The M1 Japan fixture is historical design context. Current runtime screenshots
 and claims must depict the connected Australia flow only.
 
-## Secondary governed collaboration walkthrough
+## Complete governed walkthrough
 
-The standalone primary `/demo` story above remains available. The governed
-fact-to-plan journey starts with six collaboration beats and then continues the same
-Case into that existing primary story:
+The standalone focused `/demo` story above remains available. The complete
+fact-to-plan journey starts with six collaboration beats at `/demo/collaboration` and
+then continues the same Case into that existing advisor-family/evidence route:
 
 1. **Shared message** — a parent appends one bounded budget message.
 2. **Typed proposal** — an explicit action creates one revision-pinned candidate.
@@ -40,7 +47,7 @@ Case into that existing primary story:
    explicit task action creates the pinned task and opens the durable EventSource.
 
 The shared Skill inspector consumes a server-owned `no-store` projection. It remains
-`not_created` on collaboration and reaches `matched` only after the primary demo's
+`not_created` on collaboration and reaches `matched` only after the focused demo's
 real task. The [captured Chromium evidence](../assets/collaboration-confirmed-fact.png)
 depicts the final collaboration state. The same real journey also produces the
 [advisor review](../assets/m5-advisor-ledger.png) and

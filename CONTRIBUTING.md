@@ -39,7 +39,7 @@ an external artifact, while the real candidate proof remains maintainer-operated
 ## Guardrails
 
 - Migrations and RLS changes require `make db-check` using runtime-equivalent roles. The connected `/demo` must continue to consume role-scoped backend projections rather than reproduce authority in the BFF or client.
-- Connected-demo transport or UI changes require focused backend/frontend tests plus the real `make compose-proof` Chromium flow; mocks and static screenshots are not browser-to-database evidence. Keep `/demo` primary, `/demo/collaboration` task-free, and the shared `schema_version=2` journey fail-closed.
+- Connected-demo transport or UI changes require focused backend/frontend tests plus the real `make compose-proof` Chromium flow; mocks and static screenshots are not browser-to-database evidence. Keep `/demo` task-owning, `/demo/collaboration` task-free, and the shared `schema_version=2` journey fail-closed.
 - M3A fixtures must pass offline `scripts/seed_demo.py --validate-only`; `accepted_synthetic_demo` must never be described as externally verified Evidence.
 - Fixtures must be synthetic, provenance-labelled, deterministic, and pass `make fixtures-check`; real student records are prohibited.
 - Public claims must match reproducible repository evidence and must not imply production use, real users, admissions outcomes, or measured business impact.

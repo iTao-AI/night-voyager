@@ -1,11 +1,10 @@
 # Governed Fact-to-Plan Walkthrough Implementation Plan
 
-**Implementation status:** Complete locally for authority review.
+**Implementation status:** Complete and merged as PR #58.
 
-Tasks 1–5 are implemented and committed on the isolated PR 2 branch. Task 6 records
-fresh full verification and leaves the clean local branch/worktree for independent
-authority review. No push, pull request, merge, release, provider run, or PR 3 work is
-authorized by this status.
+**Current status:** PR #58 is merged. Tasks 1–6 and independent authority review
+completed before merge. This plan remains the implementation record for unreleased
+post-v0.1.2 work; PR #59 was subsequently merged under its own plan.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation

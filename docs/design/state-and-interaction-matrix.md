@@ -14,7 +14,7 @@ state, requests, idempotency, journey storage, EventSource, and navigation uncha
 | `plan-ready` | completion status or parent receipt/timeline | continue as family/read result | create a task |
 | `terminal-task-failure` | public failure and recovery guidance | explicit retry/remediation | synthesize success |
 
-The secondary collaboration route has its own closed lifecycle:
+The task-free collaboration route has its own closed lifecycle:
 
 | Phase | Visible truth | Primary action | Forbidden action |
 | --- | --- | --- | --- |

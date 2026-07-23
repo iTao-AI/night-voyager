@@ -1,10 +1,10 @@
 import { PortfolioEntry } from "../components/presentation/PortfolioEntry";
-import { PresentationShell } from "../components/presentation/PresentationShell";
+import { PortfolioShell } from "../components/presentation/PortfolioShell";
 
 export default function Home() {
   return (
-    <PresentationShell contextKey="contextPortfolio">
+    <PortfolioShell>
       <PortfolioEntry />
-    </PresentationShell>
+    </PortfolioShell>
   );
 }

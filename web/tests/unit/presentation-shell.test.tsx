@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -7,6 +10,23 @@ import { PresentationProvider } from "../../lib/presentation/context";
 afterEach(cleanup);
 
 describe("PresentationShell", () => {
+  it("keeps the cinematic shell root-only and both governed demos on PresentationShell", () => {
+    const rootPage = readFileSync(resolve(process.cwd(), "app/page.tsx"), "utf8");
+    const connectedDemo = readFileSync(
+      resolve(process.cwd(), "components/connected-demo/ConnectedDemo.tsx"),
+      "utf8",
+    );
+    const collaborationDemo = readFileSync(
+      resolve(process.cwd(), "components/collaboration-demo/CollaborationDemo.tsx"),
+      "utf8",
+    );
+
+    expect(rootPage).toContain("PortfolioShell");
+    expect(rootPage).not.toContain("PresentationShell");
+    expect(connectedDemo).toContain("PresentationShell");
+    expect(collaborationDemo).toContain("PresentationShell");
+  });
+
   it("provides one shared landmark shell, skip link, synthetic boundary, and selected locale", () => {
     render(
       <PresentationProvider>

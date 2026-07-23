@@ -294,8 +294,8 @@ def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> N
         for relative in ("README.md", "README_CN.md")
     )
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
-    assert "/demo" in readmes and "primary" in readmes
-    assert "/demo/collaboration" in readmes and "secondary" in readmes
+    assert "complete governed walkthrough" in readmes
+    assert "focused advisor-family/evidence route" in readmes
     assert "collaboration-confirmed-fact.png" in readmes
     assert "collaboration-walkthrough.md" in docs_index
     assert "PR C" in docs_index and "implemented" in docs_index
@@ -327,7 +327,8 @@ def test_fact_to_plan_walkthrough_is_publicly_discoverable_and_evidenced() -> No
     assert "Continue to governed planning" in combined
     assert "local synthetic" in combined
     assert "provider-free" in combined
-    assert "PR 3 is implemented locally for authority review" in combined
+    assert "PRs 1-3 are merged" in combined
+    assert "PR #59" in combined
     assert "creates no task" in combined or "zero task" in combined
 
 
@@ -375,6 +376,27 @@ def test_chinese_first_portfolio_screenshots_and_historical_release_artifacts() 
     }
     for relative, expected in immutable_hashes.items():
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
+
+
+def test_release_verifier_checks_the_high_end_portfolio_entry(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_portfolio_entry_surface()
+
+    assert (
+        "proof portfolio entry: static components, bounded imagery, "
+        "real Chromium screenshot, and README discovery confirmed"
+        in capsys.readouterr().out
+    )
+
+
+def test_high_end_portfolio_screenshot_replaces_the_superseded_capture() -> None:
+    screenshot = ROOT / "docs/assets/night-voyager-portfolio-entry.png"
+    assert hashlib.sha256(screenshot.read_bytes()).hexdigest() != (
+        "195c1a0d5fe1ff9d4c0ac3870b5b871419b7ac8b7f88daab0b5fc3513c756a81"
+    )
 
 
 def test_release_verifier_installed_wheel_loads_exact_skill_manifests() -> None:

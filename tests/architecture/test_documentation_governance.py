@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import re
 import shutil
 import subprocess
@@ -74,22 +75,42 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review",
+        "Implemented; PRs 1-3 merged",
         "2026-07-22-explicit-planning-start-authority.md",
-        "**Implementation status:** Implemented locally for authority review.",
+        "**Implementation status:** Complete and merged as PR #57.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review",
+        "Implemented; PRs 1-3 merged",
         "2026-07-22-governed-fact-to-plan-walkthrough.md",
-        "**Implementation status:** Complete locally for authority review.",
+        "**Implementation status:** Complete and merged as PR #58.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review",
+        "Implemented; PRs 1-3 merged",
         "2026-07-22-chinese-first-portfolio-presentation.md",
+        "**Implementation status:** Complete and merged as PR #59.",
+    ),
+    (
+        "High-End Portfolio Entry v1",
+        "Complete locally for authority review",
+        "2026-07-23-high-end-portfolio-entry.md",
         "**Implementation status:** Complete locally for authority review.",
     ),
+)
+MERGED_FACT_TO_PLAN_BANNERS = {
+    "2026-07-22-explicit-planning-start-authority.md": (
+        "**Implementation status:** Complete and merged as PR #57."
+    ),
+    "2026-07-22-governed-fact-to-plan-walkthrough.md": (
+        "**Implementation status:** Complete and merged as PR #58."
+    ),
+}
+STALE_FACT_TO_PLAN_STATUS = (
+    "locally for authority review",
+    "awaiting targeted re-review",
+    "remain approved but not implemented",
+    "No push, pull request, merge",
 )
 
 
@@ -134,6 +155,22 @@ def relative_file_targets(source: Path) -> list[Path]:
     return targets
 
 
+def merged_fact_to_plan_status_errors(filename: str, plan: str) -> list[str]:
+    current_status = " ".join(
+        plan.split("> **For agentic workers:**", 1)[0].split()
+    )
+    errors: list[str] = []
+    expected_banner = MERGED_FACT_TO_PLAN_BANNERS[filename]
+    if expected_banner not in current_status:
+        errors.append(f"{filename}: missing merged PR banner")
+    if "unreleased post-v0.1.2" not in current_status:
+        errors.append(f"{filename}: missing unreleased post-v0.1.2 boundary")
+    for stale_status in STALE_FACT_TO_PLAN_STATUS:
+        if stale_status in current_status:
+            errors.append(f"{filename}: stale status {stale_status!r}")
+    return errors
+
+
 def superpowers_status_binding_errors(index: str) -> list[str]:
     rows: dict[str, tuple[str, str]] = {}
     for line in index.splitlines():
@@ -160,6 +197,8 @@ def superpowers_status_binding_errors(index: str) -> list[str]:
         plan = (plans_root / filename).read_text(encoding="utf-8")
         if expected_banner not in plan:
             errors.append(f"{scope}: plan banner drift for {filename}")
+        if filename in MERGED_FACT_TO_PLAN_BANNERS:
+            errors.extend(merged_fact_to_plan_status_errors(filename, plan))
     return errors
 
 
@@ -443,34 +482,51 @@ def test_explicit_planning_start_documents_match_0009_authority() -> None:
     assert "same five-field Skill pin" in normalized_worker
 
 
-def test_fact_to_plan_status_tracks_merged_pr1_pr2_and_local_pr3() -> None:
-    spec = (
-        ROOT
-        / "docs/superpowers/specs/2026-07-22-governed-fact-to-plan-closure-design.md"
-    ).read_text(encoding="utf-8")
-    plan = (
+def test_fact_to_plan_status_tracks_all_three_merged_prs() -> None:
+    pr_1_plan = (
         ROOT
         / "docs/superpowers/plans/2026-07-22-explicit-planning-start-authority.md"
     ).read_text(encoding="utf-8")
+    pr_2_plan = (
+        ROOT
+        / "docs/superpowers/plans/2026-07-22-governed-fact-to-plan-walkthrough.md"
+    ).read_text(encoding="utf-8")
     index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
-    normalized_spec = " ".join(spec.split())
-    normalized_plan = " ".join(plan.split())
     normalized_docs_index = " ".join(docs_index.split())
 
-    assert "PR 1 is merged" in normalized_spec
-    assert "PR 2 is merged" in normalized_spec
-    assert "PR 3 is implemented locally for authority review" in normalized_spec
-    assert (
-        "**Implementation status:** Implemented locally for authority review."
-        in normalized_plan
-    )
+    for filename, plan, pull_request in (
+        (
+            "2026-07-22-explicit-planning-start-authority.md",
+            pr_1_plan,
+            57,
+        ),
+        (
+            "2026-07-22-governed-fact-to-plan-walkthrough.md",
+            pr_2_plan,
+            58,
+        ),
+    ):
+        current_status = plan.split("> **For agentic workers:**", 1)[0]
+        normalized_status = " ".join(current_status.split())
+        assert merged_fact_to_plan_status_errors(filename, plan) == []
+
+        counterfactual = normalized_status.replace(
+            f"**Implementation status:** Complete and merged as PR #{pull_request}.",
+            "**Implementation status:** Complete locally for authority review.",
+            1,
+        )
+        counterfactual_errors = merged_fact_to_plan_status_errors(
+            filename, counterfactual
+        )
+        assert any("missing merged PR banner" in error for error in counterfactual_errors)
+        assert any("stale status" in error for error in counterfactual_errors)
     assert (
         "| Governed Fact-to-Plan Closure and bilingual presentation | "
-        "PR 1 and PR 2 merged; PR 3 implemented locally for authority review |"
+        "Implemented; PRs 1-3 merged |"
     ) in index
-    assert "PR 1 and PR 2 are merged" in normalized_docs_index
-    assert "PR 3 is implemented locally for authority review" in normalized_docs_index
+    assert "PRs 1-3 are merged" in normalized_docs_index
+    assert "PR #59" in normalized_docs_index
 
     adr = (ROOT / "docs/decisions/0010-explicit-planning-start-authority.md").read_text(
         encoding="utf-8"
@@ -522,6 +578,127 @@ def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
         "provider-free",
     ):
         assert token in combined
+
+
+def test_high_end_portfolio_docs_describe_the_current_unreleased_surface() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
+    design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    storyboard = (ROOT / "docs/design/demo-storyboard.md").read_text(
+        encoding="utf-8"
+    )
+    route_map = (ROOT / "docs/design/route-map.md").read_text(encoding="utf-8")
+    plans_index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    previous_plan = (
+        ROOT
+        / "docs/superpowers/plans/2026-07-22-chinese-first-portfolio-presentation.md"
+    ).read_text(encoding="utf-8")
+    current_plan = (
+        ROOT
+        / "docs/superpowers/plans/2026-07-23-high-end-portfolio-entry.md"
+    ).read_text(encoding="utf-8")
+
+    for current_readme in (readme, readme_cn):
+        for token in (
+            "static",
+            "local synthetic",
+            "provider-free",
+            "/demo/collaboration",
+            "/demo",
+            "AVIF",
+            "WebP",
+            "source PNG",
+            "post-v0.1.2",
+            "unreleased",
+        ):
+            assert token in current_readme
+    assert "complete governed walkthrough begins at `/demo/collaboration`" in readme
+    assert "focused advisor-family/evidence route remains at `/demo`" in readme
+    assert "完整 governed walkthrough 从 `/demo/collaboration` 开始" in readme_cn
+    assert "focused advisor-family/evidence route 保留在 `/demo`" in readme_cn
+
+    for token in (
+        "Virtual Night Voyage",
+        "deep navy",
+        "ivory",
+        "champagne",
+        "route atlas",
+        "warm-paper ledger",
+        "/demo",
+        "/demo/collaboration",
+    ):
+        assert token in design
+    assert "complete governed walkthrough" in storyboard
+    assert "focused advisor-family/evidence route" in storyboard
+    assert "complete governed walkthrough" in route_map
+    assert "focused advisor-family/evidence route" in route_map
+
+    for token in (
+        "v0.1.2 remains the latest published release",
+        "post-v0.1.2",
+        "unreleased",
+        "PRs 1-3 are merged",
+        "PR #59",
+    ):
+        assert token in docs_index
+    assert (
+        "| Governed Fact-to-Plan Closure and bilingual presentation | "
+        "Implemented; PRs 1-3 merged |"
+    ) in plans_index
+    assert (
+        "| High-End Portfolio Entry v1 | Complete locally for authority review |"
+        in plans_index
+    )
+    assert (
+        "**Implementation status:** Complete and merged as PR #59." in previous_plan
+    )
+    assert (
+        "**Implementation status:** Complete locally for authority review."
+        in current_plan
+    )
+
+
+def test_current_guidance_uses_complete_and_focused_route_roles() -> None:
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    connected = (ROOT / "docs/operations/connected-demo.md").read_text(
+        encoding="utf-8"
+    )
+    collaboration = (
+        ROOT / "docs/operations/collaboration-walkthrough.md"
+    ).read_text(encoding="utf-8")
+    state_matrix = (
+        ROOT / "docs/design/state-and-interaction-matrix.md"
+    ).read_text(encoding="utf-8")
+    design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
+    storyboard = (ROOT / "docs/design/demo-storyboard.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Keep `/demo` task-owning" in contributing
+    assert "focused `/demo` route" in connected
+    assert "complete governed walkthrough begins" in collaboration
+    assert "task-free collaboration route" in state_matrix
+    assert "task-free `/demo/collaboration` route" in design
+    assert "task-owning `/demo` lifecycle" in design
+    assert "focused demo's real task" in " ".join(storyboard.split())
+
+
+def test_high_end_portfolio_evidence_is_bounded_and_release_verifiable() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    screenshot = ROOT / "docs/assets/night-voyager-portfolio-entry.png"
+    screenshot_sha256 = hashlib.sha256(screenshot.read_bytes()).hexdigest()
+
+    for token in (
+        "PORTFOLIO_ENTRY_SURFACE",
+        "PORTFOLIO_SOURCE_SHA256",
+        "PORTFOLIO_PRODUCTION_ASSETS",
+        "verify_portfolio_entry_surface",
+    ):
+        assert token in verifier
+    assert screenshot_sha256 != (
+        "195c1a0d5fe1ff9d4c0ac3870b5b871419b7ac8b7f88daab0b5fc3513c756a81"
+    )
 
 
 def test_fact_to_plan_walkthrough_documents_same_case_explicit_authority() -> None:
@@ -641,7 +818,7 @@ def test_collaboration_state_matrix_matches_executable_and_approved_plan() -> No
     )[0]
     approved = set(re.findall(r"`([a-z_]+)`", plan_block))
     matrix_block = matrix.split(
-        "The secondary collaboration route has its own closed lifecycle:", 1
+        "The task-free collaboration route has its own closed lifecycle:", 1
     )[1].split("The fresh UI defaults", 1)[0]
     documented = set(re.findall(r"\| `([a-z_]+)` \|", matrix_block))
     assert executable == expected_persisted
