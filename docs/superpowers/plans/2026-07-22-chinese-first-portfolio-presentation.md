@@ -1,6 +1,6 @@
 # Chinese-First Portfolio Presentation Implementation Plan
 
-**Implementation status:** Complete and merged as PR #59.
+**Implementation status:** Complete, merged as PR #59, and released in v0.1.3.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation

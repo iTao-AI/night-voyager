@@ -80,7 +80,7 @@ EventSource. The existing task-owning `/demo` lifecycle remains the advisor-fami
 and preserves one SSE connection. Catalog-only Skills are never presented as executing
 capabilities merely because they have versions or passing evaluations.
 
-Post-v0.1.2 PRs 1-3 are merged; the Chinese-first presentation landed as PR #59. The current high-end root is a later local authority-review change and remains unreleased. It owns only the route-specific presentation shell, closed copy/data additions, responsive imagery, route atlas, continuous journey, accessibility proof, and refreshed root screenshot. It adds no backend, BFF, migration, task, worker, provider, version, release, or deployment authority.
+Fact-to-plan PRs #57–#59, the high-end root PR #60, and route presentation polish PR #61 are released in `v0.1.3`. This presentation surface owns only the route-specific shell, closed copy/data additions, responsive imagery, route atlas, continuous journey, accessibility proof, and refreshed root screenshot. It adds no backend, BFF, task, worker, provider, or deployment authority.
 
 ## Accessibility
 

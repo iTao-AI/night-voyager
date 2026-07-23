@@ -1,6 +1,6 @@
 {
   "name": "@night-voyager/web",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "engines": { "node": "24.18.0" },
   "scripts": {

@@ -1,10 +1,10 @@
 # Explicit Planning-Start Authority Implementation Plan
 
-**Implementation status:** Complete and merged as PR #57.
+**Implementation status:** Complete, merged as PR #57, and released in v0.1.3.
 
 **Current status:** PR #57 is merged. Its targeted P1 closure and independent re-review
-gates completed before merge. This plan remains the implementation record for unreleased
-post-v0.1.2 work; PR #58 and PR #59 were subsequently merged under their own plans.
+gates completed before merge. This plan remains the implementation record for work
+released in v0.1.3; PR #58 and PR #59 were subsequently merged under their own plans.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > `superpowers:executing-plans` as the primary controller. If the implementation

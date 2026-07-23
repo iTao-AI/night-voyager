@@ -1,6 +1,6 @@
 # Night Voyager High-End Portfolio Entry Implementation Plan
 
-**Implementation status:** Complete and merged as PR #60; unreleased post-v0.1.2.
+**Implementation status:** Complete, merged as PR #60, and released in v0.1.3.
 
 > **Post-implementation correction (current runtime):** The high-end entry was
 > merged in PR #60. The homepage now uses the rounded presentation ranges
@@ -47,8 +47,8 @@ frontend, font, icon, animation, image, or component dependency.
   - SHA-256:
     `4fe73754e5180e725bfc7d734fc9a9039030da5ebef41f31aa1cf2f1ccff55fc`.
 - Design review: `A-`; AI-slop review: `A`.
-- Implementation: merged as PR #60; current post-v0.1.2 presentation work
-  remains unreleased.
+- Implementation: merged as PR #60 and released in v0.1.3 with the later
+  route-presentation correction.
 
 The source image is supplied to the implementation owner as an approved input.
 Repository artifacts may record only the approved file identity, dimensions,

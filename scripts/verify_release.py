@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 FASTAPI_VERSION_FLOOR = (0, 139, 2)
 FASTAPI_VERSION_CEILING = (0, 140)
 RELEASE_TAG = f"v{VERSION}"
@@ -162,6 +162,12 @@ PUBLISHED_RELEASE_DOCUMENTS = {
     "docs/how-to/verify-v0.1.1-release.md": (
         "3e20b41e3256c275d557e6165e7e224a95a3a642286f6993da209a51aebe8f16"
     ),
+    "docs/releases/v0.1.2.md": (
+        "f09019619a086a8b548c3ab4a9c313a002c513308069b30162ab2816bb04e7fc"
+    ),
+    "docs/how-to/verify-v0.1.2-release.md": (
+        "5ffba625c4eb4dd78330a0a51b96065de763f5aab8f0a32928c3bf65cd0f3060"
+    ),
 }
 RELEASE_HEADINGS = (
     "## Summary",
@@ -173,21 +179,31 @@ RELEASE_HEADINGS = (
 )
 RELEASE_NOTE_TOKENS = (
     "local synthetic portfolio release",
-    "Governed Collaboration Core v1",
-    "MessageEvent",
-    "MemoryCandidate",
-    "advisor verification",
-    "ConfirmedFact",
-    "Case revision",
-    "versioned Skill",
-    "activation",
-    "rollback",
-    "runtime task",
+    "migration `0009`",
+    "explicit planning-start authority",
+    "same Case",
+    "Browser -> Next.js BFF -> FastAPI -> PostgreSQL -> worker/SSE",
+    "zh-CN",
+    "exact `en`",
+    "虚幻夜航",
+    "AVIF",
+    "WebP",
+    "30–40 万元",
+    "CNY 300,000–400,000",
+    "305,500–400,000 CNY",
+    "Next.js `16.2.11`",
+    "eslint-config-next `16.2.11`",
+    "GHSA-f88m-g3jw-g9cj",
+    "optional/transitive deferred risk",
     "/demo/collaboration",
-    "read-only Planning Skill inspector",
-    "task-free",
     "GitHub-generated source archive",
     "Live provider proof was not run",
+    "no production deployment",
+    "no real students",
+    "deterministic offline governed candidate import",
+    "optional read-only untrusted candidate boundary",
+    "not distributed HA or SLA",
+    "release-prep does not change migration, API, runtime behavior, or dependency tree",
 )
 RELEASE_HOW_TO_TOKENS = (
     "git fetch origin --tags --prune",

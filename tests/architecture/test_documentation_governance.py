@@ -75,35 +75,35 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "Implemented; PRs 1-3 merged",
+        "Implemented and released in v0.1.3",
         "2026-07-22-explicit-planning-start-authority.md",
-        "**Implementation status:** Complete and merged as PR #57.",
+        "**Implementation status:** Complete, merged as PR #57, and released in v0.1.3.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "Implemented; PRs 1-3 merged",
+        "Implemented and released in v0.1.3",
         "2026-07-22-governed-fact-to-plan-walkthrough.md",
-        "**Implementation status:** Complete and merged as PR #58.",
+        "**Implementation status:** Complete, merged as PR #58, and released in v0.1.3.",
     ),
     (
         "Governed Fact-to-Plan Closure and bilingual presentation",
-        "Implemented; PRs 1-3 merged",
+        "Implemented and released in v0.1.3",
         "2026-07-22-chinese-first-portfolio-presentation.md",
-        "**Implementation status:** Complete and merged as PR #59.",
+        "**Implementation status:** Complete, merged as PR #59, and released in v0.1.3.",
     ),
     (
         "High-End Portfolio Entry v1",
-        "Implemented; PR #60 merged",
+        "Implemented and released in v0.1.3",
         "2026-07-23-high-end-portfolio-entry.md",
-        "**Implementation status:** Complete and merged as PR #60; unreleased post-v0.1.2.",
+        "**Implementation status:** Complete, merged as PR #60, and released in v0.1.3.",
     ),
 )
 MERGED_FACT_TO_PLAN_BANNERS = {
     "2026-07-22-explicit-planning-start-authority.md": (
-        "**Implementation status:** Complete and merged as PR #57."
+        "**Implementation status:** Complete, merged as PR #57, and released in v0.1.3."
     ),
     "2026-07-22-governed-fact-to-plan-walkthrough.md": (
-        "**Implementation status:** Complete and merged as PR #58."
+        "**Implementation status:** Complete, merged as PR #58, and released in v0.1.3."
     ),
 }
 STALE_FACT_TO_PLAN_STATUS = (
@@ -163,8 +163,8 @@ def merged_fact_to_plan_status_errors(filename: str, plan: str) -> list[str]:
     expected_banner = MERGED_FACT_TO_PLAN_BANNERS[filename]
     if expected_banner not in current_status:
         errors.append(f"{filename}: missing merged PR banner")
-    if "unreleased post-v0.1.2" not in current_status:
-        errors.append(f"{filename}: missing unreleased post-v0.1.2 boundary")
+    if "released in v0.1.3" not in current_status:
+        errors.append(f"{filename}: missing v0.1.3 release boundary")
     for stale_status in STALE_FACT_TO_PLAN_STATUS:
         if stale_status in current_status:
             errors.append(f"{filename}: stale status {stale_status!r}")
@@ -512,7 +512,8 @@ def test_fact_to_plan_status_tracks_all_three_merged_prs() -> None:
         assert merged_fact_to_plan_status_errors(filename, plan) == []
 
         counterfactual = normalized_status.replace(
-            f"**Implementation status:** Complete and merged as PR #{pull_request}.",
+            f"**Implementation status:** Complete, merged as PR #{pull_request}, and "
+            "released in v0.1.3.",
             "**Implementation status:** Complete locally for authority review.",
             1,
         )
@@ -523,10 +524,9 @@ def test_fact_to_plan_status_tracks_all_three_merged_prs() -> None:
         assert any("stale status" in error for error in counterfactual_errors)
     assert (
         "| Governed Fact-to-Plan Closure and bilingual presentation | "
-        "Implemented; PRs 1-3 merged |"
+        "Implemented and released in v0.1.3 |"
     ) in index
-    assert "PRs 1-3 are merged" in normalized_docs_index
-    assert "PR #59" in normalized_docs_index
+    assert "PRs #57–#59 are released in v0.1.3" in normalized_docs_index
 
     adr = (ROOT / "docs/decisions/0010-explicit-planning-start-authority.md").read_text(
         encoding="utf-8"
@@ -580,7 +580,7 @@ def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
         assert token in combined
 
 
-def test_high_end_portfolio_docs_describe_the_current_unreleased_surface() -> None:
+def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
     design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
@@ -609,8 +609,7 @@ def test_high_end_portfolio_docs_describe_the_current_unreleased_surface() -> No
             "AVIF",
             "WebP",
             "source PNG",
-            "post-v0.1.2",
-            "unreleased",
+            "v0.1.3",
         ):
             assert token in current_readme
     assert "complete governed walkthrough begins at `/demo/collaboration`" in readme
@@ -635,29 +634,27 @@ def test_high_end_portfolio_docs_describe_the_current_unreleased_surface() -> No
     assert "focused advisor-family/evidence route" in route_map
 
     for token in (
-        "v0.1.2 remains the latest published release",
-        "post-v0.1.2",
-        "unreleased",
-        "PRs 1-3 are merged",
-        "PR #59",
+        "v0.1.3 is the current local synthetic portfolio release",
+        "PRs #57–#59 are released in v0.1.3",
+        "PR #60 and the route-presentation follow-up are released in v0.1.3",
     ):
         assert token in docs_index
     assert (
         "| Governed Fact-to-Plan Closure and bilingual presentation | "
-        "Implemented; PRs 1-3 merged |"
+        "Implemented and released in v0.1.3 |"
     ) in plans_index
     assert (
-        "| High-End Portfolio Entry v1 | Implemented; PR #60 merged |"
+        "| High-End Portfolio Entry v1 | Implemented and released in v0.1.3 |"
         in plans_index
     )
     assert (
-        "**Implementation status:** Complete and merged as PR #59." in previous_plan
+        "**Implementation status:** Complete, merged as PR #59, and released in v0.1.3."
+        in previous_plan
     )
     current_status = current_plan.split("> **For agentic workers:**", 1)[0]
     normalized_current_status = " ".join(current_status.replace(">", "").split())
     for token in (
-        "**Implementation status:** Complete and merged as PR #60; "
-        "unreleased post-v0.1.2.",
+        "**Implementation status:** Complete, merged as PR #60, and released in v0.1.3.",
         "30–40 万元",
         "CNY 300,000–400,000",
         "305,500–400,000 CNY",
@@ -667,8 +664,7 @@ def test_high_end_portfolio_docs_describe_the_current_unreleased_surface() -> No
     assert "Complete locally for authority review" not in current_status
     assert "complete on a local, unreleased branch for authority review" not in current_plan
     assert "completed [implementation plan]" in docs_index
-    assert "PR #60 is merged" in docs_index
-    assert "presentation follow-up remains unreleased post-v0.1.2" in docs_index
+    assert "PR #60 and the route-presentation follow-up are released in v0.1.3" in docs_index
     assert "complete locally for authority review" not in docs_index
 
 
