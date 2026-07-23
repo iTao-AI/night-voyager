@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { usePresentation } from "../../lib/presentation/context";
 import { PortfolioBackdrop } from "./PortfolioBackdrop";
+import { PortfolioJourney } from "./PortfolioJourney";
 import { PortfolioRouteAtlas } from "./PortfolioRouteAtlas";
 
 export function PortfolioEntry() {
@@ -24,7 +25,7 @@ export function PortfolioEntry() {
             <p className="portfolio-hero-summary">{copy("rootSummary")}</p>
             <nav
               className="portfolio-hero-actions"
-              aria-label={copy("rootNavigationLabel")}
+              aria-label={copy("rootNextLabel")}
             >
               <Link
                 className="portfolio-button portfolio-button-primary"
@@ -48,11 +49,7 @@ export function PortfolioEntry() {
           <PortfolioRouteAtlas />
         </div>
       </section>
-
-      <details className="portfolio-disclosure">
-        <summary>{copy("rootScopeTitle")}</summary>
-        <p>{copy("rootScopeBody")}</p>
-      </details>
+      <PortfolioJourney />
     </article>
   );
 }

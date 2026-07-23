@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import Home from "../../app/page";
@@ -39,7 +45,10 @@ describe("portfolio entry", () => {
       "href",
       "#route-atlas",
     );
-    expect(screen.getByRole("link", { name: "决策依据" })).toHaveAttribute(
+    const headerNavigation = screen.getByRole("navigation", {
+      name: "作品集导航",
+    });
+    expect(within(headerNavigation).getByRole("link", { name: "决策依据" })).toHaveAttribute(
       "href",
       "/demo",
     );
@@ -79,7 +88,10 @@ describe("portfolio entry", () => {
       "href",
       "#route-atlas",
     );
-    expect(screen.getByRole("link", { name: "Decision evidence" })).toHaveAttribute(
+    const headerNavigation = screen.getByRole("navigation", {
+      name: "Portfolio navigation",
+    });
+    expect(within(headerNavigation).getByRole("link", { name: "Decision evidence" })).toHaveAttribute(
       "href",
       "/demo",
     );

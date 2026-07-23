@@ -13,6 +13,8 @@ describe("presentation accessibility contract", () => {
   it("keeps one ordered page heading, landmarks, skip target, and native disclosure", () => {
     const { container } = render(<PresentationProvider><Home /></PresentationProvider>);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { level: 3 })).toHaveLength(3);
     const levels = [...container.querySelectorAll("h1,h2,h3")].map((heading) => Number(heading.tagName.slice(1)));
     expect(levels[0]).toBe(1);
     expect(levels.every((level, index) => index === 0 || level <= levels[index - 1] + 1)).toBe(true);
@@ -20,8 +22,10 @@ describe("presentation accessibility contract", () => {
     expect(screen.getByRole("main")).toHaveAttribute("id", "main-content");
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "跳到主要内容" })).toHaveAttribute("href", "#main-content");
+    expect(container.querySelector("#route-atlas")).toBeInTheDocument();
+    expect(container.querySelector("#journey")).toBeInTheDocument();
     expect(container.querySelector("details > summary")).toBeInstanceOf(HTMLElement);
-    expect(screen.getByRole("link", { name: "体验完整决策流程" }).closest("details")).toBeNull();
+    expect(screen.getByRole("link", { name: "查看示例方案" }).closest("details")).toBeNull();
   });
 
   it("declares durable focus, target, wrapping, link, CJK, and reduced-motion CSS", () => {

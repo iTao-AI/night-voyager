@@ -139,3 +139,40 @@ def test_runtime_portfolio_directory_contains_no_png_source() -> None:
 def test_dependency_manifests_and_locks_keep_the_approved_identity() -> None:
     for relative, expected_sha256 in LOCKED_DEPENDENCY_IDENTITIES.items():
         assert _sha256(ROOT / relative) == expected_sha256, relative
+
+
+def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> None:
+    css = (ROOT / "web/app/styles.css").read_text(encoding="utf-8")
+    component_paths = (
+        ROOT / "web/components/presentation/PortfolioBackdrop.tsx",
+        ROOT / "web/components/presentation/PortfolioEntry.tsx",
+        ROOT / "web/components/presentation/PortfolioJourney.tsx",
+        ROOT / "web/components/presentation/PortfolioRouteAtlas.tsx",
+        ROOT / "web/components/presentation/PortfolioShell.tsx",
+    )
+    assert all(path.is_file() for path in component_paths)
+    components = "\n".join(path.read_text(encoding="utf-8") for path in component_paths)
+
+    for token in (
+        ".portfolio-night",
+        "@media (max-width: 1023px)",
+        "@media (max-width: 767px)",
+        "@media (max-width: 389px)",
+        "@media (prefers-reduced-motion: reduce)",
+        ".portfolio-route-path",
+        "stroke-dashoffset: 0",
+        ".portfolio-backdrop",
+        "animation: none",
+    ):
+        assert token in css
+    assert "width: calc(100% - 2rem)" in css
+    for forbidden in (
+        "<canvas",
+        "<video",
+        "WebGL",
+        "Math.random",
+        "requestAnimationFrame",
+        "onPointerMove",
+        "pointermove",
+    ):
+        assert forbidden not in components
