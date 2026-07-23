@@ -1,12 +1,15 @@
 FROM node:24.18.0-bookworm-slim
 
+ARG PLAYWRIGHT_VERSION=1.58.2
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /workspace/web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci && npx playwright install --with-deps chromium
+RUN --mount=type=cache,target=/root/.npm \
+    npx --yes playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends socat \
     && rm -rf /var/lib/apt/lists/*
+COPY web/package.json web/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
 RUN mkdir -p /workspace/docs/assets /workspace/web/test-results \
     && useradd --create-home --uid 10001 browser \
     && chown browser:browser /workspace/docs/assets \

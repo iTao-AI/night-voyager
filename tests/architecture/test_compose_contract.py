@@ -1,3 +1,4 @@
+import json
 import os
 import stat
 import subprocess
@@ -88,7 +89,9 @@ def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
     normalized = " ".join(dockerfile.replace("\\", "").split())
 
     browser_path = dockerfile.index("ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright")
-    install = dockerfile.index("playwright install --with-deps chromium")
+    install = dockerfile.index(
+        "playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium"
+    )
     assert browser_path < install
     assert "cp -R /root/.cache/ms-playwright" not in dockerfile
     assert "chown -R browser:browser /workspace" not in dockerfile
@@ -98,6 +101,59 @@ def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
         in normalized
     )
     assert "COPY --chown=browser:browser web ./" in dockerfile
+
+
+def test_browser_proof_pins_the_browser_cli_to_the_lockfile_authority() -> None:
+    dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
+    package = json.loads(Path("web/package.json").read_text(encoding="utf-8"))
+    lock = json.loads(Path("web/package-lock.json").read_text(encoding="utf-8"))
+
+    expected = package["devDependencies"]["@playwright/test"]
+    assert expected == "1.58.2"
+    assert lock["packages"]["node_modules/@playwright/test"]["version"] == expected
+    assert lock["packages"]["node_modules/playwright"]["version"] == expected
+    assert f"ARG PLAYWRIGHT_VERSION={expected}" in dockerfile
+    assert (
+        "npx --yes playwright@${PLAYWRIGHT_VERSION} "
+        "install --with-deps chromium"
+    ) in dockerfile
+
+
+def test_browser_proof_keeps_stable_browser_and_os_layers_ahead_of_version_copy() -> None:
+    dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
+
+    package_copy = dockerfile.index(
+        "COPY web/package.json web/package-lock.json ./"
+    )
+    browser_install = dockerfile.index(
+        "playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium"
+    )
+    socat_install = dockerfile.index(
+        "apt-get install --yes --no-install-recommends socat"
+    )
+    project_install = dockerfile.index(
+        "RUN --mount=type=cache,target=/root/.npm npm ci"
+    )
+
+    assert browser_install < package_copy
+    assert socat_install < package_copy
+    assert package_copy < project_install
+    stable_prefix = dockerfile[:package_copy]
+    assert "package.json" not in stable_prefix
+    assert "package-lock.json" not in stable_prefix
+    assert "npm ci &&" not in dockerfile
+
+
+def test_browser_proof_dependency_cache_preserves_non_root_runtime_contract() -> None:
+    dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
+
+    assert "ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in dockerfile
+    assert "useradd --create-home --uid 10001 browser" in dockerfile
+    assert "COPY --chown=browser:browser web ./" in dockerfile
+    assert dockerfile.index("COPY --chown=browser:browser web ./") < dockerfile.index(
+        "USER browser"
+    )
+    assert 'ENTRYPOINT ["sh", "-c", "socat TCP-LISTEN:3000' in dockerfile
 
 
 def test_dockerfiles_keep_dependency_work_ahead_of_frequently_changed_source() -> None:

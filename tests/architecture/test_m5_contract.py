@@ -142,7 +142,11 @@ def test_m5_browser_proof_keeps_locked_runtime_and_dependencies() -> None:
     package = (ROOT / "web/package.json").read_text(encoding="utf-8")
     assert "node:24.18.0-bookworm-slim" in dockerfile
     assert "npm ci" in dockerfile
-    assert "playwright install --with-deps chromium" in dockerfile
+    assert "ARG PLAYWRIGHT_VERSION=1.58.2" in dockerfile
+    assert (
+        "playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium"
+        in dockerfile
+    )
     assert "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright" in dockerfile
     assert "TCP-LISTEN:3000" in dockerfile
     assert "TCP:web:3000" in dockerfile
