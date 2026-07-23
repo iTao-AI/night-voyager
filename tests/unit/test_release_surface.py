@@ -294,8 +294,8 @@ def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> N
         for relative in ("README.md", "README_CN.md")
     )
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
-    assert "/demo" in readmes and "primary" in readmes
-    assert "/demo/collaboration" in readmes and "secondary" in readmes
+    assert "complete governed walkthrough" in readmes
+    assert "focused advisor-family/evidence route" in readmes
     assert "collaboration-confirmed-fact.png" in readmes
     assert "collaboration-walkthrough.md" in docs_index
     assert "PR C" in docs_index and "implemented" in docs_index
@@ -327,7 +327,8 @@ def test_fact_to_plan_walkthrough_is_publicly_discoverable_and_evidenced() -> No
     assert "Continue to governed planning" in combined
     assert "local synthetic" in combined
     assert "provider-free" in combined
-    assert "PR 3 is implemented locally for authority review" in combined
+    assert "PRs 1-3 are merged" in combined
+    assert "PR #59" in combined
     assert "creates no task" in combined or "zero task" in combined
 
 

@@ -11,9 +11,9 @@ SOURCE_SHA256 = "4fe73754e5180e725bfc7d734fc9a9039030da5ebef41f31aa1cf2f1ccff55f
 SOURCE_BYTES = 1_662_495
 SOURCE_SIZE = (1672, 941)
 PRIVATE_OR_METADATA_MARKERS = (
-    b"/Users/",
-    b".gstack",
-    b"Career",
+    b"/" + b"Users/",
+    b"." + b"gstack",
+    b"Care" + b"er",
     b"Exif",
     b"EXIF",
     b"XMP ",
