@@ -90,7 +90,7 @@ def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
 
     browser_path = dockerfile.index("ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright")
     install = dockerfile.index(
-        "playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium"
+        "./node_modules/.bin/playwright install --with-deps chromium"
     )
     assert browser_path < install
     assert "cp -R /root/.cache/ms-playwright" not in dockerfile
@@ -103,44 +103,73 @@ def test_browser_proof_installs_one_owned_playwright_browser_tree() -> None:
     assert "COPY --chown=browser:browser web ./" in dockerfile
 
 
-def test_browser_proof_pins_the_browser_cli_to_the_lockfile_authority() -> None:
+def test_browser_proof_installer_uses_checked_in_lockfile_integrity_authority() -> None:
     dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
     package = json.loads(Path("web/package.json").read_text(encoding="utf-8"))
     lock = json.loads(Path("web/package-lock.json").read_text(encoding="utf-8"))
+    installer_package_path = Path("web/docker/browser-installer/package.json")
+    installer_lock_path = Path("web/docker/browser-installer/package-lock.json")
 
     expected = package["devDependencies"]["@playwright/test"]
     assert expected == "1.58.2"
     assert lock["packages"]["node_modules/@playwright/test"]["version"] == expected
     assert lock["packages"]["node_modules/playwright"]["version"] == expected
+    assert lock["packages"]["node_modules/playwright-core"]["version"] == expected
+    assert installer_package_path.is_file()
+    assert installer_lock_path.is_file()
+
+    installer_package = json.loads(installer_package_path.read_text(encoding="utf-8"))
+    installer_lock = json.loads(installer_lock_path.read_text(encoding="utf-8"))
+    assert installer_package["private"] is True
+    assert installer_package["dependencies"] == {"playwright": expected}
+    assert installer_lock["packages"][""]["dependencies"] == {"playwright": expected}
+    for dependency in ("playwright", "playwright-core"):
+        root_entry = lock["packages"][f"node_modules/{dependency}"]
+        installer_entry = installer_lock["packages"][f"node_modules/{dependency}"]
+        assert installer_entry["version"] == expected
+        assert installer_entry["resolved"] == root_entry["resolved"]
+        assert installer_entry["integrity"] == root_entry["integrity"]
+        assert installer_entry["resolved"].endswith(f"{dependency}-{expected}.tgz")
+        assert installer_entry["integrity"].startswith("sha512-")
+
     assert f"ARG PLAYWRIGHT_VERSION={expected}" in dockerfile
     assert (
-        "npx --yes playwright@${PLAYWRIGHT_VERSION} "
-        "install --with-deps chromium"
+        "COPY web/docker/browser-installer/package.json "
+        "web/docker/browser-installer/package-lock.json ./"
     ) in dockerfile
+    assert "RUN --mount=type=cache,target=/root/.npm npm ci" in dockerfile
+    assert "./node_modules/.bin/playwright install --with-deps chromium" in dockerfile
+    assert "npx --yes playwright@" not in dockerfile
+    assert "npm exec --package playwright@" not in dockerfile
 
 
 def test_browser_proof_keeps_stable_browser_and_os_layers_ahead_of_version_copy() -> None:
     dockerfile = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
 
+    installer_copy = dockerfile.index(
+        "COPY web/docker/browser-installer/package.json "
+        "web/docker/browser-installer/package-lock.json ./"
+    )
     package_copy = dockerfile.index(
         "COPY web/package.json web/package-lock.json ./"
     )
     browser_install = dockerfile.index(
-        "playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium"
+        "./node_modules/.bin/playwright install --with-deps chromium"
     )
     socat_install = dockerfile.index(
         "apt-get install --yes --no-install-recommends socat"
     )
-    project_install = dockerfile.index(
-        "RUN --mount=type=cache,target=/root/.npm npm ci"
-    )
+    installer_install = dockerfile.index("npm ci", installer_copy)
+    project_install = dockerfile.index("npm ci", installer_install + 1)
 
+    assert installer_copy < installer_install
+    assert installer_install < browser_install
     assert browser_install < package_copy
     assert socat_install < package_copy
     assert package_copy < project_install
     stable_prefix = dockerfile[:package_copy]
-    assert "package.json" not in stable_prefix
-    assert "package-lock.json" not in stable_prefix
+    assert "COPY web/package.json" not in stable_prefix
+    assert "COPY web/package-lock.json" not in stable_prefix
     assert "npm ci &&" not in dockerfile
 
 
