@@ -233,7 +233,9 @@ Skills, promote Evidence, or decide for an advisor or family.
 10. Import only the selected Evidence row into the existing candidate authority.
 11. Preserve candidate status as `UNTRUSTED_CANDIDATE` until assigned-advisor
     verification.
-12. Require explicit assigned-advisor source attestation before promotion.
+12. Require an operator-supplied source snapshot and explicit assigned-advisor
+    source attestation before promotion, with exact URL, byte-length, and SHA-256
+    binding.
 13. Reuse the existing atomic promotion, source-pack, mixed-planning, worker, SSE,
     review, family decision, receipt, and timeline authorities.
 14. Make every provider-facing attempt bounded, one-shot, and separately authorized.
@@ -245,8 +247,9 @@ Skills, promote Evidence, or decide for an advisor or family.
 17. Keep required CI completely offline, deterministic, credential-free, and
     provider-free.
 18. Produce a provider-free recovery bundle before any live acceptance.
-19. Keep artifact and selected-source content ephemeral and out of durable receipts,
-    logs, database rows, Git, and release artifacts.
+19. Keep artifact and source-snapshot content ephemeral and out of durable receipts,
+    logs, database rows, Git, and release artifacts; resumable promotion re-supplies
+    the same snapshot identity instead of relying on process memory.
 20. Prove cleanup and resource ownership before claiming a live acceptance.
 
 ## Non-goals
@@ -281,9 +284,11 @@ Skills, promote Evidence, or decide for an advisor or family.
 4. **Terminal producer state is necessary but not sufficient for candidate import.**
 5. **Evidence ownership is checked before consumer projection.**
 6. **Raw source identity is preserved exactly.**
-7. **Only one inspected cited source enters the candidate.**
+7. **Only one inspected cited Evidence URL enters the candidate; selection is not
+   source attestation.**
 8. **A candidate never self-promotes.**
-9. **Only an assigned advisor may submit source attestation and promotion.**
+9. **Only an assigned advisor may submit source attestation and promotion, using an
+   operator-supplied snapshot bound exactly to the selected raw URL.**
 10. **DRA verification state cannot substitute for advisor attestation.**
 11. **Mixed planning reads only the exact promoted mapping.**
 12. **Existing worker, lease, fencing, SSE, review, and family authorities remain
@@ -480,6 +485,11 @@ when exactly one Evidence row:
 Only that Evidence row enters the candidate import. Other upstream Evidence rows do
 not become candidate rows, promoted Evidence, or persisted source records.
 
+This Stage 1 selection chooses only the unique cited Evidence raw URL from the same
+run and segment. It is not source attestation. Stage 1 does not accept, validate, or
+persist source snapshot bytes, and it must not infer snapshot metadata from DRA
+state, artifact prose, or Evidence metadata.
+
 The proof operator is not a new Night Voyager identity role. Candidate import and
 verification continue through an existing assigned-advisor session.
 
@@ -500,11 +510,11 @@ Responsibilities:
 - verify Evidence ownership and strict projection;
 - support explicit human inspection and exact source selection;
 - import one existing `UNTRUSTED_CANDIDATE`;
-- delete artifact and source content after the import boundary;
+- delete canonical artifact content after the candidate import boundary;
 - emit a redacted candidate receipt and provider-free recovery bundle.
 
-It must not promote Evidence, create planning work, submit review, or decide for a
-family.
+It must not accept or persist source snapshot bytes, promote Evidence, create
+planning work, submit review, or decide for a family.
 
 ### Stage 2: promote
 
@@ -513,13 +523,28 @@ Responsibilities:
 - require an existing candidate receipt;
 - re-read candidate authority;
 - require an assigned-advisor session;
-- require explicit reason and complete source attestation;
+- require the operator to inspect and supply one task-owned,
+  permission-restricted source snapshot plus explicit reason and the complete
+  metadata required by the existing source-attestation contract;
 - verify the same Evidence ID and exact raw URL selected in Stage 1;
-- validate snapshot length/hash and bounded known gaps;
+- require the attestation `canonical_url` raw string to be byte-for-byte equal to
+  the Stage 1 selected raw URL;
+- reuse the existing safe snapshot validation with a declared root and
+  traversal-free logical path, reject symlinks and root escape, read the exact
+  bytes, and validate declared byte length, SHA-256, and bounded known gaps;
 - call the existing atomic verification/promotion endpoint;
 - emit a redacted promotion receipt.
 
-It must not infer attestation metadata from DRA state.
+It must not infer attestation metadata from DRA state, artifact prose, or Evidence
+metadata, and it must not fetch the source remotely.
+
+Snapshot bytes exist only within the Stage 2 validation and atomic-promotion
+boundary. They are deleted on success, handled failure, interrupt, and explicit
+cleanup. Durable receipts retain only exact URL identity, byte length, SHA-256, and
+bounded attestation metadata. A missing snapshot or any URL, length, hash, path,
+symlink, or escape mismatch fails closed before promotion and leaves no partial
+promotion. Resuming Stage 2 requires the operator to re-supply the same snapshot
+identity and bytes; recovery never depends on in-memory content or state.
 
 ### Stage 3: review
 
@@ -762,11 +787,12 @@ tracebacks, or filesystem paths do not enter the public receipt.
 - Provider credentials are used only by the producer runtime.
 - Night Voyager receives only the minimum transport authorization needed by the
   existing loopback proof.
-- Artifact and source inspection files use task-owned private temporary paths and
-  restrictive permissions.
-- Temporary content is removed on success, handled failure, interrupt, and explicit
-  cleanup.
-- Recovery bundles retain hashes and identities, never content.
+- Artifact inspection and operator-supplied source snapshot files use task-owned
+  private temporary paths and restrictive permissions.
+- Stage 1 deletes artifact content after candidate import. Stage 2 deletes source
+  snapshot bytes on success, handled failure, interrupt, and explicit cleanup.
+- Recovery bundles retain URL, length, hash, and bounded identities, never content;
+  Stage 2 recovery requires re-supplying the same snapshot identity.
 - External text is treated as data and never interpreted as instruction.
 - Existing Origin, CSRF, session, idempotency, tenant, role, and RLS boundaries
   remain required.
@@ -819,6 +845,8 @@ Controller and recovery tests cover:
 - missing or forged receipt;
 - wrong candidate, Case, actor, Evidence, pack, or Skill identity;
 - no artifact or source content in receipts;
+- Stage 1 accepts no source snapshot and deletes artifact content after import;
+- Stage 2 restart requires re-supplying the same snapshot identity and bytes;
 - cleanup after success and failure.
 
 Authority and end-to-end tests cover:
@@ -826,8 +854,14 @@ Authority and end-to-end tests cover:
 - candidate remains untrusted;
 - wrong actor and cross-tenant denial;
 - assigned-advisor attestation;
+- explicit operator inspection and snapshot supply before attestation;
 - DRA state cannot promote;
-- exact source snapshot hash;
+- operator-supplied snapshot with exact selected raw URL, byte-length, and SHA-256
+  binding;
+- declared-root and traversal-free logical-path enforcement, including symlink,
+  root-escape, missing snapshot, URL, length, and hash rejection with no partial
+  promotion;
+- no automatic source fetch or attestation inference from DRA, artifact, or Evidence;
 - atomic promotion;
 - governed mixed task;
 - task/execution/event/SSE/PlanningRun correlation;
@@ -1018,7 +1052,8 @@ A live provider attempt is permitted only after:
    schemas are frozen.
 7. Docker host and VM preflight is GREEN.
 8. Task-owned project and retained-resource inventory is recorded.
-9. The exact operator source-inspection procedure is frozen.
+9. The exact operator source-inspection, snapshot-supply, validation, and cleanup
+   procedure is frozen.
 10. The user explicitly authorizes one frozen live attempt.
 
 The live acceptance uses:
@@ -1029,6 +1064,7 @@ The live acceptance uses:
 - no automatic retry;
 - no second provider run;
 - one selected source;
+- one operator-supplied source snapshot bound to the selected raw URL;
 - explicit assigned-advisor attestation;
 - provider-free downstream stages after candidate capture.
 
@@ -1071,21 +1107,33 @@ The capability is complete only when:
 - `/health` is correct;
 - Evidence ownership is proven before projection;
 - raw source URL identity is preserved and exact;
-- exactly one inspected cited source enters the candidate;
+- exactly one inspected cited Evidence URL enters the candidate, without treating
+  selection as source attestation;
 - candidate import remains untrusted;
-- assigned-advisor source attestation is explicit;
+- assigned-advisor source attestation is explicit and uses an operator-supplied
+  snapshot whose raw canonical URL, byte length, and SHA-256 match the Stage 1
+  selection and declared snapshot;
 - promotion is atomic and exact;
 - existing mixed planning, worker, SSE, review, family decision, receipt, and timeline
   complete without a second workflow;
 - trajectory and PostgreSQL outcome evaluators agree;
 - required CI remains offline and provider-free;
 - recovery never creates a second run;
-- content is absent from durable receipts and cleaned from temporary storage;
+- artifact and source snapshot content is absent from durable receipts, cleaned from
+  its stage-owned temporary boundary, and re-supplied by exact identity for recovery;
 - Docker and Compose ownership and teardown are proven;
 - implementation PRs, authority review, hosted CI, and merged-main freeze are complete;
-- one separately authorized live acceptance succeeds or produces a bounded,
-  retained failure receipt;
+- one separately authorized, frozen live acceptance succeeds through the complete
+  governed closure;
 - public claims and non-claims match the retained evidence.
+
+A bounded retained failure receipt proves only that one attempt stopped safely and
+that its diagnostics, content cleanup, and resource cleanup are effective. It is
+valid stop evidence, but the capability remains incomplete and blocked; it does not
+authorize a success claim or a public governed-live-closure claim. The existing rule
+still applies: after a second substantive failure in the same terminal lane following
+a targeted repair, stop and investigate rather than consuming another provider
+attempt.
 
 ## Remaining boundaries
 
