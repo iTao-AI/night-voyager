@@ -423,6 +423,26 @@ class DraPreflightReceiptV1(FrozenModel):
         "untrusted_candidate_only"
     )
     provider_access: Literal["not_attempted"] = "not_attempted"
+    environment_values_read: Literal[False] = False
+    required_environment_names: tuple[
+        Literal[
+            "DECISION_RESEARCH_AGENT_API_KEY",
+            "DRA_BASE_URL",
+            "DRA_POLL_DEADLINE_SECONDS",
+            "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+            "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+            "NIGHT_VOYAGER_LIVE_SESSION_ID",
+        ],
+        ...,
+    ] = (
+        "DECISION_RESEARCH_AGENT_API_KEY",
+        "DRA_BASE_URL",
+        "DRA_POLL_DEADLINE_SECONDS",
+        "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+        "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+        "NIGHT_VOYAGER_LIVE_SESSION_ID",
+    )
+    filesystem_primitives_ready: Literal[True] = True
     one_shot_budget: Literal[1] = 1
     permitted_next_command: Literal["capture-live"] = "capture-live"
 

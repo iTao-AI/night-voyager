@@ -66,13 +66,21 @@ dra-check: ## Run the deterministic offline DRA consumer contract lane
 	  tests/unit/dra/test_application.py \
 	  tests/unit/dra/test_fixtures.py \
 	  tests/unit/dra/test_live_evaluation.py \
+	  tests/unit/dra/test_live_capture_controller.py \
 	  tests/unit/dra/test_models.py \
 	  tests/unit/dra/test_proof_controller.py \
+	  tests/integration/dra/test_live_capture_rehearsal.py \
 	  tests/architecture/test_dra_contract.py
 	uv run python scripts/verify_dra_consumer.py fixture --json
+	@scripts/run_dra_lane.sh rehearse
 
 dra-consumer-proof: ## Run one separately authorized live DRA proof attempt
-	@scripts/run_dra_lane.sh live --json
+	@test -n "$(DRA_LIVE_RECEIPT_ROOT)" -a -n "$(DRA_QUERY_FILE)" -a \
+	  "$(DRA_LIVE_PROOF_ACK)" = "separately-authorized-one-attempt"
+	@scripts/run_dra_lane.sh live \
+	  --receipt-root "$(DRA_LIVE_RECEIPT_ROOT)" \
+	  --query-file "$(DRA_QUERY_FILE)" \
+	  --one-attempt-ack "$(DRA_LIVE_PROOF_ACK)" --json
 
 check: ## Run backend, frontend, Compose, and proof checks
 	uv lock --check

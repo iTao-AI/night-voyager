@@ -28,6 +28,64 @@ def run_verifier(*arguments: str, environment: dict[str, str] | None = None):
     )
 
 
+def run_live_closure(*arguments: str):
+    return subprocess.run(
+        [sys.executable, "scripts/verify_dra_live_closure.py", *arguments],
+        cwd=ROOT,
+        env={"PATH": os.environ["PATH"]},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_live_closure_cli_is_closed_and_has_no_default_live_action() -> None:
+    result = run_live_closure("--help")
+    assert result.returncode == 0, result.stderr
+    for command in (
+        "freeze-intent",
+        "preflight-live",
+        "capture-live",
+        "select-and-import",
+        "reconcile-create",
+        "resume-poll",
+        "inspect-recovery",
+        "rehearse-capture",
+        "cleanup",
+    ):
+        assert command in result.stdout
+    assert "provider-consuming" in result.stdout
+    assert "provider-free" in result.stdout
+    assert "read-only" in result.stdout
+    assert "mutating" in result.stdout
+
+    no_command = run_live_closure()
+    assert no_command.returncode == 2
+    assert "Traceback" not in no_command.stderr
+
+
+def test_capture_live_requires_frozen_intent_and_one_attempt_ack() -> None:
+    result = run_live_closure("capture-live")
+    assert result.returncode == 2
+    assert "--receipt-root" in result.stderr
+    assert "--query-file" in result.stderr
+    assert "--one-attempt-ack" in result.stderr
+
+
+def test_cli_does_not_expose_secret_or_session_bearing_arguments() -> None:
+    result = run_live_closure("capture-live", "--help")
+    assert result.returncode == 0, result.stderr
+    for forbidden in (
+        "--credential",
+        "--token",
+        "--cookie",
+        "--header",
+        "--session",
+        "--environment",
+    ):
+        assert forbidden not in result.stdout.lower()
+
+
 def test_dra_proof_case_is_dedicated() -> None:
     assert DRA_PROOF_CASE_ID != CONNECTED_DEMO_CASE_ID
     assert str(DRA_PROOF_CASE_ID) not in (ROOT / "fixtures/m3a/manifest.json").read_text()

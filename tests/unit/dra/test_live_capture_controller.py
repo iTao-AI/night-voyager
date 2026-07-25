@@ -101,6 +101,11 @@ async def test_capture_pauses_for_inspection_then_imports_without_second_run(
         controller = DraLiveCaptureController(transport, gateway, store)
         intent = frozen_intent()
         preflight = controller.preflight(intent)
+        assert preflight.environment_values_read is False
+        assert preflight.filesystem_primitives_ready is True
+        assert "DECISION_RESEARCH_AGENT_API_KEY" in (
+            preflight.required_environment_names
+        )
         inspection = await controller.capture(
             CaptureLiveCommand(
                 intent=intent,
