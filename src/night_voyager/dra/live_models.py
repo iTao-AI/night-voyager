@@ -95,6 +95,21 @@ class DraLiveStatusEnvelopeV1(FrozenModel):
     failure_cause: None = None
 
 
+class DraLiveRunEnvelopeV1(DraLiveStatusEnvelopeV1):
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
+        min_length=1, max_length=100
+    )
+
+    @model_validator(mode="after")
+    def exact_segment_and_unique_evidence(self) -> Self:
+        identifiers: set[str] = set()
+        for row in self.evidence:
+            if row.evidence_id in identifiers:
+                raise ValueError("dra_evidence_ids_not_unique")
+            identifiers.add(row.evidence_id)
+        return self
+
+
 class DraArtifactIdentityV1(FrozenModel):
     artifact_id: Literal["research-report.md"]
     kind: Literal["research_report_markdown"]

@@ -110,6 +110,8 @@ async def test_transport_disables_environment_and_redirects_and_redacts_key() ->
     )
     health = await transport.health()
     assert health.status == "ok"
+    assert factory.client.calls[0][:2] == ("GET", "/health")
+    assert factory.client.calls[0][1] != "/api/health"
     assert factory.kwargs["trust_env"] is False
     assert factory.kwargs["follow_redirects"] is False
     assert secret not in repr(transport)
@@ -139,10 +141,34 @@ async def test_transport_exposes_bounded_allowlisted_run_and_result_projections(
     run_factory = CapturingFactory(
         {
             "run_id": "run-1",
+            "thread_id": "thread-1",
+            "profile_id": "generic",
             "state_version": 1,
             "execution_status": "completed",
             "review_status": "not_required",
             "delivery_status": "ready",
+            "failure_cause": None,
+            "segments": [
+                {
+                    "segment_id": "segment-1",
+                    "run_id": "run-1",
+                    "kind": "initial",
+                    "sequence": 0,
+                }
+            ],
+            "evidence": [
+                {
+                    "evidence_id": "evidence-1",
+                    "run_id": "run-1",
+                    "segment_id": "segment-1",
+                    "source_url": "https://example.com/%7Esource?b=2&a=1#raw",
+                    "source_identity": "https://example.com/%7Esource?b=2&a=1#raw",
+                    "retrieved_at": "2026-07-25T00:00:00Z",
+                    "citation_status": "cited",
+                    "verification_status": "unverified",
+                    "snippet": "discarded",
+                }
+            ],
             "private_additive_field": "/" + "Users/private/provider-payload",
         }
     )
@@ -152,8 +178,13 @@ async def test_transport_exposes_bounded_allowlisted_run_and_result_projections(
         client_factory=run_factory,
     )
     run = await run_transport.get_run("run-1")
-    assert run.disposition == "canonical_ready"
+    assert run.segment_id == "segment-1"
+    assert run.evidence[0].source_url == (
+        "https://example.com/%7Esource?b=2&a=1#raw"
+    )
     assert "private_additive_field" not in run.model_dump()
+    assert "snippet" not in run.evidence[0].model_dump()
+    assert run_factory.client.calls[0][:2] == ("GET", "/api/runs/run-1")
 
     result_factory = CapturingFactory(
         {
@@ -178,6 +209,50 @@ async def test_transport_exposes_bounded_allowlisted_run_and_result_projections(
     result = await result_transport.get_result("run-1")
     assert result.artifact.content == "safe"
     assert "raw" not in result.model_dump()
+    assert result_factory.client.calls[0][:2] == (
+        "GET",
+        "/api/runs/run-1/result",
+    )
+
+
+@pytest.mark.asyncio
+async def test_transport_rejects_status_segment_ownership_mismatch() -> None:
+    factory = CapturingFactory(
+        {
+            "run_id": "run-1",
+            "thread_id": "thread-1",
+            "profile_id": "generic",
+            "state_version": 1,
+            "execution_status": "completed",
+            "review_status": "not_required",
+            "delivery_status": "ready",
+            "failure_cause": None,
+            "segments": [{"segment_id": "segment-1", "run_id": "wrong-run"}],
+            "evidence": [
+                {
+                    "evidence_id": "evidence-1",
+                    "run_id": "run-1",
+                    "segment_id": "segment-1",
+                    "source_url": "https://example.com/source",
+                    "source_identity": "https://example.com/source",
+                    "retrieved_at": "2026-07-25T00:00:00Z",
+                    "citation_status": "cited",
+                    "verification_status": "unverified",
+                }
+            ],
+        }
+    )
+    transport = Httpx2DraTransport(
+        DraClientConfig(
+            base_url="http://127.0.0.1:8000",
+            poll_seconds=1,
+            deadline_seconds=30,
+        ),
+        environ={},
+        client_factory=factory,
+    )
+    with pytest.raises(RuntimeError, match="dra_transport_failed"):
+        await transport.get_run("run-1")
 
 
 def test_api_key_cannot_be_passed_in_config() -> None:

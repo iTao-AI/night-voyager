@@ -11,11 +11,11 @@ from urllib.parse import urlsplit
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from night_voyager.dra.live_models import DraLiveRunEnvelopeV1
 from night_voyager.dra.models import (
     DraCanonicalResultProjectionV1,
     DraHealthProjectionV1,
     DraRunAcceptanceV1,
-    DraRunStateProjectionV1,
 )
 from night_voyager.dra.reconciliation import (
     DraAmbiguousOutcome,
@@ -139,7 +139,7 @@ class Httpx2DraTransport:
         return cast(dict[str, object], value)
 
     async def health(self) -> DraHealthProjectionV1:
-        payload = await self._request_json("GET", "/api/health")
+        payload = await self._request_json("GET", "/health")
         return DraHealthProjectionV1.model_validate(payload)
 
     async def create_run(
@@ -158,23 +158,69 @@ class Httpx2DraTransport:
             }
         )
 
-    async def get_run(self, run_id: str) -> DraRunStateProjectionV1:
+    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1:
         payload = await self._request_json("GET", f"/api/runs/{run_id}")
-        return DraRunStateProjectionV1.model_validate(
+        raw_segments = payload.get("segments")
+        if not isinstance(raw_segments, list):
+            raise DraTransportError()
+        segments = cast(list[object], raw_segments)
+        if len(segments) != 1:
+            raise DraTransportError()
+        raw_segment = segments[0]
+        if not isinstance(raw_segment, Mapping):
+            raise DraTransportError()
+        segment = cast(Mapping[str, object], raw_segment)
+        if (
+            payload.get("run_id") != run_id
+            or segment.get("run_id") != run_id
+        ):
+            raise DraTransportError()
+        raw_evidence = payload.get("evidence")
+        if not isinstance(raw_evidence, list):
+            raise DraTransportError()
+        evidence = cast(list[object], raw_evidence)
+        selected_evidence = [
+            {
+                field: cast(Mapping[str, object], row).get(field)
+                for field in (
+                    "evidence_id",
+                    "run_id",
+                    "segment_id",
+                    "source_url",
+                    "source_identity",
+                    "retrieved_at",
+                    "citation_status",
+                    "verification_status",
+                )
+            }
+            if isinstance(row, Mapping)
+            else row
+            for row in evidence
+        ]
+        return DraLiveRunEnvelopeV1.model_validate(
             {
                 field: payload.get(field)
                 for field in (
                     "run_id",
+                    "thread_id",
+                    "profile_id",
                     "state_version",
                     "execution_status",
                     "review_status",
                     "delivery_status",
+                    "failure_cause",
                 )
+            }
+            | {
+                "segment_id": segment.get("segment_id"),
+                "evidence": selected_evidence,
             }
         )
 
     async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1:
         payload = await self._request_json("GET", f"/api/runs/{run_id}/result")
+        if payload.get("run_id") != run_id:
+            raise DraTransportError()
         artifact = payload.get("artifact")
         selected_artifact = (
             {

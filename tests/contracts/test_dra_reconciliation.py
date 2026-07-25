@@ -40,26 +40,24 @@ class FakeTransport:
 
 
 @pytest.mark.asyncio
-async def test_lost_ack_replays_once_with_same_key_and_request() -> None:
+async def test_lost_ack_requires_separate_reconciliation_without_replay() -> None:
     request = {"profile_id": "generic", "query": "bounded synthetic query"}
     transport = FakeTransport([DraAmbiguousOutcome(), accepted(replay=True)])
-    acceptance = await DraRunReconciler(transport).create(
-        request, "key-1234567890123456"
-    )
-    assert acceptance.idempotent_replay is True
-    assert transport.create_calls == [(request, "key-1234567890123456")] * 2
+    with pytest.raises(DraReconciliationRequired, match="dra_reconciliation_required"):
+        await DraRunReconciler(transport).create(request, "key-1234567890123456")
+    assert transport.create_calls == [(request, "key-1234567890123456")]
     assert transport.cancel_calls == 0
 
 
 @pytest.mark.asyncio
-async def test_replayed_identity_must_match_original_observation() -> None:
+async def test_ambiguous_observation_is_not_used_to_authorize_replay() -> None:
     request = {"profile_id": "generic", "query": "bounded synthetic query"}
     transport = FakeTransport(
         [DraAmbiguousOutcome(observed=accepted()), accepted(replay=True, run_id="run-2")]
     )
     with pytest.raises(DraReconciliationRequired, match="dra_reconciliation_required"):
         await DraRunReconciler(transport).create(request, "key-1234567890123456")
-    assert len(transport.create_calls) == 2
+    assert len(transport.create_calls) == 1
 
 
 @pytest.mark.asyncio
@@ -72,9 +70,9 @@ async def test_conflict_is_not_retried() -> None:
 
 
 @pytest.mark.asyncio
-async def test_ambiguous_replay_is_attempted_only_once() -> None:
+async def test_ambiguous_create_is_attempted_only_once() -> None:
     request = {"profile_id": "generic", "query": "bounded synthetic query"}
     transport = FakeTransport([DraAmbiguousOutcome(), DraAmbiguousOutcome()])
     with pytest.raises(DraReconciliationRequired):
         await DraRunReconciler(transport).create(request, "key-1234567890123456")
-    assert len(transport.create_calls) == 2
+    assert len(transport.create_calls) == 1
