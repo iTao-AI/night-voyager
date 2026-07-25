@@ -99,6 +99,7 @@ OUTCOME_ASSERTIONS: tuple[OutcomeAssertionId, ...] = (
 ALL_ASSERTIONS: frozenset[AssertionId] = frozenset(
     (*TRAJECTORY_ASSERTIONS, *OUTCOME_ASSERTIONS)
 )
+_STATUS_NOT_SUPPLIED = object()
 STAGE_ORDER: tuple[EvaluationStage, ...] = (
     "capture-live",
     "promote",
@@ -255,14 +256,17 @@ class DraLiveEvaluationReportV1(FrozenModel):
         value: object,
         handler: ModelWrapValidatorHandler[Self],
     ) -> Self:
-        supplied_status: object | None = None
+        supplied_status: object = _STATUS_NOT_SUPPLIED
         candidate = value
         if isinstance(value, dict) and "status" in value:
             payload = cast(dict[str, object], value).copy()
             supplied_status = payload.pop("status")
             candidate = payload
         report = handler(candidate)
-        if supplied_status is not None and supplied_status != report.status:
+        if (
+            supplied_status is not _STATUS_NOT_SUPPLIED
+            and supplied_status != report.status
+        ):
             raise ValueError("dra_evaluation_status_invalid")
         return report
 

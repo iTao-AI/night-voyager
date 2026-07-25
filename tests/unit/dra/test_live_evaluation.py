@@ -382,6 +382,27 @@ def test_canonical_report_round_trips_through_its_versioned_schema() -> None:
     )
 
 
+def test_report_status_is_optional_but_strict_when_supplied() -> None:
+    scenario = load_live_closure_scenario()
+    report = build_evaluation_report(
+        scenario=scenario,
+        receipts=receipts(),
+        outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
+    )
+    payload = cast(dict[str, object], report.model_dump(mode="json"))
+
+    omitted = deepcopy(payload)
+    omitted.pop("status")
+    assert DraLiveEvaluationReportV1.model_validate(omitted).status == "passed"
+    assert DraLiveEvaluationReportV1.model_validate(payload).status == "passed"
+
+    for invalid_status in (None, 1, "failed"):
+        invalid = deepcopy(payload)
+        invalid["status"] = invalid_status
+        with pytest.raises(ValidationError, match="dra_evaluation_status_invalid"):
+            DraLiveEvaluationReportV1.model_validate(invalid)
+
+
 @pytest.mark.parametrize(
     "forbidden",
     ("content", "body", "prompt", "headers", "environment"),
