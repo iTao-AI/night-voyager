@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Callable
 from enum import StrEnum
 from typing import Annotated, Literal, Self
+from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
@@ -30,6 +33,14 @@ from night_voyager.dra.models import (
 )
 
 PublicCode = Annotated[str, StringConstraints(min_length=1, max_length=100)]
+SafeLogicalName = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"),
+]
+SafeIdentity = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"),
+]
 
 
 class DraLiveFailurePhase(StrEnum):
@@ -258,6 +269,112 @@ class DraLiveRunIntentV1(FrozenModel):
             payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
         ).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()
+
+
+class DraFrozenRequestV1(FrozenModel):
+    logical_name: SafeLogicalName
+    encoding: Literal["utf-8"]
+    byte_length: PositiveInt = Field(le=1_048_576)
+    sha256: Sha256
+
+
+class DraCaptureInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-capture-input.v1"] = (
+        "night-voyager.dra-live-capture-input.v1"
+    )
+    scenario_id: Literal["dra-v0-1-6-live-closure-v1"]
+    producer: DraLiveProducerIdentityV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    actor_role: Literal["advisor"] = "advisor"
+    request: DraFrozenRequestV1
+    receipt_root_id: SafeLogicalName
+    one_attempt_authorized: Literal[True]
+
+
+class DraCaptureIntentV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-capture-intent.v1"] = (
+        "night-voyager.dra-live-capture-intent.v1"
+    )
+    capture: DraCaptureInputV1
+    attempt_id: SafeIdentity
+
+    @classmethod
+    def freeze(
+        cls,
+        capture: DraCaptureInputV1,
+        *,
+        attempt_id_factory: Callable[[], str],
+    ) -> DraCaptureIntentV1:
+        return cls(capture=capture, attempt_id=attempt_id_factory())
+
+    def _identity_payload(self) -> dict[str, object]:
+        return self.model_dump(
+            mode="json",
+            exclude={"intent_sha256"},
+            exclude_computed_fields=True,
+        )
+
+    @computed_field
+    @property
+    def intent_sha256(self) -> str:
+        encoded = json.dumps(
+            self._identity_payload(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def canonical_bytes(self) -> bytes:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+
+def derive_stage_key(
+    intent_sha256: str,
+    stage: str,
+    target_identity: str,
+) -> str:
+    if re.fullmatch(r"[0-9a-f]{64}", intent_sha256) is None:
+        raise ValueError("dra_live_intent_sha256_invalid")
+    for value in (stage, target_identity):
+        if (
+            not value
+            or len(value) > 200
+            or any(character.isspace() or ord(character) < 32 for character in value)
+        ):
+            raise ValueError("dra_live_stage_key_identity_invalid")
+    payload = (
+        "night-voyager.dra-live.v1"
+        f"\0{intent_sha256}\0{stage}\0{target_identity}"
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+class DraReceiptIdentityV1(FrozenModel):
+    logical_name: SafeLogicalName
+    byte_length: PositiveInt = Field(le=1_048_576)
+    sha256: Sha256
+
+
+class DraReconciliationRequiredReceiptV1(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-reconciliation-required.v1"
+    ]
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    intent_receipt: DraReceiptIdentityV1
+    create_key: Sha256
+    provider_attempt_consumed: Literal[True]
+    permitted_next_command: Literal["reconcile-create"]
 
 
 class DraSelectedEvidenceV1(FrozenModel):
