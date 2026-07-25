@@ -174,6 +174,30 @@ class PostgresDecisionRepository:
             ).model_dump(mode="json")
         return mapped
 
+    async def get_review_by_idempotency(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        planning_run_id: UUID,
+        idempotency_key: str,
+    ) -> dict[str, object] | None:
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT * FROM app.project_advisor_review_by_idempotency("
+                    ":org,:actor,:case,:run,:key)"
+                ),
+                {
+                    "org": context.organization_id,
+                    "actor": context.actor_id,
+                    "key": hashlib.sha256(idempotency_key.encode()).hexdigest(),
+                    "case": case_id,
+                    "run": planning_run_id,
+                },
+            )
+        ).mappings().one_or_none()
+        return None if row is None else dict(row)
+
     async def decide(
         self,
         context: ActorContext,

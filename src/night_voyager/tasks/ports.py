@@ -31,6 +31,10 @@ class TaskRepository(Protocol):
         self, context: ActorContext, task_id: UUID
     ) -> dict[str, object] | None: ...
 
+    async def get_by_idempotency(
+        self, context: ActorContext, idempotency_key: str
+    ) -> dict[str, object] | None: ...
+
     async def cancel(
         self,
         context: ActorContext,

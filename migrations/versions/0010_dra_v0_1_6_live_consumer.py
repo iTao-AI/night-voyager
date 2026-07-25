@@ -18,6 +18,10 @@ IMPORT_SIGNATURE = (
 )
 OUTCOME_SIGNATURE = "app.project_dra_live_outcome(uuid,uuid,uuid)"
 TASK_AUTHORITY_SIGNATURE = "app.project_agent_task_live_authority(uuid,uuid,uuid)"
+TASK_RECOVERY_SIGNATURE = "app.project_agent_task_by_idempotency(uuid,uuid,text)"
+REVIEW_RECOVERY_SIGNATURE = (
+    "app.project_advisor_review_by_idempotency(uuid,uuid,uuid,uuid,text)"
+)
 
 REVOKE_IMPORT_SQL = f"REVOKE ALL ON FUNCTION {IMPORT_SIGNATURE} FROM PUBLIC"
 GRANT_IMPORT_SQL = f"GRANT EXECUTE ON FUNCTION {IMPORT_SIGNATURE} TO night_voyager_api"
@@ -30,6 +34,18 @@ REVOKE_TASK_AUTHORITY_SQL = (
 )
 GRANT_TASK_AUTHORITY_SQL = (
     f"GRANT EXECUTE ON FUNCTION {TASK_AUTHORITY_SIGNATURE} TO night_voyager_api"
+)
+REVOKE_TASK_RECOVERY_SQL = (
+    f"REVOKE ALL ON FUNCTION {TASK_RECOVERY_SIGNATURE} FROM PUBLIC"
+)
+GRANT_TASK_RECOVERY_SQL = (
+    f"GRANT EXECUTE ON FUNCTION {TASK_RECOVERY_SIGNATURE} TO night_voyager_api"
+)
+REVOKE_REVIEW_RECOVERY_SQL = (
+    f"REVOKE ALL ON FUNCTION {REVIEW_RECOVERY_SIGNATURE} FROM PUBLIC"
+)
+GRANT_REVIEW_RECOVERY_SQL = (
+    f"GRANT EXECUTE ON FUNCTION {REVIEW_RECOVERY_SIGNATURE} TO night_voyager_api"
 )
 
 # Exact import authority present at migration 0009. Downgrade restores this byte-for-byte.
@@ -269,6 +285,58 @@ BEGIN
 END; $$;
 """
 
+TASK_RECOVERY_FUNCTION_SQL = r"""
+CREATE FUNCTION app.project_agent_task_by_idempotency(
+  p_org uuid,p_actor uuid,p_key_sha256 text
+) RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+DECLARE selected_task uuid;
+BEGIN
+  PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
+  SELECT i.response_id INTO selected_task
+  FROM app.idempotency_records i
+  JOIN app.agent_tasks t
+    ON t.organization_id=i.organization_id AND t.id=i.response_id
+  JOIN app.student_case_participants p
+    ON p.organization_id=t.organization_id AND p.case_id=t.case_id
+  WHERE i.organization_id=p_org AND i.actor_id=p_actor
+    AND i.operation='agent_task_create'
+    AND i.response_kind='agent_task' AND i.key_sha256=p_key_sha256
+    AND p.actor_id=p_actor AND p.role='advisor';
+  RETURN selected_task;
+END; $$;
+"""
+
+REVIEW_RECOVERY_FUNCTION_SQL = r"""
+CREATE FUNCTION app.project_advisor_review_by_idempotency(
+  p_org uuid,p_actor uuid,p_case uuid,p_run uuid,p_key_sha256 text
+) RETURNS TABLE(
+  review_id uuid,case_id uuid,expected_case_revision integer,
+  planning_run_id uuid,brief_id uuid,eligible_route_ids jsonb,
+  action text,request_sha256 text
+)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
+  RETURN QUERY
+  SELECT a.id,a.case_id,a.case_revision,a.planning_run_id,b.id,
+    a.eligible_route_ids,a.action,i.request_sha256
+  FROM app.idempotency_records i
+  JOIN app.advisor_reviews a
+    ON a.organization_id=i.organization_id AND a.id=i.response_id
+  JOIN app.decision_briefs b
+    ON b.organization_id=a.organization_id AND b.advisor_review_id=a.id
+  JOIN app.student_case_participants p
+    ON p.organization_id=a.organization_id AND p.case_id=a.case_id
+  WHERE i.organization_id=p_org AND i.actor_id=p_actor
+    AND i.operation='advisor_review'
+    AND i.response_kind='advisor_review' AND i.key_sha256=p_key_sha256
+    AND a.case_id=p_case AND a.planning_run_id=p_run
+    AND a.action='approve_for_consultation'
+    AND p.actor_id=p_actor AND p.role='advisor';
+END; $$;
+"""
+
 
 def _replace_import(function_sql: str) -> None:
     op.execute(f"DROP FUNCTION {IMPORT_SIGNATURE}")
@@ -298,6 +366,12 @@ def upgrade() -> None:
     op.execute(TASK_AUTHORITY_FUNCTION_SQL.strip())
     op.execute(REVOKE_TASK_AUTHORITY_SQL)
     op.execute(GRANT_TASK_AUTHORITY_SQL)
+    op.execute(TASK_RECOVERY_FUNCTION_SQL.strip())
+    op.execute(REVOKE_TASK_RECOVERY_SQL)
+    op.execute(GRANT_TASK_RECOVERY_SQL)
+    op.execute(REVIEW_RECOVERY_FUNCTION_SQL.strip())
+    op.execute(REVOKE_REVIEW_RECOVERY_SQL)
+    op.execute(GRANT_REVIEW_RECOVERY_SQL)
     op.execute(OUTCOME_FUNCTION_SQL.strip())
     op.execute(REVOKE_OUTCOME_SQL)
     op.execute(GRANT_OUTCOME_SQL)
@@ -322,6 +396,8 @@ def downgrade() -> None:
     if has_live_history:
         raise RuntimeError("refusing downgrade: DRA v0.1.6 candidate history exists")
     op.execute(f"DROP FUNCTION {OUTCOME_SIGNATURE}")
+    op.execute(f"DROP FUNCTION {REVIEW_RECOVERY_SIGNATURE}")
+    op.execute(f"DROP FUNCTION {TASK_RECOVERY_SIGNATURE}")
     op.execute(f"DROP FUNCTION {TASK_AUTHORITY_SIGNATURE}")
     _replace_import(_0009_IMPORT_FUNCTION_SQL)
     op.execute(

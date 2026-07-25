@@ -184,6 +184,28 @@ def create_task_router(
         response.headers["Cache-Control"] = "no-store"
         return {"schema_version": 1, **result}
 
+    @router.get("/agent-tasks/recovery", response_model=None)
+    async def recover_agent_task(  # pyright: ignore[reportUnusedFunction]
+        response: Response,
+        raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object] | JSONResponse:
+        if not valid_idempotency_key(idempotency_key):
+            return problem(400, "invalid_idempotency_key", "Idempotency-Key is required")
+        assert idempotency_key is not None
+        async with session_factory() as session, session.begin():
+            context = await read_context(session, raw_session)
+            try:
+                result = await TaskService(
+                    PostgresTaskRepository(session), registry=task_registry()
+                ).get_by_idempotency(context, idempotency_key)
+            except TaskAuthorizationError:
+                result = None
+        if result is None:
+            return problem(404, "resource_unavailable", "resource unavailable")
+        response.headers["Cache-Control"] = "no-store"
+        return {"schema_version": 1, **result}
+
     @router.get(EVENTS_PATH, response_model=None)
     async def stream_agent_task_events(  # pyright: ignore[reportUnusedFunction]
         task_id: UUID,

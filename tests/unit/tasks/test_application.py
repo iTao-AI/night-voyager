@@ -100,6 +100,12 @@ class FakeRepository:
         self.calls.append(("get", context, task_id))
         return self.row
 
+    async def get_by_idempotency(
+        self, context: ActorContext, idempotency_key: str
+    ) -> dict[str, object] | None:
+        self.calls.append(("get_by_idempotency", context, idempotency_key))
+        return self.row
+
     async def cancel(
         self,
         context: ActorContext,

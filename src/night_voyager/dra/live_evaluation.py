@@ -424,9 +424,16 @@ def evaluate_trajectory(
         capture.producer == scenario.producer
         and scenario.producer.release == "v0.1.6"
     )
+    provider_attempt_exact = (
+        capture.provider_attempt_consumed
+        and len(set(capture.provider_attempt_evidence.create_keys)) == 1
+        and len(set(capture.provider_attempt_evidence.observed_run_ids)) == 1
+        and capture.provider_attempt_evidence.accepted_run_id == capture.run_id
+        and capture.provider_attempt_evidence.observed_run_ids == (capture.run_id,)
+    )
     checks: dict[TrajectoryAssertionId, bool] = {
         "producer_pin_exact": exact_producer,
-        "provider_attempt_exactly_one": capture.provider_attempt_consumed,
+        "provider_attempt_exactly_one": provider_attempt_exact,
         "terminal_transition_valid": capture.stage_states[-1].status == "completed",
         "artifact_identity_exact": capture.artifact == scenario.result.artifact,
         "evidence_ownership_and_selection_valid": (
@@ -450,7 +457,7 @@ def evaluate_trajectory(
         ),
         "no_auto_promotion": promotion.acknowledgement == "promotion_recorded",
         "no_auto_decision": decision.acknowledgement == "decision_recorded",
-        "no_second_provider_run": capture.provider_attempt_consumed,
+        "no_second_provider_run": provider_attempt_exact,
     }
     return tuple(
         _result(

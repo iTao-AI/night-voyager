@@ -157,6 +157,11 @@ def test_receipts_are_content_free_and_stage_names_are_unique() -> None:
             {"stage": "capture-live", "status": "failed"},
         ],
         "provider_attempt_consumed": True,
+        "provider_attempt_evidence": {
+            "create_keys": ["a" * 64],
+            "observed_run_ids": [scenario.status.run_id],
+            "accepted_run_id": scenario.status.run_id,
+        },
     }
     with pytest.raises(ValidationError, match="dra_receipt_stage_duplicate"):
         DraCaptureReceiptV1.model_validate(receipt_payload)

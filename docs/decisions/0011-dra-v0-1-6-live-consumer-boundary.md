@@ -58,6 +58,15 @@ code to create product authority.
 15. Outcome evaluation reads only `app.project_dra_live_outcome(...)`. A family
     decision yields `decision_recorded`; only the complete provider-free evaluator
     can yield `closure_passed`.
+16. Provider-free Stage 2–4 and evaluation rehearsal crosses a real subprocess
+    boundary at every stage. Each process reopens durable receipts and receives
+    only its role-specific ephemeral authority.
+17. Mutation transport loss becomes a bounded ambiguous outcome at the HTTP POST
+    boundary. Task and AdvisorReview reconciliation use narrow actor/key-bound
+    reads over existing idempotency authority rather than process-local caches.
+18. Candidate freeze independently re-runs or re-queries recovery, Docker,
+    exact-head hosted checks, merged-PR, and approved-review evidence; closed JSON
+    shape and caller-written terminal strings are insufficient.
 
 ## Consequences
 

@@ -1172,10 +1172,10 @@ def _validated_candidate_evidence(
             {
                 "schema_version",
                 "head_sha",
-                "docker_preflight_status",
-                "teardown_status",
-                "cleanup_state",
-                "compose_projects_after",
+                "server_version",
+                "compose_version",
+                "compose_ls_sha256",
+                "task_project",
             }
         ),
     )
@@ -1184,7 +1184,14 @@ def _validated_candidate_evidence(
         kind="hosted_checks",
         head=head,
         schema_version="night-voyager.dra-live-hosted-checks-evidence.v1",
-        exact_keys=frozenset({"schema_version", "head_sha", "checks"}),
+        exact_keys=frozenset(
+            {
+                "schema_version",
+                "head_sha",
+                "repository",
+                "check_run_ids",
+            }
+        ),
     )
     recovery, recovery_evidence = _read_candidate_evidence(
         args.recovery_evidence_file,
@@ -1192,7 +1199,12 @@ def _validated_candidate_evidence(
         head=head,
         schema_version="night-voyager.dra-live-recovery-evidence.v1",
         exact_keys=frozenset(
-            {"schema_version", "head_sha", "recovery_matrix_status"}
+            {
+                "schema_version",
+                "head_sha",
+                "command",
+                "stdout_sha256",
+            }
         ),
     )
     review, review_evidence = _read_candidate_evidence(
@@ -1201,28 +1213,161 @@ def _validated_candidate_evidence(
         head=head,
         schema_version="night-voyager.dra-live-authority-review-evidence.v1",
         exact_keys=frozenset(
-            {"schema_version", "head_sha", "authority_review_status"}
+            {
+                "schema_version",
+                "head_sha",
+                "repository",
+                "pull_request",
+                "review_id",
+                "reviewed_head_sha",
+            }
         ),
     )
+
+    def run(command: tuple[str, ...]) -> str:
+        try:
+            return subprocess.run(
+                command,
+                check=True,
+                text=True,
+                capture_output=True,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise ValueError("candidate_evidence_provenance_invalid") from error
+
+    server_version = run(("docker", "version", "--format", "{{.Server.Version}}")).strip()
+    compose_version = run(("docker", "compose", "version", "--short")).strip()
+    compose_ls = run(("docker", "compose", "ls", "--format", "json"))
+    try:
+        compose_projects_value: object = json.loads(compose_ls)
+    except json.JSONDecodeError as error:
+        raise ValueError("candidate_evidence_provenance_invalid") from error
     if (
-        inventory_evidence.get("docker_preflight_status") != "passed"
-        or inventory_evidence.get("teardown_status") != "passed"
-        or inventory_evidence.get("cleanup_state") != "clean"
-        or inventory_evidence.get("compose_projects_after") != []
-        or recovery_evidence.get("recovery_matrix_status") != "passed"
-        or review_evidence.get("authority_review_status") != "CLEAN"
+        inventory_evidence.get("server_version") != server_version
+        or inventory_evidence.get("compose_version") != compose_version
+        or inventory_evidence.get("compose_ls_sha256")
+        != hashlib.sha256(compose_ls.encode()).hexdigest()
+        or not isinstance(inventory_evidence.get("task_project"), str)
+        or not isinstance(compose_projects_value, list)
     ):
-        raise ValueError("candidate_evidence_status_invalid")
-    checks_value = hosted_evidence.get("checks")
-    if not isinstance(checks_value, dict):
-        raise ValueError("candidate_hosted_checks_invalid")
-    checks = cast(dict[object, object], checks_value)
-    if {str(name): str(value) for name, value in checks.items()} != {
-        "python": "SUCCESS",
-        "frontend": "SUCCESS",
-        "compose": "SUCCESS",
+        raise ValueError("candidate_evidence_provenance_invalid")
+    compose_projects = cast(list[object], compose_projects_value)
+    for item in compose_projects:
+        if isinstance(item, dict) and cast(dict[str, object], item).get(
+            "Name"
+        ) == inventory_evidence["task_project"]:
+            raise ValueError("candidate_evidence_provenance_invalid")
+
+    repository = hosted_evidence.get("repository")
+    check_run_ids = hosted_evidence.get("check_run_ids")
+    if not isinstance(repository, str) or not isinstance(check_run_ids, dict):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    hosted_live_value: object = json.loads(
+        run(
+            (
+                "gh",
+                "api",
+                f"repos/{repository}/commits/{head}/check-runs",
+            )
+        )
+    )
+    if not isinstance(hosted_live_value, dict):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    hosted_live = cast(dict[str, object], hosted_live_value)
+    live_runs_value = hosted_live.get("check_runs")
+    if not isinstance(live_runs_value, list):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    exact_checks: dict[str, int] = {}
+    for item in cast(list[object], live_runs_value):
+        if not isinstance(item, dict):
+            continue
+        run_item = cast(dict[str, object], item)
+        name = run_item.get("name")
+        identifier = run_item.get("id")
+        if (
+            isinstance(name, str)
+            and isinstance(identifier, int)
+            and name in {"python", "frontend", "compose"}
+            and run_item.get("status") == "completed"
+            and run_item.get("conclusion") == "success"
+            and run_item.get("head_sha") == head
+        ):
+            exact_checks[name] = identifier
+    supplied_checks: dict[str, int] = {}
+    for name, identifier in cast(dict[object, object], check_run_ids).items():
+        if not isinstance(name, str) or not isinstance(identifier, int):
+            raise ValueError("candidate_evidence_provenance_invalid")
+        supplied_checks[name] = identifier
+    if exact_checks != supplied_checks or set(exact_checks) != {
+        "python",
+        "frontend",
+        "compose",
     }:
-        raise ValueError("candidate_hosted_checks_invalid")
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    command_value = recovery_evidence.get("command")
+    if not isinstance(command_value, list):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    command_items = cast(list[object], command_value)
+    if not all(isinstance(item, str) for item in command_items):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    recovery_command = tuple(cast(list[str], command_items))
+    allowed_recovery_command = (
+        "uv",
+        "run",
+        "pytest",
+        "-q",
+        "tests/integration/dra/test_live_closure_recovery.py",
+        "tests/unit/dra/test_live_review_controller.py",
+        "tests/unit/dra/test_live_decision_controller.py",
+    )
+    recovery_output = run(recovery_command)
+    if (
+        recovery_command != allowed_recovery_command
+        or recovery_evidence.get("stdout_sha256")
+        != hashlib.sha256(recovery_output.encode()).hexdigest()
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    review_repository = review_evidence.get("repository")
+    pull_request = review_evidence.get("pull_request")
+    review_id = review_evidence.get("review_id")
+    reviewed_head_sha = review_evidence.get("reviewed_head_sha")
+    if (
+        not isinstance(review_repository, str)
+        or review_repository != repository
+        or not isinstance(pull_request, int)
+        or not isinstance(review_id, int)
+        or not isinstance(reviewed_head_sha, str)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    pull_value: object = json.loads(
+        run(("gh", "api", f"repos/{repository}/pulls/{pull_request}"))
+    )
+    review_live_value: object = json.loads(
+        run(
+            (
+                "gh",
+                "api",
+                f"repos/{repository}/pulls/{pull_request}/reviews/{review_id}",
+            )
+        )
+    )
+    if (
+        not isinstance(pull_value, dict)
+        or not isinstance(review_live_value, dict)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    pull = cast(dict[str, object], pull_value)
+    review_live = cast(dict[str, object], review_live_value)
+    if (
+        pull.get("merged") is not True
+        or pull.get("merge_commit_sha") != head
+        or review_live.get("state") != "APPROVED"
+        or review_live.get("commit_id") != reviewed_head_sha
+        or review_live.get("id") != review_id
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
     return inventory, hosted, recovery, review
 
 

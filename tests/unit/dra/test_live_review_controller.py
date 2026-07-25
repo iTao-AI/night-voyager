@@ -152,6 +152,7 @@ class FakeClosureAuthority:
         context: ActorContext,
         case_id: UUID,
         planning_run_id: UUID,
+        idempotency_key: str,
     ) -> DraReviewAuthorityV1 | None:
         return self.review
 

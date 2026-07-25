@@ -9,6 +9,8 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -20,6 +22,7 @@ from pathlib import Path
 from typing import Any, Self
 from uuid import UUID
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from night_voyager.dra.fixtures import (
@@ -36,6 +39,7 @@ from night_voyager.dra.live_controller import (
     SelectAndImportCommand,
 )
 from night_voyager.dra.live_evaluation import (
+    DraLiveEvaluationReportV1,
     DraLiveOutcomeExpectedV1,
     evaluate_full_closure,
 )
@@ -49,6 +53,7 @@ from night_voyager.dra.live_models import (
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
     DraDecisionInputV1,
+    DraDecisionReceiptV1,
     DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPromotionInputV1,
@@ -61,7 +66,7 @@ from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
 from night_voyager.dra.live_outcome_postgres import (
     PostgresLiveOutcomeInspector,
 )
-from night_voyager.dra.live_storage import LiveReceiptStore
+from night_voyager.dra.live_storage import LiveReceiptStore, LiveStorageError
 from night_voyager.dra.models import SourceAttestationV1
 from night_voyager.identity.demo_seed import DRA_PROOF_CASE_ID
 from night_voyager.identity.models import ActorContext, ActorRole
@@ -75,6 +80,7 @@ SOURCE_ROOT = Path(__file__).resolve().parents[1] / "fixtures/dra"
 SOURCE_LOGICAL_PATH = "sources/australia-program-fit.html"
 SOURCE_SHA256 = "87e314e801dca1aeaf9b751c149c53629a4cf23ee04698939fdc87def5a90a13"
 MAX_RESPONSE_BYTES = 1_048_576
+LIVE_STAGES = ("promote", "review", "decide", "evaluate")
 
 
 class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -434,6 +440,170 @@ async def inspect(
         await engine.dispose()
 
 
+def _stage_environment(
+    context: ActorContext,
+    *,
+    session_value: str,
+    csrf_value: str,
+) -> dict[str, str]:
+    return {
+        **os.environ,
+        "NIGHT_VOYAGER_DRA_STAGE_ORGANIZATION_ID": str(context.organization_id),
+        "NIGHT_VOYAGER_DRA_STAGE_ACTOR_ID": str(context.actor_id),
+        "NIGHT_VOYAGER_DRA_STAGE_SESSION_ID": str(context.session_id),
+        "NIGHT_VOYAGER_DRA_STAGE_ROLE": context.role.value,
+        "NIGHT_VOYAGER_DRA_STAGE_SESSION": session_value,
+        "NIGHT_VOYAGER_DRA_STAGE_CSRF": csrf_value,
+    }
+
+
+async def _execute_live_stage_child(
+    stage: str,
+    receipt_root: Path,
+    input_file: Path,
+    snapshot_root: Path | None,
+) -> None:
+    context = ActorContext(
+        organization_id=UUID(os.environ["NIGHT_VOYAGER_DRA_STAGE_ORGANIZATION_ID"]),
+        actor_id=UUID(os.environ["NIGHT_VOYAGER_DRA_STAGE_ACTOR_ID"]),
+        role=ActorRole(os.environ["NIGHT_VOYAGER_DRA_STAGE_ROLE"]),
+        session_id=UUID(os.environ["NIGHT_VOYAGER_DRA_STAGE_SESSION_ID"]),
+    )
+    authority = EphemeralHttpAuthority(
+        origin=ORIGIN,
+        session_value=os.environ["NIGHT_VOYAGER_DRA_STAGE_SESSION"],
+        csrf_value=os.environ["NIGHT_VOYAGER_DRA_STAGE_CSRF"],
+    )
+    payload_json = input_file.read_text(encoding="utf-8")
+    async with _StdlibAsyncHttpClient(
+        base_url="http://127.0.0.1:8000",
+        timeout=30,
+    ) as client:
+        with LiveReceiptStore.open(receipt_root) as store:
+            controller = DraLiveClosureController(
+                NightVoyagerAuthorityGateway(client, authority),
+                store,
+            )
+            if stage == "promote":
+                if snapshot_root is None:
+                    raise ValueError("dra_live_stage_snapshot_missing")
+                await controller.promote(
+                    PromoteCommand(
+                        DraPromotionInputV1.model_validate_json(payload_json),
+                        context,
+                        snapshot_root,
+                    )
+                )
+                return
+            if stage == "review":
+                await controller.review(
+                    ReviewCommand(
+                        DraReviewInputV1.model_validate_json(payload_json),
+                        context,
+                    )
+                )
+                return
+            if stage == "decide":
+                await controller.decide(
+                    DecideCommand(
+                        DraDecisionInputV1.model_validate_json(payload_json),
+                        context,
+                    )
+                )
+                return
+            if stage != "evaluate":
+                raise ValueError("dra_live_stage_invalid")
+            capture = store.read_receipt("capture.json", DraCaptureReceiptV1)
+            promotion = store.read_receipt("promotion.json", DraPromotionReceiptV1)
+            review = store.read_receipt("review.json", DraReviewReceiptV1)
+            decision = store.read_receipt("decision.json", DraDecisionReceiptV1)
+            database_url = os.environ.get("NIGHT_VOYAGER_DATABASE_URL")
+            if not database_url:
+                raise ValueError("dra_live_stage_database_missing")
+            engine = create_async_engine(database_url)
+            try:
+                factory = async_sessionmaker(engine, expire_on_commit=False)
+                async with factory() as database_session:
+                    projection = await PostgresLiveOutcomeInspector(
+                        database_session
+                    ).inspect(
+                        context,
+                        DraLiveOutcomeIntentV1(
+                            intent_sha256=capture.intent_sha256,
+                            organization_id=context.organization_id,
+                            candidate_id=promotion.candidate_id,
+                            advisor_actor_identity_sha256=derive_identity_hash(
+                                "actor", str(context.actor_id)
+                            ),
+                            tenant_identity_sha256=derive_identity_hash(
+                                "tenant", str(context.organization_id)
+                            ),
+                        ),
+                    )
+            finally:
+                await engine.dispose()
+            report = evaluate_full_closure(
+                load_live_closure_scenario(),
+                (capture, promotion, review, decision),
+                DraLiveOutcomeExpectedV1.model_validate_json(payload_json),
+                projection,
+            )
+            if report.status != "passed":
+                raise ValueError("dra_live_rehearsal_evaluation_failed")
+            store.write_receipt("evaluation.json", report)
+
+
+def _run_live_stage(
+    stage: str,
+    *,
+    receipt_root: Path,
+    input_file: Path,
+    environment: dict[str, str],
+    snapshot_root: Path | None = None,
+    expect_success: bool = True,
+) -> int:
+    command: list[str] = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--live-stage",
+        stage,
+        "--receipt-root",
+        str(receipt_root),
+        "--input-file",
+        str(input_file),
+    ]
+    if snapshot_root is not None:
+        command.extend(("--snapshot-root", str(snapshot_root)))
+    completed = subprocess.run(
+        command,
+        env=environment,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if completed.returncode != (0 if expect_success else 1):
+        raise RuntimeError(
+            f"dra_live_stage_{stage}_unexpected_exit_{completed.returncode}"
+        )
+    if not expect_success:
+        result = json.loads(completed.stdout)
+        if (
+            result.get("stage") != stage
+            or result.get("problem") != "stage_authority_invalid"
+        ):
+            raise RuntimeError("dra_live_stage_rejection_invalid")
+        return -1
+    result = json.loads(completed.stdout)
+    if result.get("stage") != stage or not isinstance(result.get("pid"), int):
+        raise RuntimeError("dra_live_stage_identity_invalid")
+    return int(result["pid"])
+
+
+def _write_stage_input(path: Path, model: BaseModel) -> None:
+    path.write_text(model.model_dump_json(), encoding="utf-8")
+    path.chmod(0o600)
+
+
 async def _real_live_closure_rehearsal() -> tuple[str, str, str]:
     scenario = load_live_closure_scenario()
     advisor_context = ActorContext(
@@ -554,143 +724,145 @@ async def _real_live_closure_rehearsal() -> tuple[str, str, str]:
                 snapshot_sha256=hashlib.sha256(snapshot_path.read_bytes()).hexdigest(),
                 known_gaps=("applicant_eligibility", "intake_availability"),
             )
-            with LiveReceiptStore.open(receipt_root) as store:
-                promotion = await DraLiveClosureController(
-                    NightVoyagerAuthorityGateway(
-                        advisor_client,
-                        EphemeralHttpAuthority(
-                            origin=ORIGIN,
-                            session_value=advisor_session,
-                            csrf_value=advisor_csrf,
-                        ),
-                    ),
-                    store,
-                ).promote(
-                    PromoteCommand(
-                        DraPromotionInputV1(
-                            intent_sha256=intent.intent_sha256,
-                            capture=store.read_receipt(
-                                "capture.json", DraCaptureReceiptV1
-                            ),
-                            organization_id=advisor_context.organization_id,
-                            case_id=DRA_PROOF_CASE_ID,
-                            expected_case_revision=1,
-                            candidate_id=capture.candidate_id,
-                            dra_evidence_id=capture.selected_evidence.evidence_id,
-                            selected_raw_url=selected_url,
-                            advisor_actor_identity_sha256=derive_identity_hash(
-                                "actor", str(advisor_context.actor_id)
-                            ),
-                            tenant_identity_sha256=derive_identity_hash(
-                                "tenant", str(advisor_context.organization_id)
-                            ),
-                            reason="Exact bounded fixture source inspected.",
-                            source_attestation=attestation,
-                        ),
-                        advisor_context,
-                        snapshot_root,
-                    )
-                )
-            with LiveReceiptStore.open(receipt_root) as store:
-                review = await DraLiveClosureController(
-                    NightVoyagerAuthorityGateway(
-                        advisor_client,
-                        EphemeralHttpAuthority(
-                            origin=ORIGIN,
-                            session_value=advisor_session,
-                            csrf_value=advisor_csrf,
-                        ),
-                    ),
-                    store,
-                ).review(
-                    ReviewCommand(
-                        DraReviewInputV1(
-                            intent_sha256=intent.intent_sha256,
-                            promotion=store.read_receipt(
-                                "promotion.json", DraPromotionReceiptV1
-                            ),
-                            organization_id=advisor_context.organization_id,
-                            case_id=DRA_PROOF_CASE_ID,
-                            expected_case_revision=1,
-                            candidate_id=promotion.candidate_id,
-                            promoted_source_pack_id=UUID(PACK),
-                            promoted_source_pack_version=(
-                                promotion.promoted_source_pack_version
-                            ),
-                            advisor_actor_identity_sha256=derive_identity_hash(
-                                "actor", str(advisor_context.actor_id)
-                            ),
-                            tenant_identity_sha256=derive_identity_hash(
-                                "tenant", str(advisor_context.organization_id)
-                            ),
-                            eligible_route_ids=(UUID(AUSTRALIA),),
-                        ),
-                        advisor_context,
-                    )
-                )
-        async with _StdlibAsyncHttpClient(
-            base_url="http://127.0.0.1:8000",
-            timeout=30,
-        ) as parent_client:
-            with LiveReceiptStore.open(receipt_root) as store:
-                decision = await DraLiveClosureController(
-                    NightVoyagerAuthorityGateway(
-                        parent_client,
-                        EphemeralHttpAuthority(
-                            origin=ORIGIN,
-                            session_value=parent_session,
-                            csrf_value=parent_csrf,
-                        ),
-                    ),
-                    store,
-                ).decide(
-                    DecideCommand(
-                        DraDecisionInputV1(
-                            intent_sha256=intent.intent_sha256,
-                            review=store.read_receipt(
-                                "review.json", DraReviewReceiptV1
-                            ),
-                            organization_id=parent_context.organization_id,
-                            case_id=DRA_PROOF_CASE_ID,
-                            brief_id=review.review.brief_id,
-                            expected_brief_version=1,
-                            selected_route_id=UUID(AUSTRALIA),
-                            accepted_budget_min_minor=30_000_000,
-                            accepted_budget_max_minor=40_000_000,
-                            accepted_trade_offs=("budget_elasticity",),
-                            family_actor_identity_sha256=derive_identity_hash(
-                                "actor", str(parent_context.actor_id)
-                            ),
-                            tenant_identity_sha256=derive_identity_hash(
-                                "tenant", str(parent_context.organization_id)
-                            ),
-                        ),
-                        parent_context,
-                    )
-                )
-        database_url = os.environ.get("NIGHT_VOYAGER_DATABASE_URL")
-        if not database_url:
-            raise SystemExit("NIGHT_VOYAGER_DATABASE_URL is required")
-        engine = create_async_engine(database_url)
-        try:
-            factory = async_sessionmaker(engine, expire_on_commit=False)
-            async with factory() as database_session:
-                projection = await PostgresLiveOutcomeInspector(database_session).inspect(
+            promotion_input = DraPromotionInputV1(
+                intent_sha256=intent.intent_sha256,
+                capture=capture,
+                organization_id=advisor_context.organization_id,
+                case_id=DRA_PROOF_CASE_ID,
+                expected_case_revision=1,
+                candidate_id=capture.candidate_id,
+                dra_evidence_id=capture.selected_evidence.evidence_id,
+                selected_raw_url=selected_url,
+                advisor_actor_identity_sha256=derive_identity_hash(
+                    "actor", str(advisor_context.actor_id)
+                ),
+                tenant_identity_sha256=derive_identity_hash(
+                    "tenant", str(advisor_context.organization_id)
+                ),
+                reason="Exact bounded fixture source inspected.",
+                source_attestation=attestation,
+            )
+            promotion_input_path = task_root / "promotion-input.json"
+            _write_stage_input(promotion_input_path, promotion_input)
+            missing_root = task_root / "missing-predecessor"
+            missing_root.mkdir(mode=0o700)
+            _run_live_stage(
+                "promote",
+                receipt_root=missing_root,
+                input_file=promotion_input_path,
+                snapshot_root=snapshot_root,
+                environment=_stage_environment(
                     advisor_context,
-                    DraLiveOutcomeIntentV1(
-                        intent_sha256=intent.intent_sha256,
-                        organization_id=advisor_context.organization_id,
-                        candidate_id=promotion.candidate_id,
-                        advisor_actor_identity_sha256=derive_identity_hash(
-                            "actor", str(advisor_context.actor_id)
-                        ),
-                        tenant_identity_sha256=derive_identity_hash(
-                            "tenant", str(advisor_context.organization_id)
-                        ),
+                    session_value=advisor_session,
+                    csrf_value=advisor_csrf,
+                ),
+                expect_success=False,
+            )
+            stage_pids = {
+                _run_live_stage(
+                    "promote",
+                    receipt_root=receipt_root,
+                    input_file=promotion_input_path,
+                    snapshot_root=snapshot_root,
+                    environment=_stage_environment(
+                        advisor_context,
+                        session_value=advisor_session,
+                        csrf_value=advisor_csrf,
                     ),
                 )
-        finally:
-            await engine.dispose()
+            }
+            with LiveReceiptStore.open(receipt_root) as store:
+                promotion = store.read_receipt(
+                    "promotion.json", DraPromotionReceiptV1
+                )
+            review_input = DraReviewInputV1(
+                intent_sha256=intent.intent_sha256,
+                promotion=promotion,
+                organization_id=advisor_context.organization_id,
+                case_id=DRA_PROOF_CASE_ID,
+                expected_case_revision=1,
+                candidate_id=promotion.candidate_id,
+                promoted_source_pack_id=UUID(PACK),
+                promoted_source_pack_version=promotion.promoted_source_pack_version,
+                advisor_actor_identity_sha256=derive_identity_hash(
+                    "actor", str(advisor_context.actor_id)
+                ),
+                tenant_identity_sha256=derive_identity_hash(
+                    "tenant", str(advisor_context.organization_id)
+                ),
+                eligible_route_ids=(UUID(AUSTRALIA),),
+            )
+            review_input_path = task_root / "review-input.json"
+            _write_stage_input(review_input_path, review_input)
+            forged_payload = review_input.model_dump(mode="json")
+            forged_payload["promotion"]["verification_id"] = str(UUID(int=999))
+            forged_input_path = task_root / "forged-review-input.json"
+            forged_input_path.write_text(
+                json.dumps(forged_payload, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            forged_input_path.chmod(0o600)
+            _run_live_stage(
+                "review",
+                receipt_root=receipt_root,
+                input_file=forged_input_path,
+                environment=_stage_environment(
+                    advisor_context,
+                    session_value=advisor_session,
+                    csrf_value=advisor_csrf,
+                ),
+                expect_success=False,
+            )
+            stage_pids.add(
+                _run_live_stage(
+                    "review",
+                    receipt_root=receipt_root,
+                    input_file=review_input_path,
+                    environment=_stage_environment(
+                        advisor_context,
+                        session_value=advisor_session,
+                        csrf_value=advisor_csrf,
+                    ),
+                )
+            )
+            with LiveReceiptStore.open(receipt_root) as store:
+                review = store.read_receipt("review.json", DraReviewReceiptV1)
+            decision_input = DraDecisionInputV1(
+                intent_sha256=intent.intent_sha256,
+                review=review,
+                organization_id=parent_context.organization_id,
+                case_id=DRA_PROOF_CASE_ID,
+                brief_id=review.review.brief_id,
+                expected_brief_version=1,
+                selected_route_id=UUID(AUSTRALIA),
+                accepted_budget_min_minor=30_000_000,
+                accepted_budget_max_minor=40_000_000,
+                accepted_trade_offs=("budget_elasticity",),
+                family_actor_identity_sha256=derive_identity_hash(
+                    "actor", str(parent_context.actor_id)
+                ),
+                tenant_identity_sha256=derive_identity_hash(
+                    "tenant", str(parent_context.organization_id)
+                ),
+            )
+            decision_input_path = task_root / "decision-input.json"
+            _write_stage_input(decision_input_path, decision_input)
+            stage_pids.add(
+                _run_live_stage(
+                    "decide",
+                    receipt_root=receipt_root,
+                    input_file=decision_input_path,
+                    environment=_stage_environment(
+                        parent_context,
+                        session_value=parent_session,
+                        csrf_value=parent_csrf,
+                    ),
+                )
+            )
+            with LiveReceiptStore.open(receipt_root) as store:
+                decision = store.read_receipt(
+                    "decision.json", DraDecisionReceiptV1
+                )
         expected = DraLiveOutcomeExpectedV1(
             candidate_id=str(promotion.candidate_id),
             source_pack_id=str(review.source_pack_id),
@@ -717,12 +889,26 @@ async def _real_live_closure_rehearsal() -> tuple[str, str, str]:
             decision_receipt_id=str(decision.decision.decision_receipt_id),
             timeline_plan_id=str(decision.decision.timeline_plan_id),
         )
-        report = evaluate_full_closure(
-            scenario,
-            (capture, promotion, review, decision),
-            expected,
-            projection,
+        expected_path = task_root / "evaluation-input.json"
+        _write_stage_input(expected_path, expected)
+        stage_pids.add(
+            _run_live_stage(
+                "evaluate",
+                receipt_root=receipt_root,
+                input_file=expected_path,
+                environment=_stage_environment(
+                    advisor_context,
+                    session_value=advisor_session,
+                    csrf_value=advisor_csrf,
+                ),
+            )
         )
+        if len(stage_pids) != len(LIVE_STAGES) or os.getpid() in stage_pids:
+            raise SystemExit("dra_live_rehearsal_process_boundary_invalid")
+        with LiveReceiptStore.open(receipt_root) as store:
+            report = store.read_receipt(
+                "evaluation.json", DraLiveEvaluationReportV1
+            )
         if report.status != "passed":
             raise SystemExit("dra_live_rehearsal_evaluation_failed")
         return str(promotion.candidate_id), str(review.task.task_id), str(
@@ -740,10 +926,61 @@ def verify_fixture_flow() -> None:
     )
 
 
+def _run_live_stage_probe() -> int:  # pyright: ignore[reportUnusedFunction]
+    completed = subprocess.run(
+        (sys.executable, str(Path(__file__).resolve()), "--live-stage-probe"),
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return int(completed.stdout.strip())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fixture", action="store_true", required=True)
-    parser.parse_args()
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--fixture", action="store_true")
+    mode.add_argument("--live-stage-probe", action="store_true")
+    mode.add_argument("--live-stage", choices=LIVE_STAGES)
+    parser.add_argument("--receipt-root")
+    parser.add_argument("--input-file")
+    parser.add_argument("--snapshot-root")
+    args = parser.parse_args()
+    if args.live_stage_probe:
+        print(os.getpid())
+        return
+    if args.live_stage:
+        if not args.receipt_root or not args.input_file:
+            raise SystemExit(1)
+        try:
+            asyncio.run(
+                _execute_live_stage_child(
+                    args.live_stage,
+                    Path(args.receipt_root),
+                    Path(args.input_file),
+                    Path(args.snapshot_root) if args.snapshot_root else None,
+                )
+            )
+        except (KeyError, LiveStorageError, OSError, ValueError):
+            print(
+                json.dumps(
+                    {
+                        "stage": args.live_stage,
+                        "problem": "stage_authority_invalid",
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+            raise SystemExit(1) from None
+        print(
+            json.dumps(
+                {"stage": args.live_stage, "pid": os.getpid()},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        return
     verify_fixture_flow()
 
 

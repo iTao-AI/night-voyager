@@ -19,6 +19,7 @@ from night_voyager.dra.ports import (
     VerifyDraCandidateCommand,
 )
 from night_voyager.dra.postgres import BASELINE_SOURCE_PACK_ID
+from night_voyager.dra.reconciliation import DraAmbiguousOutcome
 from night_voyager.identity.models import ActorContext
 from night_voyager.skills.models import SkillRuntimePin
 
@@ -61,8 +62,6 @@ class NightVoyagerAuthorityGateway:
     ) -> None:
         self._client = client
         self._authority = authority
-        self._tasks: dict[str, DraPlanningTaskProjectionV1] = {}
-        self._reviews: dict[UUID, DraReviewAuthorityV1] = {}
 
     def _headers(self, idempotency_key: str | None = None) -> dict[str, str]:
         headers = {
@@ -84,6 +83,56 @@ class NightVoyagerAuthorityGateway:
             raise ValueError("night_voyager_http_response_invalid")
         payload.pop("schema_version")
         return payload
+
+    @staticmethod
+    def _transport_failure(error: Exception) -> bool:
+        root_module = type(error).__module__.split(".", maxsplit=1)[0]
+        return isinstance(error, (TimeoutError, ConnectionError, OSError)) or root_module in {
+            "httpcore2",
+            "httpx2",
+        }
+
+    async def _post_mutation(
+        self,
+        url: str,
+        *,
+        idempotency_key: str,
+        payload: object,
+    ) -> HttpResponsePort:
+        try:
+            return await self._client.post(
+                url,
+                headers=self._headers(idempotency_key),
+                json=payload,
+            )
+        except Exception as error:
+            if self._transport_failure(error):
+                raise DraAmbiguousOutcome() from error
+            raise
+
+    @staticmethod
+    def _task_projection(raw: dict[str, object]) -> DraPlanningTaskProjectionV1:
+        return DraPlanningTaskProjectionV1(
+            task_id=UUID(str(raw["task_id"])),
+            case_id=UUID(str(raw["case_id"])),
+            case_revision=int(str(raw["case_revision"])),
+            operation="generate_governed_mixed_planning_run_v1",
+            source_pack_id=UUID(str(raw["source_pack_id"])),
+            source_pack_version=int(str(raw["source_pack_version"])),
+            status="needs_advisor_review",
+            planning_run_id=UUID(str(raw["planning_run_id"])),
+            execution_id=UUID(str(raw["execution_id"])),
+            terminal_event_id=int(str(raw["terminal_event_id"])),
+            skill_pin=SkillRuntimePin.model_validate_json(
+                json.dumps(
+                    raw["skill_pin"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            ),
+            request_sha256=str(raw["request_sha256"]),
+        )
 
     async def import_candidate(
         self,
@@ -128,13 +177,13 @@ class NightVoyagerAuthorityGateway:
         idempotency_key: str,
     ) -> DraVerificationViewV1:
         del context
-        response = await self._client.post(
+        response = await self._post_mutation(
             (
                 f"/api/v1/cases/{command.case_id}/dra-candidates/"
                 f"{command.candidate_id}/verification-decisions"
             ),
-            headers=self._headers(idempotency_key),
-            json={
+            idempotency_key=idempotency_key,
+            payload={
                 "schema_version": 1,
                 "expected_case_revision": command.expected_case_revision,
                 "dra_evidence_id": command.dra_evidence_id,
@@ -171,7 +220,21 @@ class NightVoyagerAuthorityGateway:
         self, context: ActorContext, idempotency_key: str
     ) -> DraPlanningTaskProjectionV1 | None:
         del context
-        return self._tasks.get(idempotency_key)
+        for _ in range(60):
+            response = await self._client.get(
+                "/api/v1/agent-tasks/recovery",
+                headers=self._headers(idempotency_key),
+            )
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            current = self._projection_payload(response)
+            if current.get("status") == "needs_advisor_review":
+                return self._task_projection(current)
+            if current.get("status") != "preparing":
+                raise ValueError("planning_task_terminal_invalid")
+            await asyncio.sleep(1)
+        raise ValueError("planning_task_deadline_exceeded")
 
     async def create_task(
         self,
@@ -191,10 +254,10 @@ class NightVoyagerAuthorityGateway:
             "source_pack_version": source_pack_version,
             "policy_version": "m3a-policy-v1",
         }
-        response = await self._client.post(
+        response = await self._post_mutation(
             f"/api/v1/cases/{case_id}/agent-tasks",
-            headers=self._headers(idempotency_key),
-            json={
+            idempotency_key=idempotency_key,
+            payload={
                 "schema_version": 1,
                 **{
                     key: value
@@ -210,50 +273,54 @@ class NightVoyagerAuthorityGateway:
         raw = cast(dict[str, object], raw_value)
         task_id = UUID(str(raw["task_id"]))
         for _ in range(60):
-            current_response = await self._client.get(
-                f"/api/v1/tasks/{task_id}",
-                params={"live_authority": "true"},
-                headers=self._headers(),
-            )
+            try:
+                current_response = await self._client.get(
+                    f"/api/v1/tasks/{task_id}",
+                    params={"live_authority": "true"},
+                    headers=self._headers(),
+                )
+            except Exception as error:
+                if self._transport_failure(error):
+                    raise DraAmbiguousOutcome() from error
+                raise
             current_response.raise_for_status()
             current_value = current_response.json()
             if not isinstance(current_value, dict):
                 raise ValueError("planning_task_response_invalid")
             current = cast(dict[str, object], current_value)
             if current.get("status") == "needs_advisor_review":
-                projection = DraPlanningTaskProjectionV1(
-                    task_id=task_id,
-                    case_id=UUID(str(current["case_id"])),
-                    case_revision=int(str(current["case_revision"])),
-                    operation="generate_governed_mixed_planning_run_v1",
-                    source_pack_id=UUID(str(current["source_pack_id"])),
-                    source_pack_version=int(str(current["source_pack_version"])),
-                    status="needs_advisor_review",
-                    planning_run_id=UUID(str(current["planning_run_id"])),
-                    execution_id=UUID(str(current["execution_id"])),
-                    terminal_event_id=int(str(current["terminal_event_id"])),
-                    skill_pin=SkillRuntimePin.model_validate_json(
-                        json.dumps(
-                            current["skill_pin"],
-                            ensure_ascii=False,
-                            sort_keys=True,
-                            separators=(",", ":"),
-                        )
-                    ),
-                    request_sha256=str(current["request_sha256"]),
-                )
-                self._tasks[idempotency_key] = projection
-                return projection
+                return self._task_projection(current)
             if current.get("status") != "preparing":
                 raise ValueError("planning_task_terminal_invalid")
             await asyncio.sleep(1)
         raise ValueError("planning_task_deadline_exceeded")
 
     async def get_review(
-        self, context: ActorContext, case_id: UUID, planning_run_id: UUID
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        planning_run_id: UUID,
+        idempotency_key: str,
     ) -> DraReviewAuthorityV1 | None:
-        del context, case_id
-        return self._reviews.get(planning_run_id)
+        del context
+        response = await self._client.get(
+            (
+                f"/api/v1/cases/{case_id}/advisor-reviews/recovery"
+                f"?planning_run_id={planning_run_id}"
+            ),
+            headers=self._headers(idempotency_key),
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        return DraReviewAuthorityV1.model_validate_json(
+            json.dumps(
+                self._projection_payload(response),
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
 
     async def record_review(
         self,
@@ -274,10 +341,10 @@ class NightVoyagerAuthorityGateway:
             "risk_acceptances": [],
             "reviewer_notes": None,
         }
-        response = await self._client.post(
+        response = await self._post_mutation(
             f"/api/v1/cases/{case_id}/advisor-reviews",
-            headers=self._headers(idempotency_key),
-            json={
+            idempotency_key=idempotency_key,
+            payload={
                 "schema_version": 1,
                 **{
                     key: value
@@ -300,7 +367,6 @@ class NightVoyagerAuthorityGateway:
             eligible_route_ids=eligible_route_ids,
             request_sha256=canonical_request_sha256(request_payload),
         )
-        self._reviews[planning_run_id] = projection
         return projection
 
     async def get_decision(
@@ -380,10 +446,10 @@ class NightVoyagerAuthorityGateway:
             "currency": "CNY",
             "accepted_trade_offs": list(trade_offs),
         }
-        response = await self._client.post(
+        response = await self._post_mutation(
             f"/api/v1/decision-briefs/{brief_id}/family-decisions",
-            headers=self._headers(idempotency_key),
-            json={
+            idempotency_key=idempotency_key,
+            payload={
                 "schema_version": 1,
                 **{
                     key: value

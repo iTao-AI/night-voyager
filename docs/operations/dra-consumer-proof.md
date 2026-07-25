@@ -158,6 +158,11 @@ whether to synthesize success, replay the exact request/key, or fail closed on
 partial/conflicting state. Fresh processes must re-inject the assigned-advisor
 or parent session. Session identifiers, cookies, headers, auth-file paths, and
 credential material are never receipt, bundle, log, or cleanup content.
+HTTP mutation transport loss is converted to a bounded ambiguous outcome only
+at the POST boundary. Candidate and decision recovery use their existing narrow
+reads; planning-task and AdvisorReview recovery use actor/key-bound recovery
+reads backed by the existing idempotency records. They do not expose a generic
+task, review, or idempotency query surface.
 
 Each provider-free command consumes one bounded public-safe JSON input whose
 embedded parent receipt must byte-match the durable predecessor. The snapshot
@@ -209,7 +214,11 @@ uv run python scripts/verify_dra_live_closure.py rehearse-full --json
 
 `rehearse-full` uses the deterministic fixture through real PostgreSQL, FastAPI,
 worker, SSE, review, decision, and the migration `0010` outcome inspector. It
-does not consume the live provider budget.
+does not consume the live provider budget. Stage 2, Stage 3, Stage 4, and final
+evaluation each run in a separate subprocess, reopen the durable receipt store,
+and re-inject only the role-specific ephemeral authority. The rehearsal also
+proves that a missing predecessor and a forged predecessor are rejected before
+mutation.
 
 ## Candidate freeze
 
@@ -232,21 +241,25 @@ uv run python scripts/verify_dra_live_closure.py freeze-candidate \
   --json
 ```
 
-Each evidence JSON is bound to the same exact merged-main SHA. Docker evidence
-must record a passed preflight and teardown, an empty task Compose inventory, and
-clean task state; hosted evidence must record terminal `SUCCESS` for the exact
-`python`, `frontend`, and `compose` checks; recovery and authority-review evidence
-must be terminal `passed` and `CLEAN`. Arbitrary files, feature-branch HEADs,
-missing/failed checks, stale evidence, dirty main, or local/origin/live main drift
-fail closed.
+Each evidence JSON is bound to the same exact merged-main SHA, but its status is
+not trusted. Freeze re-runs the closed recovery command, re-queries Docker server,
+Compose version and task-project absence, and reads the exact GitHub check-run,
+merged-PR, and approved-review identities. The supplied values and hashes must
+match those independently observed results. Arbitrary exact-shape files,
+feature-branch HEADs, missing/failed checks, stale evidence, dirty main, or
+local/origin/live main drift fail closed.
 
 The four files use closed schemas:
 `night-voyager.dra-live-docker-evidence.v1`,
 `night-voyager.dra-live-hosted-checks-evidence.v1`,
 `night-voyager.dra-live-recovery-evidence.v1`, and
-`night-voyager.dra-live-authority-review-evidence.v1`. Extra keys are rejected;
-each file must contain its exact `head_sha` and the stage-specific terminal fields
-described above.
+`night-voyager.dra-live-authority-review-evidence.v1`. Extra keys are rejected.
+Docker evidence binds server/Compose versions, the exact Compose inventory hash,
+and task project name. Hosted evidence binds repository and the three exact check
+run IDs. Recovery evidence binds the closed command and observed stdout hash.
+Authority-review evidence binds repository, PR number, review ID, and reviewed
+head; freeze verifies that the PR merged as the supplied exact main SHA and that
+the review is `APPROVED` on the supplied reviewed head.
 
 The readiness receipt binds the exact merged main, spec and PR C plan hashes,
 producer pin, scenario, intent/receipt/CLI schema identities, required hosted

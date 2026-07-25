@@ -108,11 +108,19 @@ the existing governed task, five-field Skill pin, terminal event/SSE, PlanningRu
 and AdvisorReview. Stage 4 records the family decision, DecisionReceipt, and
 TimelinePlan. Each stage has a distinct acknowledgement and lost-ack
 reconciliation; no session material enters a receipt.
+Real HTTP transport loss is mapped to the bounded ambiguity type at the mutation
+POST boundary. Fresh-process task and AdvisorReview recovery are exact
+actor/idempotency-key reads over existing product records; they are not
+process-local caches or generic read APIs.
 
 The outcome inspector executes only migration `0010` function
 `app.project_dra_live_outcome(...)`. It has no table `SELECT`, generic SQL, DML,
 privileged role, or cross-tenant path. `decision_recorded` is not completion;
 only the complete evaluator may produce `closure_passed`.
+The capture receipt additionally binds the domain-separated provider create key,
+the accepted run, and every observed run identity. The two provider-cardinality
+assertions require one unique key and one unique accepted run; the consumed
+boolean alone is not evidence of either assertion.
 
 ## Governed mixed-planning surface
 

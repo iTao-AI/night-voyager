@@ -191,6 +191,23 @@ class PostgresTaskRepository:
                 return task
         raise RuntimeError("pinned task Skill version is unavailable")
 
+    async def get_by_idempotency(
+        self,
+        context: ActorContext,
+        idempotency_key: str,
+    ) -> dict[str, object] | None:
+        task_id = await self._session.scalar(
+            text("SELECT app.project_agent_task_by_idempotency(:org,:actor,:key)"),
+            {
+                "org": context.organization_id,
+                "actor": context.actor_id,
+                "key": self._key_hash(idempotency_key),
+            },
+        )
+        if task_id is None:
+            return None
+        return await self.get(context, cast(UUID, task_id))
+
     async def cancel(
         self,
         context: ActorContext,

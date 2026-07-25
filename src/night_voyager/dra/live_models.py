@@ -519,6 +519,18 @@ class DraStageStateV1(FrozenModel):
     status: Literal["pending", "completed", "failed"]
 
 
+class DraProviderAttemptEvidenceV1(FrozenModel):
+    create_keys: tuple[Sha256, ...] = Field(min_length=1)
+    observed_run_ids: tuple[BoundedId, ...] = Field(min_length=1)
+    accepted_run_id: BoundedId
+
+    @model_validator(mode="after")
+    def accepted_run_was_observed(self) -> Self:
+        if self.accepted_run_id not in self.observed_run_ids:
+            raise ValueError("dra_provider_accepted_run_unobserved")
+        return self
+
+
 class DraCaptureReceiptV1(FrozenModel):
     schema_version: Literal["night-voyager.dra-live-capture-receipt.v1"]
     intent_sha256: Sha256
@@ -530,6 +542,7 @@ class DraCaptureReceiptV1(FrozenModel):
     selected_evidence: DraSelectedEvidenceV1 | None
     stage_states: tuple[DraStageStateV1, ...]
     provider_attempt_consumed: bool
+    provider_attempt_evidence: DraProviderAttemptEvidenceV1
     candidate_id: UUID | None = None
     candidate_authority: Literal["untrusted_candidate"] | None = None
     candidate_import_key: Sha256 | None = None

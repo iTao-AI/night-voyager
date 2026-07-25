@@ -89,7 +89,11 @@ class DraClosureGatewayPort(Protocol):
     ) -> DraPlanningTaskProjectionV1: ...
 
     async def get_review(
-        self, context: ActorContext, case_id: UUID, planning_run_id: UUID
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        planning_run_id: UUID,
+        idempotency_key: str,
     ) -> DraReviewAuthorityV1 | None: ...
 
     async def record_review(

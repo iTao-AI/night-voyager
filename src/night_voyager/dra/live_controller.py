@@ -25,6 +25,7 @@ from night_voyager.dra.live_models import (
     DraPreflightReceiptV1,
     DraPromotionInputV1,
     DraPromotionReceiptV1,
+    DraProviderAttemptEvidenceV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
     DraReviewInputV1,
@@ -361,7 +362,7 @@ class DraLiveClosureController:
             }
         )
         recorded = await authority.get_review(
-            context, review.case_id, task.planning_run_id
+            context, review.case_id, task.planning_run_id, review_key
         )
         if recorded is None:
             try:
@@ -392,7 +393,7 @@ class DraLiveClosureController:
                     ),
                 )
                 recorded = await authority.get_review(
-                    context, review.case_id, task.planning_run_id
+                    context, review.case_id, task.planning_run_id, review_key
                 )
                 if recorded is None:
                     recorded = await authority.record_review(
@@ -1026,6 +1027,17 @@ class DraLiveCaptureController:
             selected_evidence=selected,
             stage_states=(DraStageStateV1(stage="capture-live", status="completed"),),
             provider_attempt_consumed=True,
+            provider_attempt_evidence=DraProviderAttemptEvidenceV1(
+                create_keys=(
+                    derive_stage_key(
+                        intent.intent_sha256,
+                        "create",
+                        intent.attempt_id,
+                    ),
+                ),
+                observed_run_ids=(inspection.run_id,),
+                accepted_run_id=inspection.run_id,
+            ),
             candidate_id=view.candidate_id,
             candidate_authority="untrusted_candidate",
             candidate_import_key=import_key,

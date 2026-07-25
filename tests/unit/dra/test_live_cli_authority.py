@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -13,6 +14,7 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
 
+import httpx2
 import pytest
 
 from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
@@ -21,6 +23,8 @@ from night_voyager.dra.live_http import (
     NightVoyagerAuthorityGateway,
 )
 from night_voyager.dra.live_storage import LiveReceiptStore
+from night_voyager.dra.ports import VerifyDraCandidateCommand
+from night_voyager.dra.reconciliation import DraAmbiguousOutcome
 from night_voyager.identity.models import ActorContext, ActorRole
 from scripts import verify_dra_governed_flow as governed_flow
 
@@ -142,6 +146,162 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
     assert result.returncode == 30
     assert payload["problem_code"] == "candidate_readiness_invalid"
     assert not receipts.exists()
+
+
+@pytest.mark.asyncio
+async def test_production_gateway_translates_commit_then_timeout_and_rereads_task() -> None:
+    case_id = UUID("10000000-0000-0000-0000-000000000101")
+    task_id = UUID("10000000-0000-0000-0000-000000000102")
+    source_pack_id = UUID("10000000-0000-0000-0000-000000000103")
+    planning_run_id = UUID("10000000-0000-0000-0000-000000000104")
+    execution_id = UUID("10000000-0000-0000-0000-000000000105")
+    observed: list[tuple[str, str]] = []
+
+    class _Response:
+        status_code = 200
+
+        def json(self) -> object:
+            return {
+                "schema_version": 1,
+                "task_id": str(task_id),
+                "case_id": str(case_id),
+                "case_revision": 7,
+                "operation": "generate_governed_mixed_planning_run_v1",
+                "source_pack_id": str(source_pack_id),
+                "source_pack_version": 3,
+                "status": "needs_advisor_review",
+                "planning_run_id": str(planning_run_id),
+                "execution_id": str(execution_id),
+                "terminal_event_id": 11,
+                "skill_pin": {
+                    "skill_definition_id": "81000000-0000-0000-0000-000000000002",
+                    "skill_version_id": "82000000-0000-0000-0000-000000000002",
+                    "skill_activation_event_id": "84000000-0000-0000-0000-000000000001",
+                    "skill_activation_sequence": 1,
+                    "runtime_binding_sha256": "d" * 64,
+                },
+                "request_sha256": "e" * 64,
+            }
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _Client:
+        async def post(self, url: str, **kwargs: object) -> _Response:
+            del kwargs
+            observed.append(("POST", url))
+            raise httpx2.ReadTimeout("committed response lost")
+
+        async def get(self, url: str, **kwargs: object) -> _Response:
+            del kwargs
+            observed.append(("GET", url))
+            return _Response()
+
+    context = ActorContext(
+        organization_id=UUID("10000000-0000-0000-0000-000000000106"),
+        actor_id=UUID("10000000-0000-0000-0000-000000000107"),
+        role=ActorRole.ADVISOR,
+        session_id=UUID("10000000-0000-0000-0000-000000000108"),
+    )
+    gateway = NightVoyagerAuthorityGateway(
+        _Client(),
+        EphemeralHttpAuthority(
+            origin="http://127.0.0.1:3000",
+            session_value="bounded-session",
+            csrf_value="bounded-csrf",
+        ),
+    )
+
+    with pytest.raises(DraAmbiguousOutcome):
+        await gateway.create_task(
+            context,
+            case_id,
+            7,
+            source_pack_id,
+            3,
+            "bounded-idempotency-key",
+        )
+    recovered = await NightVoyagerAuthorityGateway(
+        _Client(),
+        gateway._authority,  # pyright: ignore[reportPrivateUsage]
+    ).get_task(context, "bounded-idempotency-key")
+
+    assert recovered is not None
+    assert recovered.task_id == task_id
+    assert observed[-1] == ("GET", "/api/v1/agent-tasks/recovery")
+
+
+def test_governed_rehearsal_stage_probe_runs_in_a_fresh_process() -> None:
+    child_pid = governed_flow._run_live_stage_probe()  # pyright: ignore[reportPrivateUsage]
+    assert child_pid != os.getpid()
+
+
+@pytest.mark.asyncio
+async def test_all_production_mutations_translate_transport_lost_ack(
+    tmp_path: Path,
+) -> None:
+    observed: list[str] = []
+
+    class _Client:
+        async def post(self, url: str, **kwargs: object) -> object:
+            del kwargs
+            observed.append(url)
+            raise httpx2.ReadTimeout("committed response lost")
+
+    command = _command(_private_roots(tmp_path)[1]).promotion
+    context = ActorContext(
+        organization_id=command.organization_id,
+        actor_id=UUID("20000000-0000-4000-8000-000000000002"),
+        role=ActorRole.ADVISOR,
+        session_id=UUID("30000000-0000-4000-8000-000000000002"),
+    )
+    gateway = NightVoyagerAuthorityGateway(
+        _Client(),
+        EphemeralHttpAuthority(
+            origin="http://127.0.0.1:3000",
+            session_value="bounded-session",
+            csrf_value="bounded-csrf",
+        ),
+    )
+    assert command.source_attestation is not None
+    calls = (
+        gateway.promote_candidate(
+            context,
+            VerifyDraCandidateCommand(
+                case_id=command.case_id,
+                candidate_id=command.candidate_id,
+                expected_case_revision=command.expected_case_revision,
+                dra_evidence_id=command.dra_evidence_id,
+                decision="approve",
+                reason=command.reason,
+                source_attestation=command.source_attestation,
+            ),
+            "promotion-key",
+        ),
+        gateway.record_review(
+            context,
+            command.case_id,
+            command.expected_case_revision,
+            UUID("10000000-0000-4000-8000-000000000201"),
+            (UUID("10000000-0000-4000-8000-000000000202"),),
+            "review-key",
+        ),
+        gateway.record_decision(
+            context,
+            UUID("10000000-0000-4000-8000-000000000203"),
+            1,
+            UUID("10000000-0000-4000-8000-000000000202"),
+            100,
+            200,
+            ("bounded",),
+            "decision-key",
+        ),
+    )
+    for call in calls:
+        with pytest.raises(DraAmbiguousOutcome):
+            await call
+
+    assert len(observed) == 3
 
 
 def test_governed_proof_imports_with_exact_core_runtime_export() -> None:

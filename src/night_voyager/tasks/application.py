@@ -71,6 +71,19 @@ class TaskService:
             else self._project(row, include_live_authority=include_live_authority)
         )
 
+    async def get_by_idempotency(
+        self,
+        context: ActorContext,
+        idempotency_key: str,
+    ) -> dict[str, object] | None:
+        self._require_advisor(context)
+        row = await self._repository.get_by_idempotency(context, idempotency_key)
+        return (
+            None
+            if row is None
+            else self._project(row, include_live_authority=True)
+        )
+
     async def cancel(
         self,
         context: ActorContext,

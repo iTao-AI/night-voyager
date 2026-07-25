@@ -26,6 +26,7 @@ from night_voyager.dra.live_models import (
     DraDecisionReceiptV1,
     DraPlanningTaskProjectionV1,
     DraPromotionReceiptV1,
+    DraProviderAttemptEvidenceV1,
     DraReviewAuthorityV1,
     DraReviewReceiptV1,
     DraSelectedEvidenceV1,
@@ -83,6 +84,11 @@ def typed_receipts() -> tuple[
         ),
         stage_states=stages,
         provider_attempt_consumed=True,
+        provider_attempt_evidence=DraProviderAttemptEvidenceV1(
+            create_keys=("9" * 64,),
+            observed_run_ids=("run-1",),
+            accepted_run_id="run-1",
+        ),
         candidate_id=CANDIDATE,
         candidate_authority="untrusted_candidate",
         candidate_import_key="b" * 64,
@@ -260,6 +266,26 @@ def test_typed_trajectory_is_closed_complete_and_order_independent() -> None:
     assert first == reordered
     assert all(result.status == "passed" for result in first)
     assert {result.assertion_id for result in first} == set(TRAJECTORY_ASSERTIONS)
+
+
+def test_provider_attempt_assertions_reject_multiple_runs_or_keys() -> None:
+    capture, promotion, review, decision = typed_receipts()
+    payload = capture.model_dump(mode="json")
+    payload["provider_attempt_evidence"] = {
+        "create_keys": ("9" * 64, "8" * 64),
+        "observed_run_ids": ("run-1", "run-2"),
+        "accepted_run_id": "run-1",
+    }
+    forged = DraCaptureReceiptV1.model_validate(payload)
+    failed = {
+        item.assertion_id
+        for item in evaluate_trajectory(
+            load_live_closure_scenario(),
+            (forged, promotion, review, decision),
+        )
+        if item.status == "failed"
+    }
+    assert failed == {"provider_attempt_exactly_one", "no_second_provider_run"}
 
 
 def test_self_asserted_trajectory_receipts_are_not_authority() -> None:
