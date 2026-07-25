@@ -93,10 +93,17 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A implemented provider-free; PR B/C approved but not implemented",
+        "PR A/B implemented provider-free; PR C approved but not implemented",
         "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
-        "**Implementation status:** PR A implemented provider-free; "
-        "PR B and PR C remain approved but not implemented.",
+        "**Implementation status:** PR A and PR B implemented provider-free; "
+        "PR C remains approved but not implemented.",
+    ),
+    (
+        "DRA v0.1.6 governed live closure",
+        "PR A/B implemented provider-free; PR C approved but not implemented",
+        "2026-07-25-dra-v0-1-6-live-closure-pr-b-implementation-plan.md",
+        "**Implementation status:** PR B implemented provider-free; "
+        "PR C remains approved but not implemented.",
     ),
     (
         "High-End Portfolio Entry v1",
@@ -105,6 +112,36 @@ PLAN_STATUS_BINDINGS = (
         "**Implementation status:** Complete, merged as PR #60, and released in v0.1.3.",
     ),
 )
+
+
+def test_dra_stage_one_recovery_and_non_claims_are_documented() -> None:
+    runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
+    reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
+    adr = (
+        ROOT / "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md"
+    ).read_text()
+    combined = "\n".join((runbook, reference, adr))
+    for required in (
+        "freeze-intent",
+        "preflight-live",
+        "capture-live",
+        "select-and-import",
+        "reconcile-create",
+        "resume-poll",
+        "inspect-recovery",
+        "rehearse-capture",
+        "cleanup",
+        "operator_action_required",
+        "same run",
+        "URL-only",
+        "UNTRUSTED_CANDIDATE",
+        "no remote cancellation",
+        "Live provider proof was not run",
+        "PR C remains approved but not implemented",
+    ):
+        assert required in combined
+    assert "PR B is implemented provider-free" in combined
+    assert "governed-live success claim" in combined
 MERGED_FACT_TO_PLAN_BANNERS = {
     "2026-07-22-explicit-planning-start-authority.md": (
         "**Implementation status:** Complete, merged as PR #57, and released in v0.1.3."
@@ -316,8 +353,9 @@ def test_implemented_document_statuses_do_not_regress() -> None:
             "PR B and PR C were delivered under their own plans",
         ),
         "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
-            "**Implementation status:** PR A foundation implemented provider-free;",
-            "governed live acceptance remains unimplemented",
+            "**Implementation status:** PR A and PR B implemented provider-free; "
+            "PR C remains approved but not implemented.",
+            "Governed live acceptance remains unimplemented",
         ),
     }
     for relative, required in expected.items():

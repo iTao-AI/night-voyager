@@ -22,6 +22,7 @@ from night_voyager.dra.live_models import (
     DraCaptureInputV1,
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
+    DraControllerStopReceiptV1,
     DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPollRecoveryReceiptV1,
@@ -157,6 +158,7 @@ async def test_request_bytes_are_rechecked_before_any_provider_access(
                 query_path=path,
             )
         )
+        assert isinstance(result, DraControllerStopReceiptV1)
         assert result.public_code == "request_identity_mismatch"
         assert result.provider_attempt_consumed is False
         assert transport.health_calls == 0
@@ -285,6 +287,7 @@ async def test_selection_and_actor_fail_closed_without_second_run(
                 context=actor_context,
             )
         )
+        assert isinstance(stopped, DraControllerStopReceiptV1)
         assert stopped.public_code == code
         assert transport.create_calls == 1
         assert gateway.import_calls == 0

@@ -65,6 +65,19 @@ def test_release_verifier_checks_the_governed_mixed_planning_surface(
     assert "proof DRA surface: offline governed mixed decision closure confirmed" in output
 
 
+def test_release_verifier_tracks_live_capture_controller_and_rehearsal() -> None:
+    source = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    for required in (
+        "src/night_voyager/dra/live_controller.py",
+        "src/night_voyager/dra/live_storage.py",
+        "scripts/verify_dra_live_closure.py",
+        "tests/integration/dra/test_live_capture_rehearsal.py",
+        "PR B is implemented provider-free",
+        "PR C remains approved but not implemented",
+    ):
+        assert required in source
+
+
 @pytest.mark.parametrize(
     ("relative", "required", "message"),
     (

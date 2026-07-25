@@ -1,5 +1,7 @@
 # DRA v0.1.6 Live Closure PR B Implementation Plan
 
+**Implementation status:** PR B implemented provider-free; PR C remains approved but not implemented.
+
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. Execute serially on top of merged PR A. Do not use
 > subagents or parallel write lanes because receipt identity, filesystem lifetime,
