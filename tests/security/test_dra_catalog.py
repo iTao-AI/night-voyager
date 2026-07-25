@@ -147,3 +147,14 @@ def test_0010_closes_live_producer_and_outcome_projection_authority() -> None:
         == 1
     )
     assert "refusing downgrade: DRA v0.1.6 candidate history exists" in source
+
+
+def test_live_storage_uses_descriptor_relative_no_follow_operations() -> None:
+    source = (
+        ROOT / "src/night_voyager/dra/live_storage.py"
+    ).read_text(encoding="utf-8")
+    assert "O_NOFOLLOW" in source
+    assert "dir_fd=" in source
+    assert "os.fsync" in source
+    assert "os.link" in source
+    assert "resolve(" not in source

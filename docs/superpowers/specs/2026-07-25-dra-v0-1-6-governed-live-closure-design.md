@@ -3,7 +3,7 @@
 
 ## Status
 
-**Implementation status:** PR A foundation implemented provider-free; governed live acceptance remains unimplemented. PR B and PR C remain approved but not implemented.
+**Implementation status:** PR A and PR B implemented provider-free; PR C remains approved but not implemented. Governed live acceptance remains unimplemented.
 
 This document defines the bounded Night Voyager consumer increment after the
 `v0.1.3` local synthetic portfolio release. PR A implements only the offline

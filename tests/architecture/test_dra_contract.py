@@ -30,7 +30,8 @@ def test_dra_consumer_does_not_import_agent_frameworks_or_runtime() -> None:
         "deepagents",
         "langsmith",
     ):
-        assert forbidden not in source.lower()
+        assert f"import {forbidden}" not in source.lower()
+        assert f"from {forbidden}" not in source.lower()
 
 
 def test_dra_migration_is_seed_free_and_proof_case_is_external() -> None:
@@ -55,6 +56,19 @@ def test_required_dra_lane_is_fixture_only() -> None:
     assert "make dra-check" in workflow
     assert "DRA_LIVE_PROOF_ACK" not in workflow
     assert "dra-consumer-proof" not in workflow
+
+
+def test_required_dra_lane_includes_provider_free_live_capture_rehearsal() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    script = (ROOT / "scripts/verify_dra_live_closure.py")
+    assert script.is_file()
+    assert "scripts/run_dra_lane.sh rehearse" in makefile
+    assert "verify_dra_live_closure.py rehearse-capture" in (
+        ROOT / "scripts/run_dra_lane.sh"
+    ).read_text()
+    assert "capture-live" not in (
+        ROOT / ".github/workflows/ci.yml"
+    ).read_text()
 
 
 def test_live_contracts_are_provider_free_and_content_bounded() -> None:

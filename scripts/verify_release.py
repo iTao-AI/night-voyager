@@ -249,7 +249,10 @@ DRA_SURFACE = (
     "src/night_voyager/dra/live_models.py",
     "src/night_voyager/dra/live_projection.py",
     "src/night_voyager/dra/live_evaluation.py",
+    "src/night_voyager/dra/live_controller.py",
+    "src/night_voyager/dra/live_storage.py",
     "scripts/verify_dra_consumer.py",
+    "scripts/verify_dra_live_closure.py",
     "scripts/verify_dra_governed_flow.py",
     "scripts/run_dra_lane.sh",
     "scripts/seed_dra_proof.py",
@@ -257,6 +260,7 @@ DRA_SURFACE = (
     "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md",
     "docs/reference/dra-governed-evidence.md",
     "docs/operations/dra-consumer-proof.md",
+    "tests/integration/dra/test_live_capture_rehearsal.py",
 )
 COLLABORATION_SURFACE = (
     "migrations/versions/0007_conversation_and_memory.py",
@@ -515,12 +519,17 @@ def verify_dra_surface() -> None:
         or "tests/contracts/test_dra_live_projection.py" not in makefile
         or "tests/contracts/test_dra_transport.py" not in makefile
         or "tests/unit/dra" not in makefile
+        or "scripts/run_dra_lane.sh rehearse" not in makefile
         or "generate_governed_mixed_planning_run_v1" not in reference
         or "australia_program_fit -> program_fit -> externally_verified"
         not in reference
         or "exact copies of the synthetic baseline" not in reference
         or "Live provider proof was not run" not in operations
-        or "PR B and PR C remain approved but not implemented" not in operations
+        or "PR B is implemented provider-free" not in operations
+        or "PR C remains approved but not implemented" not in operations
+        or "operator_action_required" not in operations
+        or "select-and-import" not in operations
+        or "same run" not in operations
         or "no governed-live success claim" not in operations
         or "make compose-proof" not in operations
     ):

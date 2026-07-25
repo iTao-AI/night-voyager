@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted. The provider-free PR A foundation is implemented. Provider execution and
-the governed live acceptance remain unimplemented.
+Accepted. The provider-free PR A foundation and PR B Stage 1 controller are
+implemented. Live provider proof was not run, and governed live acceptance remains
+unimplemented.
 
 ## Context
 
@@ -40,6 +41,14 @@ code to create product authority.
    metadata.
 9. Required CI uses only the checked-in scenario and fake transport. It performs no
    provider call and makes no governed-live success claim.
+10. Stage 1 is a two-step boundary. `capture-live` stops at
+    `operator_action_required`; only provider-free `select-and-import` accepts the
+    operator's URL-only selection and imports an `UNTRUSTED_CANDIDATE`.
+11. Ambiguous create replay requires separate exact authorization. Late polling
+    resumes only the same run. There is no automatic retry or remote cancellation.
+12. Receipts use descriptor-bound create-once storage and retain bounded identities
+    only. Artifact bytes span inspection/import and are removed on success, handled
+    failure, or interrupt; orphaned bytes block recovery until acknowledged cleanup.
 
 ## Consequences
 
@@ -50,8 +59,9 @@ code to create product authority.
   when live history exists.
 - The deterministic Compose governed-flow proof imports the v0.1.6 scenario
   candidate, but still uses checked-in synthetic bytes and no provider.
-- PR B and PR C must supply the separately authorized execution and governed
-  closure controllers before capability completion can be claimed.
+- PR B supplies the provider-free-tested Stage 1 execution controller. PR C remains
+  approved but not implemented and must supply promotion-through-decision closure
+  before capability completion can be claimed.
 
 ## Non-claims
 

@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Callable
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Literal, Self, cast
+from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
     Field,
+    ModelWrapValidatorHandler,
     PositiveInt,
     StringConstraints,
     computed_field,
@@ -30,6 +34,15 @@ from night_voyager.dra.models import (
 )
 
 PublicCode = Annotated[str, StringConstraints(min_length=1, max_length=100)]
+SafeLogicalName = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$"),
+]
+SafeIdentity = Annotated[
+    str,
+    StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"),
+]
+_INTENT_HASH_NOT_SUPPLIED = object()
 
 
 class DraLiveFailurePhase(StrEnum):
@@ -260,6 +273,247 @@ class DraLiveRunIntentV1(FrozenModel):
         return hashlib.sha256(encoded).hexdigest()
 
 
+class DraFrozenRequestV1(FrozenModel):
+    logical_name: SafeLogicalName
+    encoding: Literal["utf-8"]
+    byte_length: PositiveInt = Field(le=1_048_576)
+    sha256: Sha256
+
+
+class DraCaptureInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-capture-input.v1"] = (
+        "night-voyager.dra-live-capture-input.v1"
+    )
+    scenario_id: Literal["dra-v0-1-6-live-closure-v1"]
+    producer: DraLiveProducerIdentityV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    actor_role: Literal["advisor"] = "advisor"
+    request: DraFrozenRequestV1
+    deadline_seconds: PositiveInt = Field(default=900, le=3600)
+    poll_seconds: float = Field(default=2.0, gt=0, le=60)
+    receipt_root_id: SafeLogicalName
+    one_attempt_authorized: Literal[True]
+
+
+class DraCaptureIntentV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-capture-intent.v1"] = (
+        "night-voyager.dra-live-capture-intent.v1"
+    )
+    capture: DraCaptureInputV1
+    attempt_id: SafeIdentity
+
+    @classmethod
+    def freeze(
+        cls,
+        capture: DraCaptureInputV1,
+        *,
+        attempt_id_factory: Callable[[], str],
+    ) -> DraCaptureIntentV1:
+        return cls(capture=capture, attempt_id=attempt_id_factory())
+
+    def _identity_payload(self) -> dict[str, object]:
+        return self.model_dump(
+            mode="json",
+            exclude={"intent_sha256"},
+            exclude_computed_fields=True,
+        )
+
+    @computed_field
+    @property
+    def intent_sha256(self) -> str:
+        encoded = json.dumps(
+            self._identity_payload(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def canonical_bytes(self) -> bytes:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def validate_derived_intent_hash(
+        cls,
+        value: object,
+        handler: ModelWrapValidatorHandler[Self],
+    ) -> Self:
+        supplied_hash: object = _INTENT_HASH_NOT_SUPPLIED
+        candidate = value
+        if isinstance(value, dict) and "intent_sha256" in value:
+            payload = cast(dict[str, object], value).copy()
+            supplied_hash = payload.pop("intent_sha256")
+            candidate = payload
+        intent = handler(candidate)
+        if (
+            supplied_hash is not _INTENT_HASH_NOT_SUPPLIED
+            and supplied_hash != intent.intent_sha256
+        ):
+            raise ValueError("dra_live_intent_sha256_invalid")
+        return intent
+
+
+def derive_stage_key(
+    intent_sha256: str,
+    stage: str,
+    target_identity: str,
+) -> str:
+    if re.fullmatch(r"[0-9a-f]{64}", intent_sha256) is None:
+        raise ValueError("dra_live_intent_sha256_invalid")
+    for value in (stage, target_identity):
+        if (
+            not value
+            or len(value) > 200
+            or any(character.isspace() or ord(character) < 32 for character in value)
+        ):
+            raise ValueError("dra_live_stage_key_identity_invalid")
+    payload = (
+        "night-voyager.dra-live.v1"
+        f"\0{intent_sha256}\0{stage}\0{target_identity}"
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def derive_identity_hash(kind: str, raw_identity: str) -> str:
+    if kind not in {"actor", "tenant"} or not raw_identity:
+        raise ValueError("dra_live_identity_invalid")
+    payload = f"night-voyager.dra-live.identity.v1\0{kind}\0{raw_identity}"
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+class DraReceiptIdentityV1(FrozenModel):
+    logical_name: SafeLogicalName
+    byte_length: PositiveInt = Field(le=1_048_576)
+    sha256: Sha256
+
+
+class DraReconciliationRequiredReceiptV1(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-reconciliation-required.v1"
+    ]
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    intent_receipt: DraReceiptIdentityV1
+    create_key: Sha256
+    provider_attempt_consumed: Literal[True]
+    permitted_next_command: Literal["reconcile-create"]
+
+
+class DraPreflightReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-preflight.v1"] = (
+        "night-voyager.dra-live-preflight.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    intent_receipt: DraReceiptIdentityV1
+    scenario_id: Literal["dra-v0-1-6-live-closure-v1"]
+    producer: DraLiveProducerIdentityV1
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    receipt_root_id: SafeLogicalName
+    candidate_freeze: Literal["untrusted_candidate_only"] = (
+        "untrusted_candidate_only"
+    )
+    provider_access: Literal["not_attempted"] = "not_attempted"
+    environment_values_read: Literal[False] = False
+    required_environment_names: tuple[
+        Literal[
+            "DECISION_RESEARCH_AGENT_API_KEY",
+            "DRA_BASE_URL",
+            "DRA_POLL_DEADLINE_SECONDS",
+            "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+            "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+            "NIGHT_VOYAGER_LIVE_SESSION_ID",
+        ],
+        ...,
+    ] = (
+        "DECISION_RESEARCH_AGENT_API_KEY",
+        "DRA_BASE_URL",
+        "DRA_POLL_DEADLINE_SECONDS",
+        "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+        "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+        "NIGHT_VOYAGER_LIVE_SESSION_ID",
+    )
+    filesystem_primitives_ready: Literal[True] = True
+    one_shot_budget: Literal[1] = 1
+    permitted_next_command: Literal["capture-live"] = "capture-live"
+
+
+class DraInspectionRequiredReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-inspection-required.v1"] = (
+        "night-voyager.dra-live-inspection-required.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    preflight_receipt: DraReceiptIdentityV1
+    producer: DraLiveProducerIdentityV1
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    thread_id: BoundedId
+    run_id: BoundedId
+    segment_id: BoundedId
+    state_version: PositiveInt
+    acceptance_idempotent_replay: bool
+    artifact: DraArtifactIdentityV1
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
+        min_length=1, max_length=100
+    )
+    provider_attempt_consumed: Literal[True]
+    operator_action_required: Literal[True] = True
+    permitted_next_command: Literal["select-and-import"] = "select-and-import"
+
+    @model_validator(mode="after")
+    def exact_evidence_ownership(self) -> Self:
+        identifiers: set[str] = set()
+        for row in self.evidence:
+            if row.run_id != self.run_id or row.segment_id != self.segment_id:
+                raise ValueError("dra_evidence_ownership_invalid")
+            if row.evidence_id in identifiers:
+                raise ValueError("dra_evidence_ids_not_unique")
+            identifiers.add(row.evidence_id)
+        return self
+
+
+class DraPollRecoveryReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-poll-recovery.v1"] = (
+        "night-voyager.dra-live-poll-recovery.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    preflight_receipt: DraReceiptIdentityV1
+    thread_id: BoundedId
+    run_id: BoundedId
+    segment_id: BoundedId
+    last_state_version: int = Field(ge=0)
+    provider_attempt_consumed: Literal[True]
+    permitted_next_command: Literal["resume-poll"] = "resume-poll"
+
+
+class DraControllerStopReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-controller-stop.v1"] = (
+        "night-voyager.dra-live-controller-stop.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    phase: DraLiveFailurePhase
+    public_code: PublicCode
+    provider_attempt_consumed: bool
+    cleanup_status: Literal["removed", "absent", "failed"]
+    permitted_next_command: Literal["stop", "cleanup"]
+
+
 class DraSelectedEvidenceV1(FrozenModel):
     evidence_id: BoundedId
     run_id: BoundedId
@@ -294,12 +548,26 @@ class DraCaptureReceiptV1(FrozenModel):
     selected_evidence: DraSelectedEvidenceV1 | None
     stage_states: tuple[DraStageStateV1, ...]
     provider_attempt_consumed: bool
+    candidate_id: UUID | None = None
+    candidate_authority: Literal["untrusted_candidate"] | None = None
+    candidate_import_key: Sha256 | None = None
+    cleanup_status: Literal["removed", "absent", "failed"] | None = None
 
     @model_validator(mode="after")
     def unique_stage_names(self) -> Self:
         names = [item.stage for item in self.stage_states]
         if len(names) != len(set(names)):
             raise ValueError("dra_receipt_stage_duplicate")
+        candidate_fields = (
+            self.candidate_id,
+            self.candidate_authority,
+            self.candidate_import_key,
+            self.cleanup_status,
+        )
+        if self.selected_evidence is not None and any(
+            value is None for value in candidate_fields
+        ):
+            raise ValueError("dra_capture_candidate_identity_incomplete")
         return self
 
 

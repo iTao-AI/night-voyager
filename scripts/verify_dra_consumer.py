@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Offline DRA fixture verification and separately authorized live proof."""
+"""Offline fixture verifier and legacy read-only live projection helper.
+
+The governed one-attempt capture command lives in verify_dra_live_closure.py.
+"""
 
 from __future__ import annotations
 

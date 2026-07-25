@@ -8,9 +8,11 @@ make dra-check
 
 It validates the copied v1 fixture, strict v0.1.6 live models and transport,
 candidate projection, checked-in synthetic source snapshot, fake client,
-deterministic evaluation, exact producer/baseline pins, application contracts,
-and architecture boundary. It requires no DRA service, network access, API key,
-or provider credential.
+deterministic evaluation, exact producer/baseline pins, the provider-free Stage 1
+capture rehearsal, application contracts, and architecture boundary. The rehearsal
+crosses an inspection pause, copies the recovery bundle, resumes in a fresh process,
+imports one `UNTRUSTED_CANDIDATE`, and proves that no second provider run occurs. It
+requires no DRA service, network access, API key, or provider credential.
 
 ## Dedicated database proof
 
@@ -48,43 +50,128 @@ service.
 
 ## Separately authorized live proof
 
-Live provider proof was not run. It is not a required CI gate and is excluded from
-`make check`, `make proof`, and Compose. Run it only after separate approval for
-one provider attempt and its cost/deadline:
+Live provider proof was not run. PR B is implemented provider-free; PR C remains approved but not implemented.
+Stage 1 therefore has no governed-live success claim.
+The live command is not a required CI gate and is excluded from `make check`,
+`make proof`, and Compose. Run it only after separate approval for one provider
+attempt and its cost/deadline.
+
+The command journey is deliberately two-step. First freeze the exact Case, actor,
+tenant, query identity, receipt root, and one-attempt authorization; then create the
+provider-free preflight receipt:
 
 ```bash
-export DRA_LIVE_PROOF_ACK=separately-authorized-one-attempt
-export DRA_ADVISOR_ATTESTATION_ACK=source-inspected-for-bounded-program-fit
+uv run python scripts/verify_dra_live_closure.py freeze-intent \
+  --receipt-root '<private-mode-0700-root>' \
+  --query-file '<bounded-public-safe-utf8-file>' \
+  --organization-id '<organization-uuid>' \
+  --case-id '<case-uuid>' \
+  --expected-case-revision '<revision>' \
+  --advisor-actor-id '<advisor-uuid>' \
+  --deadline-seconds '<approved-integer>' \
+  --poll-seconds '<approved-number>' \
+  --one-attempt-ack separately-authorized-one-attempt --json
+uv run python scripts/verify_dra_live_closure.py preflight-live \
+  --receipt-root '<same-private-root>' --json
+```
+
+`preflight-live` reads no environment values and performs no provider access. Its
+receipt binds the intent, exact v0.1.6 producer, scenario/schema identities,
+filesystem readiness, frozen monotonic deadline/poll interval,
+`UNTRUSTED_CANDIDATE` freeze, and one-shot budget.
+
+Only after the preflight receipt exists, inject the required process-only values:
+
+```bash
+export DRA_LIVE_PROOF_ACK
 export DECISION_RESEARCH_AGENT_API_KEY
-export DRA_IDEMPOTENCY_KEY
-export DRA_BASE_URL='http://127.0.0.1:<port>'
-export DRA_QUERY_FILE='<approved public-safe UTF-8 file>'
-export DRA_POLL_DEADLINE_SECONDS='<approved integer>'
-export DRA_SOURCE_ROOT='<approved source root>'
-export DRA_SOURCE_LOGICAL_PATH='<approved relative source path>'
-export DRA_SOURCE_SHA256='<approved lowercase SHA-256>'
+export DRA_BASE_URL
+export DRA_QUERY_FILE
+export DRA_POLL_DEADLINE_SECONDS
+export DRA_LIVE_RECEIPT_ROOT
+export NIGHT_VOYAGER_LIVE_ORGANIZATION_ID
+export NIGHT_VOYAGER_LIVE_ACTOR_ID
+export NIGHT_VOYAGER_LIVE_SESSION_ID
 make dra-consumer-proof
 ```
 
-Set `DECISION_RESEARCH_AGENT_API_KEY` and `DRA_IDEMPOTENCY_KEY` in the operator
-environment before exporting them; do not place their values in shell history,
-files, command arguments, logs, or proof output.
+Set all values in the operator environment before exporting the names; do not place
+credential or session values in shell history, files, command arguments, receipts,
+logs, or proof output. `DRA_POLL_DEADLINE_SECONDS` must equal the deadline frozen by
+`freeze-intent`; the frozen poll interval is not read from ambient state.
+`capture-live` re-reads the exact query bytes immediately
+before `/health` and create. It performs at most one keyed create, validates the
+strict terminal projection, polls at the frozen interval until the frozen monotonic
+deadline, writes the canonical artifact only under the private receipt root, then
+stops with `operator_action_required`. If the descriptor-bound receipt root and its
+operator-visible pathname no longer identify the same directory and artifact,
+inspection fails closed instead of returning a pathname to replacement bytes.
 
-The client accepts loopback HTTP only, disables environment proxy trust and
-redirects, performs one keyed create, and applies bounded response/deadline
-checks. Ambiguous delivery stops without automatic lost-ack replay; any
-recovery attempt needs separate authorization and the same idempotency
-identity. Canonical Markdown is written only
-to an owned temporary file and is not printed. Output contains bounded
-IDs/hashes/statuses and never the API key, query, raw provider response, source
-bytes, or local path.
+The operator privately inspects that artifact and the same-run Evidence inventory.
+Stage 1 accepts no source snapshot. The only resumed input is a URL-only declaration
+for the unique cited raw URL:
 
-This command proves only the bounded provider consumer surface; it is not the
-full governed-live closure. The additional advisor acknowledgement records that
-source inspection has occurred, but it does not itself submit a verification
-decision or grant promotion authority. Any later approval still requires
-source attestation and the atomic API authority gate. Failure is terminal for
-the attempt; there is no automatic provider retry.
+```bash
+export NIGHT_VOYAGER_LIVE_API_BASE_URL
+export NIGHT_VOYAGER_LIVE_SESSION
+export NIGHT_VOYAGER_LIVE_CSRF
+uv run python scripts/verify_dra_live_closure.py select-and-import \
+  --receipt-root '<same-private-root>' \
+  --declared-raw-url '<exact-cited-raw-url>' --json
+```
 
-PR B and PR C remain approved but not implemented. Live provider proof was not
-run, and PR A provides no governed-live success claim.
+`select-and-import` is provider-free. It revalidates the frozen intent, run,
+artifact, Evidence ownership, advisor and tenant identities; imports only the exact
+operator-selected Evidence row as the existing `UNTRUSTED_CANDIDATE`; confirms that
+no verification/promotion exists; and deletes artifact bytes. Other cited rows from
+the same run are not added to that candidate import. It does not promote Evidence,
+start planning, create an AdvisorReview, or make a family decision.
+
+## Recovery and cleanup
+
+There is no remote cancellation command. An ambiguous create stops before replay:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py reconcile-create \
+  --receipt-root '<same-private-root>' \
+  --query-file '<same-bounded-file>' \
+  --exact-replay-ack separately-authorized-one-attempt --json
+```
+
+This is a separately acknowledged replay of the exact frozen request and create key.
+The controller requires the supplied reconciliation receipt to equal its durable
+receipt and predecessor identities before provider access. A poll deadline stores the
+accepted run identity; `resume-poll` revalidates the durable preflight and poll receipt,
+polls only the same run at the frozen interval, and never creates another:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py resume-poll \
+  --receipt-root '<same-private-root>' --json
+uv run python scripts/verify_dra_live_closure.py inspect-recovery \
+  --receipt-root '<same-private-root>' --json
+```
+
+`inspect-recovery` is provider-free and read-only. Output uses the closed exit
+classes `success`, `safe_pause`, `recoverable_incomplete`, `terminal_failure`, and
+`cleanup_incomplete`; it contains bounded identities, receipt hashes, exact next
+command, artifact/session cleanup state, and no raw exception or private value.
+
+Cleanup defaults to a dry run for one exact root. Deletion needs its own acknowledgement:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py cleanup \
+  --receipt-root '<same-private-root>' --json
+uv run python scripts/verify_dra_live_closure.py cleanup \
+  --receipt-root '<same-private-root>' \
+  --delete-ack delete-exact-live-artifact --json
+```
+
+Normal completion, handled failure, `SIGINT`, and `SIGTERM` clean task-owned artifact
+bytes synchronously. `SIGKILL`, host crash, and power loss cannot guarantee cleanup;
+an orphaned artifact blocks recovery until explicit cleanup. Identity/preflight,
+inspection, recovery, failure, capture, and cleanup receipts are retained for audit;
+query, artifact, credential, and session bytes are not durable receipt content.
+
+For the required provider-free proof, `rehearse-capture` performs the same inspection
+pause/resume contract with fake transport. It is already run by `make dra-check`;
+do not substitute it for separate live authorization.

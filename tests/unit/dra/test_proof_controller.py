@@ -10,9 +10,10 @@ from pathlib import Path
 import pytest
 
 from night_voyager.dra.live_models import DraLiveRunEnvelopeV1
+from night_voyager.dra.live_storage import LiveStorageInvalid
 from night_voyager.dra.models import DraCanonicalResultProjectionV1
 from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID, DRA_PROOF_CASE_ID
-from scripts import verify_dra_consumer
+from scripts import verify_dra_consumer, verify_dra_live_closure
 
 ROOT = Path(__file__).parents[3]
 
@@ -26,6 +27,81 @@ def run_verifier(*arguments: str, environment: dict[str, str] | None = None):
         capture_output=True,
         check=False,
     )
+
+
+def run_live_closure(*arguments: str):
+    return subprocess.run(
+        [sys.executable, "scripts/verify_dra_live_closure.py", *arguments],
+        cwd=ROOT,
+        env={"PATH": os.environ["PATH"]},
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_live_closure_cli_is_closed_and_has_no_default_live_action() -> None:
+    result = run_live_closure("--help")
+    assert result.returncode == 0, result.stderr
+    for command in (
+        "freeze-intent",
+        "preflight-live",
+        "capture-live",
+        "select-and-import",
+        "reconcile-create",
+        "resume-poll",
+        "inspect-recovery",
+        "rehearse-capture",
+        "cleanup",
+    ):
+        assert command in result.stdout
+    assert "provider-consuming" in result.stdout
+    assert "provider-free" in result.stdout
+    assert "read-only" in result.stdout
+    assert "mutating" in result.stdout
+
+    no_command = run_live_closure()
+    assert no_command.returncode == 2
+    assert "Traceback" not in no_command.stderr
+
+
+def test_capture_live_requires_frozen_intent_and_one_attempt_ack() -> None:
+    result = run_live_closure("capture-live")
+    assert result.returncode == 2
+    assert "--receipt-root" in result.stderr
+    assert "--query-file" in result.stderr
+    assert "--one-attempt-ack" in result.stderr
+
+
+def test_create_root_rejects_symlink_before_mutating_target(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "target"
+    target.mkdir(mode=0o755)
+    marker = target / "marker.txt"
+    marker.write_text("unchanged", encoding="utf-8")
+    link = tmp_path / "receipt-root"
+    link.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(LiveStorageInvalid, match="root_invalid"):
+        verify_dra_live_closure.open_receipt_root(link, create=True)
+
+    assert target.stat().st_mode & 0o777 == 0o755
+    assert marker.read_text(encoding="utf-8") == "unchanged"
+
+
+def test_cli_does_not_expose_secret_or_session_bearing_arguments() -> None:
+    result = run_live_closure("capture-live", "--help")
+    assert result.returncode == 0, result.stderr
+    for forbidden in (
+        "--credential",
+        "--token",
+        "--cookie",
+        "--header",
+        "--session",
+        "--environment",
+    ):
+        assert forbidden not in result.stdout.lower()
 
 
 def test_dra_proof_case_is_dedicated() -> None:

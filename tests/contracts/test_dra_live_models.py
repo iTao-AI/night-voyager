@@ -15,6 +15,7 @@ from night_voyager.dra.live_evaluation import (
 )
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
+    DraCaptureInputV1,
     DraCaptureReceiptV1,
     DraFailureReceiptV1,
     DraLiveFailurePhase,
@@ -183,6 +184,13 @@ def test_receipts_are_content_free_and_stage_names_are_unique() -> None:
         DraFailureReceiptV1.model_validate(
             failure_payload | {"provider_payload": {"secret": "forbidden"}}
         )
+
+
+def test_stage_one_capture_input_excludes_selection_and_session_material() -> None:
+    assert "selected_url" not in DraCaptureInputV1.model_fields
+    assert "source_snapshot" not in DraCaptureInputV1.model_fields
+    assert "session" not in DraCaptureInputV1.model_fields
+    assert "credential" not in DraCaptureInputV1.model_fields
 
 
 def test_evaluation_models_are_closed_and_derive_status() -> None:

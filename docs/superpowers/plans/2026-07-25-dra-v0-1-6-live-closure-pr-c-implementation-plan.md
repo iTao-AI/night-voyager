@@ -1,5 +1,7 @@
 # DRA v0.1.6 Live Closure PR C Implementation Plan
 
+**Implementation status:** PR A and PR B implemented provider-free; PR C remains approved but not implemented.
+
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. Execute serially on top of merged PR B. Do not
 > dispatch parallel agents: Stage 2 attestation, promoted-pack identity, task/Skill
