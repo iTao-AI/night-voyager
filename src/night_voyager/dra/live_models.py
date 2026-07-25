@@ -30,6 +30,7 @@ from night_voyager.dra.models import (
     DraProducerPinV1,
     FrozenModel,
     Sha256,
+    SourceAttestationV1,
     validate_raw_public_https_url,
 )
 
@@ -72,13 +73,11 @@ class DraLiveProducerIdentityV1(FrozenModel):
     name: Literal["decision-research-agent"] = "decision-research-agent"
     release: Literal["v0.1.6"] = DRA_LIVE_RELEASE
     commit: Literal["7d43324b469cb5e445c2e8be83af3be4d841cf1c"] = DRA_LIVE_COMMIT
-    tag_object: Literal["9e0b0b443c435cf636dfce932c3c77d91d0a43e4"] = (
-        DRA_LIVE_TAG_OBJECT
-    )
+    tag_object: Literal["9e0b0b443c435cf636dfce932c3c77d91d0a43e4"] = DRA_LIVE_TAG_OBJECT
     contract_schema: Literal["dra.downstream-consumer.v1"] = DRA_CONTRACT_SCHEMA
-    fixture_sha256: Literal[
-        "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
-    ] = DRA_FIXTURE_SHA256
+    fixture_sha256: Literal["cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"] = (
+        DRA_FIXTURE_SHA256
+    )
 
     @property
     def pin(self) -> DraProducerPinV1:
@@ -126,13 +125,9 @@ class DraLiveRunEnvelopeV1(FrozenModel):
         "pending", "running", "completed", "completed_with_fallback", "failed"
     ]
     review_status: Literal["not_required", "required", "resolved"]
-    delivery_status: Literal[
-        "pending", "ready", "review_required", "blocked", "failed"
-    ]
+    delivery_status: Literal["pending", "ready", "review_required", "blocked", "failed"]
     failure_cause: DraLiveFailureCauseEnvelopeV1 | None
-    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
-        max_length=100
-    )
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(max_length=100)
 
     @model_validator(mode="after")
     def exact_segment_and_unique_evidence(self) -> Self:
@@ -252,9 +247,7 @@ class DraLiveRunIntentV1(FrozenModel):
     )
 
     @classmethod
-    def from_scenario(
-        cls, scenario: DraLiveScenarioV1, *, attempt_id: str
-    ) -> DraLiveRunIntentV1:
+    def from_scenario(cls, scenario: DraLiveScenarioV1, *, attempt_id: str) -> DraLiveRunIntentV1:
         return cls(
             scenario_id=scenario.scenario_id,
             attempt_id=attempt_id,
@@ -355,10 +348,7 @@ class DraCaptureIntentV1(FrozenModel):
             supplied_hash = payload.pop("intent_sha256")
             candidate = payload
         intent = handler(candidate)
-        if (
-            supplied_hash is not _INTENT_HASH_NOT_SUPPLIED
-            and supplied_hash != intent.intent_sha256
-        ):
+        if supplied_hash is not _INTENT_HASH_NOT_SUPPLIED and supplied_hash != intent.intent_sha256:
             raise ValueError("dra_live_intent_sha256_invalid")
         return intent
 
@@ -377,10 +367,7 @@ def derive_stage_key(
             or any(character.isspace() or ord(character) < 32 for character in value)
         ):
             raise ValueError("dra_live_stage_key_identity_invalid")
-    payload = (
-        "night-voyager.dra-live.v1"
-        f"\0{intent_sha256}\0{stage}\0{target_identity}"
-    )
+    payload = f"night-voyager.dra-live.v1\0{intent_sha256}\0{stage}\0{target_identity}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -398,9 +385,7 @@ class DraReceiptIdentityV1(FrozenModel):
 
 
 class DraReconciliationRequiredReceiptV1(FrozenModel):
-    schema_version: Literal[
-        "night-voyager.dra-live-reconciliation-required.v1"
-    ]
+    schema_version: Literal["night-voyager.dra-live-reconciliation-required.v1"]
     intent_sha256: Sha256
     attempt_id: SafeIdentity
     intent_receipt: DraReceiptIdentityV1
@@ -421,9 +406,7 @@ class DraPreflightReceiptV1(FrozenModel):
     advisor_actor_identity_sha256: Sha256
     tenant_identity_sha256: Sha256
     receipt_root_id: SafeLogicalName
-    candidate_freeze: Literal["untrusted_candidate_only"] = (
-        "untrusted_candidate_only"
-    )
+    candidate_freeze: Literal["untrusted_candidate_only"] = "untrusted_candidate_only"
     provider_access: Literal["not_attempted"] = "not_attempted"
     environment_values_read: Literal[False] = False
     required_environment_names: tuple[
@@ -467,9 +450,7 @@ class DraInspectionRequiredReceiptV1(FrozenModel):
     state_version: PositiveInt
     acceptance_idempotent_replay: bool
     artifact: DraArtifactIdentityV1
-    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
-        min_length=1, max_length=100
-    )
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(min_length=1, max_length=100)
     provider_attempt_consumed: Literal[True]
     operator_action_required: Literal[True] = True
     permitted_next_command: Literal["select-and-import"] = "select-and-import"
@@ -564,11 +545,69 @@ class DraCaptureReceiptV1(FrozenModel):
             self.candidate_import_key,
             self.cleanup_status,
         )
-        if self.selected_evidence is not None and any(
-            value is None for value in candidate_fields
-        ):
+        if self.selected_evidence is not None and any(value is None for value in candidate_fields):
             raise ValueError("dra_capture_candidate_identity_incomplete")
         return self
+
+
+class SnapshotIdentityV1(FrozenModel):
+    canonical_url: BoundedText
+    logical_path: BoundedText
+    byte_length: PositiveInt = Field(le=10_485_760)
+    sha256: Sha256
+
+
+class DraPromotionInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-promotion-input.v1"] = (
+        "night-voyager.dra-live-promotion-input.v1"
+    )
+    intent_sha256: Sha256
+    capture: DraCaptureReceiptV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    candidate_id: UUID
+    dra_evidence_id: BoundedId
+    selected_raw_url: BoundedText
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    reason: BoundedText
+    source_attestation: SourceAttestationV1
+
+    @model_validator(mode="after")
+    def exact_capture_binding(self) -> Self:
+        selected = self.capture.selected_evidence
+        if (
+            self.capture.intent_sha256 != self.intent_sha256
+            or self.capture.candidate_id != self.candidate_id
+            or self.capture.candidate_authority != "untrusted_candidate"
+            or selected is None
+            or selected.evidence_id != self.dra_evidence_id
+            or selected.source_url != self.selected_raw_url
+            or self.source_attestation.canonical_url != self.selected_raw_url
+        ):
+            raise ValueError("dra_promotion_capture_binding_invalid")
+        return self
+
+
+class DraPromotionReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-promotion-receipt.v1"] = (
+        "night-voyager.dra-live-promotion-receipt.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    candidate_id: UUID
+    dra_evidence_id: BoundedId
+    selected_raw_url: BoundedText
+    promotion_key: Sha256
+    verification_id: UUID
+    promoted_source_pack_version: PositiveInt
+    promoted_source_entry_id: UUID
+    promoted_evidence_id: UUID
+    snapshot: SnapshotIdentityV1
+    stage_states: tuple[DraStageStateV1, ...]
+    acknowledgement: Literal["promotion_recorded"] = "promotion_recorded"
+    provider_attempt_consumed: Literal[True] = True
 
 
 class DraFailureReceiptV1(FrozenModel):
@@ -585,6 +624,4 @@ class DraFailureReceiptV1(FrozenModel):
     provider_attempt_consumed: bool
     known_identity_hashes: tuple[Sha256, ...]
     last_completed_stage: Literal["capture-live", "promote", "review", "decide"] | None
-    permitted_next_action: Literal[
-        "stop", "same_run_recovery", "separate_authorization"
-    ]
+    permitted_next_action: Literal["stop", "same_run_recovery", "separate_authorization"]

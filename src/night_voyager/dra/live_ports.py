@@ -16,7 +16,11 @@ from night_voyager.dra.models import (
     DraHealthProjectionV1,
     DraRunAcceptanceV1,
 )
-from night_voyager.dra.ports import DraCandidateViewV1
+from night_voyager.dra.ports import (
+    DraCandidateViewV1,
+    DraVerificationViewV1,
+    VerifyDraCandidateCommand,
+)
 from night_voyager.identity.models import ActorContext
 
 ReceiptModel = TypeVar("ReceiptModel", bound=BaseModel)
@@ -33,9 +37,7 @@ class DraLiveTransportPort(Protocol):
 
     async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1: ...
 
-    async def get_result(
-        self, run_id: str
-    ) -> DraCanonicalResultProjectionV1: ...
+    async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1: ...
 
 
 class DraCandidateGatewayPort(Protocol):
@@ -47,14 +49,26 @@ class DraCandidateGatewayPort(Protocol):
     ) -> DraCandidateViewV1: ...
 
 
-class DraLiveReceiptStorePort(Protocol):
-    def write_receipt(
-        self, logical_name: str, model: BaseModel
-    ) -> DraReceiptIdentityV1: ...
+class DraPromotionGatewayPort(Protocol):
+    async def get_candidate(
+        self,
+        context: ActorContext,
+        case_id: object,
+        candidate_id: object,
+    ) -> DraCandidateViewV1 | None: ...
 
-    def read_receipt(
-        self, logical_name: str, model_type: type[ReceiptModel]
-    ) -> ReceiptModel: ...
+    async def promote_candidate(
+        self,
+        context: ActorContext,
+        command: VerifyDraCandidateCommand,
+        idempotency_key: str,
+    ) -> DraVerificationViewV1: ...
+
+
+class DraLiveReceiptStorePort(Protocol):
+    def write_receipt(self, logical_name: str, model: BaseModel) -> DraReceiptIdentityV1: ...
+
+    def read_receipt(self, logical_name: str, model_type: type[ReceiptModel]) -> ReceiptModel: ...
 
     def artifact_path(self) -> Path | None: ...
 

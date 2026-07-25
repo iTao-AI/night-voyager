@@ -16,7 +16,9 @@ from night_voyager.dra.live_storage import (
     LiveReceiptStore,
     LiveStorageConflict,
     LiveStorageInvalid,
+    supplied_snapshot,
 )
+from night_voyager.dra.models import SourceAttestationV1
 
 
 def private_root(tmp_path: Path, name: str = "receipts") -> Path:
@@ -77,9 +79,7 @@ def test_receipt_write_is_atomic_private_and_create_once(tmp_path: Path) -> None
     "name",
     ("../intent.json", "nested/intent.json", "/tmp/intent.json", "unknown.json"),
 )
-def test_receipt_names_are_closed_and_traversal_free(
-    tmp_path: Path, name: str
-) -> None:
+def test_receipt_names_are_closed_and_traversal_free(tmp_path: Path, name: str) -> None:
     with (
         LiveReceiptStore.open(private_root(tmp_path)) as store,
         pytest.raises(LiveStorageInvalid, match="receipt_name_invalid"),
@@ -106,9 +106,7 @@ def test_artifact_is_exact_private_and_persists_until_explicit_cleanup(
         assert store.delete_artifact().status == "absent"
 
         with pytest.raises(LiveStorageInvalid, match="artifact_hash_invalid"):
-            store.write_artifact_for_inspection(
-                scenario.result.artifact, b"forged"
-            )
+            store.write_artifact_for_inspection(scenario.result.artifact, b"forged")
 
 
 def test_root_descriptor_survives_path_rename_without_escape(tmp_path: Path) -> None:
@@ -142,9 +140,7 @@ def test_operator_artifact_path_fails_closed_after_root_path_replacement(
                 scenario.result.artifact, artifact.content.encode("utf-8")
             )
 
-        assert store.read_artifact(scenario.result.artifact) == (
-            artifact.content.encode("utf-8")
-        )
+        assert store.read_artifact(scenario.result.artifact) == (artifact.content.encode("utf-8"))
         assert replacement_artifact.read_bytes() == attacker_bytes
 
 
@@ -202,8 +198,7 @@ def test_two_process_same_and_different_receipt_races(tmp_path: Path) -> None:
     context = multiprocessing.get_context("fork")
     queue: multiprocessing.Queue[str] = context.Queue()
     same = [
-        context.Process(target=race_writer, args=(str(root), "a" * 64, queue))
-        for _ in range(2)
+        context.Process(target=race_writer, args=(str(root), "a" * 64, queue)) for _ in range(2)
     ]
     for process in same:
         process.start()
@@ -235,3 +230,48 @@ def test_recovery_bundle_bytes_are_canonical(tmp_path: Path) -> None:
         bundle = store.verify_recovery_bundle()
     payload = json.loads(bundle.canonical_bytes())
     assert payload["schema_version"] == "night-voyager.dra-live-recovery.v1"
+
+
+def test_supplied_snapshot_rejects_parent_symlink_and_removes_exact_file(
+    tmp_path: Path,
+) -> None:
+    import hashlib
+    from datetime import date
+
+    root = tmp_path / "snapshot"
+    root.mkdir(mode=0o700)
+    parent = root / "source"
+    parent.mkdir(mode=0o700)
+    content = b"snapshot\n"
+    target = parent / "page.html"
+    target.write_bytes(content)
+    target.chmod(0o600)
+    attestation = SourceAttestationV1(
+        canonical_url="https://example.edu/page",
+        publisher="Example",
+        institution="Example",
+        snapshot_date=date(2026, 7, 25),
+        freshness_days=30,
+        redistribution_class="link_only",
+        evidence_class="institutional",
+        logical_path="source/page.html",
+        snapshot_byte_length=len(content),
+        snapshot_sha256=hashlib.sha256(content).hexdigest(),
+        known_gaps=("applicant_eligibility", "intake_availability"),
+    )
+
+    with supplied_snapshot(root, attestation, "https://example.edu/page") as identity:
+        assert identity.byte_length == len(content)
+        assert identity.sha256 == hashlib.sha256(content).hexdigest()
+    assert not target.exists()
+
+    target.write_bytes(content)
+    target.chmod(0o600)
+    moved = root / "moved"
+    parent.rename(moved)
+    (root / "source").symlink_to(moved, target_is_directory=True)
+    with (
+        pytest.raises(LiveStorageInvalid, match="snapshot_path_invalid"),
+        supplied_snapshot(root, attestation, "https://example.edu/page"),
+    ):
+        pass

@@ -5,7 +5,9 @@ import json
 import os
 import stat
 import uuid
-from pathlib import Path
+from collections.abc import Generator
+from contextlib import contextmanager
+from pathlib import Path, PurePosixPath
 from typing import Literal, Self, TypeVar
 
 from pydantic import BaseModel, ConfigDict
@@ -13,7 +15,9 @@ from pydantic import BaseModel, ConfigDict
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
     DraReceiptIdentityV1,
+    SnapshotIdentityV1,
 )
+from night_voyager.dra.models import SourceAttestationV1
 
 ReceiptModel = TypeVar("ReceiptModel", bound=BaseModel)
 ARTIFACT_NAME = "artifact.research-report.md"
@@ -25,12 +29,15 @@ RECEIPT_NAMES = frozenset(
         "poll-recovery.json",
         "inspection-required.json",
         "capture.json",
+        "promotion.json",
+        "promotion-ambiguous.json",
         "failure.json",
         "cleanup.json",
     }
 )
 _NOFOLLOW = getattr(os, "O_NOFOLLOW", 0)
 _DIRECTORY = getattr(os, "O_DIRECTORY", 0)
+SNAPSHOT_ACTIVE_NAME = ".night-voyager-stage2-active"
 
 
 class LiveStorageError(RuntimeError):
@@ -88,6 +95,148 @@ def _write_all(file_descriptor: int, content: bytes) -> None:
         if written <= 0:
             raise LiveStorageInvalid("write_incomplete")
         offset += written
+
+
+@contextmanager
+def supplied_snapshot(
+    root: Path,
+    attestation: SourceAttestationV1,
+    selected_url: str,
+) -> Generator[SnapshotIdentityV1]:
+    if _NOFOLLOW == 0 or _DIRECTORY == 0:
+        raise LiveStorageInvalid("snapshot_primitives_unavailable")
+    try:
+        root_fd = os.open(root, os.O_RDONLY | _DIRECTORY | _NOFOLLOW)
+    except OSError as error:
+        raise LiveStorageInvalid("snapshot_root_invalid") from error
+    parent_fds: list[int] = []
+    parent_fd = root_fd
+    marker_created = False
+    file_name = ""
+    try:
+        root_stat = os.fstat(root_fd)
+        if (
+            not stat.S_ISDIR(root_stat.st_mode)
+            or root_stat.st_uid != os.getuid()
+            or stat.S_IMODE(root_stat.st_mode) != 0o700
+        ):
+            raise LiveStorageInvalid("snapshot_root_invalid")
+        try:
+            marker_fd = os.open(
+                SNAPSHOT_ACTIVE_NAME,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | _NOFOLLOW,
+                0o600,
+                dir_fd=root_fd,
+            )
+        except FileExistsError as error:
+            raise LiveStorageInvalid("snapshot_cleanup_required") from error
+        try:
+            os.fchmod(marker_fd, 0o600)
+            _write_all(marker_fd, b"stage2-active\n")
+            os.fsync(marker_fd)
+        finally:
+            os.close(marker_fd)
+        marker_created = True
+        os.fsync(root_fd)
+
+        logical = PurePosixPath(attestation.logical_path)
+        if (
+            logical.is_absolute()
+            or not logical.parts
+            or ".." in logical.parts
+            or "." in logical.parts
+        ):
+            raise LiveStorageInvalid("snapshot_path_invalid")
+        file_name = logical.parts[-1]
+        for component in logical.parts[:-1]:
+            try:
+                descriptor = os.open(
+                    component,
+                    os.O_RDONLY | _DIRECTORY | _NOFOLLOW,
+                    dir_fd=parent_fd,
+                )
+            except OSError as error:
+                raise LiveStorageInvalid("snapshot_path_invalid") from error
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISDIR(metadata.st_mode)
+                or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o700
+            ):
+                os.close(descriptor)
+                raise LiveStorageInvalid("snapshot_path_invalid")
+            parent_fds.append(descriptor)
+            parent_fd = descriptor
+        try:
+            descriptor = os.open(
+                file_name,
+                os.O_RDONLY | _NOFOLLOW,
+                dir_fd=parent_fd,
+            )
+        except OSError as error:
+            raise LiveStorageInvalid("snapshot_path_invalid") from error
+        try:
+            metadata = os.fstat(descriptor)
+            if (
+                not stat.S_ISREG(metadata.st_mode)
+                or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o600
+                or metadata.st_size < 1
+                or metadata.st_size > 10_485_760
+            ):
+                raise LiveStorageInvalid("snapshot_file_invalid")
+            chunks: list[bytes] = []
+            remaining = metadata.st_size
+            while remaining:
+                chunk = os.read(descriptor, min(remaining, 65_536))
+                if not chunk:
+                    raise LiveStorageInvalid("snapshot_file_invalid")
+                chunks.append(chunk)
+                remaining -= len(chunk)
+            if os.read(descriptor, 1):
+                raise LiveStorageInvalid("snapshot_file_invalid")
+            content = b"".join(chunks)
+        finally:
+            os.close(descriptor)
+        digest = hashlib.sha256(content).hexdigest()
+        if selected_url != attestation.canonical_url:
+            raise LiveStorageInvalid("snapshot_selected_url_invalid")
+        if (
+            len(content) != attestation.snapshot_byte_length
+            or digest != attestation.snapshot_sha256
+        ):
+            raise LiveStorageInvalid("snapshot_identity_invalid")
+        yield SnapshotIdentityV1(
+            canonical_url=attestation.canonical_url,
+            logical_path=attestation.logical_path,
+            byte_length=len(content),
+            sha256=digest,
+        )
+    finally:
+        if file_name:
+            try:
+                os.unlink(file_name, dir_fd=parent_fd)
+                os.fsync(parent_fd)
+            except FileNotFoundError:
+                pass
+        if marker_created:
+            try:
+                os.unlink(SNAPSHOT_ACTIVE_NAME, dir_fd=root_fd)
+                os.fsync(root_fd)
+            except FileNotFoundError:
+                pass
+        for descriptor in reversed(parent_fds):
+            os.close(descriptor)
+        os.close(root_fd)
+
+
+def validate_supplied_snapshot(
+    root: Path,
+    attestation: SourceAttestationV1,
+    selected_url: str,
+) -> SnapshotIdentityV1:
+    with supplied_snapshot(root, attestation, selected_url) as identity:
+        return identity
 
 
 class LiveReceiptStore:
@@ -232,9 +381,7 @@ class LiveReceiptStore:
             sha256=hashlib.sha256(content).hexdigest(),
         )
 
-    def write_receipt(
-        self, logical_name: str, model: BaseModel
-    ) -> DraReceiptIdentityV1:
+    def write_receipt(self, logical_name: str, model: BaseModel) -> DraReceiptIdentityV1:
         self._validate_receipt_name(logical_name)
         return self._publish_bytes(
             logical_name,
@@ -249,9 +396,7 @@ class LiveReceiptStore:
     ) -> ReceiptModel:
         self._validate_receipt_name(logical_name)
         try:
-            return model_type.model_validate_json(
-                self._read_bytes(logical_name, receipt=True)
-            )
+            return model_type.model_validate_json(self._read_bytes(logical_name, receipt=True))
         except LiveStorageInvalid:
             raise
         except Exception as error:
