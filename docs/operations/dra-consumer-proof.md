@@ -248,25 +248,53 @@ removes any caller threshold override, runs the repository `MODE=dev` host and
 Docker VM preflight, enforces the default `8,388,608 KiB` VM minimum, and captures
 the fixed task project's before/after Compose, container, image, build-cache,
 network, and volume inventories. It also reads the exact GitHub check-run,
-merged-PR, approved-review, reviewed-tree, and merge-tree identities. The
-supplied values and hashes must match those independently observed results.
-Arbitrary exact-shape files, feature-branch HEADs, missing/failed checks, stale
-reviews, dirty main, residual task resources, or local/origin/live main drift
-fail closed.
+merged-PR, final-head, reviewed-tree, and merge-tree identities. Independent
+human review authority is supplied only through the explicit attestation
+receipt described below; it is not inferred from the PR body, merge state,
+automation, or a GitHub Review. Machine-observable identities and hashes must
+match the independently observed results; the human verdict must arrive through
+the closed attestation rather than a caller-written status-only file.
+Feature-branch HEADs, missing/failed checks, stale attestations, dirty main,
+residual task resources, or local/origin/live main drift fail closed.
 
 The four files use closed schemas:
 `night-voyager.dra-live-docker-evidence.v1`,
 `night-voyager.dra-live-hosted-checks-evidence.v1`,
 `night-voyager.dra-live-recovery-evidence.v1`, and
-`night-voyager.dra-live-authority-review-evidence.v1`. Extra keys are rejected.
+`night-voyager.dra-live-authority-review-evidence.v2`. Extra keys are rejected;
+the superseded v1 GitHub-review shape is not accepted.
 Docker evidence binds the canonical task project, default Docker VM threshold,
 observed host/VM free space, preflight stdout, all six before/after inventory
 hashes, and the exact retained image, volume, and build-cache identities. Hosted
 evidence binds repository and the three exact check run IDs. Recovery evidence
-binds the closed command and observed stdout hash. Authority-review evidence
-binds repository, PR number, review ID, and reviewed head; freeze verifies that
-the final PR head is the approved review commit, the PR merged as the supplied
-exact main SHA, and the reviewed and merge commits have the same tree.
+binds the closed command and observed stdout hash.
+
+Authority-review evidence is a public-neutral human attestation with this exact
+closed shape:
+
+```json
+{
+  "schema_version": "night-voyager.dra-live-authority-review-evidence.v2",
+  "head_sha": "<exact-merged-main-40-hex>",
+  "repository": "<owner/repository>",
+  "pull_request": 70,
+  "reviewed_head_sha": "<exact-reviewed-head-40-hex>",
+  "verdict": "CLEAN",
+  "review_record_id": "<opaque-public-neutral-record-id>",
+  "review_record_sha256": "<sha256-of-the-independent-review-record>",
+  "acknowledgement": "independent_authority_review_attested"
+}
+```
+
+The attesting human supplies the opaque record identity and SHA-256 without
+copying private review content into this repository or the durable readiness
+receipt. Missing, malformed, non-`CLEAN`, stale, cross-head, wrongly
+acknowledged, or extra-field evidence fails closed. Freeze live-requeries that
+the final PR head equals `reviewed_head_sha`, the PR merged as `head_sha`, and
+the reviewed and merge commits have the same tree. A repository whose ruleset
+requires zero GitHub approvals, including a PR whose GitHub reviews list is
+empty, therefore remains compatible with an explicit independent human review;
+GitHub review state is neither required nor treated as human-review authority.
 
 The readiness receipt binds the exact merged main, spec and PR C plan hashes,
 producer pin, scenario, intent/receipt/CLI schema identities, required hosted
