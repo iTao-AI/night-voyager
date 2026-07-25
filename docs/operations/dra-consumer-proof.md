@@ -50,8 +50,9 @@ service.
 
 ## Separately authorized live proof
 
-Live provider proof was not run. PR B is implemented provider-free; PR C remains approved but not implemented.
-Stage 1 therefore has no governed-live success claim.
+Live provider proof was not run. PR A, PR B, and PR C are implemented provider-free,
+but the capability remains
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. There is no governed-live success claim.
 The live command is not a required CI gate and is excluded from `make check`,
 `make proof`, and Compose. Run it only after separate approval for one provider
 attempt and its cost/deadline.
@@ -126,6 +127,153 @@ operator-selected Evidence row as the existing `UNTRUSTED_CANDIDATE`; confirms t
 no verification/promotion exists; and deletes artifact bytes. Other cited rows from
 the same run are not added to that candidate import. It does not promote Evidence,
 start planning, create an AdvisorReview, or make a family decision.
+
+## Canonical resumable operator transcript
+
+The frozen live journey is one ordered transcript. Each mutation prints a bounded
+actor, tenant, Case, target, and action preview and requires a distinct
+acknowledgement; no global acknowledgement authorizes a later stage.
+
+| Step | Command | Durable predecessor | Ephemeral input | Provider / mutation | Success output | Recovery |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `preflight-live` | frozen intent | none | no provider, no business mutation | preflight receipt | rerun exact preflight |
+| 2 | `capture-live` | preflight receipt | provider access for one frozen attempt | one provider create plus same-run polling | inspection-required receipt | `reconcile-create` or `resume-poll` |
+| 3 | `select-and-import` | inspection-required receipt | assigned advisor session | candidate import only | capture receipt | `inspect-recovery` |
+| 4 | `promote` | capture receipt plus re-supplied snapshot | fresh assigned advisor session and `acknowledge-promote` | atomic existing promotion authority | `promotion_recorded` | exact-key authority reconciliation |
+| 5 | `review` | promotion receipt | fresh assigned advisor session and `acknowledge-review` | existing task/worker/SSE and AdvisorReview | `review_recorded` | exact-key authority reconciliation |
+| 6 | `decide` | review receipt | fresh parent session and `acknowledge-decide` | existing family decision authority | `decision_recorded` | exact-key authority reconciliation |
+| 7 | `evaluate` | decision receipt | fresh assigned advisor session and `acknowledge-evaluate` | read-only migration `0010` projection | `closure_passed` or bounded failure | re-run evaluation only |
+| 8 | `cleanup` | exact receipt root | cleanup acknowledgement | task-owned filesystem cleanup only | cleanup receipt | inspect residue, then exact cleanup |
+
+Stage 2 never fetches a source. The operator supplies a task-owned mode-`0700`
+root containing the declared mode-`0600` snapshot. Descriptor-bound no-follow
+traversal reads the exact bytes once, checks the original selected URL,
+byte length, SHA-256, and required known gaps, then removes the snapshot on
+success, handled failure, `SIGINT`, or `SIGTERM`. Hard-termination residue is
+detected on the next open and blocks progress until explicit cleanup. Durable
+receipts retain URL identity, length, hash, and bounded metadata only.
+
+Every Stage 2–4 recovery re-reads current product authority before deciding
+whether to synthesize success, replay the exact request/key, or fail closed on
+partial/conflicting state. Fresh processes must re-inject the assigned-advisor
+or parent session. Session identifiers, cookies, headers, auth-file paths, and
+credential material are never receipt, bundle, log, or cleanup content.
+HTTP mutation transport loss is converted to a bounded ambiguous outcome only
+at the POST boundary. Candidate and decision recovery use their existing narrow
+reads; planning-task and AdvisorReview recovery use actor/key-bound recovery
+reads backed by the existing idempotency records. They do not expose a generic
+task, review, or idempotency query surface.
+
+Each provider-free command consumes one bounded public-safe JSON input whose
+embedded parent receipt must byte-match the durable predecessor. The snapshot
+root is supplied only to `promote`; session values remain process-only:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py promote \
+  --receipt-root '<same-private-root>' \
+  --input-file '<promotion-input.json>' \
+  --snapshot-root '<private-snapshot-root>' \
+  --ack acknowledge-promote --json
+uv run python scripts/verify_dra_live_closure.py review \
+  --receipt-root '<same-private-root>' \
+  --input-file '<review-input.json>' \
+  --ack acknowledge-review --json
+uv run python scripts/verify_dra_live_closure.py decide \
+  --receipt-root '<same-private-root>' \
+  --input-file '<decision-input.json>' \
+  --ack acknowledge-decide --json
+uv run python scripts/verify_dra_live_closure.py evaluate \
+  --receipt-root '<same-private-root>' \
+  --input-file '<receipt-derived-expected-outcome.json>' \
+  --ack acknowledge-evaluate --json
+```
+
+After input and acknowledgement validation, each mutation command writes a
+content-free preview to standard error before accessing product authority. The
+preview binds only the stage and canonical input SHA-256; the final JSON result
+is written separately to standard output.
+
+The evaluator rejects an expected outcome that is not exactly derivable from the
+four typed durable stage receipts. Migration `0010` separately proves the exact
+execution, terminal event/SSE cursor, five-field Skill pin, AdvisorReview,
+DecisionReceipt, and TimelinePlan identities.
+
+`decision_recorded` is not capability completion. A failed evaluator after a
+committed decision leaves a recoverable incomplete state and must not repeat or
+roll back that decision. A bounded retained failure receipt is safe-stop evidence
+only. After a second substantive failure in the same terminal lane, stop and
+investigate; do not authorize another live attempt from the failure receipt.
+
+Auxiliary provider-free checks remain separate:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py rehearse-capture \
+  --receipt-root '<private-rehearsal-root>' --phase capture --json
+uv run python scripts/verify_dra_live_closure.py rehearse-full --json
+```
+
+`rehearse-full` uses the deterministic fixture through real PostgreSQL, FastAPI,
+worker, SSE, review, decision, and the migration `0010` outcome inspector. It
+does not consume the live provider budget. Stage 2, Stage 3, Stage 4, and final
+evaluation each run in a separate subprocess, reopen the durable receipt store,
+and re-inject only the role-specific ephemeral authority. The rehearsal also
+proves that a missing predecessor and a forged predecessor are rejected before
+mutation.
+
+## Candidate freeze
+
+After PR A/B/C merge and exact merged-main `python`, `frontend`, and `compose`
+checks succeed, produce an executable readiness receipt. First record the
+repository-required Docker host/VM preflight and before/after task inventory in
+one public-safe file, with task-scoped teardown complete and retained
+volumes/shared images/cache preserved. Then run:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py freeze-candidate \
+  --receipt-root '<private-mode-0700-root>' \
+  --merged-main-sha '<exact-40-hex-merged-main>' \
+  --docker-inventory-file '<verified-docker-evidence.json>' \
+  --hosted-check-evidence-file '<exact-head-checks.json>' \
+  --recovery-evidence-file '<recovery-matrix.json>' \
+  --authority-review-evidence-file '<authority-review.json>' \
+  --hosted-check python --hosted-check frontend --hosted-check compose \
+  --authorization-placeholder PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION \
+  --json
+```
+
+Each evidence JSON is bound to the same exact merged-main SHA, but its status is
+not trusted. Freeze rejects any recovery command outside the closed command
+allowlist before starting a subprocess, then re-runs the accepted command. It
+removes any caller threshold override, runs the repository `MODE=dev` host and
+Docker VM preflight, enforces the default `8,388,608 KiB` VM minimum, and captures
+the fixed task project's before/after Compose, container, image, build-cache,
+network, and volume inventories. It also reads the exact GitHub check-run,
+merged-PR, approved-review, reviewed-tree, and merge-tree identities. The
+supplied values and hashes must match those independently observed results.
+Arbitrary exact-shape files, feature-branch HEADs, missing/failed checks, stale
+reviews, dirty main, residual task resources, or local/origin/live main drift
+fail closed.
+
+The four files use closed schemas:
+`night-voyager.dra-live-docker-evidence.v1`,
+`night-voyager.dra-live-hosted-checks-evidence.v1`,
+`night-voyager.dra-live-recovery-evidence.v1`, and
+`night-voyager.dra-live-authority-review-evidence.v1`. Extra keys are rejected.
+Docker evidence binds the canonical task project, default Docker VM threshold,
+observed host/VM free space, preflight stdout, all six before/after inventory
+hashes, and the exact retained image, volume, and build-cache identities. Hosted
+evidence binds repository and the three exact check run IDs. Recovery evidence
+binds the closed command and observed stdout hash. Authority-review evidence
+binds repository, PR number, review ID, and reviewed head; freeze verifies that
+the final PR head is the approved review commit, the PR merged as the supplied
+exact main SHA, and the reviewed and merge commits have the same tree.
+
+The readiness receipt binds the exact merged main, spec and PR C plan hashes,
+producer pin, scenario, intent/receipt/CLI schema identities, required hosted
+checks, recovery-matrix result, Docker preflight/inventory, cleanup state, and
+the explicit authorization placeholder. A successful freeze still reports
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. Only a separately authorized frozen live
+attempt whose complete evaluator reports `closure_passed` can change that claim.
 
 ## Recovery and cleanup
 

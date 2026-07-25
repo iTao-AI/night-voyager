@@ -1,12 +1,11 @@
 # Governed DRA evidence reference
 
 Candidate import, atomic human verification/promotion, and governed mixed
-PlanningRun generation are implemented as a deterministic local proof. PR A
-also implements the provider-free DRA v0.1.6 producer pin, strict live
-projection boundary, deterministic scenario, outcome read authority, and
-evaluation contracts. The existing `generate_planning_run_v1` path remains
-all-synthetic, and `/demo` is unchanged. Live provider proof was not run and
-the full governed-live closure remains unimplemented.
+PlanningRun generation are implemented as a deterministic provider-free proof.
+AdvisorReview, family decision, and final evaluation are included. The existing
+`generate_planning_run_v1` path remains all-synthetic, and `/demo` is unchanged.
+Live provider proof was not run; capability status remains
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
 
 ## Pinned consumer contract
 
@@ -75,8 +74,8 @@ The PR A live boundary is deliberately narrower than a provider workflow:
 - Required CI uses deterministic scenario data and a fake transport. It does
   not contact a provider or promote a candidate.
 
-PR B is implemented provider-free; PR C remains approved but not implemented.
-PR A and PR B therefore supply no governed-live success claim.
+PR A, PR B, and PR C are implemented provider-free. They supply no
+governed-live success claim.
 
 ## Stage 1 live-capture boundary
 
@@ -102,7 +101,26 @@ or remote cancellation exists. Recovery
 receipts contain identity hashes and bounded metadata, never query, artifact,
 credential, session, provider payload, or environment values. Stage 1 performs no
 source snapshot validation, promotion, planning, AdvisorReview, or family decision.
-Those provider-free closure stages remain PR C work.
+Stage 2–4 now reuse the existing product authorities. Stage 2 validates an
+operator-supplied snapshot using descriptor-bound no-follow I/O and binds the
+exact selected raw URL, length, and SHA-256 before promotion. Stage 3 observes
+the existing governed task, five-field Skill pin, terminal event/SSE, PlanningRun,
+and AdvisorReview. Stage 4 records the family decision, DecisionReceipt, and
+TimelinePlan. Each stage has a distinct acknowledgement and lost-ack
+reconciliation; no session material enters a receipt.
+Real HTTP transport loss is mapped to the bounded ambiguity type at the mutation
+POST boundary. Fresh-process task and AdvisorReview recovery are exact
+actor/idempotency-key reads over existing product records; they are not
+process-local caches or generic read APIs.
+
+The outcome inspector executes only migration `0010` function
+`app.project_dra_live_outcome(...)`. It has no table `SELECT`, generic SQL, DML,
+privileged role, or cross-tenant path. `decision_recorded` is not completion;
+only the complete evaluator may produce `closure_passed`.
+The capture receipt additionally binds the domain-separated provider create key,
+the accepted run, and every observed run identity. The two provider-cardinality
+assertions require one unique key and one unique accepted run; the consumed
+boolean alone is not evidence of either assertion.
 
 ## Governed mixed-planning surface
 
@@ -150,3 +168,13 @@ terminal status. They exclude source bytes, Markdown, snippets, provider
 payloads, credentials, local paths, token/cost data, traces, and internal
 baseline pins. Caller DTOs cannot declare `externally_verified`, promoted IDs,
 tenant claims, role, or authority.
+Lost acknowledgements retain a bounded stage-specific ambiguity receipt containing
+only the parent receipt identity, domain-separated mutation key, exact request
+hash, and target identity hash. A current result is accepted only when all
+request/result fields match; partial or conflicting authority fails closed.
+
+Final trajectory evaluation accepts only the typed `capture`, `promotion`,
+`review`, and `decision` receipts. Caller-supplied assertion identifiers are not
+authority. The closed migration `0010` projection correlates the promoted mapping
+with the exact task execution, terminal event/SSE cursor, five-field Skill pin,
+AdvisorReview/brief, family decision, DecisionReceipt, and TimelinePlan.

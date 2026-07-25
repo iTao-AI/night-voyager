@@ -3,7 +3,8 @@
 
 ## Status
 
-**Implementation status:** PR A and PR B implemented provider-free; PR C remains approved but not implemented. Governed live acceptance remains unimplemented.
+**Implementation status:** PR A, PR B, and PR C are implemented provider-free; governed live acceptance remains pending.
+Capability status remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
 
 This document defines the bounded Night Voyager consumer increment after the
 `v0.1.3` local synthetic portfolio release. PR A implements only the offline

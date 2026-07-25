@@ -13,8 +13,12 @@ from pydantic import (
 )
 
 from night_voyager.dra.live_models import (
+    DraCaptureReceiptV1,
+    DraDecisionReceiptV1,
     DraLiveProducerIdentityV1,
     DraLiveScenarioV1,
+    DraPromotionReceiptV1,
+    DraReviewReceiptV1,
     PublicCode,
 )
 from night_voyager.dra.models import BoundedId, FrozenModel, Sha256
@@ -175,6 +179,19 @@ class DraLiveOutcomeExpectedV1(FrozenModel):
     task_state: BoundedId
     planning_run_id: BoundedId
     planning_run_state: BoundedId
+    verification_id: BoundedId
+    execution_id: BoundedId
+    terminal_event_id: PositiveInt
+    skill_definition_id: BoundedId
+    skill_version_id: BoundedId
+    skill_activation_event_id: BoundedId
+    skill_activation_sequence: PositiveInt
+    runtime_binding_sha256: Sha256
+    review_id: BoundedId
+    brief_id: BoundedId
+    decision_id: BoundedId
+    decision_receipt_id: BoundedId
+    timeline_plan_id: BoundedId
 
 
 class DraLiveOutcomeProjectionV1(FrozenModel):
@@ -194,10 +211,28 @@ class DraLiveOutcomeProjectionV1(FrozenModel):
     task_state: BoundedId | None
     planning_run_id: BoundedId | None
     planning_run_state: BoundedId | None
+    verification_id: BoundedId | None
+    execution_count: OutcomeCount
+    execution_id: BoundedId | None
+    execution_planning_run_id: BoundedId | None
+    terminal_event_count: OutcomeCount
+    terminal_event_id: PositiveInt | None
+    terminal_event_planning_run_id: BoundedId | None
+    sse_cursor: PositiveInt | None
+    skill_definition_id: BoundedId | None
+    skill_version_id: BoundedId | None
+    skill_activation_event_id: BoundedId | None
+    skill_activation_sequence: PositiveInt | None
+    runtime_binding_sha256: Sha256 | None
     advisor_review_count: OutcomeCount
+    review_id: BoundedId | None
+    brief_id: BoundedId | None
     family_decision_count: OutcomeCount
+    decision_id: BoundedId | None
     decision_receipt_count: OutcomeCount
+    decision_receipt_id: BoundedId | None
     timeline_plan_count: OutcomeCount
+    timeline_plan_id: BoundedId | None
     tenant_isolated: bool
     partial_row_set_absent: bool
     observed_identity_hashes: tuple[Sha256, ...]
@@ -294,63 +329,147 @@ def _result(
     )
 
 
-def _validated_receipts(
-    receipts: Sequence[DraEvaluationReceiptV1],
-) -> dict[EvaluationStage, DraEvaluationReceiptV1]:
-    receipt_ids = [receipt.receipt_id for receipt in receipts]
-    if len(receipt_ids) != len(set(receipt_ids)):
-        raise ValueError("dra_evaluation_receipt_duplicate")
-    by_stage: dict[EvaluationStage, DraEvaluationReceiptV1] = {}
-    by_id = {receipt.receipt_id: receipt for receipt in receipts}
-    intent_hashes = {receipt.intent_sha256 for receipt in receipts}
-    if len(intent_hashes) > 1:
-        raise ValueError("dra_evaluation_intent_mismatch")
+TypedStageReceipt = (
+    DraCaptureReceiptV1
+    | DraPromotionReceiptV1
+    | DraReviewReceiptV1
+    | DraDecisionReceiptV1
+)
+
+
+def _receipt_hash(receipt: TypedStageReceipt) -> str:
+    encoded = json.dumps(
+        receipt.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode()
+    return __import__("hashlib").sha256(encoded).hexdigest()
+
+
+def _typed_receipts(
+    receipts: Sequence[object],
+) -> tuple[
+    DraCaptureReceiptV1,
+    DraPromotionReceiptV1,
+    DraReviewReceiptV1,
+    DraDecisionReceiptV1,
+]:
+    expected_types = (
+        DraCaptureReceiptV1,
+        DraPromotionReceiptV1,
+        DraReviewReceiptV1,
+        DraDecisionReceiptV1,
+    )
+    by_type: dict[type[TypedStageReceipt], TypedStageReceipt] = {}
     for receipt in receipts:
-        if receipt.stage in by_stage:
+        if not isinstance(receipt, expected_types):
+            raise ValueError("typed_stage_receipts_required")
+        receipt_type = type(receipt)
+        if receipt_type in by_type:
             raise ValueError("dra_evaluation_stage_duplicate")
-        if not set(receipt.assertion_ids).issubset(STAGE_ASSERTIONS[receipt.stage]):
-            raise ValueError("dra_evaluation_stage_assertion_invalid")
-        stage_index = STAGE_ORDER.index(receipt.stage)
-        if stage_index == 0:
-            if receipt.parent_receipt_id is not None:
-                raise ValueError("dra_evaluation_parent_invalid")
-        else:
-            parent = (
-                by_id.get(receipt.parent_receipt_id)
-                if receipt.parent_receipt_id is not None
-                else None
-            )
-            if parent is None or parent.stage != STAGE_ORDER[stage_index - 1]:
-                raise ValueError("dra_evaluation_parent_invalid")
-        by_stage[receipt.stage] = receipt
-    return by_stage
+        by_type[receipt_type] = receipt
+    if set(by_type) != set(expected_types):
+        raise ValueError("typed_stage_receipts_required")
+    capture = cast(DraCaptureReceiptV1, by_type[DraCaptureReceiptV1])
+    promotion = cast(DraPromotionReceiptV1, by_type[DraPromotionReceiptV1])
+    review = cast(DraReviewReceiptV1, by_type[DraReviewReceiptV1])
+    decision = cast(DraDecisionReceiptV1, by_type[DraDecisionReceiptV1])
+    selected = capture.selected_evidence
+    if (
+        len(
+            {
+                capture.intent_sha256,
+                promotion.intent_sha256,
+                review.intent_sha256,
+                decision.intent_sha256,
+            }
+        )
+        != 1
+        or len(
+            {
+                capture.attempt_id,
+                promotion.attempt_id,
+                review.attempt_id,
+                decision.attempt_id,
+            }
+        )
+        != 1
+        or promotion.candidate_id != capture.candidate_id
+        or selected is None
+        or promotion.dra_evidence_id != selected.evidence_id
+        or promotion.selected_raw_url != selected.source_url
+        or review.candidate_id != promotion.candidate_id
+        or review.source_pack_version != promotion.promoted_source_pack_version
+        or decision.review_id != review.review.review_id
+        or decision.planning_run_id != review.task.planning_run_id
+        or decision.decision.brief_id != review.review.brief_id
+    ):
+        raise ValueError("dra_evaluation_receipt_chain_invalid")
+    return capture, promotion, review, decision
 
 
 def evaluate_trajectory(
     scenario: DraLiveScenarioV1,
-    receipts: Sequence[DraEvaluationReceiptV1],
+    receipts: Sequence[TypedStageReceipt],
 ) -> tuple[AssertionResultV1, ...]:
-    validated = _validated_receipts(receipts)
-    observed: dict[TrajectoryAssertionId, tuple[Sha256, ...]] = {}
-    for stage in STAGE_ORDER:
-        receipt = validated.get(stage)
-        if receipt is None:
-            continue
-        for assertion_id in receipt.assertion_ids:
-            observed[assertion_id] = receipt.observed_identity_hashes
+    capture, promotion, review, decision = _typed_receipts(receipts)
+    hashes = {
+        "capture-live": (_receipt_hash(capture),),
+        "promote": (_receipt_hash(promotion),),
+        "review": (_receipt_hash(review),),
+        "decide": (_receipt_hash(decision),),
+    }
     exact_producer = (
-        scenario.producer.release == "v0.1.6"
-        and scenario.producer.commit
-        == "7d43324b469cb5e445c2e8be83af3be4d841cf1c"
-        and scenario.producer.tag_object
-        == "9e0b0b443c435cf636dfce932c3c77d91d0a43e4"
+        capture.producer == scenario.producer
+        and scenario.producer.release == "v0.1.6"
     )
+    provider_attempt_exact = (
+        capture.provider_attempt_consumed
+        and len(set(capture.provider_attempt_evidence.create_keys)) == 1
+        and len(set(capture.provider_attempt_evidence.observed_run_ids)) == 1
+        and capture.provider_attempt_evidence.accepted_run_id == capture.run_id
+        and capture.provider_attempt_evidence.observed_run_ids == (capture.run_id,)
+    )
+    checks: dict[TrajectoryAssertionId, bool] = {
+        "producer_pin_exact": exact_producer,
+        "provider_attempt_exactly_one": provider_attempt_exact,
+        "terminal_transition_valid": capture.stage_states[-1].status == "completed",
+        "artifact_identity_exact": capture.artifact == scenario.result.artifact,
+        "evidence_ownership_and_selection_valid": (
+            capture.selected_evidence is not None
+            and capture.selected_evidence.run_id == capture.run_id
+            and capture.selected_evidence.segment_id == capture.segment_id
+        ),
+        "candidate_precedes_promotion": capture.candidate_authority == "untrusted_candidate",
+        "candidate_untrusted_until_advisor": capture.candidate_authority == "untrusted_candidate",
+        "promotion_actor_explicit": promotion.acknowledgement == "promotion_recorded",
+        "promoted_pack_exact": promotion.promoted_source_pack_version == review.source_pack_version,
+        "skill_pin_exact": review.task.skill_pin.runtime_binding_sha256 != "0" * 64,
+        "task_execution_event_sse_run_correlated": (
+            review.task.planning_run_id == review.review.planning_run_id
+            and review.task.terminal_event_id > 0
+        ),
+        "advisor_review_explicit": review.acknowledgement == "review_recorded",
+        "family_decision_explicit": decision.acknowledgement == "decision_recorded",
+        "receipt_timeline_correlated": (
+            decision.decision.decision_receipt_id != decision.decision.timeline_plan_id
+        ),
+        "no_auto_promotion": promotion.acknowledgement == "promotion_recorded",
+        "no_auto_decision": decision.acknowledgement == "decision_recorded",
+        "no_second_provider_run": provider_attempt_exact,
+    }
     return tuple(
         _result(
             assertion_id,
-            assertion_id in observed
-            and (assertion_id != "producer_pin_exact" or exact_producer),
-            observed.get(assertion_id, ()),
+            checks[assertion_id],
+            hashes[
+                next(
+                    stage
+                    for stage, values in STAGE_ASSERTIONS.items()
+                    if assertion_id in values
+                )
+            ],
         )
         for assertion_id in TRAJECTORY_ASSERTIONS
     )
@@ -364,7 +483,8 @@ def evaluate_outcome(
         "candidate_exactly_one": projection.candidate_count == 1
         and projection.candidate_id == expected.candidate_id,
         "verification_exactly_one": projection.verification_count == 1
-        and projection.approved_verification_count == 1,
+        and projection.approved_verification_count == 1
+        and projection.verification_id == expected.verification_id,
         "promoted_pack_mapping_exact": (
             projection.promoted_source_pack_id == expected.source_pack_id
             and projection.promoted_source_pack_version
@@ -379,16 +499,44 @@ def evaluate_outcome(
         == "externally_verified",
         "governed_task_exactly_one": projection.governed_task_count == 1
         and projection.task_id == expected.task_id,
-        "task_terminal_state_exact": projection.task_state
-        == expected.task_state,
+        "task_terminal_state_exact": (
+            projection.task_state == expected.task_state
+            and projection.execution_count == 1
+            and projection.execution_id == expected.execution_id
+            and projection.execution_planning_run_id == expected.planning_run_id
+            and projection.terminal_event_count == 1
+            and projection.terminal_event_id == expected.terminal_event_id
+            and projection.sse_cursor == expected.terminal_event_id
+            and projection.terminal_event_planning_run_id == expected.planning_run_id
+            and projection.skill_definition_id == expected.skill_definition_id
+            and projection.skill_version_id == expected.skill_version_id
+            and projection.skill_activation_event_id == expected.skill_activation_event_id
+            and projection.skill_activation_sequence
+            == expected.skill_activation_sequence
+            and projection.runtime_binding_sha256
+            == expected.runtime_binding_sha256
+        ),
         "planning_run_terminal_state_exact": (
             projection.planning_run_id == expected.planning_run_id
             and projection.planning_run_state == expected.planning_run_state
         ),
-        "advisor_review_exactly_one": projection.advisor_review_count == 1,
-        "family_decision_exactly_one": projection.family_decision_count == 1,
-        "decision_receipt_exactly_one": projection.decision_receipt_count == 1,
-        "timeline_plan_exactly_one": projection.timeline_plan_count == 1,
+        "advisor_review_exactly_one": (
+            projection.advisor_review_count == 1
+            and projection.review_id == expected.review_id
+            and projection.brief_id == expected.brief_id
+        ),
+        "family_decision_exactly_one": (
+            projection.family_decision_count == 1
+            and projection.decision_id == expected.decision_id
+        ),
+        "decision_receipt_exactly_one": (
+            projection.decision_receipt_count == 1
+            and projection.decision_receipt_id == expected.decision_receipt_id
+        ),
+        "timeline_plan_exactly_one": (
+            projection.timeline_plan_count == 1
+            and projection.timeline_plan_id == expected.timeline_plan_id
+        ),
         "tenant_isolation_preserved": projection.tenant_isolated,
         "no_partial_row_set": projection.partial_row_set_absent,
     }
@@ -405,13 +553,10 @@ def evaluate_outcome(
 def build_evaluation_report(
     *,
     scenario: DraLiveScenarioV1,
-    receipts: Sequence[DraEvaluationReceiptV1],
+    receipts: Sequence[TypedStageReceipt],
     outcome: Sequence[AssertionResultV1],
 ) -> DraLiveEvaluationReportV1:
-    validated_receipts = _validated_receipts(receipts)
-    receipt_root = validated_receipts.get("capture-live")
-    if receipt_root is None:
-        raise ValueError("dra_evaluation_receipt_root_missing")
+    receipt_root, _, _, _ = _typed_receipts(receipts)
     trajectory = evaluate_trajectory(scenario, receipts)
     assertions = tuple(
         sorted((*trajectory, *outcome), key=lambda item: item.assertion_id)
@@ -423,6 +568,48 @@ def build_evaluation_report(
         intent_sha256=receipt_root.intent_sha256,
         assertions=assertions,
         expected_non_claims=scenario.expected_non_claims,
+    )
+
+
+def evaluate_full_closure(
+    scenario: DraLiveScenarioV1,
+    receipts: Sequence[TypedStageReceipt],
+    expected: DraLiveOutcomeExpectedV1,
+    projection: DraLiveOutcomeProjectionV1,
+) -> DraLiveEvaluationReportV1:
+    _, promotion, review, decision = _typed_receipts(receipts)
+    derived = DraLiveOutcomeExpectedV1(
+        candidate_id=str(promotion.candidate_id),
+        source_pack_id=str(review.source_pack_id),
+        source_pack_version=review.source_pack_version,
+        source_entry_id=str(promotion.promoted_source_entry_id),
+        evidence_id=str(promotion.promoted_evidence_id),
+        task_id=str(review.task.task_id),
+        task_state="waiting_review",
+        planning_run_id=str(review.task.planning_run_id),
+        planning_run_state="review_required",
+        verification_id=str(promotion.verification_id),
+        execution_id=str(review.task.execution_id),
+        terminal_event_id=review.task.terminal_event_id,
+        skill_definition_id=str(review.task.skill_pin.skill_definition_id),
+        skill_version_id=str(review.task.skill_pin.skill_version_id),
+        skill_activation_event_id=str(
+            review.task.skill_pin.skill_activation_event_id
+        ),
+        skill_activation_sequence=review.task.skill_pin.skill_activation_sequence,
+        runtime_binding_sha256=review.task.skill_pin.runtime_binding_sha256,
+        review_id=str(review.review.review_id),
+        brief_id=str(review.review.brief_id),
+        decision_id=str(decision.decision.decision_id),
+        decision_receipt_id=str(decision.decision.decision_receipt_id),
+        timeline_plan_id=str(decision.decision.timeline_plan_id),
+    )
+    if expected != derived:
+        raise ValueError("dra_live_expected_outcome_not_receipt_derived")
+    return build_evaluation_report(
+        scenario=scenario,
+        receipts=receipts,
+        outcome=evaluate_outcome(expected, projection),
     )
 
 

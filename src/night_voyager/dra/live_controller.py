@@ -7,28 +7,40 @@ import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
+from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.errors import DraAuthorizationError, DraConflictError
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
+    DraDecisionInputV1,
+    DraDecisionReceiptV1,
     DraInspectionRequiredReceiptV1,
     DraLiveFailurePhase,
+    DraMutationAmbiguousReceiptV1,
     DraPollRecoveryReceiptV1,
     DraPreflightReceiptV1,
+    DraPromotionInputV1,
+    DraPromotionReceiptV1,
+    DraProviderAttemptEvidenceV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
+    DraReviewInputV1,
+    DraReviewReceiptV1,
     DraStageStateV1,
     derive_identity_hash,
     derive_stage_key,
 )
 from night_voyager.dra.live_ports import (
     DraCandidateGatewayPort,
+    DraClosureGatewayPort,
     DraLiveClockPort,
     DraLiveSleepPort,
     DraLiveTransportPort,
+    DraPromotionGatewayPort,
 )
 from night_voyager.dra.live_projection import (
     DraLiveConsumerEvidenceV1,
@@ -37,7 +49,11 @@ from night_voyager.dra.live_projection import (
     project_terminal_result,
     select_cited_evidence,
 )
-from night_voyager.dra.live_storage import LiveReceiptStore, LiveStorageError
+from night_voyager.dra.live_storage import (
+    LiveReceiptStore,
+    LiveStorageError,
+    supplied_snapshot,
+)
 from night_voyager.dra.models import (
     DraCandidateImportV1,
     DraCanonicalArtifactInputV1,
@@ -46,6 +62,7 @@ from night_voyager.dra.models import (
     DraRunProjectionV1,
     DraRunRequestIdentityV1,
 )
+from night_voyager.dra.ports import VerifyDraCandidateCommand
 from night_voyager.dra.reconciliation import (
     DraAmbiguousOutcome,
     DraTransportConflict,
@@ -101,6 +118,427 @@ class SelectAndImportCommand:
     context: ActorContext
 
 
+@dataclass(frozen=True, slots=True)
+class PromoteCommand:
+    promotion: DraPromotionInputV1
+    context: ActorContext
+    snapshot_root: Path
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewCommand:
+    review: DraReviewInputV1
+    context: ActorContext
+
+
+@dataclass(frozen=True, slots=True)
+class DecideCommand:
+    decision: DraDecisionInputV1
+    context: ActorContext
+
+
+class DraLiveClosureController:
+    def __init__(
+        self,
+        authority: DraPromotionGatewayPort | DraClosureGatewayPort,
+        store: LiveReceiptStore,
+    ) -> None:
+        self._authority = authority
+        self._store = store
+
+    @staticmethod
+    def _target_hash(stage: str, value: object) -> str:
+        return hashlib.sha256(
+            f"night-voyager.dra-live.target.v1\0{stage}\0{value}".encode()
+        ).hexdigest()
+
+    async def promote(self, command: PromoteCommand) -> DraPromotionReceiptV1:
+        authority = cast(DraPromotionGatewayPort, self._authority)
+        promotion = command.promotion
+        stored = self._store.read_receipt("capture.json", DraCaptureReceiptV1)
+        if stored != promotion.capture:
+            raise ValueError("promotion_capture_receipt_invalid")
+        context = command.context
+        if (
+            context.role is not ActorRole.ADVISOR
+            or context.organization_id != promotion.organization_id
+            or derive_identity_hash("actor", str(context.actor_id))
+            != promotion.advisor_actor_identity_sha256
+            or derive_identity_hash("tenant", str(context.organization_id))
+            != promotion.tenant_identity_sha256
+        ):
+            raise ValueError("promotion_actor_invalid")
+        current = await authority.get_candidate(
+            context, promotion.case_id, promotion.candidate_id
+        )
+        if current is None or current.candidate_id != promotion.candidate_id:
+            raise ValueError("promotion_candidate_invalid")
+        key = derive_stage_key(
+            promotion.intent_sha256,
+            "promotion",
+            str(promotion.candidate_id),
+        )
+        request = VerifyDraCandidateCommand(
+            case_id=promotion.case_id,
+            candidate_id=promotion.candidate_id,
+            expected_case_revision=promotion.expected_case_revision,
+            dra_evidence_id=promotion.dra_evidence_id,
+            decision="approve",
+            reason=promotion.reason,
+            source_attestation=promotion.source_attestation,
+        )
+        request_sha256 = canonical_request_sha256(request.model_dump(mode="json"))
+        parent_identity = self._store.write_receipt("capture.json", stored)
+        with supplied_snapshot(
+            command.snapshot_root,
+            promotion.source_attestation,
+            promotion.selected_raw_url,
+        ) as snapshot:
+            if (
+                promotion.capture.selected_evidence is None
+                or promotion.capture.selected_evidence.source_url != promotion.selected_raw_url
+            ):
+                raise ValueError("selected_raw_url_invalid")
+            if current.verification is None:
+                try:
+                    verification = await authority.promote_candidate(context, request, key)
+                except DraAmbiguousOutcome:
+                    self._store.write_receipt(
+                        "promotion-ambiguous.json",
+                        DraMutationAmbiguousReceiptV1(
+                            intent_sha256=promotion.intent_sha256,
+                            attempt_id=promotion.capture.attempt_id,
+                            stage="promote",
+                            parent_receipt=parent_identity,
+                            mutation_key=key,
+                            request_sha256=request_sha256,
+                            target_identity_sha256=self._target_hash(
+                                "promote", promotion.candidate_id
+                            ),
+                            permitted_next_command="promote",
+                        ),
+                    )
+                    reread = await authority.get_candidate(
+                        context,
+                        promotion.case_id,
+                        promotion.candidate_id,
+                    )
+                    if reread is None or reread.verification is None:
+                        raise
+                    verification = reread.verification
+            else:
+                verification = current.verification
+            if (
+                verification.decision != "approve"
+                or verification.promoted_source_pack_version is None
+                or verification.promoted_source_entry_id is None
+                or verification.promoted_evidence_id is None
+                or verification.decision_request_sha256 != request_sha256
+            ):
+                raise ValueError("promotion_authority_result_invalid")
+            receipt = DraPromotionReceiptV1(
+                intent_sha256=promotion.intent_sha256,
+                attempt_id=promotion.capture.attempt_id,
+                candidate_id=promotion.candidate_id,
+                dra_evidence_id=promotion.dra_evidence_id,
+                selected_raw_url=promotion.selected_raw_url,
+                promotion_key=key,
+                verification_id=verification.verification_id,
+                promoted_source_pack_version=(verification.promoted_source_pack_version),
+                promoted_source_entry_id=(verification.promoted_source_entry_id),
+                promoted_evidence_id=verification.promoted_evidence_id,
+                snapshot=snapshot,
+                stage_states=(
+                    *promotion.capture.stage_states,
+                    DraStageStateV1(stage="promote", status="completed"),
+                ),
+            )
+            self._store.write_receipt("promotion.json", receipt)
+            return receipt
+
+    async def review(self, command: ReviewCommand) -> DraReviewReceiptV1:
+        authority = cast(DraClosureGatewayPort, self._authority)
+        review = command.review
+        stored = self._store.read_receipt(
+            "promotion.json", DraPromotionReceiptV1
+        )
+        if stored != review.promotion:
+            raise ValueError("review_promotion_receipt_invalid")
+        context = command.context
+        if (
+            context.role is not ActorRole.ADVISOR
+            or context.organization_id != review.organization_id
+            or derive_identity_hash("actor", str(context.actor_id))
+            != review.advisor_actor_identity_sha256
+            or derive_identity_hash("tenant", str(context.organization_id))
+            != review.tenant_identity_sha256
+        ):
+            raise ValueError("review_actor_invalid")
+        mapping = await authority.get_promoted_mapping(
+            context, review.case_id, review.candidate_id
+        )
+        if mapping != (
+            review.promoted_source_pack_id,
+            review.promoted_source_pack_version,
+        ):
+            raise ValueError("promoted_mapping_invalid")
+        task_key = derive_stage_key(
+            review.intent_sha256, "planning-task", str(review.case_id)
+        )
+        task_request_sha256 = canonical_request_sha256(
+            {
+                "case_id": str(review.case_id),
+                "operation": "generate_governed_mixed_planning_run_v1",
+                "expected_case_revision": review.expected_case_revision,
+                "source_pack_id": str(review.promoted_source_pack_id),
+                "source_pack_version": review.promoted_source_pack_version,
+                "policy_version": "m3a-policy-v1",
+            }
+        )
+        task = await authority.get_task(context, task_key)
+        if task is None:
+            try:
+                task = await authority.create_task(
+                    context,
+                    review.case_id,
+                    review.expected_case_revision,
+                    review.promoted_source_pack_id,
+                    review.promoted_source_pack_version,
+                    task_key,
+                )
+            except DraAmbiguousOutcome:
+                self._store.write_receipt(
+                    "review-ambiguous.json",
+                    DraMutationAmbiguousReceiptV1(
+                        intent_sha256=review.intent_sha256,
+                        attempt_id=review.promotion.attempt_id,
+                        stage="review",
+                        parent_receipt=self._store.write_receipt(
+                            "promotion.json", stored
+                        ),
+                        mutation_key=task_key,
+                        request_sha256=task_request_sha256,
+                        target_identity_sha256=self._target_hash(
+                            "review-task", review.case_id
+                        ),
+                        permitted_next_command="review",
+                    ),
+                )
+                task = await authority.get_task(context, task_key)
+                if task is None:
+                    task = await authority.create_task(
+                        context,
+                        review.case_id,
+                        review.expected_case_revision,
+                        review.promoted_source_pack_id,
+                        review.promoted_source_pack_version,
+                        task_key,
+                    )
+        if (
+            task.operation != "generate_governed_mixed_planning_run_v1"
+            or task.source_pack_id != review.promoted_source_pack_id
+            or task.source_pack_version
+            != review.promoted_source_pack_version
+            or task.status != "needs_advisor_review"
+            or task.case_id != review.case_id
+            or task.case_revision != review.expected_case_revision
+            or task.request_sha256 != task_request_sha256
+        ):
+            raise ValueError("planning_task_projection_invalid")
+        review_key = derive_stage_key(
+            review.intent_sha256,
+            "advisor-review",
+            str(task.planning_run_id),
+        )
+        review_request_sha256 = canonical_request_sha256(
+            {
+                "case_id": str(review.case_id),
+                "planning_run_id": str(task.planning_run_id),
+                "expected_case_revision": review.expected_case_revision,
+                "action": "approve_for_consultation",
+                "eligible_route_ids": [str(item) for item in review.eligible_route_ids],
+                "risk_acceptances": [],
+                "reviewer_notes": None,
+            }
+        )
+        recorded = await authority.get_review(
+            context, review.case_id, task.planning_run_id, review_key
+        )
+        if recorded is None:
+            try:
+                recorded = await authority.record_review(
+                    context,
+                    review.case_id,
+                    review.expected_case_revision,
+                    task.planning_run_id,
+                    review.eligible_route_ids,
+                    review_key,
+                )
+            except DraAmbiguousOutcome:
+                self._store.write_receipt(
+                    "review-ambiguous.json",
+                    DraMutationAmbiguousReceiptV1(
+                        intent_sha256=review.intent_sha256,
+                        attempt_id=review.promotion.attempt_id,
+                        stage="review",
+                        parent_receipt=self._store.write_receipt(
+                            "promotion.json", stored
+                        ),
+                        mutation_key=review_key,
+                        request_sha256=review_request_sha256,
+                        target_identity_sha256=self._target_hash(
+                            "review", task.planning_run_id
+                        ),
+                        permitted_next_command="review",
+                    ),
+                )
+                recorded = await authority.get_review(
+                    context, review.case_id, task.planning_run_id, review_key
+                )
+                if recorded is None:
+                    recorded = await authority.record_review(
+                        context,
+                        review.case_id,
+                        review.expected_case_revision,
+                        task.planning_run_id,
+                        review.eligible_route_ids,
+                        review_key,
+                    )
+        if (
+            recorded.planning_run_id != task.planning_run_id
+            or recorded.eligible_route_ids != review.eligible_route_ids
+            or recorded.case_id != review.case_id
+            or recorded.expected_case_revision != review.expected_case_revision
+            or recorded.action != "approve_for_consultation"
+            or recorded.request_sha256 != review_request_sha256
+        ):
+            raise ValueError("advisor_review_projection_invalid")
+        receipt = DraReviewReceiptV1(
+            intent_sha256=review.intent_sha256,
+            attempt_id=review.promotion.attempt_id,
+            candidate_id=review.candidate_id,
+            source_pack_id=review.promoted_source_pack_id,
+            source_pack_version=review.promoted_source_pack_version,
+            task_key=task_key,
+            review_key=review_key,
+            task=task,
+            review=recorded,
+            stage_states=(
+                *review.promotion.stage_states,
+                DraStageStateV1(stage="review", status="completed"),
+            ),
+        )
+        self._store.write_receipt("review.json", receipt)
+        return receipt
+
+    async def decide(self, command: DecideCommand) -> DraDecisionReceiptV1:
+        authority = cast(DraClosureGatewayPort, self._authority)
+        decision = command.decision
+        stored = self._store.read_receipt(
+            "review.json", DraReviewReceiptV1
+        )
+        if stored != decision.review:
+            raise ValueError("decision_review_receipt_invalid")
+        context = command.context
+        if (
+            context.role not in {ActorRole.PARENT, ActorRole.STUDENT}
+            or context.organization_id != decision.organization_id
+            or derive_identity_hash("actor", str(context.actor_id))
+            != decision.family_actor_identity_sha256
+            or derive_identity_hash("tenant", str(context.organization_id))
+            != decision.tenant_identity_sha256
+        ):
+            raise ValueError("decision_actor_invalid")
+        decision_key = derive_stage_key(
+            decision.intent_sha256, "family-decision", str(decision.brief_id)
+        )
+        decision_request_sha256 = canonical_request_sha256(
+            {
+                "brief_id": str(decision.brief_id),
+                "expected_brief_version": decision.expected_brief_version,
+                "selected_route_id": str(decision.selected_route_id),
+                "accepted_budget_min_minor": decision.accepted_budget_min_minor,
+                "accepted_budget_max_minor": decision.accepted_budget_max_minor,
+                "currency": "CNY",
+                "accepted_trade_offs": list(decision.accepted_trade_offs),
+            }
+        )
+        recorded = await authority.get_decision(
+            context, decision.brief_id
+        )
+        if recorded is None:
+            try:
+                recorded = await authority.record_decision(
+                    context,
+                    decision.brief_id,
+                    decision.expected_brief_version,
+                    decision.selected_route_id,
+                    decision.accepted_budget_min_minor,
+                    decision.accepted_budget_max_minor,
+                    decision.accepted_trade_offs,
+                    decision_key,
+                )
+            except DraAmbiguousOutcome:
+                self._store.write_receipt(
+                    "decision-ambiguous.json",
+                    DraMutationAmbiguousReceiptV1(
+                        intent_sha256=decision.intent_sha256,
+                        attempt_id=decision.review.attempt_id,
+                        stage="decide",
+                        parent_receipt=self._store.write_receipt(
+                            "review.json", stored
+                        ),
+                        mutation_key=decision_key,
+                        request_sha256=decision_request_sha256,
+                        target_identity_sha256=self._target_hash(
+                            "decide", decision.brief_id
+                        ),
+                        permitted_next_command="decide",
+                    ),
+                )
+                recorded = await authority.get_decision(
+                    context, decision.brief_id
+                )
+                if recorded is None:
+                    recorded = await authority.record_decision(
+                        context,
+                        decision.brief_id,
+                        decision.expected_brief_version,
+                        decision.selected_route_id,
+                        decision.accepted_budget_min_minor,
+                        decision.accepted_budget_max_minor,
+                        decision.accepted_trade_offs,
+                        decision_key,
+                    )
+        if (
+            recorded.brief_id != decision.brief_id
+            or recorded.selected_route_id != decision.selected_route_id
+            or recorded.expected_brief_version != decision.expected_brief_version
+            or recorded.accepted_budget_min_minor
+            != decision.accepted_budget_min_minor
+            or recorded.accepted_budget_max_minor
+            != decision.accepted_budget_max_minor
+            or recorded.currency != "CNY"
+            or recorded.accepted_trade_offs != decision.accepted_trade_offs
+            or recorded.request_sha256 != decision_request_sha256
+        ):
+            raise ValueError("family_decision_projection_invalid")
+        receipt = DraDecisionReceiptV1(
+            intent_sha256=decision.intent_sha256,
+            attempt_id=decision.review.attempt_id,
+            decision_key=decision_key,
+            review_id=decision.review.review.review_id,
+            planning_run_id=decision.review.task.planning_run_id,
+            decision=recorded,
+            stage_states=(
+                *decision.review.stage_states,
+                DraStageStateV1(stage="decide", status="completed"),
+            ),
+        )
+        self._store.write_receipt("decision.json", receipt)
+        return receipt
+
+
 class DraLiveCaptureController:
     def __init__(
         self,
@@ -126,9 +564,7 @@ class DraLiveCaptureController:
             intent_receipt=intent_receipt,
             scenario_id=capture.scenario_id,
             producer=capture.producer,
-            advisor_actor_identity_sha256=(
-                capture.advisor_actor_identity_sha256
-            ),
+            advisor_actor_identity_sha256=(capture.advisor_actor_identity_sha256),
             tenant_identity_sha256=capture.tenant_identity_sha256,
             receipt_root_id=capture.receipt_root_id,
         )
@@ -140,12 +576,8 @@ class DraLiveCaptureController:
         intent: DraCaptureIntentV1,
         preflight: DraPreflightReceiptV1,
     ) -> DraReceiptIdentityV1:
-        stored_intent = self._store.read_receipt(
-            "intent.json", DraCaptureIntentV1
-        )
-        stored_preflight = self._store.read_receipt(
-            "preflight.json", DraPreflightReceiptV1
-        )
+        stored_intent = self._store.read_receipt("intent.json", DraCaptureIntentV1)
+        stored_preflight = self._store.read_receipt("preflight.json", DraPreflightReceiptV1)
         if (
             stored_intent != intent
             or stored_preflight != preflight
@@ -207,9 +639,7 @@ class DraLiveCaptureController:
         provider_attempt_consumed: bool,
     ) -> DraControllerStopReceiptV1:
         cleanup = self._store.delete_artifact()
-        cleanup_status = (
-            "failed" if cleanup.status == "retained" else cleanup.status
-        )
+        cleanup_status = "failed" if cleanup.status == "retained" else cleanup.status
         receipt = DraControllerStopReceiptV1(
             intent_sha256=intent.intent_sha256,
             attempt_id=intent.attempt_id,
@@ -217,9 +647,7 @@ class DraLiveCaptureController:
             public_code=public_code,
             provider_attempt_consumed=provider_attempt_consumed,
             cleanup_status=cleanup_status,
-            permitted_next_command=(
-                "cleanup" if cleanup.status == "failed" else "stop"
-            ),
+            permitted_next_command=("cleanup" if cleanup.status == "failed" else "stop"),
         )
         self._store.write_receipt("failure.json", receipt)
         return receipt
@@ -231,9 +659,7 @@ class DraLiveCaptureController:
             command.intent.attempt_id,
         )
         try:
-            preflight_identity = self._validate_preflight(
-                command.intent, command.preflight
-            )
+            preflight_identity = self._validate_preflight(command.intent, command.preflight)
             query = self._read_frozen_query(command)
         except (ValueError, LiveStorageError):
             return self._stop(
@@ -250,9 +676,7 @@ class DraLiveCaptureController:
             )
         except DraAmbiguousOutcome:
             receipt = DraReconciliationRequiredReceiptV1(
-                schema_version=(
-                    "night-voyager.dra-live-reconciliation-required.v1"
-                ),
+                schema_version=("night-voyager.dra-live-reconciliation-required.v1"),
                 intent_sha256=command.intent.intent_sha256,
                 attempt_id=command.intent.attempt_id,
                 intent_receipt=command.preflight.intent_receipt,
@@ -282,9 +706,7 @@ class DraLiveCaptureController:
             acceptance,
         )
 
-    async def reconcile_create(
-        self, command: ReconcileCreateCommand
-    ) -> CaptureResult:
+    async def reconcile_create(self, command: ReconcileCreateCommand) -> CaptureResult:
         if not command.exact_replay_authorized:
             raise ValueError("reconciliation_authorization_required")
         expected_key = derive_stage_key(
@@ -304,13 +726,10 @@ class DraLiveCaptureController:
             or command.prior.intent_sha256 != command.intent.intent_sha256
             or command.prior.attempt_id != command.intent.attempt_id
             or command.prior.create_key != expected_key
-            or command.prior.intent_receipt
-            != command.preflight.intent_receipt
+            or command.prior.intent_receipt != command.preflight.intent_receipt
         ):
             raise ValueError("reconciliation_identity_invalid")
-        preflight_identity = self._validate_preflight(
-            command.intent, command.preflight
-        )
+        preflight_identity = self._validate_preflight(command.intent, command.preflight)
         query = self._read_frozen_query(
             CaptureLiveCommand(
                 intent=command.intent,
@@ -346,9 +765,7 @@ class DraLiveCaptureController:
         acceptance: DraRunAcceptanceV1,
     ) -> CaptureResult:
         last_state_version = 0
-        deadline = (
-            self._clock.monotonic() + intent.capture.deadline_seconds
-        )
+        deadline = self._clock.monotonic() + intent.capture.deadline_seconds
         while True:
             try:
                 run = await self._transport.get_run(acceptance.run_id)
@@ -364,9 +781,7 @@ class DraLiveCaptureController:
                 remaining = deadline - self._clock.monotonic()
                 if remaining <= 0:
                     break
-                await self._sleeper.sleep(
-                    min(intent.capture.poll_seconds, remaining)
-                )
+                await self._sleeper.sleep(min(intent.capture.poll_seconds, remaining))
                 continue
             if run.disposition != "canonical_ready":
                 return self._stop(
@@ -404,9 +819,7 @@ class DraLiveCaptureController:
                 producer=intent.capture.producer,
                 case_id=intent.capture.case_id,
                 expected_case_revision=intent.capture.expected_case_revision,
-                advisor_actor_identity_sha256=(
-                    intent.capture.advisor_actor_identity_sha256
-                ),
+                advisor_actor_identity_sha256=(intent.capture.advisor_actor_identity_sha256),
                 tenant_identity_sha256=intent.capture.tenant_identity_sha256,
                 thread_id=acceptance.thread_id,
                 run_id=acceptance.run_id,
@@ -435,15 +848,9 @@ class DraLiveCaptureController:
     async def resume_poll(self, command: ResumePollCommand) -> CaptureResult:
         prior = command.prior
         try:
-            stored_prior = self._store.read_receipt(
-                "poll-recovery.json", DraPollRecoveryReceiptV1
-            )
-            stored_preflight = self._store.read_receipt(
-                "preflight.json", DraPreflightReceiptV1
-            )
-            preflight_identity = self._validate_preflight(
-                command.intent, stored_preflight
-            )
+            stored_prior = self._store.read_receipt("poll-recovery.json", DraPollRecoveryReceiptV1)
+            stored_preflight = self._store.read_receipt("preflight.json", DraPreflightReceiptV1)
+            preflight_identity = self._validate_preflight(command.intent, stored_preflight)
         except (LiveStorageError, ValueError) as error:
             raise ValueError("poll_recovery_identity_invalid") from error
         if (
@@ -491,9 +898,7 @@ class DraLiveCaptureController:
                 or derive_identity_hash("tenant", str(context.organization_id))
                 != capture.tenant_identity_sha256
             ):
-                raise DraAuthorizationError(
-                    "dra_candidate_operation_requires_advisor"
-                )
+                raise DraAuthorizationError("dra_candidate_operation_requires_advisor")
             artifact_bytes = self._store.read_artifact(inspection.artifact)
             artifact_text = artifact_bytes.decode("utf-8", errors="strict")
             projection = DraTerminalProjectionV1(
@@ -519,9 +924,7 @@ class DraLiveCaptureController:
                     for row in inspection.evidence
                 ),
             )
-            selected = select_cited_evidence(
-                projection, command.declared_raw_url
-            )
+            selected = select_cited_evidence(projection, command.declared_raw_url)
         except DraAuthorizationError:
             return self._stop(
                 intent,
@@ -612,9 +1015,7 @@ class DraLiveCaptureController:
                 public_code="cleanup_incomplete",
                 provider_attempt_consumed=True,
             )
-        cleanup_status = (
-            "removed" if cleanup.status == "removed" else "absent"
-        )
+        cleanup_status = "removed" if cleanup.status == "removed" else "absent"
         receipt = DraCaptureReceiptV1(
             schema_version="night-voyager.dra-live-capture-receipt.v1",
             intent_sha256=intent.intent_sha256,
@@ -624,10 +1025,19 @@ class DraLiveCaptureController:
             segment_id=inspection.segment_id,
             artifact=inspection.artifact,
             selected_evidence=selected,
-            stage_states=(
-                DraStageStateV1(stage="capture-live", status="completed"),
-            ),
+            stage_states=(DraStageStateV1(stage="capture-live", status="completed"),),
             provider_attempt_consumed=True,
+            provider_attempt_evidence=DraProviderAttemptEvidenceV1(
+                create_keys=(
+                    derive_stage_key(
+                        intent.intent_sha256,
+                        "create",
+                        intent.attempt_id,
+                    ),
+                ),
+                observed_run_ids=(inspection.run_id,),
+                accepted_run_id=inspection.run_id,
+            ),
             candidate_id=view.candidate_id,
             candidate_authority="untrusted_candidate",
             candidate_import_key=import_key,

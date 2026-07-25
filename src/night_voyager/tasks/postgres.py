@@ -124,6 +124,8 @@ class PostgresTaskRepository:
         result = await self._session.execute(
             text(
                 "SELECT t.id AS task_id,t.operation,t.row_version,t.state,"
+                "t.case_id,t.case_revision,t.source_pack_id,t.source_pack_version,"
+                "t.policy_version,t.request_sha256,"
                 "t.attempt_count,t.terminal_code,"
                 "t.result_planning_run_id,t.created_at,t.updated_at,"
                 "t.skill_definition_id,t.skill_version_id,t.skill_activation_event_id,"
@@ -147,6 +149,20 @@ class PostgresTaskRepository:
         if row is None:
             return None
         task = dict(row)
+        authority = (
+            await self._session.execute(
+                text(
+                    "SELECT execution_id,terminal_event_id "
+                    "FROM app.project_agent_task_live_authority(:org,:actor,:task)"
+                ),
+                {
+                    "org": context.organization_id,
+                    "actor": context.actor_id,
+                    "task": task_id,
+                },
+            )
+        ).mappings().one()
+        task.update(authority)
         if task["skill_definition_id"] is None:
             task["skill_key"] = None
             task["semantic_version"] = None
@@ -174,6 +190,23 @@ class PostgresTaskRepository:
                 task["semantic_version"] = version_data.get("semantic_version")
                 return task
         raise RuntimeError("pinned task Skill version is unavailable")
+
+    async def get_by_idempotency(
+        self,
+        context: ActorContext,
+        idempotency_key: str,
+    ) -> dict[str, object] | None:
+        task_id = await self._session.scalar(
+            text("SELECT app.project_agent_task_by_idempotency(:org,:actor,:key)"),
+            {
+                "org": context.organization_id,
+                "actor": context.actor_id,
+                "key": self._key_hash(idempotency_key),
+            },
+        )
+        if task_id is None:
+            return None
+        return await self.get(context, cast(UUID, task_id))
 
     async def cancel(
         self,

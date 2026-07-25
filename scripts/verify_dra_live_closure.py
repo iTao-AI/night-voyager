@@ -8,8 +8,11 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import signal
 import stat
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 from typing import Literal, NoReturn, cast
@@ -18,6 +21,7 @@ from uuid import UUID
 
 import httpx2
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from night_voyager.adapters.dra_readonly import (
     DraClientConfig,
@@ -26,28 +30,50 @@ from night_voyager.adapters.dra_readonly import (
 from night_voyager.dra.fixtures import load_live_closure_scenario
 from night_voyager.dra.live_controller import (
     CaptureLiveCommand,
+    DecideCommand,
     DraLiveCaptureController,
+    DraLiveClosureController,
+    PromoteCommand,
     ReconcileCreateCommand,
     ResumePollCommand,
+    ReviewCommand,
     SelectAndImportCommand,
+)
+from night_voyager.dra.live_evaluation import (
+    DraLiveEvaluationReportV1,
+    DraLiveOutcomeExpectedV1,
+    evaluate_full_closure,
 )
 from night_voyager.dra.live_fakes import (
     ScenarioCandidateGateway,
     ScenarioDraLiveTransport,
 )
+from night_voyager.dra.live_http import (
+    EphemeralHttpAuthority,
+    NightVoyagerAuthorityGateway,
+)
 from night_voyager.dra.live_models import (
+    DraCandidateReadinessReceiptV1,
     DraCaptureInputV1,
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
+    DraDecisionInputV1,
+    DraDecisionReceiptV1,
     DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPollRecoveryReceiptV1,
     DraPreflightReceiptV1,
+    DraPromotionInputV1,
+    DraPromotionReceiptV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
+    DraReviewInputV1,
+    DraReviewReceiptV1,
     derive_identity_hash,
 )
+from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
+from night_voyager.dra.live_outcome_postgres import PostgresLiveOutcomeInspector
 from night_voyager.dra.live_storage import (
     CleanupResultV1,
     LiveReceiptStore,
@@ -60,6 +86,37 @@ from night_voyager.identity.models import ActorContext, ActorRole
 
 ONE_ATTEMPT_ACK = "separately-authorized-one-attempt"
 CLEANUP_ACK = "delete-exact-live-artifact"
+ALLOWED_RECOVERY_COMMAND = (
+    "uv",
+    "run",
+    "pytest",
+    "-q",
+    "tests/integration/dra/test_live_closure_recovery.py",
+    "tests/unit/dra/test_live_review_controller.py",
+    "tests/unit/dra/test_live_decision_controller.py",
+)
+CANDIDATE_TASK_PROJECT = "night-voyager-dra-v0-1-6-live-acceptance"
+DOCKER_VM_MINIMUM_KIB = 8_388_608
+HOST_MINIMUM_KIB = 5_242_880
+DOCKER_INVENTORY_COMMANDS = (
+    ("compose", ("docker", "compose", "ls", "--all", "--format", "json")),
+    ("containers", ("docker", "ps", "-a", "--no-trunc", "--format", "json")),
+    (
+        "images",
+        (
+            "docker",
+            "image",
+            "ls",
+            "--digests",
+            "--no-trunc",
+            "--format",
+            "json",
+        ),
+    ),
+    ("build_cache", ("docker", "buildx", "du", "--verbose")),
+    ("networks", ("docker", "network", "ls", "--no-trunc", "--format", "json")),
+    ("volumes", ("docker", "volume", "ls", "--format", "json")),
+)
 REHEARSAL_ORGANIZATION = UUID("10000000-0000-0000-0000-000000000001")
 REHEARSAL_CASE = UUID("40000000-0000-0000-0000-000000000003")
 REHEARSAL_ACTOR = UUID("20000000-0000-0000-0000-000000000001")
@@ -128,6 +185,27 @@ def _result_payload(
         payload["receipt"] = receipt.model_dump(mode="json")
     payload.update(extra)
     return payload
+
+
+def _emit_mutation_preview(stage: str, payload: dict[str, object]) -> None:
+    """Emit a bounded, content-free preview before any Stage 2-4 authority call."""
+    preview = {
+        "schema_version": "night-voyager.dra-live-mutation-preview.v1",
+        "stage": stage,
+        "input_sha256": hashlib.sha256(
+            json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "acknowledgement": "accepted",
+    }
+    print(
+        json.dumps(preview, sort_keys=True, separators=(",", ":")),
+        file=sys.stderr,
+    )
 
 
 def _open_root(path: Path, *, create: bool = False) -> LiveReceiptStore:
@@ -876,6 +954,709 @@ def rehearse_capture(args: argparse.Namespace) -> NoReturn:
     _rehearsal_resume(root, args.declared_raw_url, as_json=args.json)
 
 
+def inspect_provider_free_stage(args: argparse.Namespace) -> NoReturn:
+    """Run one provider-free Stage 2-4 mutation or final evaluation."""
+    stage = str(args.command)
+    if args.ack != f"acknowledge-{stage}":
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                f"{stage}_acknowledgement_required",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    if not getattr(args, "input_file", None):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                f"{stage if stage != 'promote' else 'promotion'}_input_required",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    try:
+        payload_value = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
+        if not isinstance(payload_value, dict):
+            raise ValueError("stage_input_invalid")
+        payload = cast(dict[str, object], payload_value)
+        _emit_mutation_preview(stage, payload)
+        result, identity = asyncio.run(_execute_provider_free_stage(args, payload))
+    except (LiveStorageError, OSError, ValueError, httpx2.HTTPError):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                f"{stage}_authority_invalid",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    _emit(
+        _result_payload(
+            "success",
+            {
+                "promote": "promotion_recorded",
+                "review": "review_recorded",
+                "decide": "decision_recorded",
+                "evaluate": "closure_passed",
+            }[stage],
+            "cleanup" if stage == "evaluate" else (
+                "review" if stage == "promote" else "decide" if stage == "review" else "evaluate"
+            ),
+            receipt=identity,
+            preview={
+                "stage": stage,
+                "intent_sha256": str(result.intent_sha256),
+                "attempt_id": (
+                    str(result.attempt_id)
+                    if not isinstance(result, DraLiveEvaluationReportV1)
+                    else "evaluation"
+                ),
+            },
+            mutation_performed=stage != "evaluate",
+        ),
+        as_json=args.json,
+    )
+
+
+def _ephemeral_context(role: ActorRole) -> tuple[ActorContext, EphemeralHttpAuthority, str]:
+    required = (
+        "NIGHT_VOYAGER_LIVE_API_BASE_URL",
+        "NIGHT_VOYAGER_LIVE_SESSION",
+        "NIGHT_VOYAGER_LIVE_CSRF",
+        "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+        "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+        "NIGHT_VOYAGER_LIVE_SESSION_ID",
+    )
+    if any(not os.environ.get(name) for name in required):
+        raise ValueError("stage_environment_incomplete")
+    base_url = os.environ[required[0]].rstrip("/")
+    parsed = urlsplit(base_url)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("stage_environment_invalid")
+    context = ActorContext(
+        organization_id=UUID(os.environ[required[3]]),
+        actor_id=UUID(os.environ[required[4]]),
+        role=role,
+        session_id=UUID(os.environ[required[5]]),
+    )
+    return (
+        context,
+        EphemeralHttpAuthority(
+            origin=f"{parsed.scheme}://{parsed.netloc}",
+            session_value=os.environ[required[1]],
+            csrf_value=os.environ[required[2]],
+        ),
+        base_url,
+    )
+
+
+async def _execute_provider_free_stage(
+    args: argparse.Namespace, payload: dict[str, object]
+) -> tuple[
+    DraPromotionReceiptV1
+    | DraReviewReceiptV1
+    | DraDecisionReceiptV1
+    | DraLiveEvaluationReportV1,
+    DraReceiptIdentityV1,
+]:
+    stage = str(args.command)
+    role = ActorRole.PARENT if stage == "decide" else ActorRole.ADVISOR
+    context, authority, base_url = _ephemeral_context(role)
+    with _open_root(Path(args.receipt_root)) as store:
+        if stage == "evaluate":
+            expected = DraLiveOutcomeExpectedV1.model_validate(payload)
+            capture = store.read_receipt("capture.json", DraCaptureReceiptV1)
+            promotion = store.read_receipt("promotion.json", DraPromotionReceiptV1)
+            review = store.read_receipt("review.json", DraReviewReceiptV1)
+            decision = store.read_receipt("decision.json", DraDecisionReceiptV1)
+            database_url = os.environ.get("NIGHT_VOYAGER_DATABASE_URL")
+            if not database_url:
+                raise ValueError("stage_environment_incomplete")
+            engine = create_async_engine(database_url)
+            try:
+                factory = async_sessionmaker(engine, expire_on_commit=False)
+                async with factory() as session:
+                    projection = await PostgresLiveOutcomeInspector(session).inspect(
+                        context,
+                        DraLiveOutcomeIntentV1(
+                            intent_sha256=capture.intent_sha256,
+                            organization_id=context.organization_id,
+                            candidate_id=promotion.candidate_id,
+                            advisor_actor_identity_sha256=derive_identity_hash(
+                                "actor", str(context.actor_id)
+                            ),
+                            tenant_identity_sha256=derive_identity_hash(
+                                "tenant", str(context.organization_id)
+                            ),
+                        ),
+                    )
+            finally:
+                await engine.dispose()
+            report = evaluate_full_closure(
+                load_live_closure_scenario(),
+                (capture, promotion, review, decision),
+                expected,
+                projection,
+            )
+            if report.status != "passed":
+                raise ValueError("closure_evaluation_failed")
+            return report, store.write_receipt("evaluation.json", report)
+        async with httpx2.AsyncClient(
+            base_url=base_url,
+            trust_env=False,
+            follow_redirects=False,
+            timeout=30,
+        ) as client:
+            gateway = NightVoyagerAuthorityGateway(client, authority)
+            controller = DraLiveClosureController(gateway, store)
+            if stage == "promote":
+                model = DraPromotionInputV1.model_validate(payload)
+                snapshot_root = getattr(args, "snapshot_root", None)
+                if not snapshot_root:
+                    raise ValueError("promotion_snapshot_root_required")
+                result = await controller.promote(
+                    PromoteCommand(model, context, Path(snapshot_root))
+                )
+                return result, store.write_receipt("promotion.json", result)
+            if stage == "review":
+                model = DraReviewInputV1.model_validate(payload)
+                result = await controller.review(ReviewCommand(model, context))
+                return result, store.write_receipt("review.json", result)
+            model = DraDecisionInputV1.model_validate(payload)
+            result = await controller.decide(DecideCommand(model, context))
+            return result, store.write_receipt("decision.json", result)
+
+
+def rehearse_full(args: argparse.Namespace) -> NoReturn:
+    """Run the existing real provider-free HTTP/worker/database closure."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("verify_dra_governed_flow.py")),
+        "--fixture",
+    ]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                "full_rehearsal_failed",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    _emit(
+        _result_payload(
+            "success",
+            "closure_passed",
+            "cleanup",
+            provider_attempt_consumed=False,
+            provider_accessed=False,
+        ),
+        as_json=args.json,
+    )
+
+
+def _read_candidate_evidence(
+    path_value: str | None,
+    *,
+    kind: str,
+    head: str,
+    schema_version: str,
+    exact_keys: frozenset[str],
+) -> tuple[bytes, dict[str, object]]:
+    if not path_value:
+        raise ValueError(f"candidate_{kind}_evidence_missing")
+    raw = Path(path_value).read_bytes()
+    if not raw or len(raw) > 1_048_576:
+        raise ValueError(f"candidate_{kind}_evidence_invalid")
+    parsed_value = json.loads(raw)
+    if not isinstance(parsed_value, dict):
+        raise ValueError(f"candidate_{kind}_evidence_invalid")
+    parsed = cast(dict[str, object], parsed_value)
+    if (
+        frozenset(parsed) != exact_keys
+        or parsed.get("schema_version") != schema_version
+        or parsed.get("head_sha") != head
+    ):
+        raise ValueError(f"candidate_{kind}_evidence_invalid")
+    return raw, parsed
+
+
+def _validated_candidate_evidence(
+    args: argparse.Namespace,
+    head: str,
+) -> tuple[bytes, bytes, bytes, bytes]:
+    inventory, inventory_evidence = _read_candidate_evidence(
+        args.docker_inventory_file,
+        kind="docker",
+        head=head,
+        schema_version="night-voyager.dra-live-docker-evidence.v1",
+        exact_keys=frozenset(
+            {
+                "schema_version",
+                "head_sha",
+                "task_project",
+                "minimum_docker_vm_kib",
+                "host_available_kib",
+                "docker_vm_available_kib",
+                "doctor_stdout_sha256",
+                "before_inventory_sha256",
+                "after_inventory_sha256",
+                "retained_resources",
+            }
+        ),
+    )
+    hosted, hosted_evidence = _read_candidate_evidence(
+        args.hosted_check_evidence_file,
+        kind="hosted_checks",
+        head=head,
+        schema_version="night-voyager.dra-live-hosted-checks-evidence.v1",
+        exact_keys=frozenset(
+            {
+                "schema_version",
+                "head_sha",
+                "repository",
+                "check_run_ids",
+            }
+        ),
+    )
+    recovery, recovery_evidence = _read_candidate_evidence(
+        args.recovery_evidence_file,
+        kind="recovery",
+        head=head,
+        schema_version="night-voyager.dra-live-recovery-evidence.v1",
+        exact_keys=frozenset(
+            {
+                "schema_version",
+                "head_sha",
+                "command",
+                "stdout_sha256",
+            }
+        ),
+    )
+    review, review_evidence = _read_candidate_evidence(
+        args.authority_review_evidence_file,
+        kind="authority_review",
+        head=head,
+        schema_version="night-voyager.dra-live-authority-review-evidence.v1",
+        exact_keys=frozenset(
+            {
+                "schema_version",
+                "head_sha",
+                "repository",
+                "pull_request",
+                "review_id",
+                "reviewed_head_sha",
+            }
+        ),
+    )
+
+    command_value = recovery_evidence.get("command")
+    if not isinstance(command_value, list):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    command_items = cast(list[object], command_value)
+    if not all(isinstance(item, str) for item in command_items):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    recovery_command = tuple(cast(list[str], command_items))
+    if recovery_command != ALLOWED_RECOVERY_COMMAND:
+        raise ValueError("candidate_evidence_provenance_invalid")
+    if (
+        inventory_evidence.get("task_project") != CANDIDATE_TASK_PROJECT
+        or inventory_evidence.get("minimum_docker_vm_kib")
+        != DOCKER_VM_MINIMUM_KIB
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    def run(
+        command: tuple[str, ...],
+        *,
+        environment: dict[str, str] | None = None,
+    ) -> str:
+        try:
+            return subprocess.run(
+                command,
+                check=True,
+                text=True,
+                capture_output=True,
+                env=environment,
+            ).stdout
+        except (OSError, subprocess.CalledProcessError) as error:
+            raise ValueError("candidate_evidence_provenance_invalid") from error
+
+    def capture_inventory() -> dict[str, str]:
+        return {
+            name: run(command)
+            for name, command in DOCKER_INVENTORY_COMMANDS
+        }
+
+    def inventory_hashes(observed: dict[str, str]) -> dict[str, str]:
+        return {
+            name: hashlib.sha256(value.encode()).hexdigest()
+            for name, value in observed.items()
+        }
+
+    def json_lines(raw: str) -> tuple[dict[str, object], ...]:
+        values: list[dict[str, object]] = []
+        for line in raw.splitlines():
+            if not line:
+                continue
+            try:
+                value: object = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    "candidate_evidence_provenance_invalid"
+                ) from error
+            if not isinstance(value, dict):
+                raise ValueError("candidate_evidence_provenance_invalid")
+            values.append(cast(dict[str, object], value))
+        return tuple(values)
+
+    def retained_resources(
+        observed: dict[str, str],
+    ) -> dict[str, object]:
+        images = tuple(
+            sorted(
+                f"{item.get('Repository')}:{item.get('Tag')}"
+                for item in json_lines(observed["images"])
+                if isinstance(item.get("Repository"), str)
+                and isinstance(item.get("Tag"), str)
+                and item.get("Repository") != "<none>"
+                and item.get("Tag") != "<none>"
+            )
+        )
+        volumes = tuple(
+            sorted(
+                str(item["Name"])
+                for item in json_lines(observed["volumes"])
+                if isinstance(item.get("Name"), str)
+            )
+        )
+        return {
+            "images": list(images),
+            "volumes": list(volumes),
+            "build_cache_sha256": hashlib.sha256(
+                observed["build_cache"].encode()
+            ).hexdigest(),
+        }
+
+    before_inventory = capture_inventory()
+    if any(
+        CANDIDATE_TASK_PROJECT in value
+        for value in before_inventory.values()
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    doctor_environment = os.environ.copy()
+    doctor_environment.pop("NIGHT_VOYAGER_DOCKER_MINIMUM_KB", None)
+    doctor_output = run(
+        ("make", "doctor", "MODE=dev"),
+        environment=doctor_environment,
+    )
+    host_match = re.search(
+        r"PASSED CHECK: host project filesystem ([0-9]+) KiB available",
+        doctor_output,
+    )
+    vm_match = re.search(
+        r"PASSED CHECK: Docker VM filesystem ([0-9]+) KiB available",
+        doctor_output,
+    )
+    if host_match is None or vm_match is None:
+        raise ValueError("candidate_evidence_provenance_invalid")
+    host_available_kib = int(host_match.group(1))
+    docker_vm_available_kib = int(vm_match.group(1))
+    after_inventory = capture_inventory()
+    if any(
+        CANDIDATE_TASK_PROJECT in value
+        for value in after_inventory.values()
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    if (
+        host_available_kib < HOST_MINIMUM_KIB
+        or docker_vm_available_kib < DOCKER_VM_MINIMUM_KIB
+        or inventory_evidence.get("host_available_kib")
+        != host_available_kib
+        or inventory_evidence.get("docker_vm_available_kib")
+        != docker_vm_available_kib
+        or inventory_evidence.get("doctor_stdout_sha256")
+        != hashlib.sha256(doctor_output.encode()).hexdigest()
+        or inventory_evidence.get("before_inventory_sha256")
+        != inventory_hashes(before_inventory)
+        or inventory_evidence.get("after_inventory_sha256")
+        != inventory_hashes(after_inventory)
+        or inventory_evidence.get("retained_resources")
+        != retained_resources(after_inventory)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    repository = hosted_evidence.get("repository")
+    check_run_ids = hosted_evidence.get("check_run_ids")
+    if not isinstance(repository, str) or not isinstance(check_run_ids, dict):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    hosted_live_value: object = json.loads(
+        run(
+            (
+                "gh",
+                "api",
+                f"repos/{repository}/commits/{head}/check-runs",
+            )
+        )
+    )
+    if not isinstance(hosted_live_value, dict):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    hosted_live = cast(dict[str, object], hosted_live_value)
+    live_runs_value = hosted_live.get("check_runs")
+    if not isinstance(live_runs_value, list):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    exact_checks: dict[str, int] = {}
+    for item in cast(list[object], live_runs_value):
+        if not isinstance(item, dict):
+            continue
+        run_item = cast(dict[str, object], item)
+        name = run_item.get("name")
+        identifier = run_item.get("id")
+        if (
+            isinstance(name, str)
+            and isinstance(identifier, int)
+            and name in {"python", "frontend", "compose"}
+            and run_item.get("status") == "completed"
+            and run_item.get("conclusion") == "success"
+            and run_item.get("head_sha") == head
+        ):
+            exact_checks[name] = identifier
+    supplied_checks: dict[str, int] = {}
+    for name, identifier in cast(dict[object, object], check_run_ids).items():
+        if not isinstance(name, str) or not isinstance(identifier, int):
+            raise ValueError("candidate_evidence_provenance_invalid")
+        supplied_checks[name] = identifier
+    if exact_checks != supplied_checks or set(exact_checks) != {
+        "python",
+        "frontend",
+        "compose",
+    }:
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    recovery_output = run(recovery_command)
+    if (
+        recovery_evidence.get("stdout_sha256")
+        != hashlib.sha256(recovery_output.encode()).hexdigest()
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    review_repository = review_evidence.get("repository")
+    pull_request = review_evidence.get("pull_request")
+    review_id = review_evidence.get("review_id")
+    reviewed_head_sha = review_evidence.get("reviewed_head_sha")
+    if (
+        not isinstance(review_repository, str)
+        or review_repository != repository
+        or not isinstance(pull_request, int)
+        or not isinstance(review_id, int)
+        or not isinstance(reviewed_head_sha, str)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    pull_value: object = json.loads(
+        run(("gh", "api", f"repos/{repository}/pulls/{pull_request}"))
+    )
+    review_live_value: object = json.loads(
+        run(
+            (
+                "gh",
+                "api",
+                f"repos/{repository}/pulls/{pull_request}/reviews/{review_id}",
+            )
+        )
+    )
+    if (
+        not isinstance(pull_value, dict)
+        or not isinstance(review_live_value, dict)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    pull = cast(dict[str, object], pull_value)
+    review_live = cast(dict[str, object], review_live_value)
+    pull_head_value = pull.get("head")
+    if (
+        pull.get("merged") is not True
+        or pull.get("merge_commit_sha") != head
+        or not isinstance(pull_head_value, dict)
+        or cast(dict[str, object], pull_head_value).get("sha")
+        != reviewed_head_sha
+        or review_live.get("state") != "APPROVED"
+        or review_live.get("commit_id") != reviewed_head_sha
+        or review_live.get("id") != review_id
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    reviewed_commit_value: object = json.loads(
+        run(
+            (
+                "gh",
+                "api",
+                f"repos/{repository}/git/commits/{reviewed_head_sha}",
+            )
+        )
+    )
+    merge_commit_value: object = json.loads(
+        run(("gh", "api", f"repos/{repository}/git/commits/{head}"))
+    )
+    if (
+        not isinstance(reviewed_commit_value, dict)
+        or not isinstance(merge_commit_value, dict)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    reviewed_tree = cast(dict[str, object], reviewed_commit_value).get("tree")
+    merge_tree = cast(dict[str, object], merge_commit_value).get("tree")
+    reviewed_tree_sha = (
+        cast(dict[str, object], reviewed_tree).get("sha")
+        if isinstance(reviewed_tree, dict)
+        else None
+    )
+    merge_tree_sha = (
+        cast(dict[str, object], merge_tree).get("sha")
+        if isinstance(merge_tree, dict)
+        else None
+    )
+    if (
+        not isinstance(reviewed_tree_sha, str)
+        or re.fullmatch(r"[0-9a-f]{40}", reviewed_tree_sha) is None
+        or reviewed_tree_sha != merge_tree_sha
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    return inventory, hosted, recovery, review
+
+
+def freeze_candidate(args: argparse.Namespace) -> NoReturn:
+    """Write a provider-free, executable post-merge readiness identity."""
+    required_hosted_checks = tuple(sorted(set(args.hosted_check)))
+    authorization_placeholder = args.authorization_placeholder
+    try:
+        if required_hosted_checks != ("compose", "frontend", "python"):
+            raise ValueError("candidate_hosted_check_names_invalid")
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout
+        local_main = subprocess.run(
+            ["git", "rev-parse", "main"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        origin_main = subprocess.run(
+            ["git", "rev-parse", "origin/main"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        if (
+            head != args.merged_main_sha
+            or branch != "main"
+            or status
+            or local_main != head
+            or origin_main != head
+        ):
+            raise ValueError("candidate_main_identity_invalid")
+        live_main = subprocess.run(
+            ["git", "ls-remote", "origin", "refs/heads/main"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.split()[0]
+        if live_main != head:
+            raise ValueError("candidate_main_identity_invalid")
+
+        inventory, hosted, recovery, review = _validated_candidate_evidence(
+            args, head
+        )
+        repository = Path(__file__).resolve().parents[1]
+
+        def digest(relative: str) -> str:
+            return hashlib.sha256(
+                (repository / relative).read_bytes()
+            ).hexdigest()
+
+        receipt = DraCandidateReadinessReceiptV1(
+            merged_main_sha=head,
+            spec_sha256=digest(
+                "docs/superpowers/specs/"
+                "2026-07-25-dra-v0-1-6-governed-live-closure-design.md"
+            ),
+            plan_sha256=digest(
+                "docs/superpowers/plans/"
+                "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md"
+            ),
+            scenario_sha256=digest(
+                "fixtures/dra/live-closure-scenario-v1.json"
+            ),
+            intent_schema_sha256=digest(
+                "src/night_voyager/dra/live_models.py"
+            ),
+            receipt_schema_sha256=digest(
+                "src/night_voyager/dra/live_storage.py"
+            ),
+            cli_sha256=digest("scripts/verify_dra_live_closure.py"),
+            producer=load_live_closure_scenario().producer,
+            required_hosted_checks=required_hosted_checks,
+            recovery_matrix_status="passed",
+            docker_preflight_status="passed",
+            docker_inventory_sha256=hashlib.sha256(inventory).hexdigest(),
+            hosted_checks_evidence_sha256=hashlib.sha256(hosted).hexdigest(),
+            recovery_matrix_evidence_sha256=hashlib.sha256(recovery).hexdigest(),
+            authority_review_evidence_sha256=hashlib.sha256(review).hexdigest(),
+            cleanup_state="clean",
+            authorization_placeholder=authorization_placeholder,
+        )
+        with _open_root(Path(args.receipt_root), create=True) as store:
+            identity = store.write_receipt("readiness.json", receipt)
+    except (
+        LiveStorageError,
+        OSError,
+        subprocess.CalledProcessError,
+        ValueError,
+    ):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                "candidate_readiness_invalid",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    _emit(
+        _result_payload(
+            "success",
+            "candidate_readiness_frozen",
+            "await-separate-live-authorization",
+            receipt=identity,
+            required_hosted_checks=required_hosted_checks,
+            docker_inventory_sha256=receipt.docker_inventory_sha256,
+            authorization_placeholder=authorization_placeholder,
+            capability_status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        ),
+        as_json=args.json,
+    )
+
+
 def _root_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--receipt-root", required=True)
     parser.add_argument("--json", action="store_true")
@@ -948,6 +1729,45 @@ def parse_args() -> argparse.Namespace:
     rehearsal.add_argument("--phase", choices=("capture", "resume"), required=True)
     rehearsal.add_argument("--declared-raw-url")
 
+    for stage in ("promote", "review", "decide", "evaluate"):
+        stage_parser = commands.add_parser(
+            stage,
+            help=f"provider-free {stage} predecessor and authority preflight",
+        )
+        _root_argument(stage_parser)
+        stage_parser.add_argument("--ack", required=True)
+        stage_parser.add_argument("--input-file")
+        if stage == "promote":
+            stage_parser.add_argument("--snapshot-root")
+
+    full_rehearsal = commands.add_parser(
+        "rehearse-full",
+        help="provider-free full HTTP/worker/database closure rehearsal",
+    )
+    full_rehearsal.add_argument("--json", action="store_true")
+
+    candidate = commands.add_parser(
+        "freeze-candidate",
+        help="provider-free post-merge live-acceptance candidate freeze",
+    )
+    _root_argument(candidate)
+    candidate.add_argument("--merged-main-sha", required=True)
+    candidate.add_argument("--docker-inventory-file", required=True)
+    candidate.add_argument("--hosted-check-evidence-file")
+    candidate.add_argument("--recovery-evidence-file")
+    candidate.add_argument("--authority-review-evidence-file")
+    candidate.add_argument(
+        "--hosted-check",
+        action="append",
+        choices=("python", "frontend", "compose"),
+        required=True,
+    )
+    candidate.add_argument(
+        "--authorization-placeholder",
+        required=True,
+        choices=("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION",),
+    )
+
     clean = commands.add_parser(
         "cleanup", help="provider-free mutating exact-root cleanup (dry-run default)"
     )
@@ -969,6 +1789,12 @@ def main() -> None:
         "resume-poll": resume_poll,
         "inspect-recovery": inspect_recovery,
         "rehearse-capture": rehearse_capture,
+        "promote": inspect_provider_free_stage,
+        "review": inspect_provider_free_stage,
+        "decide": inspect_provider_free_stage,
+        "evaluate": inspect_provider_free_stage,
+        "rehearse-full": rehearse_full,
+        "freeze-candidate": freeze_candidate,
         "cleanup": cleanup,
     }
     try:

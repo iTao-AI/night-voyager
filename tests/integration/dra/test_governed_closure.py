@@ -160,6 +160,13 @@ async def test_v0_1_6_scenario_closes_through_mixed_task_and_family_decision() -
             assert task.status_code == 200
             assert task.json()["status"] == "needs_advisor_review"
             run_id = task.json()["planning_run_id"]
+            recovered_task = await client.get(
+                "/api/v1/agent-tasks/recovery",
+                headers={"Idempotency-Key": "closure-mixed-task-0001"},
+            )
+            assert recovered_task.status_code == 200, recovered_task.text
+            assert recovered_task.json()["task_id"] == task_id
+            assert recovered_task.json()["planning_run_id"] == run_id
             events = await client.get(f"/api/v1/tasks/{task_id}/events")
             assert events.status_code == 200
             assert "event: waiting_review" in events.text
@@ -178,6 +185,16 @@ async def test_v0_1_6_scenario_closes_through_mixed_task_and_family_decision() -
             )
             assert review.status_code == 200, review.text
             brief_id = review.json()["brief_id"]
+            recovered_review = await client.get(
+                (
+                    f"/api/v1/cases/{CLOSURE_CASE}/advisor-reviews/recovery"
+                    f"?planning_run_id={run_id}"
+                ),
+                headers={"Idempotency-Key": "closure-advisor-review-0001"},
+            )
+            assert recovered_review.status_code == 200, recovered_review.text
+            assert recovered_review.json()["review_id"] == review.json()["review_id"]
+            assert recovered_review.json()["brief_id"] == brief_id
 
             client.cookies.set("night_voyager_session", parent.raw_session_token)
             decision = await client.post(

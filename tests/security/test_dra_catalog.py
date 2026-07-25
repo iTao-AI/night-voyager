@@ -125,10 +125,25 @@ def test_0010_closes_live_producer_and_outcome_projection_authority() -> None:
     assert "p_producer_release<>'v0.1.6'" in source
     assert "p_producer_commit<>'7d43324b469cb5e445c2e8be83af3be4d841cf1c'" in source
     assert "CREATE FUNCTION app.project_dra_live_outcome" in source
+    assert "CREATE FUNCTION app.project_agent_task_live_authority" in source
+    assert "CREATE FUNCTION app.project_agent_task_by_idempotency" in source
+    assert "CREATE FUNCTION app.project_advisor_review_by_idempotency" in source
     assert "SECURITY DEFINER SET search_path = pg_catalog, pg_temp" in source
     assert "PERFORM app.assert_m3b_context(p_org,p_actor,'advisor')" in source
     assert "REVOKE ALL ON FUNCTION {OUTCOME_SIGNATURE} FROM PUBLIC" in source
     assert "GRANT EXECUTE ON FUNCTION {OUTCOME_SIGNATURE} TO night_voyager_api" in source
+    assert (
+        "GRANT EXECUTE ON FUNCTION {TASK_AUTHORITY_SIGNATURE} "
+        "TO night_voyager_api"
+    ) in source
+    assert (
+        "GRANT EXECUTE ON FUNCTION {TASK_RECOVERY_SIGNATURE} "
+        "TO night_voyager_api"
+    ) in source
+    assert (
+        "GRANT EXECUTE ON FUNCTION {REVIEW_RECOVERY_SIGNATURE} "
+        "TO night_voyager_api"
+    ) in source
     assert "TO night_voyager_worker" not in source
     assert "GRANT SELECT ON" not in source
     assert "GRANT INSERT ON" not in source
@@ -158,3 +173,22 @@ def test_live_storage_uses_descriptor_relative_no_follow_operations() -> None:
     assert "os.fsync" in source
     assert "os.link" in source
     assert "resolve(" not in source
+
+
+def test_live_outcome_adapter_uses_only_closed_0010_projection() -> None:
+    source = (
+        ROOT / "src/night_voyager/dra/live_outcome_postgres.py"
+    ).read_text(encoding="utf-8")
+    assert source.count("app.project_dra_live_outcome") == 1
+    for forbidden in (
+        "dra_research_candidates",
+        "external_evidence_verifications",
+        "INSERT ",
+        "UPDATE ",
+        "DELETE ",
+        "SELECT * FROM app.",
+    ):
+        if forbidden == "SELECT * FROM app.":
+            assert source.count(forbidden) == 1
+        else:
+            assert forbidden not in source

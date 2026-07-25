@@ -76,6 +76,7 @@ class DraVerificationViewV1(FrozenPortModel):
     promoted_source_pack_version: PositiveInt | None = None
     promoted_source_entry_id: UUID | None = None
     promoted_evidence_id: UUID | None = None
+    decision_request_sha256: Sha256 | None = None
     replayed: bool = False
 
 

@@ -11,11 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from night_voyager.api import create_app
 from night_voyager.config import Settings
+from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
 from night_voyager.skills.models import SkillKey
 from night_voyager.skills.registry import SkillRuntimeRegistry
+from night_voyager.tasks.models import CreateTaskCommand
 from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
 
 pytestmark = pytest.mark.database
@@ -278,6 +280,23 @@ async def test_real_http_task_create_read_cancel_contract() -> None:
             assert current.headers["cache-control"] == "no-store"
             assert current.json()["status"] == "preparing"
             assert "state" not in current.json()
+            live_authority = await client.get(
+                f"/api/v1/tasks/{task_id}?live_authority=true"
+            )
+            assert live_authority.status_code == 200
+            assert live_authority.json()["case_id"] == str(CASE)
+            assert live_authority.json()["request_sha256"] == (
+                canonical_request_sha256(
+                    CreateTaskCommand(
+                        case_id=CASE,
+                        expected_case_revision=1,
+                        source_pack_id=PACK,
+                        source_pack_version=1,
+                    ).model_dump(mode="json")
+                )
+            )
+            assert live_authority.json()["execution_id"] is None
+            assert live_authority.json()["terminal_event_id"] == 1
             assert "lease_owner" not in current.json()
 
             client.cookies.set("night_voyager_session", parent.raw_session_token)

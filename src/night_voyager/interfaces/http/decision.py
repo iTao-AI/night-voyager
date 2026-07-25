@@ -149,6 +149,31 @@ def create_decision_router(
         response.headers["Cache-Control"] = "no-store"
         return {"schema_version": 1, **result}
 
+    @router.get("/cases/{case_id}/advisor-reviews/recovery", response_model=None)
+    async def recover_advisor_review(  # pyright: ignore[reportUnusedFunction]
+        case_id: UUID,
+        planning_run_id: UUID,
+        response: Response,
+        raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object] | JSONResponse:
+        if not idempotency_key or len(idempotency_key) > 200:
+            return problem(400, "invalid_idempotency_key", "Idempotency-Key is required")
+        async with session_factory() as session, session.begin():
+            context = await read_context(session, raw_session)
+            result = await PostgresDecisionRepository(
+                session
+            ).get_review_by_idempotency(
+                context,
+                case_id,
+                planning_run_id,
+                idempotency_key,
+            )
+        if result is None:
+            return problem(404, "resource_unavailable", "resource unavailable")
+        response.headers["Cache-Control"] = "no-store"
+        return {"schema_version": 1, **result}
+
     async def decide(
         brief_id: UUID,
         payload: FamilyDecisionRequest,

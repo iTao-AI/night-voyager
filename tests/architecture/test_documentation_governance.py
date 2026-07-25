@@ -93,17 +93,24 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B implemented provider-free; PR C approved but not implemented",
+        "PR A/B/C implemented provider-free; live acceptance pending",
         "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
-        "**Implementation status:** PR A and PR B implemented provider-free; "
-        "PR C remains approved but not implemented.",
+        "**Implementation status:** PR A, PR B, and PR C are implemented "
+        "provider-free; governed live acceptance remains pending.",
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B implemented provider-free; PR C approved but not implemented",
+        "PR A/B/C implemented provider-free; live acceptance pending",
         "2026-07-25-dra-v0-1-6-live-closure-pr-b-implementation-plan.md",
-        "**Implementation status:** PR B implemented provider-free; "
-        "PR C remains approved but not implemented.",
+        "**Implementation status:** PR A, PR B, and PR C are implemented "
+        "provider-free; governed live acceptance remains pending.",
+    ),
+    (
+        "DRA v0.1.6 governed live closure",
+        "PR A/B/C implemented provider-free; live acceptance pending",
+        "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md",
+        "**Implementation status:** PR A, PR B, and PR C are implemented "
+        "provider-free; governed live acceptance remains pending.",
     ),
     (
         "High-End Portfolio Entry v1",
@@ -114,7 +121,7 @@ PLAN_STATUS_BINDINGS = (
 )
 
 
-def test_dra_stage_one_recovery_and_non_claims_are_documented() -> None:
+def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
     runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
     reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
     adr = (
@@ -130,6 +137,12 @@ def test_dra_stage_one_recovery_and_non_claims_are_documented() -> None:
         "resume-poll",
         "inspect-recovery",
         "rehearse-capture",
+        "promote",
+        "review",
+        "decide",
+        "evaluate",
+        "rehearse-full",
+        "freeze-candidate",
         "cleanup",
         "operator_action_required",
         "same run",
@@ -137,10 +150,18 @@ def test_dra_stage_one_recovery_and_non_claims_are_documented() -> None:
         "UNTRUSTED_CANDIDATE",
         "no remote cancellation",
         "Live provider proof was not run",
-        "PR C remains approved but not implemented",
+        "PR A, PR B, and PR C are implemented provider-free",
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        "safe-stop evidence",
+        "second substantive failure",
+        "snapshot",
+        "Docker",
+        "python",
+        "frontend",
+        "compose",
     ):
         assert required in combined
-    assert "PR B is implemented provider-free" in combined
+    assert "distinct acknowledgement" in combined
     assert "governed-live success claim" in combined
 MERGED_FACT_TO_PLAN_BANNERS = {
     "2026-07-22-explicit-planning-start-authority.md": (
@@ -353,9 +374,9 @@ def test_implemented_document_statuses_do_not_regress() -> None:
             "PR B and PR C were delivered under their own plans",
         ),
         "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
-            "**Implementation status:** PR A and PR B implemented provider-free; "
-            "PR C remains approved but not implemented.",
-            "Governed live acceptance remains unimplemented",
+            "**Implementation status:** PR A, PR B, and PR C are implemented "
+            "provider-free; governed live acceptance remains pending.",
+            "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
         ),
     }
     for relative, required in expected.items():

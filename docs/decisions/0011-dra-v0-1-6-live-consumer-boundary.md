@@ -2,9 +2,9 @@
 
 ## Status
 
-Accepted. The provider-free PR A foundation and PR B Stage 1 controller are
-implemented. Live provider proof was not run, and governed live acceptance remains
-unimplemented.
+Accepted. PR A, PR B, and PR C are implemented provider-free. Live provider proof
+was not run, and governed live acceptance remains
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
 
 ## Context
 
@@ -49,6 +49,27 @@ code to create product authority.
 12. Receipts use descriptor-bound create-once storage and retain bounded identities
     only. Artifact bytes span inspection/import and are removed on success, handled
     failure, or interrupt; orphaned bytes block recovery until acknowledged cleanup.
+13. Stage 2 validates a separately supplied private snapshot through descriptor-bound
+    no-follow traversal, binds its exact bytes and original selected URL, and deletes
+    the task-owned copy on every handled exit before retaining only identity metadata.
+14. Stage 3 and Stage 4 reuse the existing AgentTask/worker/SSE, AdvisorReview,
+    family decision, DecisionReceipt, and TimelinePlan authorities. Every mutation
+    has a domain-separated key and authoritative lost-ack reconciliation.
+15. Outcome evaluation reads only `app.project_dra_live_outcome(...)`. A family
+    decision yields `decision_recorded`; only the complete provider-free evaluator
+    can yield `closure_passed`.
+16. Provider-free Stage 2–4 and evaluation rehearsal crosses a real subprocess
+    boundary at every stage. Each process reopens durable receipts and receives
+    only its role-specific ephemeral authority.
+17. Mutation transport loss becomes a bounded ambiguous outcome at the HTTP POST
+    boundary. Task and AdvisorReview reconciliation use narrow actor/key-bound
+    reads over existing idempotency authority rather than process-local caches.
+18. Candidate freeze rejects an unapproved recovery command before subprocess
+    execution, independently runs the default-threshold host/VM preflight, binds
+    the canonical task project's complete before/after Docker inventories, and
+    re-queries exact-head hosted checks, final merged-PR head, approved-review
+    commit, and reviewed/merge tree equality. Closed JSON shape and caller-written
+    terminal strings are insufficient.
 
 ## Consequences
 
@@ -59,9 +80,9 @@ code to create product authority.
   when live history exists.
 - The deterministic Compose governed-flow proof imports the v0.1.6 scenario
   candidate, but still uses checked-in synthetic bytes and no provider.
-- PR B supplies the provider-free-tested Stage 1 execution controller. PR C remains
-  approved but not implemented and must supply promotion-through-decision closure
-  before capability completion can be claimed.
+- PR A, PR B, and PR C supply the provider-free implementation and deterministic
+  recovery proof. Candidate freeze, separately authorized live acceptance, and its
+  terminal evaluation remain outstanding.
 
 ## Non-claims
 

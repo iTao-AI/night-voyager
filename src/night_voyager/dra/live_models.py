@@ -30,8 +30,10 @@ from night_voyager.dra.models import (
     DraProducerPinV1,
     FrozenModel,
     Sha256,
+    SourceAttestationV1,
     validate_raw_public_https_url,
 )
+from night_voyager.skills.models import SkillRuntimePin
 
 PublicCode = Annotated[str, StringConstraints(min_length=1, max_length=100)]
 SafeLogicalName = Annotated[
@@ -72,13 +74,11 @@ class DraLiveProducerIdentityV1(FrozenModel):
     name: Literal["decision-research-agent"] = "decision-research-agent"
     release: Literal["v0.1.6"] = DRA_LIVE_RELEASE
     commit: Literal["7d43324b469cb5e445c2e8be83af3be4d841cf1c"] = DRA_LIVE_COMMIT
-    tag_object: Literal["9e0b0b443c435cf636dfce932c3c77d91d0a43e4"] = (
-        DRA_LIVE_TAG_OBJECT
-    )
+    tag_object: Literal["9e0b0b443c435cf636dfce932c3c77d91d0a43e4"] = DRA_LIVE_TAG_OBJECT
     contract_schema: Literal["dra.downstream-consumer.v1"] = DRA_CONTRACT_SCHEMA
-    fixture_sha256: Literal[
-        "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
-    ] = DRA_FIXTURE_SHA256
+    fixture_sha256: Literal["cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"] = (
+        DRA_FIXTURE_SHA256
+    )
 
     @property
     def pin(self) -> DraProducerPinV1:
@@ -126,13 +126,9 @@ class DraLiveRunEnvelopeV1(FrozenModel):
         "pending", "running", "completed", "completed_with_fallback", "failed"
     ]
     review_status: Literal["not_required", "required", "resolved"]
-    delivery_status: Literal[
-        "pending", "ready", "review_required", "blocked", "failed"
-    ]
+    delivery_status: Literal["pending", "ready", "review_required", "blocked", "failed"]
     failure_cause: DraLiveFailureCauseEnvelopeV1 | None
-    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
-        max_length=100
-    )
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(max_length=100)
 
     @model_validator(mode="after")
     def exact_segment_and_unique_evidence(self) -> Self:
@@ -252,9 +248,7 @@ class DraLiveRunIntentV1(FrozenModel):
     )
 
     @classmethod
-    def from_scenario(
-        cls, scenario: DraLiveScenarioV1, *, attempt_id: str
-    ) -> DraLiveRunIntentV1:
+    def from_scenario(cls, scenario: DraLiveScenarioV1, *, attempt_id: str) -> DraLiveRunIntentV1:
         return cls(
             scenario_id=scenario.scenario_id,
             attempt_id=attempt_id,
@@ -355,10 +349,7 @@ class DraCaptureIntentV1(FrozenModel):
             supplied_hash = payload.pop("intent_sha256")
             candidate = payload
         intent = handler(candidate)
-        if (
-            supplied_hash is not _INTENT_HASH_NOT_SUPPLIED
-            and supplied_hash != intent.intent_sha256
-        ):
+        if supplied_hash is not _INTENT_HASH_NOT_SUPPLIED and supplied_hash != intent.intent_sha256:
             raise ValueError("dra_live_intent_sha256_invalid")
         return intent
 
@@ -377,10 +368,7 @@ def derive_stage_key(
             or any(character.isspace() or ord(character) < 32 for character in value)
         ):
             raise ValueError("dra_live_stage_key_identity_invalid")
-    payload = (
-        "night-voyager.dra-live.v1"
-        f"\0{intent_sha256}\0{stage}\0{target_identity}"
-    )
+    payload = f"night-voyager.dra-live.v1\0{intent_sha256}\0{stage}\0{target_identity}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -398,9 +386,7 @@ class DraReceiptIdentityV1(FrozenModel):
 
 
 class DraReconciliationRequiredReceiptV1(FrozenModel):
-    schema_version: Literal[
-        "night-voyager.dra-live-reconciliation-required.v1"
-    ]
+    schema_version: Literal["night-voyager.dra-live-reconciliation-required.v1"]
     intent_sha256: Sha256
     attempt_id: SafeIdentity
     intent_receipt: DraReceiptIdentityV1
@@ -421,9 +407,7 @@ class DraPreflightReceiptV1(FrozenModel):
     advisor_actor_identity_sha256: Sha256
     tenant_identity_sha256: Sha256
     receipt_root_id: SafeLogicalName
-    candidate_freeze: Literal["untrusted_candidate_only"] = (
-        "untrusted_candidate_only"
-    )
+    candidate_freeze: Literal["untrusted_candidate_only"] = "untrusted_candidate_only"
     provider_access: Literal["not_attempted"] = "not_attempted"
     environment_values_read: Literal[False] = False
     required_environment_names: tuple[
@@ -467,9 +451,7 @@ class DraInspectionRequiredReceiptV1(FrozenModel):
     state_version: PositiveInt
     acceptance_idempotent_replay: bool
     artifact: DraArtifactIdentityV1
-    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
-        min_length=1, max_length=100
-    )
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(min_length=1, max_length=100)
     provider_attempt_consumed: Literal[True]
     operator_action_required: Literal[True] = True
     permitted_next_command: Literal["select-and-import"] = "select-and-import"
@@ -537,6 +519,18 @@ class DraStageStateV1(FrozenModel):
     status: Literal["pending", "completed", "failed"]
 
 
+class DraProviderAttemptEvidenceV1(FrozenModel):
+    create_keys: tuple[Sha256, ...] = Field(min_length=1)
+    observed_run_ids: tuple[BoundedId, ...] = Field(min_length=1)
+    accepted_run_id: BoundedId
+
+    @model_validator(mode="after")
+    def accepted_run_was_observed(self) -> Self:
+        if self.accepted_run_id not in self.observed_run_ids:
+            raise ValueError("dra_provider_accepted_run_unobserved")
+        return self
+
+
 class DraCaptureReceiptV1(FrozenModel):
     schema_version: Literal["night-voyager.dra-live-capture-receipt.v1"]
     intent_sha256: Sha256
@@ -548,6 +542,7 @@ class DraCaptureReceiptV1(FrozenModel):
     selected_evidence: DraSelectedEvidenceV1 | None
     stage_states: tuple[DraStageStateV1, ...]
     provider_attempt_consumed: bool
+    provider_attempt_evidence: DraProviderAttemptEvidenceV1
     candidate_id: UUID | None = None
     candidate_authority: Literal["untrusted_candidate"] | None = None
     candidate_import_key: Sha256 | None = None
@@ -564,10 +559,258 @@ class DraCaptureReceiptV1(FrozenModel):
             self.candidate_import_key,
             self.cleanup_status,
         )
-        if self.selected_evidence is not None and any(
-            value is None for value in candidate_fields
-        ):
+        if self.selected_evidence is not None and any(value is None for value in candidate_fields):
             raise ValueError("dra_capture_candidate_identity_incomplete")
+        return self
+
+
+class SnapshotIdentityV1(FrozenModel):
+    canonical_url: BoundedText
+    logical_path: BoundedText
+    byte_length: PositiveInt = Field(le=10_485_760)
+    sha256: Sha256
+
+
+class DraPromotionInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-promotion-input.v1"] = (
+        "night-voyager.dra-live-promotion-input.v1"
+    )
+    intent_sha256: Sha256
+    capture: DraCaptureReceiptV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    candidate_id: UUID
+    dra_evidence_id: BoundedId
+    selected_raw_url: BoundedText
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    reason: BoundedText
+    source_attestation: SourceAttestationV1
+
+    @model_validator(mode="after")
+    def exact_capture_binding(self) -> Self:
+        selected = self.capture.selected_evidence
+        if (
+            self.capture.intent_sha256 != self.intent_sha256
+            or self.capture.candidate_id != self.candidate_id
+            or self.capture.candidate_authority != "untrusted_candidate"
+            or selected is None
+            or selected.evidence_id != self.dra_evidence_id
+            or selected.source_url != self.selected_raw_url
+            or self.source_attestation.canonical_url != self.selected_raw_url
+        ):
+            raise ValueError("dra_promotion_capture_binding_invalid")
+        return self
+
+
+class DraPromotionReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-promotion-receipt.v1"] = (
+        "night-voyager.dra-live-promotion-receipt.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    candidate_id: UUID
+    dra_evidence_id: BoundedId
+    selected_raw_url: BoundedText
+    promotion_key: Sha256
+    verification_id: UUID
+    promoted_source_pack_version: PositiveInt
+    promoted_source_entry_id: UUID
+    promoted_evidence_id: UUID
+    snapshot: SnapshotIdentityV1
+    stage_states: tuple[DraStageStateV1, ...]
+    acknowledgement: Literal["promotion_recorded"] = "promotion_recorded"
+    provider_attempt_consumed: Literal[True] = True
+
+
+class DraPlanningTaskProjectionV1(FrozenModel):
+    task_id: UUID
+    case_id: UUID
+    case_revision: PositiveInt
+    operation: Literal["generate_governed_mixed_planning_run_v1"]
+    source_pack_id: UUID
+    source_pack_version: PositiveInt
+    status: Literal["needs_advisor_review"]
+    planning_run_id: UUID
+    execution_id: UUID
+    terminal_event_id: PositiveInt
+    skill_pin: SkillRuntimePin
+    request_sha256: Sha256
+
+
+class DraReviewAuthorityV1(FrozenModel):
+    review_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    planning_run_id: UUID
+    brief_id: UUID
+    eligible_route_ids: tuple[UUID, ...] = Field(min_length=1)
+    action: Literal["approve_for_consultation"] = "approve_for_consultation"
+    request_sha256: Sha256
+
+
+class DraReviewInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-review-input.v1"] = (
+        "night-voyager.dra-live-review-input.v1"
+    )
+    intent_sha256: Sha256
+    promotion: DraPromotionReceiptV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    candidate_id: UUID
+    promoted_source_pack_id: UUID
+    promoted_source_pack_version: PositiveInt
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    eligible_route_ids: tuple[UUID, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def exact_promotion_binding(self) -> Self:
+        if (
+            self.promotion.intent_sha256 != self.intent_sha256
+            or self.promotion.candidate_id != self.candidate_id
+            or self.promotion.promoted_source_pack_version
+            != self.promoted_source_pack_version
+            or len(self.eligible_route_ids) != len(set(self.eligible_route_ids))
+        ):
+            raise ValueError("dra_review_promotion_binding_invalid")
+        return self
+
+
+class DraReviewReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-review-receipt.v1"] = (
+        "night-voyager.dra-live-review-receipt.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    candidate_id: UUID
+    source_pack_id: UUID
+    source_pack_version: PositiveInt
+    task_key: Sha256
+    review_key: Sha256
+    task: DraPlanningTaskProjectionV1
+    review: DraReviewAuthorityV1
+    stage_states: tuple[DraStageStateV1, ...]
+    acknowledgement: Literal["review_recorded"] = "review_recorded"
+
+
+class DraDecisionAuthorityV1(FrozenModel):
+    decision_id: UUID
+    decision_receipt_id: UUID
+    timeline_plan_id: UUID
+    brief_id: UUID
+    selected_route_id: UUID
+    expected_brief_version: PositiveInt
+    accepted_budget_min_minor: PositiveInt
+    accepted_budget_max_minor: PositiveInt
+    currency: Literal["CNY"]
+    accepted_trade_offs: tuple[BoundedText, ...]
+    request_sha256: Sha256
+
+
+class DraMutationAmbiguousReceiptV1(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-mutation-ambiguous.v1"
+    ] = "night-voyager.dra-live-mutation-ambiguous.v1"
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    stage: Literal["promote", "review", "decide"]
+    parent_receipt: DraReceiptIdentityV1
+    mutation_key: Sha256
+    request_sha256: Sha256
+    target_identity_sha256: Sha256
+    public_code: Literal["mutation_outcome_ambiguous"] = (
+        "mutation_outcome_ambiguous"
+    )
+    permitted_next_command: Literal["promote", "review", "decide"]
+
+
+class DraDecisionInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-decision-input.v1"] = (
+        "night-voyager.dra-live-decision-input.v1"
+    )
+    intent_sha256: Sha256
+    review: DraReviewReceiptV1
+    organization_id: UUID
+    case_id: UUID
+    brief_id: UUID
+    expected_brief_version: PositiveInt
+    selected_route_id: UUID
+    accepted_budget_min_minor: PositiveInt
+    accepted_budget_max_minor: PositiveInt
+    accepted_trade_offs: tuple[BoundedText, ...]
+    family_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+
+    @model_validator(mode="after")
+    def exact_review_binding(self) -> Self:
+        if (
+            self.review.intent_sha256 != self.intent_sha256
+            or self.review.review.brief_id != self.brief_id
+            or self.selected_route_id
+            not in self.review.review.eligible_route_ids
+            or self.accepted_budget_min_minor
+            > self.accepted_budget_max_minor
+        ):
+            raise ValueError("dra_decision_review_binding_invalid")
+        return self
+
+
+class DraDecisionReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-decision-receipt.v1"] = (
+        "night-voyager.dra-live-decision-receipt.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    decision_key: Sha256
+    review_id: UUID
+    planning_run_id: UUID
+    decision: DraDecisionAuthorityV1
+    stage_states: tuple[DraStageStateV1, ...]
+    acknowledgement: Literal["decision_recorded"] = "decision_recorded"
+
+
+class DraCandidateReadinessReceiptV1(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-candidate-readiness.v1"
+    ] = "night-voyager.dra-live-candidate-readiness.v1"
+    merged_main_sha: Annotated[
+        str, StringConstraints(pattern=r"^[0-9a-f]{40}$")
+    ]
+    spec_sha256: Sha256
+    plan_sha256: Sha256
+    scenario_sha256: Sha256
+    intent_schema_sha256: Sha256
+    receipt_schema_sha256: Sha256
+    cli_sha256: Sha256
+    producer: DraLiveProducerIdentityV1
+    required_hosted_checks: tuple[
+        Literal["compose", "frontend", "python"], ...
+    ]
+    recovery_matrix_status: Literal["passed"]
+    docker_preflight_status: Literal["passed"]
+    docker_inventory_sha256: Sha256
+    hosted_checks_evidence_sha256: Sha256
+    recovery_matrix_evidence_sha256: Sha256
+    authority_review_evidence_sha256: Sha256
+    cleanup_state: Literal["clean"]
+    authorization_placeholder: Literal[
+        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    ]
+    capability_status: Literal[
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+    ] = "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+
+    @model_validator(mode="after")
+    def exact_hosted_checks(self) -> Self:
+        if self.required_hosted_checks != (
+            "compose",
+            "frontend",
+            "python",
+        ):
+            raise ValueError("dra_live_required_checks_invalid")
         return self
 
 
@@ -585,6 +828,4 @@ class DraFailureReceiptV1(FrozenModel):
     provider_attempt_consumed: bool
     known_identity_hashes: tuple[Sha256, ...]
     last_completed_stage: Literal["capture-live", "promote", "review", "decide"] | None
-    permitted_next_action: Literal[
-        "stop", "same_run_recovery", "separate_authorization"
-    ]
+    permitted_next_action: Literal["stop", "same_run_recovery", "separate_authorization"]
