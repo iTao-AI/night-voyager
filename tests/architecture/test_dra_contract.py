@@ -9,7 +9,9 @@ def test_dra_consumer_is_product_owned_and_fixture_bounded() -> None:
     expected = (
         "src/night_voyager/dra/models.py",
         "src/night_voyager/dra/fixtures.py",
+        "src/night_voyager/dra/live_models.py",
         "fixtures/dra/downstream-consumer-contract-v1.json",
+        "fixtures/dra/live-closure-scenario-v1.json",
         "fixtures/dra/manifest.json",
         "fixtures/dra/sources/australia-program-fit.html",
     )
@@ -45,6 +47,15 @@ def test_required_dra_lane_is_fixture_only() -> None:
     assert "verify_dra_consumer.py fixture --json" in makefile
     assert "make dra-check" in workflow
     assert "DRA_LIVE_PROOF_ACK" not in workflow
+
+
+def test_live_contracts_are_provider_free_and_content_bounded() -> None:
+    live_models = (ROOT / "src/night_voyager/dra/live_models.py").read_text()
+    scenario = (ROOT / "fixtures/dra/live-closure-scenario-v1.json").read_text()
+    assert "httpx" not in live_models
+    assert "DECISION_RESEARCH_AGENT_API_KEY" not in scenario
+    assert '"content"' not in scenario
+    assert '"provider_payload"' not in scenario
 
 
 def test_governed_mixed_planning_public_contract_is_closed() -> None:
