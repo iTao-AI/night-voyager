@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import os
+import re
 import signal
 import stat
 import subprocess
@@ -85,6 +86,37 @@ from night_voyager.identity.models import ActorContext, ActorRole
 
 ONE_ATTEMPT_ACK = "separately-authorized-one-attempt"
 CLEANUP_ACK = "delete-exact-live-artifact"
+ALLOWED_RECOVERY_COMMAND = (
+    "uv",
+    "run",
+    "pytest",
+    "-q",
+    "tests/integration/dra/test_live_closure_recovery.py",
+    "tests/unit/dra/test_live_review_controller.py",
+    "tests/unit/dra/test_live_decision_controller.py",
+)
+CANDIDATE_TASK_PROJECT = "night-voyager-dra-v0-1-6-live-acceptance"
+DOCKER_VM_MINIMUM_KIB = 8_388_608
+HOST_MINIMUM_KIB = 5_242_880
+DOCKER_INVENTORY_COMMANDS = (
+    ("compose", ("docker", "compose", "ls", "--all", "--format", "json")),
+    ("containers", ("docker", "ps", "-a", "--no-trunc", "--format", "json")),
+    (
+        "images",
+        (
+            "docker",
+            "image",
+            "ls",
+            "--digests",
+            "--no-trunc",
+            "--format",
+            "json",
+        ),
+    ),
+    ("build_cache", ("docker", "buildx", "du", "--verbose")),
+    ("networks", ("docker", "network", "ls", "--no-trunc", "--format", "json")),
+    ("volumes", ("docker", "volume", "ls", "--format", "json")),
+)
 REHEARSAL_ORGANIZATION = UUID("10000000-0000-0000-0000-000000000001")
 REHEARSAL_CASE = UUID("40000000-0000-0000-0000-000000000003")
 REHEARSAL_ACTOR = UUID("20000000-0000-0000-0000-000000000001")
@@ -1172,10 +1204,14 @@ def _validated_candidate_evidence(
             {
                 "schema_version",
                 "head_sha",
-                "server_version",
-                "compose_version",
-                "compose_ls_sha256",
                 "task_project",
+                "minimum_docker_vm_kib",
+                "host_available_kib",
+                "docker_vm_available_kib",
+                "doctor_stdout_sha256",
+                "before_inventory_sha256",
+                "after_inventory_sha256",
+                "retained_resources",
             }
         ),
     )
@@ -1224,39 +1260,141 @@ def _validated_candidate_evidence(
         ),
     )
 
-    def run(command: tuple[str, ...]) -> str:
+    command_value = recovery_evidence.get("command")
+    if not isinstance(command_value, list):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    command_items = cast(list[object], command_value)
+    if not all(isinstance(item, str) for item in command_items):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    recovery_command = tuple(cast(list[str], command_items))
+    if recovery_command != ALLOWED_RECOVERY_COMMAND:
+        raise ValueError("candidate_evidence_provenance_invalid")
+    if (
+        inventory_evidence.get("task_project") != CANDIDATE_TASK_PROJECT
+        or inventory_evidence.get("minimum_docker_vm_kib")
+        != DOCKER_VM_MINIMUM_KIB
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+
+    def run(
+        command: tuple[str, ...],
+        *,
+        environment: dict[str, str] | None = None,
+    ) -> str:
         try:
             return subprocess.run(
                 command,
                 check=True,
                 text=True,
                 capture_output=True,
+                env=environment,
             ).stdout
         except (OSError, subprocess.CalledProcessError) as error:
             raise ValueError("candidate_evidence_provenance_invalid") from error
 
-    server_version = run(("docker", "version", "--format", "{{.Server.Version}}")).strip()
-    compose_version = run(("docker", "compose", "version", "--short")).strip()
-    compose_ls = run(("docker", "compose", "ls", "--format", "json"))
-    try:
-        compose_projects_value: object = json.loads(compose_ls)
-    except json.JSONDecodeError as error:
-        raise ValueError("candidate_evidence_provenance_invalid") from error
-    if (
-        inventory_evidence.get("server_version") != server_version
-        or inventory_evidence.get("compose_version") != compose_version
-        or inventory_evidence.get("compose_ls_sha256")
-        != hashlib.sha256(compose_ls.encode()).hexdigest()
-        or not isinstance(inventory_evidence.get("task_project"), str)
-        or not isinstance(compose_projects_value, list)
+    def capture_inventory() -> dict[str, str]:
+        return {
+            name: run(command)
+            for name, command in DOCKER_INVENTORY_COMMANDS
+        }
+
+    def inventory_hashes(observed: dict[str, str]) -> dict[str, str]:
+        return {
+            name: hashlib.sha256(value.encode()).hexdigest()
+            for name, value in observed.items()
+        }
+
+    def json_lines(raw: str) -> tuple[dict[str, object], ...]:
+        values: list[dict[str, object]] = []
+        for line in raw.splitlines():
+            if not line:
+                continue
+            try:
+                value: object = json.loads(line)
+            except json.JSONDecodeError as error:
+                raise ValueError(
+                    "candidate_evidence_provenance_invalid"
+                ) from error
+            if not isinstance(value, dict):
+                raise ValueError("candidate_evidence_provenance_invalid")
+            values.append(cast(dict[str, object], value))
+        return tuple(values)
+
+    def retained_resources(
+        observed: dict[str, str],
+    ) -> dict[str, object]:
+        images = tuple(
+            sorted(
+                f"{item.get('Repository')}:{item.get('Tag')}"
+                for item in json_lines(observed["images"])
+                if isinstance(item.get("Repository"), str)
+                and isinstance(item.get("Tag"), str)
+                and item.get("Repository") != "<none>"
+                and item.get("Tag") != "<none>"
+            )
+        )
+        volumes = tuple(
+            sorted(
+                str(item["Name"])
+                for item in json_lines(observed["volumes"])
+                if isinstance(item.get("Name"), str)
+            )
+        )
+        return {
+            "images": list(images),
+            "volumes": list(volumes),
+            "build_cache_sha256": hashlib.sha256(
+                observed["build_cache"].encode()
+            ).hexdigest(),
+        }
+
+    before_inventory = capture_inventory()
+    if any(
+        CANDIDATE_TASK_PROJECT in value
+        for value in before_inventory.values()
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
-    compose_projects = cast(list[object], compose_projects_value)
-    for item in compose_projects:
-        if isinstance(item, dict) and cast(dict[str, object], item).get(
-            "Name"
-        ) == inventory_evidence["task_project"]:
-            raise ValueError("candidate_evidence_provenance_invalid")
+    doctor_environment = os.environ.copy()
+    doctor_environment.pop("NIGHT_VOYAGER_DOCKER_MINIMUM_KB", None)
+    doctor_output = run(
+        ("make", "doctor", "MODE=dev"),
+        environment=doctor_environment,
+    )
+    host_match = re.search(
+        r"PASSED CHECK: host project filesystem ([0-9]+) KiB available",
+        doctor_output,
+    )
+    vm_match = re.search(
+        r"PASSED CHECK: Docker VM filesystem ([0-9]+) KiB available",
+        doctor_output,
+    )
+    if host_match is None or vm_match is None:
+        raise ValueError("candidate_evidence_provenance_invalid")
+    host_available_kib = int(host_match.group(1))
+    docker_vm_available_kib = int(vm_match.group(1))
+    after_inventory = capture_inventory()
+    if any(
+        CANDIDATE_TASK_PROJECT in value
+        for value in after_inventory.values()
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    if (
+        host_available_kib < HOST_MINIMUM_KIB
+        or docker_vm_available_kib < DOCKER_VM_MINIMUM_KIB
+        or inventory_evidence.get("host_available_kib")
+        != host_available_kib
+        or inventory_evidence.get("docker_vm_available_kib")
+        != docker_vm_available_kib
+        or inventory_evidence.get("doctor_stdout_sha256")
+        != hashlib.sha256(doctor_output.encode()).hexdigest()
+        or inventory_evidence.get("before_inventory_sha256")
+        != inventory_hashes(before_inventory)
+        or inventory_evidence.get("after_inventory_sha256")
+        != inventory_hashes(after_inventory)
+        or inventory_evidence.get("retained_resources")
+        != retained_resources(after_inventory)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
 
     repository = hosted_evidence.get("repository")
     check_run_ids = hosted_evidence.get("check_run_ids")
@@ -1305,26 +1443,9 @@ def _validated_candidate_evidence(
     }:
         raise ValueError("candidate_evidence_provenance_invalid")
 
-    command_value = recovery_evidence.get("command")
-    if not isinstance(command_value, list):
-        raise ValueError("candidate_evidence_provenance_invalid")
-    command_items = cast(list[object], command_value)
-    if not all(isinstance(item, str) for item in command_items):
-        raise ValueError("candidate_evidence_provenance_invalid")
-    recovery_command = tuple(cast(list[str], command_items))
-    allowed_recovery_command = (
-        "uv",
-        "run",
-        "pytest",
-        "-q",
-        "tests/integration/dra/test_live_closure_recovery.py",
-        "tests/unit/dra/test_live_review_controller.py",
-        "tests/unit/dra/test_live_decision_controller.py",
-    )
     recovery_output = run(recovery_command)
     if (
-        recovery_command != allowed_recovery_command
-        or recovery_evidence.get("stdout_sha256")
+        recovery_evidence.get("stdout_sha256")
         != hashlib.sha256(recovery_output.encode()).hexdigest()
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
@@ -1360,12 +1481,51 @@ def _validated_candidate_evidence(
         raise ValueError("candidate_evidence_provenance_invalid")
     pull = cast(dict[str, object], pull_value)
     review_live = cast(dict[str, object], review_live_value)
+    pull_head_value = pull.get("head")
     if (
         pull.get("merged") is not True
         or pull.get("merge_commit_sha") != head
+        or not isinstance(pull_head_value, dict)
+        or cast(dict[str, object], pull_head_value).get("sha")
+        != reviewed_head_sha
         or review_live.get("state") != "APPROVED"
         or review_live.get("commit_id") != reviewed_head_sha
         or review_live.get("id") != review_id
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    reviewed_commit_value: object = json.loads(
+        run(
+            (
+                "gh",
+                "api",
+                f"repos/{repository}/git/commits/{reviewed_head_sha}",
+            )
+        )
+    )
+    merge_commit_value: object = json.loads(
+        run(("gh", "api", f"repos/{repository}/git/commits/{head}"))
+    )
+    if (
+        not isinstance(reviewed_commit_value, dict)
+        or not isinstance(merge_commit_value, dict)
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    reviewed_tree = cast(dict[str, object], reviewed_commit_value).get("tree")
+    merge_tree = cast(dict[str, object], merge_commit_value).get("tree")
+    reviewed_tree_sha = (
+        cast(dict[str, object], reviewed_tree).get("sha")
+        if isinstance(reviewed_tree, dict)
+        else None
+    )
+    merge_tree_sha = (
+        cast(dict[str, object], merge_tree).get("sha")
+        if isinstance(merge_tree, dict)
+        else None
+    )
+    if (
+        not isinstance(reviewed_tree_sha, str)
+        or re.fullmatch(r"[0-9a-f]{40}", reviewed_tree_sha) is None
+        or reviewed_tree_sha != merge_tree_sha
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
     return inventory, hosted, recovery, review

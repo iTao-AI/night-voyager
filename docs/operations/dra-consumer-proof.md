@@ -242,24 +242,31 @@ uv run python scripts/verify_dra_live_closure.py freeze-candidate \
 ```
 
 Each evidence JSON is bound to the same exact merged-main SHA, but its status is
-not trusted. Freeze re-runs the closed recovery command, re-queries Docker server,
-Compose version and task-project absence, and reads the exact GitHub check-run,
-merged-PR, and approved-review identities. The supplied values and hashes must
-match those independently observed results. Arbitrary exact-shape files,
-feature-branch HEADs, missing/failed checks, stale evidence, dirty main, or
-local/origin/live main drift fail closed.
+not trusted. Freeze rejects any recovery command outside the closed command
+allowlist before starting a subprocess, then re-runs the accepted command. It
+removes any caller threshold override, runs the repository `MODE=dev` host and
+Docker VM preflight, enforces the default `8,388,608 KiB` VM minimum, and captures
+the fixed task project's before/after Compose, container, image, build-cache,
+network, and volume inventories. It also reads the exact GitHub check-run,
+merged-PR, approved-review, reviewed-tree, and merge-tree identities. The
+supplied values and hashes must match those independently observed results.
+Arbitrary exact-shape files, feature-branch HEADs, missing/failed checks, stale
+reviews, dirty main, residual task resources, or local/origin/live main drift
+fail closed.
 
 The four files use closed schemas:
 `night-voyager.dra-live-docker-evidence.v1`,
 `night-voyager.dra-live-hosted-checks-evidence.v1`,
 `night-voyager.dra-live-recovery-evidence.v1`, and
 `night-voyager.dra-live-authority-review-evidence.v1`. Extra keys are rejected.
-Docker evidence binds server/Compose versions, the exact Compose inventory hash,
-and task project name. Hosted evidence binds repository and the three exact check
-run IDs. Recovery evidence binds the closed command and observed stdout hash.
-Authority-review evidence binds repository, PR number, review ID, and reviewed
-head; freeze verifies that the PR merged as the supplied exact main SHA and that
-the review is `APPROVED` on the supplied reviewed head.
+Docker evidence binds the canonical task project, default Docker VM threshold,
+observed host/VM free space, preflight stdout, all six before/after inventory
+hashes, and the exact retained image, volume, and build-cache identities. Hosted
+evidence binds repository and the three exact check run IDs. Recovery evidence
+binds the closed command and observed stdout hash. Authority-review evidence
+binds repository, PR number, review ID, and reviewed head; freeze verifies that
+the final PR head is the approved review commit, the PR merged as the supplied
+exact main SHA, and the reviewed and merge commits have the same tree.
 
 The readiness receipt binds the exact merged main, spec and PR C plan hashes,
 producer pin, scenario, intent/receipt/CLI schema identities, required hosted

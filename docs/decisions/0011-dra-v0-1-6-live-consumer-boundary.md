@@ -64,9 +64,12 @@ code to create product authority.
 17. Mutation transport loss becomes a bounded ambiguous outcome at the HTTP POST
     boundary. Task and AdvisorReview reconciliation use narrow actor/key-bound
     reads over existing idempotency authority rather than process-local caches.
-18. Candidate freeze independently re-runs or re-queries recovery, Docker,
-    exact-head hosted checks, merged-PR, and approved-review evidence; closed JSON
-    shape and caller-written terminal strings are insufficient.
+18. Candidate freeze rejects an unapproved recovery command before subprocess
+    execution, independently runs the default-threshold host/VM preflight, binds
+    the canonical task project's complete before/after Docker inventories, and
+    re-queries exact-head hosted checks, final merged-PR head, approved-review
+    commit, and reviewed/merge tree equality. Closed JSON shape and caller-written
+    terminal strings are insufficient.
 
 ## Consequences
 
