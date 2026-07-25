@@ -68,6 +68,8 @@ uv run python scripts/verify_dra_live_closure.py freeze-intent \
   --case-id '<case-uuid>' \
   --expected-case-revision '<revision>' \
   --advisor-actor-id '<advisor-uuid>' \
+  --deadline-seconds '<approved-integer>' \
+  --poll-seconds '<approved-number>' \
   --one-attempt-ack separately-authorized-one-attempt --json
 uv run python scripts/verify_dra_live_closure.py preflight-live \
   --receipt-root '<same-private-root>' --json
@@ -75,7 +77,8 @@ uv run python scripts/verify_dra_live_closure.py preflight-live \
 
 `preflight-live` reads no environment values and performs no provider access. Its
 receipt binds the intent, exact v0.1.6 producer, scenario/schema identities,
-filesystem readiness, `UNTRUSTED_CANDIDATE` freeze, and one-shot budget.
+filesystem readiness, frozen monotonic deadline/poll interval,
+`UNTRUSTED_CANDIDATE` freeze, and one-shot budget.
 
 Only after the preflight receipt exists, inject the required process-only values:
 
@@ -94,10 +97,15 @@ make dra-consumer-proof
 
 Set all values in the operator environment before exporting the names; do not place
 credential or session values in shell history, files, command arguments, receipts,
-logs, or proof output. `capture-live` re-reads the exact query bytes immediately
+logs, or proof output. `DRA_POLL_DEADLINE_SECONDS` must equal the deadline frozen by
+`freeze-intent`; the frozen poll interval is not read from ambient state.
+`capture-live` re-reads the exact query bytes immediately
 before `/health` and create. It performs at most one keyed create, validates the
-strict terminal projection, writes the canonical artifact only under the private
-receipt root, then stops with `operator_action_required`.
+strict terminal projection, polls at the frozen interval until the frozen monotonic
+deadline, writes the canonical artifact only under the private receipt root, then
+stops with `operator_action_required`. If the descriptor-bound receipt root and its
+operator-visible pathname no longer identify the same directory and artifact,
+inspection fails closed instead of returning a pathname to replacement bytes.
 
 The operator privately inspects that artifact and the same-run Evidence inventory.
 Stage 1 accepts no source snapshot. The only resumed input is a URL-only declaration
@@ -113,10 +121,11 @@ uv run python scripts/verify_dra_live_closure.py select-and-import \
 ```
 
 `select-and-import` is provider-free. It revalidates the frozen intent, run,
-artifact, Evidence ownership, advisor and tenant identities; imports only the
-existing `UNTRUSTED_CANDIDATE`; confirms that no verification/promotion exists; and
-deletes artifact bytes. It does not promote Evidence, start planning, create an
-AdvisorReview, or make a family decision.
+artifact, Evidence ownership, advisor and tenant identities; imports only the exact
+operator-selected Evidence row as the existing `UNTRUSTED_CANDIDATE`; confirms that
+no verification/promotion exists; and deletes artifact bytes. Other cited rows from
+the same run are not added to that candidate import. It does not promote Evidence,
+start planning, create an AdvisorReview, or make a family decision.
 
 ## Recovery and cleanup
 
@@ -130,8 +139,10 @@ uv run python scripts/verify_dra_live_closure.py reconcile-create \
 ```
 
 This is a separately acknowledged replay of the exact frozen request and create key.
-A poll deadline stores the accepted run identity; `resume-poll` polls only the same run
-and never creates another:
+The controller requires the supplied reconciliation receipt to equal its durable
+receipt and predecessor identities before provider access. A poll deadline stores the
+accepted run identity; `resume-poll` revalidates the durable preflight and poll receipt,
+polls only the same run at the frozen interval, and never creates another:
 
 ```bash
 uv run python scripts/verify_dra_live_closure.py resume-poll \

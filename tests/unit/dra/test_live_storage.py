@@ -122,6 +122,32 @@ def test_root_descriptor_survives_path_rename_without_escape(tmp_path: Path) -> 
         assert not (replacement / "intent.json").exists()
 
 
+def test_operator_artifact_path_fails_closed_after_root_path_replacement(
+    tmp_path: Path,
+) -> None:
+    root = private_root(tmp_path)
+    moved = tmp_path / "moved"
+    scenario = load_live_closure_scenario()
+    artifact = build_v0_1_6_scenario_candidate_import().artifact
+    attacker_bytes = b"attacker-controlled replacement"
+    with LiveReceiptStore.open(root) as store:
+        root.rename(moved)
+        replacement = private_root(tmp_path)
+        replacement_artifact = replacement / "artifact.research-report.md"
+        replacement_artifact.write_bytes(attacker_bytes)
+        replacement_artifact.chmod(0o600)
+
+        with pytest.raises(LiveStorageInvalid, match="artifact_path_invalid"):
+            store.write_artifact_for_inspection(
+                scenario.result.artifact, artifact.content.encode("utf-8")
+            )
+
+        assert store.read_artifact(scenario.result.artifact) == (
+            artifact.content.encode("utf-8")
+        )
+        assert replacement_artifact.read_bytes() == attacker_bytes
+
+
 def test_symlink_swap_and_malformed_json_fail_closed(tmp_path: Path) -> None:
     root = private_root(tmp_path)
     outside = tmp_path / "outside"

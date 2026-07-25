@@ -272,14 +272,41 @@ class LiveReceiptStore:
             content,
             conflict_code="artifact_conflict",
         )
-        return self._root / ARTIFACT_NAME
+        return self._validated_artifact_path()
 
     def artifact_path(self) -> Path | None:
         try:
             self._read_bytes(ARTIFACT_NAME, receipt=False)
         except LiveStorageInvalid:
             return None
-        return self._root / ARTIFACT_NAME
+        return self._validated_artifact_path()
+
+    def _validated_artifact_path(self) -> Path:
+        self._ensure_open()
+        visible_path = self._root / ARTIFACT_NAME
+        try:
+            authority_root = os.fstat(self._root_fd)
+            visible_root = os.stat(self._root, follow_symlinks=False)
+            authority_artifact = os.stat(
+                ARTIFACT_NAME,
+                dir_fd=self._root_fd,
+                follow_symlinks=False,
+            )
+            visible_artifact = os.stat(
+                visible_path,
+                follow_symlinks=False,
+            )
+        except OSError as error:
+            raise LiveStorageInvalid("artifact_path_invalid") from error
+        if (
+            (authority_root.st_dev, authority_root.st_ino)
+            != (visible_root.st_dev, visible_root.st_ino)
+            or (authority_artifact.st_dev, authority_artifact.st_ino)
+            != (visible_artifact.st_dev, visible_artifact.st_ino)
+            or not stat.S_ISREG(visible_artifact.st_mode)
+        ):
+            raise LiveStorageInvalid("artifact_path_invalid")
+        return visible_path
 
     def read_artifact(self, identity: DraArtifactIdentityV1) -> bytes:
         content = self._read_bytes(ARTIFACT_NAME, receipt=False)

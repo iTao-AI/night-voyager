@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID
 
@@ -38,6 +39,20 @@ ACTOR_ID = UUID("20000000-0000-0000-0000-000000000001")
 SESSION_ID = UUID("30000000-0000-0000-0000-000000000001")
 QUERY = b"bounded synthetic query"
 SOURCE_URL = "https://example.com/contract-source-1"
+SECOND_SOURCE_URL = "https://example.com/contract-source-2"
+
+
+@dataclass
+class FakeTime:
+    current: float = 0.0
+    sleeps: list[float] = field(default_factory=lambda: list[float]())
+
+    def monotonic(self) -> float:
+        return self.current
+
+    async def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.current += seconds
 
 
 def context(role: ActorRole = ActorRole.ADVISOR) -> ActorContext:
@@ -80,6 +95,18 @@ def frozen_intent() -> DraCaptureIntentV1:
             receipt_root_id="dra-live-capture-root",
             one_attempt_authorized=True,
         ),
+        attempt_id_factory=lambda: "attempt-0000000000000001",
+    )
+
+
+def timed_intent(
+    *, deadline_seconds: int, poll_seconds: float
+) -> DraCaptureIntentV1:
+    capture = frozen_intent().capture.model_dump(mode="json")
+    capture["deadline_seconds"] = deadline_seconds
+    capture["poll_seconds"] = poll_seconds
+    return DraCaptureIntentV1.freeze(
+        DraCaptureInputV1.model_validate(capture),
         attempt_id_factory=lambda: "attempt-0000000000000001",
     )
 
@@ -215,17 +242,19 @@ async def test_ambiguous_create_stops_and_only_exact_authorized_replay_resumes(
 @pytest.mark.asyncio
 async def test_poll_timeout_resumes_only_the_same_run(tmp_path: Path) -> None:
     scenario = load_live_closure_scenario()
-    transport = ScenarioDraLiveTransport(scenario, in_progress_polls=1)
+    transport = ScenarioDraLiveTransport(scenario, in_progress_polls=2)
     gateway = ScenarioCandidateGateway()
     path = query_file(tmp_path)
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        first_time = FakeTime()
         controller = DraLiveCaptureController(
             transport,
             gateway,
             store,
-            poll_budget=1,
+            clock=first_time,
+            sleeper=first_time,
         )
-        intent = frozen_intent()
+        intent = timed_intent(deadline_seconds=1, poll_seconds=1)
         preflight = controller.preflight(intent)
         stopped = await controller.capture(
             CaptureLiveCommand(intent=intent, preflight=preflight, query_path=path)
@@ -233,13 +262,147 @@ async def test_poll_timeout_resumes_only_the_same_run(tmp_path: Path) -> None:
         assert isinstance(stopped, DraPollRecoveryReceiptV1)
         assert stopped.permitted_next_command == "resume-poll"
         assert transport.create_calls == 1
+        assert first_time.sleeps == [1]
 
-        resumed = await controller.resume_poll(
+        resumed_time = FakeTime()
+        resumed = await DraLiveCaptureController(
+            transport,
+            gateway,
+            store,
+            clock=resumed_time,
+            sleeper=resumed_time,
+        ).resume_poll(
             ResumePollCommand(intent=intent, prior=stopped)
         )
         assert isinstance(resumed, DraInspectionRequiredReceiptV1)
         assert resumed.run_id == stopped.run_id
         assert transport.create_calls == 1
+        assert resumed_time.sleeps == []
+
+
+@pytest.mark.asyncio
+async def test_polling_sleeps_at_frozen_interval_until_later_terminal(
+    tmp_path: Path,
+) -> None:
+    transport = ScenarioDraLiveTransport(
+        load_live_closure_scenario(), in_progress_polls=2
+    )
+    gateway = ScenarioCandidateGateway()
+    fake_time = FakeTime()
+    with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        controller = DraLiveCaptureController(
+            transport,
+            gateway,
+            store,
+            clock=fake_time,
+            sleeper=fake_time,
+        )
+        intent = timed_intent(deadline_seconds=10, poll_seconds=2)
+        result = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+    assert isinstance(result, DraInspectionRequiredReceiptV1)
+    assert fake_time.sleeps == [2, 2]
+
+
+@pytest.mark.asyncio
+async def test_recovery_rejects_missing_or_forged_durable_prior_without_provider(
+    tmp_path: Path,
+) -> None:
+    path = query_file(tmp_path)
+    transport = ScenarioDraLiveTransport(
+        load_live_closure_scenario(), ambiguous_create_once=True
+    )
+    root = private_root(tmp_path)
+    with LiveReceiptStore.open(root) as store:
+        controller = DraLiveCaptureController(
+            transport, ScenarioCandidateGateway(), store
+        )
+        intent = frozen_intent()
+        preflight = controller.preflight(intent)
+        prior = await controller.capture(
+            CaptureLiveCommand(intent=intent, preflight=preflight, query_path=path)
+        )
+        assert isinstance(prior, DraReconciliationRequiredReceiptV1)
+        forged = prior.model_copy(
+            update={
+                "intent_receipt": prior.intent_receipt.model_copy(
+                    update={"sha256": "f" * 64}
+                )
+            }
+        )
+        with pytest.raises(ValueError, match="reconciliation_identity_invalid"):
+            await controller.reconcile_create(
+                ReconcileCreateCommand(
+                    intent=intent,
+                    preflight=preflight,
+                    prior=forged,
+                    query_path=path,
+                    exact_replay_authorized=True,
+                )
+            )
+        assert transport.create_calls == 1
+
+        (root / "reconciliation-required.json").unlink()
+        with pytest.raises(ValueError, match="reconciliation_identity_invalid"):
+            await controller.reconcile_create(
+                ReconcileCreateCommand(
+                    intent=intent,
+                    preflight=preflight,
+                    prior=prior,
+                    query_path=path,
+                    exact_replay_authorized=True,
+                )
+            )
+        assert transport.create_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_resume_rejects_cross_run_prior_before_provider_access(
+    tmp_path: Path,
+) -> None:
+    fake_time = FakeTime()
+    transport = ScenarioDraLiveTransport(
+        load_live_closure_scenario(), in_progress_polls=10
+    )
+    root = private_root(tmp_path)
+    with LiveReceiptStore.open(root) as store:
+        intent = timed_intent(deadline_seconds=1, poll_seconds=1)
+        controller = DraLiveCaptureController(
+            transport,
+            ScenarioCandidateGateway(),
+            store,
+            clock=fake_time,
+            sleeper=fake_time,
+        )
+        prior = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+        assert isinstance(prior, DraPollRecoveryReceiptV1)
+        forged = prior.model_copy(
+            update={
+                "thread_id": "forged-thread",
+                "run_id": "forged-run",
+                "segment_id": "forged-segment",
+            }
+        )
+        with pytest.raises(ValueError, match="poll_recovery_identity_invalid"):
+            await controller.resume_poll(
+                ResumePollCommand(intent=intent, prior=forged)
+            )
+        (root / "poll-recovery.json").unlink()
+        with pytest.raises(ValueError, match="poll_recovery_identity_invalid"):
+            await controller.resume_poll(
+                ResumePollCommand(intent=intent, prior=prior)
+            )
 
 
 @pytest.mark.asyncio
@@ -292,3 +455,46 @@ async def test_selection_and_actor_fail_closed_without_second_run(
         assert transport.create_calls == 1
         assert gateway.import_calls == 0
         assert store.artifact_path() is None
+
+
+@pytest.mark.asyncio
+async def test_multiple_cited_rows_import_only_exact_operator_selection(
+    tmp_path: Path,
+) -> None:
+    scenario = load_live_closure_scenario()
+    transport = ScenarioDraLiveTransport(scenario)
+    first = transport.run.evidence[0]
+    second = first.model_copy(
+        update={
+            "evidence_id": "evidence-contract-source-2",
+            "source_url": SECOND_SOURCE_URL,
+            "source_identity": SECOND_SOURCE_URL,
+        }
+    )
+    transport.run = transport.run.model_copy(
+        update={"evidence": (first, second)}
+    )
+    gateway = ScenarioCandidateGateway()
+    with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        controller = DraLiveCaptureController(transport, gateway, store)
+        intent = frozen_intent()
+        inspection = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+        assert isinstance(inspection, DraInspectionRequiredReceiptV1)
+        final = await controller.select_and_import(
+            SelectAndImportCommand(
+                intent=intent,
+                inspection=inspection,
+                declared_raw_url=SECOND_SOURCE_URL,
+                context=context(),
+            )
+        )
+    assert isinstance(final, DraCaptureReceiptV1)
+    assert gateway.last_import is not None
+    assert len(gateway.last_import.evidence) == 1
+    assert gateway.last_import.evidence[0].source_url == SECOND_SOURCE_URL

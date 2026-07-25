@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import signal
+import stat
 import uuid
 from pathlib import Path
 from typing import Literal, NoReturn, cast
@@ -51,6 +52,7 @@ from night_voyager.dra.live_storage import (
     CleanupResultV1,
     LiveReceiptStore,
     LiveStorageError,
+    LiveStorageInvalid,
 )
 from night_voyager.dra.models import DraCandidateImportV1
 from night_voyager.dra.ports import DraCandidateViewV1
@@ -130,9 +132,41 @@ def _result_payload(
 
 def _open_root(path: Path, *, create: bool = False) -> LiveReceiptStore:
     if create:
-        path.mkdir(mode=0o700, parents=False, exist_ok=True)
-        path.chmod(0o700)
+        created = False
+        try:
+            os.mkdir(path, mode=0o700)
+            created = True
+        except FileExistsError:
+            try:
+                metadata = os.lstat(path)
+            except OSError as error:
+                raise LiveStorageInvalid("root_invalid") from error
+            if (
+                not stat.S_ISDIR(metadata.st_mode)
+                or metadata.st_uid != os.getuid()
+                or stat.S_IMODE(metadata.st_mode) != 0o700
+            ):
+                raise LiveStorageInvalid("root_invalid") from None
+        if created:
+            nofollow = getattr(os, "O_NOFOLLOW", 0)
+            directory = getattr(os, "O_DIRECTORY", 0)
+            if nofollow == 0 or directory == 0:
+                raise LiveStorageInvalid("root_primitives_unavailable")
+            descriptor = os.open(
+                path, os.O_RDONLY | directory | nofollow
+            )
+            try:
+                os.fchmod(descriptor, 0o700)
+            finally:
+                os.close(descriptor)
     return LiveReceiptStore.open(path)
+
+
+def open_receipt_root(
+    path: Path, *, create: bool = False
+) -> LiveReceiptStore:
+    """Open or safely create one exact private receipt root."""
+    return _open_root(path, create=create)
 
 
 def _read_intent(store: LiveReceiptStore) -> DraCaptureIntentV1:
@@ -253,16 +287,22 @@ def _actor_from_environment(intent: DraCaptureIntentV1) -> ActorContext:
     )
 
 
-def _live_transport() -> Httpx2DraTransport:
+def _live_transport(
+    intent: DraCaptureIntentV1,
+) -> Httpx2DraTransport:
     try:
         base_url = os.environ["DRA_BASE_URL"]
-        deadline = float(os.environ.get("DRA_POLL_DEADLINE_SECONDS", "900"))
+        declared_deadline = float(
+            os.environ["DRA_POLL_DEADLINE_SECONDS"]
+        )
     except (KeyError, ValueError) as error:
         raise ValueError("producer_environment_incomplete") from error
+    if declared_deadline != intent.capture.deadline_seconds:
+        raise ValueError("producer_environment_invalid")
     config = DraClientConfig(
         base_url=base_url,
-        poll_seconds=2,
-        deadline_seconds=deadline,
+        poll_seconds=intent.capture.poll_seconds,
+        deadline_seconds=intent.capture.deadline_seconds,
     )
     return Httpx2DraTransport(config, environ=os.environ)
 
@@ -315,6 +355,8 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
                 byte_length=len(query),
                 sha256=hashlib.sha256(query).hexdigest(),
             ),
+            deadline_seconds=args.deadline_seconds,
+            poll_seconds=args.poll_seconds,
             receipt_root_id=Path(args.receipt_root).name,
             one_attempt_authorized=True,
         ),
@@ -445,9 +487,9 @@ def capture_live(args: argparse.Namespace) -> NoReturn:
             as_json=args.json,
         )
     try:
-        transport = _live_transport()
         with _open_root(Path(args.receipt_root)) as store:
             intent = _read_intent(store)
+            transport = _live_transport(intent)
             preflight = _preflight_receipt(store)
             _ensure_no_orphaned_artifact(store)
             _actor_from_environment(intent)
@@ -530,9 +572,9 @@ def reconcile_create(args: argparse.Namespace) -> NoReturn:
             as_json=args.json,
         )
     try:
-        transport = _live_transport()
         with _open_root(Path(args.receipt_root)) as store:
             intent = _read_intent(store)
+            transport = _live_transport(intent)
             _actor_from_environment(intent)
             controller = DraLiveCaptureController(
                 transport, _CaptureOnlyGateway(), store
@@ -565,9 +607,9 @@ def reconcile_create(args: argparse.Namespace) -> NoReturn:
 
 def resume_poll(args: argparse.Namespace) -> NoReturn:
     try:
-        transport = _live_transport()
         with _open_root(Path(args.receipt_root)) as store:
             intent = _read_intent(store)
+            transport = _live_transport(intent)
             _actor_from_environment(intent)
             controller = DraLiveCaptureController(
                 transport, _CaptureOnlyGateway(), store
@@ -616,6 +658,26 @@ def inspect_recovery(args: argparse.Namespace) -> NoReturn:
             else:
                 next_command = "capture-live"
                 stage = "preflight"
+            provider_attempt_consumed = False
+            receipt_types = (
+                ("capture.json", DraCaptureReceiptV1),
+                (
+                    "inspection-required.json",
+                    DraInspectionRequiredReceiptV1,
+                ),
+                ("poll-recovery.json", DraPollRecoveryReceiptV1),
+                (
+                    "reconciliation-required.json",
+                    DraReconciliationRequiredReceiptV1,
+                ),
+                ("failure.json", DraControllerStopReceiptV1),
+            )
+            for receipt_name, receipt_type in receipt_types:
+                if receipt_name in names:
+                    provider_attempt_consumed = store.read_receipt(
+                        receipt_name, receipt_type
+                    ).provider_attempt_consumed
+                    break
     except (LiveStorageError, ValueError):
         _emit(
             _result_payload(
@@ -638,8 +700,7 @@ def inspect_recovery(args: argparse.Namespace) -> NoReturn:
             intent_sha256=intent.intent_sha256,
             attempt_id=intent.attempt_id,
             last_completed_stage=stage,
-            provider_attempt_consumed=stage
-            not in {"preflight", "capture-live"},
+            provider_attempt_consumed=provider_attempt_consumed,
             required_external_inputs=(
                 ["operator_declared_raw_url"]
                 if next_command == "select-and-import"
@@ -840,6 +901,8 @@ def parse_args() -> argparse.Namespace:
     freeze.add_argument("--expected-case-revision", type=int, required=True)
     freeze.add_argument("--advisor-actor-id", required=True)
     freeze.add_argument("--one-attempt-ack", required=True)
+    freeze.add_argument("--deadline-seconds", type=int, default=900)
+    freeze.add_argument("--poll-seconds", type=float, default=2.0)
 
     preflight = commands.add_parser(
         "preflight-live", help="provider-free mutating readiness receipt"

@@ -293,6 +293,8 @@ class DraCaptureInputV1(FrozenModel):
     tenant_identity_sha256: Sha256
     actor_role: Literal["advisor"] = "advisor"
     request: DraFrozenRequestV1
+    deadline_seconds: PositiveInt = Field(default=900, le=3600)
+    poll_seconds: float = Field(default=2.0, gt=0, le=60)
     receipt_root_id: SafeLogicalName
     one_attempt_authorized: Literal[True]
 

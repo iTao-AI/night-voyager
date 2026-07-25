@@ -85,15 +85,20 @@ PR B adds a closed command sequence: `freeze-intent`, `preflight-live`,
 `inspect-recovery`, `rehearse-capture`, and `cleanup`.
 
 `capture-live` owns one frozen attempt. It validates exact request bytes immediately
-before provider access, accepts only the strict terminal projection, persists a
-private artifact plus same-run Evidence inventory, and stops at
-`operator_action_required`. Operator selection is a separate URL-only,
-provider-free action. `select-and-import` accepts exactly one byte-identical cited
-raw URL, imports through existing assigned-advisor authority, confirms
-`UNTRUSTED_CANDIDATE`, and removes artifact bytes.
+before provider access, polls on the frozen monotonic deadline and interval, accepts
+only the strict terminal projection, persists a private artifact plus same-run
+Evidence inventory, and stops at `operator_action_required`. An operator-visible
+artifact pathname is returned only while it resolves to the same descriptor-bound
+directory and artifact; pathname replacement fails closed. Operator selection is a
+separate URL-only, provider-free action. `select-and-import` accepts exactly one
+byte-identical cited raw URL, imports only that selected Evidence row through existing
+assigned-advisor authority, confirms `UNTRUSTED_CANDIDATE`, and removes artifact
+bytes.
 
 Ambiguous create delivery requires an explicit exact replay. Poll recovery observes
-only the same run. No second workflow or remote cancellation exists. Recovery
+only the same run. Both recovery paths require an exact match to their durable
+receipt and validated predecessor chain before provider access. No second workflow
+or remote cancellation exists. Recovery
 receipts contain identity hashes and bounded metadata, never query, artifact,
 credential, session, provider payload, or environment values. Stage 1 performs no
 source snapshot validation, promotion, planning, AdvisorReview, or family decision.

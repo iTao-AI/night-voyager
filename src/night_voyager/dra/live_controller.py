@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
 import stat
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +26,8 @@ from night_voyager.dra.live_models import (
 )
 from night_voyager.dra.live_ports import (
     DraCandidateGatewayPort,
+    DraLiveClockPort,
+    DraLiveSleepPort,
     DraLiveTransportPort,
 )
 from night_voyager.dra.live_projection import (
@@ -55,6 +59,16 @@ CaptureResult = (
     | DraPollRecoveryReceiptV1
     | DraControllerStopReceiptV1
 )
+
+
+class _SystemClock:
+    def monotonic(self) -> float:
+        return time.monotonic()
+
+
+class _AsyncioSleeper:
+    async def sleep(self, seconds: float) -> None:
+        await asyncio.sleep(seconds)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,14 +108,14 @@ class DraLiveCaptureController:
         candidate_gateway: DraCandidateGatewayPort,
         store: LiveReceiptStore,
         *,
-        poll_budget: int = 20,
+        clock: DraLiveClockPort | None = None,
+        sleeper: DraLiveSleepPort | None = None,
     ) -> None:
-        if poll_budget < 1 or poll_budget > 10_000:
-            raise ValueError("poll_budget_invalid")
         self._transport = transport
         self._candidate_gateway = candidate_gateway
         self._store = store
-        self._poll_budget = poll_budget
+        self._clock = clock or _SystemClock()
+        self._sleeper = sleeper or _AsyncioSleeper()
 
     def preflight(self, intent: DraCaptureIntentV1) -> DraPreflightReceiptV1:
         capture = intent.capture
@@ -278,10 +292,20 @@ class DraLiveCaptureController:
             "create",
             command.intent.attempt_id,
         )
+        try:
+            stored_prior = self._store.read_receipt(
+                "reconciliation-required.json",
+                DraReconciliationRequiredReceiptV1,
+            )
+        except LiveStorageError as error:
+            raise ValueError("reconciliation_identity_invalid") from error
         if (
-            command.prior.intent_sha256 != command.intent.intent_sha256
+            stored_prior != command.prior
+            or command.prior.intent_sha256 != command.intent.intent_sha256
             or command.prior.attempt_id != command.intent.attempt_id
             or command.prior.create_key != expected_key
+            or command.prior.intent_receipt
+            != command.preflight.intent_receipt
         ):
             raise ValueError("reconciliation_identity_invalid")
         preflight_identity = self._validate_preflight(
@@ -322,7 +346,10 @@ class DraLiveCaptureController:
         acceptance: DraRunAcceptanceV1,
     ) -> CaptureResult:
         last_state_version = 0
-        for _ in range(self._poll_budget):
+        deadline = (
+            self._clock.monotonic() + intent.capture.deadline_seconds
+        )
+        while True:
             try:
                 run = await self._transport.get_run(acceptance.run_id)
             except (DraTransportError, ValueError):
@@ -334,6 +361,12 @@ class DraLiveCaptureController:
                 )
             last_state_version = run.state_version
             if run.disposition == "in_progress":
+                remaining = deadline - self._clock.monotonic()
+                if remaining <= 0:
+                    break
+                await self._sleeper.sleep(
+                    min(intent.capture.poll_seconds, remaining)
+                )
                 continue
             if run.disposition != "canonical_ready":
                 return self._stop(
@@ -401,9 +434,23 @@ class DraLiveCaptureController:
 
     async def resume_poll(self, command: ResumePollCommand) -> CaptureResult:
         prior = command.prior
+        try:
+            stored_prior = self._store.read_receipt(
+                "poll-recovery.json", DraPollRecoveryReceiptV1
+            )
+            stored_preflight = self._store.read_receipt(
+                "preflight.json", DraPreflightReceiptV1
+            )
+            preflight_identity = self._validate_preflight(
+                command.intent, stored_preflight
+            )
+        except (LiveStorageError, ValueError) as error:
+            raise ValueError("poll_recovery_identity_invalid") from error
         if (
-            prior.intent_sha256 != command.intent.intent_sha256
+            stored_prior != prior
+            or prior.intent_sha256 != command.intent.intent_sha256
             or prior.attempt_id != command.intent.attempt_id
+            or prior.preflight_receipt != preflight_identity
         ):
             raise ValueError("poll_recovery_identity_invalid")
         acceptance = DraRunAcceptanceV1(
@@ -414,7 +461,7 @@ class DraLiveCaptureController:
         )
         return await self._poll_to_inspection(
             command.intent,
-            prior.preflight_receipt,
+            preflight_identity,
             acceptance,
         )
 
@@ -519,17 +566,15 @@ class DraLiveCaptureController:
                 delivery_status="ready",
             ),
             artifact=projection.artifact,
-            evidence=tuple(
+            evidence=(
                 DraEvidenceProjectionV1(
-                    evidence_id=row.evidence_id,
-                    source_url=row.source_url,
-                    source_identity=row.source_identity,
-                    retrieved_at=row.retrieved_at,
-                    citation_status="cited",
-                    verification_status=row.verification_status,
-                )
-                for row in inspection.evidence
-                if row.citation_status == "cited"
+                    evidence_id=selected.evidence_id,
+                    source_url=selected.source_url,
+                    source_identity=selected.source_identity,
+                    retrieved_at=selected.retrieved_at,
+                    citation_status=selected.citation_status,
+                    verification_status=selected.verification_status,
+                ),
             ),
         )
         import_key = derive_stage_key(
