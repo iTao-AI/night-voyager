@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -108,6 +108,19 @@ cannot execute it, and neither runtime role receives direct task DML. Migration 
 also revokes `transition_case(uuid,uuid,text,text)` from the API, so `PUBLIC`, API, and
 worker cannot submit a standalone planning transition at head. Task creation takes a
 same-key transaction advisory lock before replay lookup.
+
+Migration `0010` adds no table, role, or RLS policy. It closes new DRA candidate
+imports to the exact v0.1.6 producer tuple while keeping historical v0.1.3 rows
+readable, and adds the tenant-scoped `project_dra_live_outcome` function. Only
+`night_voyager_api` may execute that bounded read projection. The API receives
+no new table DML, and `night_voyager_worker` and `PUBLIC` receive no new
+authority. All affected ledgers retain forced RLS.
+
+The isolated `0010 -> 0009 -> 0010` lane proves producer validation, historical
+readability, function owner/signature/ACL, API/worker parity, and clean
+re-upgrade. Downgrade refuses before mutation when v0.1.6 history exists; with
+no incompatible live history it removes only the additive function and
+restores the previous import boundary.
 
 Use `make fact-to-plan-db-check` for the isolated `0009 -> 0008 -> 0009` parity lane.
 It proves the exact `0008` task function definition, owner, signature, ACL, runtime

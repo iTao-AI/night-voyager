@@ -88,16 +88,37 @@ class DraLiveStatusEnvelopeV1(FrozenModel):
     thread_id: BoundedId
     segment_id: BoundedId
     profile_id: Literal["generic"]
-    state_version: PositiveInt
+    state_version: Annotated[int, Field(gt=0)]
     execution_status: Literal["completed"]
     review_status: Literal["not_required"]
     delivery_status: Literal["ready"]
     failure_cause: None = None
 
 
-class DraLiveRunEnvelopeV1(DraLiveStatusEnvelopeV1):
+class DraLiveFailureCauseEnvelopeV1(FrozenModel):
+    schema_version: Literal["dra.run-failure-cause.v1"]
+    observation_status: Literal["observed"]
+    phase: PublicCode
+    code: PublicCode
+    recorded_at: AwareDatetime
+
+
+class DraLiveRunEnvelopeV1(FrozenModel):
+    run_id: BoundedId
+    thread_id: BoundedId
+    segment_id: BoundedId
+    profile_id: Literal["generic"]
+    state_version: int
+    execution_status: Literal[
+        "pending", "running", "completed", "completed_with_fallback", "failed"
+    ]
+    review_status: Literal["not_required", "required", "resolved"]
+    delivery_status: Literal[
+        "pending", "ready", "review_required", "blocked", "failed"
+    ]
+    failure_cause: DraLiveFailureCauseEnvelopeV1 | None
     evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
-        min_length=1, max_length=100
+        max_length=100
     )
 
     @model_validator(mode="after")
@@ -108,6 +129,33 @@ class DraLiveRunEnvelopeV1(DraLiveStatusEnvelopeV1):
                 raise ValueError("dra_evidence_ids_not_unique")
             identifiers.add(row.evidence_id)
         return self
+
+    @computed_field
+    @property
+    def disposition(
+        self,
+    ) -> Literal["in_progress", "canonical_ready", "terminal_invalid"]:
+        state = (
+            self.execution_status,
+            self.review_status,
+            self.delivery_status,
+        )
+        if (
+            state
+            in {
+                ("pending", "not_required", "pending"),
+                ("running", "not_required", "pending"),
+            }
+            and self.failure_cause is None
+        ):
+            return "in_progress"
+        if (
+            state == ("completed", "not_required", "ready")
+            and self.state_version > 0
+            and self.failure_cause is None
+        ):
+            return "canonical_ready"
+        return "terminal_invalid"
 
 
 class DraArtifactIdentityV1(FrozenModel):

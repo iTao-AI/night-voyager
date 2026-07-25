@@ -1,28 +1,36 @@
 # Governed DRA evidence reference
 
 Candidate import, atomic human verification/promotion, and governed mixed
-PlanningRun generation are implemented as a deterministic local proof. The
-existing `generate_planning_run_v1` path remains all-synthetic, and `/demo` is
-unchanged. Live provider proof was not run and remains separately authorized.
+PlanningRun generation are implemented as a deterministic local proof. PR A
+also implements the provider-free DRA v0.1.6 producer pin, strict live
+projection boundary, deterministic scenario, outcome read authority, and
+evaluation contracts. The existing `generate_planning_run_v1` path remains
+all-synthetic, and `/demo` is unchanged. Live provider proof was not run and
+the full governed-live closure remains unimplemented.
 
 ## Pinned consumer contract
 
 | Field | Exact value |
 | --- | --- |
-| DRA release | `v0.1.3` |
-| DRA commit | `87b2a8e335385eb865086f7a69fe2b190567cfa2` |
+| Historical fixture DRA release | `v0.1.3` |
+| Historical fixture DRA commit | `87b2a8e335385eb865086f7a69fe2b190567cfa2` |
 | Contract schema | `dra.downstream-consumer.v1` |
 | Copied fixture SHA-256 | `cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157` |
+| New live-import DRA release | `v0.1.6` |
+| New live-import DRA commit | `7d43324b469cb5e445c2e8be83af3be4d841cf1c` |
+| New live-import DRA tag object | `9e0b0b443c435cf636dfce932c3c77d91d0a43e4` |
 | Baseline source pack | `50000000-0000-0000-0000-000000000001`, version `1` |
 | Canonical manifest SHA-256 | `84350ea5705d9681d3e6550e1bd06e3340a9fcf0e7e7bbed4478ed3403405f28` |
 | Raw manifest SHA-256 | `5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25` |
 
-The import DTO is strict and frozen. It accepts the exact producer pins,
-bounded request/run identities, canonical `research-report.md`, and ordered
-six-field Evidence projections. Artifact content exists only at the import
-boundary; persistence retains its byte length and SHA-256, never Markdown.
-Exactly one ordered Evidence item must be promotable through a public HTTPS
-source. Candidate authority is fixed to `untrusted_candidate`.
+The historical copied fixture remains byte-identical and readable under its
+v0.1.3 producer identity. New imports use the strict v0.1.6 live DTO and accept
+only the exact v0.1.6 producer tuple, bounded request/run identities, canonical
+`research-report.md`, and ordered six-field Evidence projections. Artifact
+content exists only at the import boundary; persistence retains its byte length
+and SHA-256, never Markdown. Exactly one ordered Evidence item must be
+promotable through its original public HTTPS raw URL. Candidate authority is
+fixed to `untrusted_candidate`.
 
 ## Authority surface
 
@@ -41,6 +49,34 @@ copying the other accepted synthetic facts. Rejection creates no pack or
 Evidence. There is no later promotion command or table.
 Any approve or reject decision makes the whole candidate terminal. A rejected
 source therefore requires a newly imported candidate before another decision.
+
+Migration `0010` closes new import authority to the exact v0.1.6 producer tuple
+without rewriting or invalidating historical rows. It adds the API-only
+`app.project_dra_live_outcome(...)` read boundary, which returns the bounded
+candidate and verification outcome needed by live reconciliation. The function
+is migrator-owned and tenant-scoped; the API receives only `EXECUTE`.
+`night_voyager_api` receives no new table DML, the worker receives no new
+authority, and forced RLS remains enabled. Downgrade removes only the additive
+v0.1.6 boundary after refusing incompatible live history.
+
+## Provider-free live foundation
+
+The PR A live boundary is deliberately narrower than a provider workflow:
+
+- `/health` is the only preflight endpoint.
+- A live run is accepted only when request ownership, exact producer identity,
+  artifact metadata, and ordered Evidence all agree.
+- The selected raw URL retains its original string identity through candidate
+  import and later source attestation; URL normalization cannot grant authority.
+- Ambiguous create delivery is not replayed automatically. A separate,
+  authorized recovery action is required.
+- Evaluation observes persisted projections and receipt identities only.
+  Canonical evaluation bytes exclude clocks, durations, and ambient time.
+- Required CI uses deterministic scenario data and a fake transport. It does
+  not contact a provider or promote a candidate.
+
+PR B and PR C remain approved but not implemented. PR A therefore supplies no
+governed-live success claim.
 
 ## Governed mixed-planning surface
 
@@ -68,10 +104,12 @@ retry policy, fencing, events, SSE, AdvisorReview, DecisionBrief, family
 decision, receipt, and timeline are reused without a second workflow.
 
 The deterministic offline closure is exercised by `make db-check` and
-`make compose-proof`. It imports the copied fixture, performs the atomic human
-approval, creates the mixed task, reaches `review_required`, and closes through
-the existing advisor and family gates. It does not call DRA or add browser
-integration; the connected `/demo` remains the synthetic M5 walkthrough.
+`make compose-proof`. It imports the checked-in v0.1.6 scenario candidate,
+performs the atomic human approval, creates the mixed task, reaches
+`review_required`, and closes through the existing advisor and family gates.
+The historical copied v0.1.3 fixture retains its separate compatibility proof.
+Neither path calls DRA or adds browser integration; the connected `/demo`
+remains the synthetic M5 walkthrough.
 
 The three assigned-advisor HTTP routes are documented in
 [HTTP API v1](http-api-v1.md). Mutations require exact Origin, session CSRF,

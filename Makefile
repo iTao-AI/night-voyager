@@ -59,7 +59,15 @@ mke-consumer-proof: ## Run the real exact-candidate read-only proof
 
 dra-check: ## Run the deterministic offline DRA consumer contract lane
 	uv run pytest -q tests/contracts/test_dra_v1_contract.py \
-	  tests/contracts/test_dra_reconciliation.py tests/unit/dra \
+	  tests/contracts/test_dra_live_models.py \
+	  tests/contracts/test_dra_live_projection.py \
+	  tests/contracts/test_dra_reconciliation.py \
+	  tests/contracts/test_dra_transport.py \
+	  tests/unit/dra/test_application.py \
+	  tests/unit/dra/test_fixtures.py \
+	  tests/unit/dra/test_live_evaluation.py \
+	  tests/unit/dra/test_models.py \
+	  tests/unit/dra/test_proof_controller.py \
 	  tests/architecture/test_dra_contract.py
 	uv run python scripts/verify_dra_consumer.py fixture --json
 

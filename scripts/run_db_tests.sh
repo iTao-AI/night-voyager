@@ -44,6 +44,7 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/connected_demo tests/integration/dra \
         tests/integration/collaboration \
         --ignore=tests/integration/tasks/test_planning_start_migration.py \
+        --ignore=tests/integration/dra/test_dra_live_migration.py \
         --ignore=tests/integration/tasks/test_mixed_downgrade.py \
         --ignore=tests/integration/collaboration/test_collaboration_downgrade.py \
         --ignore=tests/integration/dra/test_governed_closure.py

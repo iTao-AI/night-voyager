@@ -13,7 +13,7 @@ from night_voyager.adapters.governed_mixed_planning import GovernedMixedPlanning
 from night_voyager.adapters.router import PlanningAdapterRouter
 from night_voyager.api import create_app
 from night_voyager.config import Settings
-from night_voyager.dra.fixtures import build_fixture_candidate_import
+from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
@@ -52,7 +52,7 @@ def headers(session: IssuedSession, key: str) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
-async def test_fixture_candidate_closes_through_mixed_task_and_family_decision() -> None:
+async def test_v0_1_6_scenario_closes_through_mixed_task_and_family_decision() -> None:
     migration_url = os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
     api_url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
     worker_url = os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"]
@@ -77,7 +77,7 @@ async def test_fixture_candidate_closes_through_mixed_task_and_family_decision()
         app = create_app(settings=settings, session_factory=sessions)
         async with AsyncClient(transport=ASGITransport(app=app), base_url=ORIGIN) as client:
             client.cookies.set("night_voyager_session", advisor.raw_session_token)
-            candidate = build_fixture_candidate_import()
+            candidate = build_v0_1_6_scenario_candidate_import()
             import_payload = candidate.model_dump(
                 mode="json", exclude_computed_fields=True
             )

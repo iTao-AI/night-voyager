@@ -92,6 +92,13 @@ PLAN_STATUS_BINDINGS = (
         "**Implementation status:** Complete, merged as PR #59, and released in v0.1.3.",
     ),
     (
+        "DRA v0.1.6 governed live closure",
+        "PR A implemented provider-free; PR B/C approved but not implemented",
+        "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
+        "**Implementation status:** PR A implemented provider-free; "
+        "PR B and PR C remain approved but not implemented.",
+    ),
+    (
         "High-End Portfolio Entry v1",
         "Implemented and released in v0.1.3",
         "2026-07-23-high-end-portfolio-entry.md",
@@ -307,6 +314,10 @@ def test_implemented_document_statuses_do_not_regress() -> None:
             "PR #30",
             "released in v0.1.2 as part of Governed Collaboration Core v1",
             "PR B and PR C were delivered under their own plans",
+        ),
+        "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
+            "**Implementation status:** PR A foundation implemented provider-free;",
+            "governed live acceptance remains unimplemented",
         ),
     }
     for relative, required in expected.items():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from typing import cast
 
 import pytest
 from pydantic import ValidationError
@@ -38,9 +39,21 @@ def acceptance() -> DraRunAcceptanceV1:
 
 def run_payload() -> dict[str, object]:
     scenario = load_live_closure_scenario()
-    return scenario.status.model_dump(mode="json") | {
-        "evidence": [item.model_dump(mode="json") for item in scenario.evidence]
-    }
+    payload = cast(dict[str, object], scenario.status.model_dump(mode="json"))
+    payload["evidence"] = [
+        cast(dict[str, object], item.model_dump(mode="json"))
+        for item in scenario.evidence
+    ]
+    return payload
+
+
+def evidence_payload() -> dict[str, object]:
+    value = run_payload()["evidence"]
+    assert isinstance(value, list)
+    rows = cast(list[object], value)
+    first = rows[0]
+    assert isinstance(first, dict)
+    return cast(dict[str, object], first)
 
 
 def result_payload() -> dict[str, object]:
@@ -73,7 +86,9 @@ def project(
 def test_scenario_fake_and_strict_projection_have_exact_field_parity() -> None:
     scenario = load_live_closure_scenario()
     fake = ScenarioDraLiveTransport(scenario)
-    assert fake.run.model_dump(mode="json") == run_payload()
+    assert fake.run.model_dump(
+        mode="json", exclude_computed_fields=True
+    ) == run_payload()
     assert fake.result.model_dump(
         mode="json", exclude_computed_fields=True
     ) == result_payload()
@@ -99,28 +114,48 @@ def test_scenario_fake_and_strict_projection_have_exact_field_parity() -> None:
         ("execution_status", "running"),
         ("review_status", "required"),
         ("delivery_status", "review_required"),
-        ("failure_cause", {"code": "failed"}),
-        ("profile_id", "other"),
+        (
+            "failure_cause",
+            {
+                "schema_version": "dra.run-failure-cause.v1",
+                "observation_status": "observed",
+                "phase": "execution",
+                "code": "execution_error",
+                "recorded_at": "2026-07-25T00:00:00Z",
+            },
+        ),
     ),
 )
 def test_terminal_run_contract_rejects_noncanonical_states(
     field: str, value: object
 ) -> None:
+    run = DraLiveRunEnvelopeV1.model_validate(run_payload() | {field: value})
+    with pytest.raises(DraLiveContractError, match="terminal_state_invalid"):
+        project(run_value=run)
+
+
+def test_run_envelope_rejects_non_generic_profile() -> None:
     with pytest.raises(ValidationError):
-        DraLiveRunEnvelopeV1.model_validate(run_payload() | {field: value})
+        DraLiveRunEnvelopeV1.model_validate(
+            run_payload() | {"profile_id": "other"}
+        )
 
 
-@pytest.mark.parametrize("evidence", ([], [{}] * 101))
-def test_evidence_collection_is_nonempty_and_bounded(
-    evidence: list[object],
-) -> None:
+def test_evidence_collection_is_nonempty_and_bounded() -> None:
+    evidence: list[object] = [{} for _ in range(101)]
     with pytest.raises(ValidationError):
         DraLiveRunEnvelopeV1.model_validate(run_payload() | {"evidence": evidence})
 
 
+def test_empty_terminal_evidence_fails_projection() -> None:
+    run = DraLiveRunEnvelopeV1.model_validate(run_payload() | {"evidence": []})
+    with pytest.raises(DraLiveContractError, match="evidence_projection_invalid"):
+        project(run_value=run)
+
+
 def test_duplicate_evidence_and_wrong_ownership_fail_closed() -> None:
     payload = run_payload()
-    row = deepcopy(payload["evidence"][0])  # type: ignore[index]
+    row = deepcopy(evidence_payload())
     with pytest.raises(ValidationError, match="dra_evidence_ids_not_unique"):
         DraLiveRunEnvelopeV1.model_validate(
             payload | {"evidence": [row, deepcopy(row)]}
@@ -275,7 +310,9 @@ def test_verified_label_does_not_create_promotion_authority() -> None:
 
 def test_artifact_and_result_identity_are_strict() -> None:
     payload = result_payload()
-    artifact = dict(payload["artifact"])  # type: ignore[arg-type]
+    artifact_value = payload["artifact"]
+    assert isinstance(artifact_value, dict)
+    artifact = cast(dict[str, object], artifact_value)
     for field, value in (
         ("kind", "other"),
         ("media_type", "application/json"),
@@ -294,12 +331,12 @@ def test_artifact_and_result_identity_are_strict() -> None:
 
 
 def test_live_evidence_envelope_rejects_unknown_and_wrong_typed_fields() -> None:
-    payload = run_payload()["evidence"][0]  # type: ignore[index]
+    payload = evidence_payload()
     with pytest.raises(ValidationError):
         DraLiveEvidenceEnvelopeV1.model_validate(
-            dict(payload) | {"unknown": "forbidden"}
+            payload | {"unknown": "forbidden"}
         )
     with pytest.raises(ValidationError):
         DraLiveEvidenceEnvelopeV1.model_validate(
-            dict(payload) | {"run_id": 42}
+            payload | {"run_id": 42}
         )

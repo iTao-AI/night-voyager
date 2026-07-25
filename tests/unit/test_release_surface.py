@@ -422,17 +422,17 @@ def copy_planning_start_gate_surface(destination: Path) -> None:
     shutil.copyfile(ROOT / "scripts/run_db_tests.sh", scripts / "run_db_tests.sh")
 
 
-def test_release_verifier_accepts_exactly_one_0009_alembic_head(
+def test_release_verifier_accepts_exactly_one_0010_alembic_head(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     verifier = load_verifier()
 
     verifier.verify_alembic_contract()
 
-    assert "proof migrations: exact Alembic head 0009" in capsys.readouterr().out
+    assert "proof migrations: exact Alembic head 0010" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("mutation", ("remove_0009", "add_second_head"))
+@pytest.mark.parametrize("mutation", ("remove_0010", "add_second_head"))
 def test_release_verifier_rejects_alembic_head_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -440,15 +440,15 @@ def test_release_verifier_rejects_alembic_head_mutation(
 ) -> None:
     verifier = load_verifier()
     copy_planning_start_gate_surface(tmp_path)
-    if mutation == "remove_0009":
-        (tmp_path / "migrations/versions/0009_explicit_planning_start_authority.py").unlink()
+    if mutation == "remove_0010":
+        (tmp_path / "migrations/versions/0010_dra_v0_1_6_live_consumer.py").unlink()
     else:
         (tmp_path / "migrations/versions/0099_test_branch.py").write_text(
             'revision = "0099"\ndown_revision = "0008"\n', encoding="utf-8"
         )
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
-    with pytest.raises(SystemExit, match="exactly one Alembic head 0009"):
+    with pytest.raises(SystemExit, match="exactly one Alembic head 0010"):
         verifier.verify_alembic_contract()
 
 
@@ -458,6 +458,9 @@ def test_release_verifier_rejects_alembic_head_mutation(
         "inside-planning-start-migration",
         "tests/integration/tasks/test_planning_start_migration.py",
         'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"',
+        "inside-dra-live-migration",
+        "tests/integration/dra/test_dra_live_migration.py",
+        'run_lane "${BASE_PROJECT_NAME}-dra-live-migration"',
     ),
 )
 def test_release_verifier_rejects_missing_planning_start_gate_node(
@@ -473,5 +476,5 @@ def test_release_verifier_rejects_missing_planning_start_gate_node(
     script.write_text(source.replace(required, "", 1), encoding="utf-8")
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
-    with pytest.raises(SystemExit, match="planning-start migration gate drift"):
+    with pytest.raises(SystemExit, match="migration gate drift"):
         verifier.verify_alembic_contract()

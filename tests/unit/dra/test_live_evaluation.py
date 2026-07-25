@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from copy import deepcopy
 
 import pytest
@@ -23,9 +24,11 @@ CAPTURE_SHA = "b" * 64
 PROMOTE_SHA = "c" * 64
 REVIEW_SHA = "d" * 64
 DECIDE_SHA = "e" * 64
+Receipts = tuple[DraEvaluationReceiptV1, ...]
+ReceiptMutator = Callable[[Receipts], Receipts]
 
 
-def receipts() -> tuple[DraEvaluationReceiptV1, ...]:
+def receipts() -> Receipts:
     return (
         DraEvaluationReceiptV1(
             receipt_id="capture-receipt",
@@ -164,25 +167,35 @@ def test_missing_observation_is_failed_not_inferred() -> None:
     }
 
 
+def duplicate_receipt(values: Receipts) -> Receipts:
+    return values + (values[0],)
+
+
+def replace_parent_with_missing(values: Receipts) -> Receipts:
+    return values[:-1] + (
+        values[-1].model_copy(update={"parent_receipt_id": "missing-parent"}),
+    )
+
+
+def forge_child_parent(values: Receipts) -> Receipts:
+    return values[:-1] + (
+        values[-1].model_copy(
+            update={"parent_receipt_id": values[0].receipt_id}
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     "mutate",
     (
-        lambda values: values + (values[0],),
-        lambda values: values[:-1]
-        + (
-            values[-1].model_copy(
-                update={"parent_receipt_id": "missing-parent"}
-            ),
-        ),
-        lambda values: values[:-1]
-        + (
-            values[-1].model_copy(
-                update={"parent_receipt_id": values[0].receipt_id}
-            ),
-        ),
+        duplicate_receipt,
+        replace_parent_with_missing,
+        forge_child_parent,
     ),
 )
-def test_duplicate_missing_parent_and_forged_child_are_rejected(mutate) -> None:
+def test_duplicate_missing_parent_and_forged_child_are_rejected(
+    mutate: ReceiptMutator,
+) -> None:
     with pytest.raises(ValueError):
         evaluate_trajectory(load_live_closure_scenario(), mutate(receipts()))
 

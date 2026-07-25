@@ -17,7 +17,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from night_voyager.dra.fixtures import build_fixture_candidate_import
+from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
 from night_voyager.identity.demo_seed import DRA_PROOF_CASE_ID
 
 ORIGIN = "http://127.0.0.1:3000"
@@ -94,7 +94,7 @@ def validate_source_snapshot(
 def import_and_promote(
     opener: urllib.request.OpenerDirector, csrf: str
 ) -> tuple[str, int]:
-    candidate = build_fixture_candidate_import()
+    candidate = build_v0_1_6_scenario_candidate_import()
     payload = candidate.model_dump(mode="json", exclude_computed_fields=True)
     payload.pop("organization_id")
     payload.pop("case_id")

@@ -164,7 +164,7 @@ def test_receipts_are_content_free_and_stage_names_are_unique() -> None:
             artifact.model_dump() | {"content": "forbidden"}
         )
 
-    failure_payload = {
+    failure_payload: dict[str, object] = {
         "schema_version": "night-voyager.dra-live-failure-receipt.v1",
         "intent_sha256": intent.intent_sha256,
         "attempt_id": intent.attempt_id,

@@ -45,8 +45,16 @@ def test_required_dra_lane_is_fixture_only() -> None:
     makefile = (ROOT / "Makefile").read_text()
     workflow = (ROOT / ".github/workflows/ci.yml").read_text()
     assert "verify_dra_consumer.py fixture --json" in makefile
+    for node in (
+        "tests/contracts/test_dra_live_models.py",
+        "tests/contracts/test_dra_live_projection.py",
+        "tests/contracts/test_dra_transport.py",
+        "tests/unit/dra/test_live_evaluation.py",
+    ):
+        assert node in makefile
     assert "make dra-check" in workflow
     assert "DRA_LIVE_PROOF_ACK" not in workflow
+    assert "dra-consumer-proof" not in workflow
 
 
 def test_live_contracts_are_provider_free_and_content_bounded() -> None:
@@ -56,6 +64,25 @@ def test_live_contracts_are_provider_free_and_content_bounded() -> None:
     assert "DECISION_RESEARCH_AGENT_API_KEY" not in scenario
     assert '"content"' not in scenario
     assert '"provider_payload"' not in scenario
+
+
+def test_dra_live_foundation_is_release_verified_without_live_execution() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text()
+    governed_flow = (ROOT / "scripts/verify_dra_governed_flow.py").read_text()
+    fixture_verifier = (ROOT / "scripts/verify_dra_consumer.py").read_text()
+    for required in (
+        "migrations/versions/0010_dra_v0_1_6_live_consumer.py",
+        "src/night_voyager/dra/live_projection.py",
+        "src/night_voyager/dra/live_evaluation.py",
+        "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md",
+    ):
+        assert required in verifier
+    assert "build_v0_1_6_scenario_candidate_import" in governed_flow
+    assert "build_fixture_candidate_import" not in governed_flow
+    assert "load_dra_fixture" in fixture_verifier
+    assert "verify_dra_consumer.py fixture --json" in (
+        ROOT / "Makefile"
+    ).read_text()
 
 
 def test_governed_mixed_planning_public_contract_is_closed() -> None:

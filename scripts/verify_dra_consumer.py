@@ -16,9 +16,9 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 from night_voyager.dra.fixtures import build_fixture_candidate_import, load_dra_fixture
+from night_voyager.dra.live_models import DraLiveRunEnvelopeV1
 from night_voyager.dra.models import (
     DraCanonicalResultProjectionV1,
-    DraRunStateProjectionV1,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +43,7 @@ PUBLIC_ERRORS = {
 
 
 class LiveProjectionTransport(Protocol):
-    async def get_run(self, run_id: str) -> DraRunStateProjectionV1: ...
+    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1: ...
 
     async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1: ...
 

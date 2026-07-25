@@ -168,6 +168,12 @@ PUBLISHED_RELEASE_DOCUMENTS = {
     "docs/how-to/verify-v0.1.2-release.md": (
         "5ffba625c4eb4dd78330a0a51b96065de763f5aab8f0a32928c3bf65cd0f3060"
     ),
+    "docs/releases/v0.1.3.md": (
+        "aa1f7eb6e709641cb8fe5155a95d892ac1f5f441610f431a6f430c784ee6f3c2"
+    ),
+    "docs/how-to/verify-v0.1.3-release.md": (
+        "1f62ca4b1c8db8caa0613df3851ea79b48afb6c5696b590d8b6cc5caa4986162"
+    ),
 }
 RELEASE_HEADINGS = (
     "## Summary",
@@ -238,11 +244,17 @@ RELEASE_HOW_TO_TOKENS = (
     "bypass the `main` ruleset",
 )
 DRA_SURFACE = (
+    "migrations/versions/0010_dra_v0_1_6_live_consumer.py",
+    "fixtures/dra/live-closure-scenario-v1.json",
+    "src/night_voyager/dra/live_models.py",
+    "src/night_voyager/dra/live_projection.py",
+    "src/night_voyager/dra/live_evaluation.py",
     "scripts/verify_dra_consumer.py",
     "scripts/verify_dra_governed_flow.py",
     "scripts/run_dra_lane.sh",
     "scripts/seed_dra_proof.py",
     "docs/decisions/0007-dra-governed-mixed-evidence-boundary.md",
+    "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md",
     "docs/reference/dra-governed-evidence.md",
     "docs/operations/dra-consumer-proof.md",
 )
@@ -499,11 +511,17 @@ def verify_dra_surface() -> None:
         or "dra-consumer-proof:" not in makefile
         or "make dra-check" not in workflow
         or "dra-consumer-proof" in workflow
+        or "tests/contracts/test_dra_live_models.py" not in makefile
+        or "tests/contracts/test_dra_live_projection.py" not in makefile
+        or "tests/contracts/test_dra_transport.py" not in makefile
+        or "tests/unit/dra" not in makefile
         or "generate_governed_mixed_planning_run_v1" not in reference
         or "australia_program_fit -> program_fit -> externally_verified"
         not in reference
         or "exact copies of the synthetic baseline" not in reference
         or "Live provider proof was not run" not in operations
+        or "PR B and PR C remain approved but not implemented" not in operations
+        or "no governed-live success claim" not in operations
         or "make compose-proof" not in operations
     ):
         raise SystemExit("governed DRA command or status contract drift")
@@ -877,18 +895,24 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0009"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0009")
+    if heads != {"0010"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0010")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
         "inside-planning-start-migration": 3,
         "tests/integration/tasks/test_planning_start_migration.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"': 2,
+        "inside-dra-live-migration": 3,
+        "tests/integration/dra/test_dra_live_migration.py": 2,
+        'run_lane "${BASE_PROJECT_NAME}-dra-live-migration"': 2,
     }
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
-        raise SystemExit("planning-start migration gate drift")
-    print("proof migrations: exact Alembic head 0009 and planning-start parity lane confirmed")
+        raise SystemExit("migration gate drift")
+    print(
+        "proof migrations: exact Alembic head 0010 with planning-start and "
+        "DRA live parity lanes confirmed"
+    )
 
 
 def verify_config() -> None:

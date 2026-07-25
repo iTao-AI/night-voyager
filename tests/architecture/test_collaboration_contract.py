@@ -230,7 +230,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         < full_seed
         < refusal
     )
-    assert "refusing downgrade: Skill governance or runtime pin history exists" in runner
+    assert "refusing downgrade: DRA v0.1.6 candidate history exists" in runner
 
 
 def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_history() -> None:

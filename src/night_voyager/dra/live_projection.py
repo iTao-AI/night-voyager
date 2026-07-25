@@ -67,6 +67,8 @@ def project_terminal_result(
     run: DraLiveRunEnvelopeV1,
     result: DraCanonicalResultProjectionV1,
 ) -> DraTerminalProjectionV1:
+    if run.disposition != "canonical_ready":
+        raise DraLiveContractError("terminal_state_invalid")
     if (
         run.thread_id != acceptance.thread_id
         or run.run_id != acceptance.run_id
@@ -75,6 +77,8 @@ def project_terminal_result(
         raise DraLiveContractError("run_ownership_invalid")
     if result.run_id != acceptance.run_id:
         raise DraLiveContractError("result_ownership_invalid")
+    if not run.evidence:
+        raise DraLiveContractError("evidence_projection_invalid")
 
     projected: list[DraLiveConsumerEvidenceV1] = []
     for row in run.evidence:

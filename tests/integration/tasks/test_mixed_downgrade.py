@@ -111,9 +111,15 @@ async def test_downgrade_freezes_nonterminal_mixed_tasks_and_preserves_terminal_
     # pre-existing 0006 mixed-task downgrade only after a clean 0008 -> 0007
     # downgrade has restored the exact legacy task signature.
     alembic("downgrade", "0007")
-    running_case, running_version = await approved_pack(1401)
-    queued_case, queued_version = await approved_pack(1402)
-    terminal_case, terminal_version = await approved_pack(1403)
+    running_case, running_version = await approved_pack(
+        1401, historical_import=True
+    )
+    queued_case, queued_version = await approved_pack(
+        1402, historical_import=True
+    )
+    terminal_case, terminal_version = await approved_pack(
+        1403, historical_import=True
+    )
     running_task = UUID("80000000-0000-0000-0000-000000001401")
     queued_task = UUID("80000000-0000-0000-0000-000000001402")
     terminal_task = UUID("80000000-0000-0000-0000-000000001403")

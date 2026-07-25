@@ -9,10 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from night_voyager.dra.models import (
-    DraCanonicalResultProjectionV1,
-    DraRunStateProjectionV1,
-)
+from night_voyager.dra.live_models import DraLiveRunEnvelopeV1
+from night_voyager.dra.models import DraCanonicalResultProjectionV1
 from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID, DRA_PROOF_CASE_ID
 from scripts import verify_dra_consumer
 
@@ -91,6 +89,16 @@ def test_make_and_ci_keep_live_proof_out_of_required_gates() -> None:
     assert "dra-consumer-proof" not in workflow
 
 
+def test_historical_fixture_and_live_scenario_are_distinct_explicit_paths() -> None:
+    makefile = (ROOT / "Makefile").read_text()
+    governed_flow = (ROOT / "scripts/verify_dra_governed_flow.py").read_text()
+    fixture_verifier = (ROOT / "scripts/verify_dra_consumer.py").read_text()
+    assert "verify_dra_consumer.py fixture --json" in makefile
+    assert "load_dra_fixture" in fixture_verifier
+    assert "build_v0_1_6_scenario_candidate_import" in governed_flow
+    assert "build_fixture_candidate_import" not in governed_flow
+
+
 def test_public_docs_close_governed_mixed_planning_without_live_claim() -> None:
     reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
     runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
@@ -124,14 +132,14 @@ def test_main_normalizes_unexpected_live_errors_without_private_output(
 class FakeLiveTransport:
     def __init__(
         self,
-        runs: list[DraRunStateProjectionV1 | Exception],
+        runs: list[DraLiveRunEnvelopeV1 | Exception],
         result: DraCanonicalResultProjectionV1 | Exception,
     ) -> None:
         self.runs = runs
         self.result = result
         self.result_calls = 0
 
-    async def get_run(self, run_id: str) -> DraRunStateProjectionV1:
+    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1:
         _ = run_id
         value = self.runs.pop(0)
         if isinstance(value, Exception):
@@ -146,14 +154,19 @@ class FakeLiveTransport:
         return self.result
 
 
-def run_state(execution: str, review: str, delivery: str) -> DraRunStateProjectionV1:
-    return DraRunStateProjectionV1.model_validate(
+def run_state(execution: str, review: str, delivery: str) -> DraLiveRunEnvelopeV1:
+    return DraLiveRunEnvelopeV1.model_validate(
         {
             "run_id": "run-1",
+            "thread_id": "thread-1",
+            "segment_id": "segment-1",
+            "profile_id": "generic",
             "state_version": 1,
             "execution_status": execution,
             "review_status": review,
             "delivery_status": delivery,
+            "failure_cause": None,
+            "evidence": [],
         }
     )
 
