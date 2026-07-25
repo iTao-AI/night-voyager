@@ -77,6 +77,16 @@ def test_root_browser_proof_context_ignores_local_playwright_artifacts() -> None
     assert "**/test-results" in ignored
 
 
+def test_compose_proof_runs_governed_dra_closure_and_closed_outcome_inspector() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    governed = Path("scripts/verify_dra_governed_flow.py").read_text(
+        encoding="utf-8"
+    )
+    assert "verify_dra_governed_flow.py --fixture" in script
+    assert "PostgresLiveOutcomeInspector" in governed
+    assert "app.evidence_refs" not in governed
+
+
 def test_local_playwright_uses_the_exact_ipv4_next_origin() -> None:
     config = Path("web/playwright.config.ts").read_text(encoding="utf-8")
 

@@ -66,10 +66,16 @@ dra-check: ## Run the deterministic offline DRA consumer contract lane
 	  tests/unit/dra/test_application.py \
 	  tests/unit/dra/test_fixtures.py \
 	  tests/unit/dra/test_live_evaluation.py \
+	  tests/unit/dra/test_live_outcome_evaluation.py \
+	  tests/unit/dra/test_live_promotion_controller.py \
+	  tests/unit/dra/test_live_review_controller.py \
+	  tests/unit/dra/test_live_decision_controller.py \
 	  tests/unit/dra/test_live_capture_controller.py \
 	  tests/unit/dra/test_models.py \
 	  tests/unit/dra/test_proof_controller.py \
 	  tests/integration/dra/test_live_capture_rehearsal.py \
+	  tests/integration/dra/test_live_closure_recovery.py \
+	  tests/integration/dra/test_live_outcome_projection.py \
 	  tests/architecture/test_dra_contract.py
 	uv run python scripts/verify_dra_consumer.py fixture --json
 	@scripts/run_dra_lane.sh rehearse

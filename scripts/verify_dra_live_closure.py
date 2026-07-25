@@ -10,6 +10,8 @@ import json
 import os
 import signal
 import stat
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 from typing import Literal, NoReturn, cast
@@ -876,6 +878,83 @@ def rehearse_capture(args: argparse.Namespace) -> NoReturn:
     _rehearsal_resume(root, args.declared_raw_url, as_json=args.json)
 
 
+def inspect_provider_free_stage(args: argparse.Namespace) -> NoReturn:
+    """Validate the durable predecessor before a separately acknowledged stage."""
+    stage = str(args.command)
+    if args.ack != f"acknowledge-{stage}":
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                f"{stage}_acknowledgement_required",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    predecessor = {
+        "promote": "capture.json",
+        "review": "promotion.json",
+        "decide": "review.json",
+        "evaluate": "decision.json",
+    }[stage]
+    try:
+        with _open_root(Path(args.receipt_root)) as store:
+            names = {
+                identity.logical_name
+                for identity in store.verify_recovery_bundle().receipts
+            }
+            if predecessor not in names:
+                raise ValueError("stage_predecessor_missing")
+    except (LiveStorageError, ValueError):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                f"{stage}_predecessor_invalid",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    _emit(
+        _result_payload(
+            "safe_pause",
+            f"{stage}_ephemeral_authority_required",
+            stage,
+            predecessor=predecessor,
+            mutation_performed=False,
+        ),
+        as_json=args.json,
+    )
+
+
+def rehearse_full(args: argparse.Namespace) -> NoReturn:
+    """Run the existing real provider-free HTTP/worker/database closure."""
+    command = [
+        sys.executable,
+        str(Path(__file__).with_name("verify_dra_governed_flow.py")),
+        "--fixture",
+    ]
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError:
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                "full_rehearsal_failed",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    _emit(
+        _result_payload(
+            "success",
+            "closure_passed",
+            "cleanup",
+            provider_attempt_consumed=False,
+            provider_accessed=False,
+        ),
+        as_json=args.json,
+    )
+
+
 def _root_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--receipt-root", required=True)
     parser.add_argument("--json", action="store_true")
@@ -948,6 +1027,20 @@ def parse_args() -> argparse.Namespace:
     rehearsal.add_argument("--phase", choices=("capture", "resume"), required=True)
     rehearsal.add_argument("--declared-raw-url")
 
+    for stage in ("promote", "review", "decide", "evaluate"):
+        stage_parser = commands.add_parser(
+            stage,
+            help=f"provider-free {stage} predecessor and authority preflight",
+        )
+        _root_argument(stage_parser)
+        stage_parser.add_argument("--ack", required=True)
+
+    full_rehearsal = commands.add_parser(
+        "rehearse-full",
+        help="provider-free full HTTP/worker/database closure rehearsal",
+    )
+    full_rehearsal.add_argument("--json", action="store_true")
+
     clean = commands.add_parser(
         "cleanup", help="provider-free mutating exact-root cleanup (dry-run default)"
     )
@@ -969,6 +1062,11 @@ def main() -> None:
         "resume-poll": resume_poll,
         "inspect-recovery": inspect_recovery,
         "rehearse-capture": rehearse_capture,
+        "promote": inspect_provider_free_stage,
+        "review": inspect_provider_free_stage,
+        "decide": inspect_provider_free_stage,
+        "evaluate": inspect_provider_free_stage,
+        "rehearse-full": rehearse_full,
         "cleanup": cleanup,
     }
     try:

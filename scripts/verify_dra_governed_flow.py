@@ -13,12 +13,18 @@ import urllib.request
 from http.cookiejar import CookieJar
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
+from night_voyager.dra.live_models import derive_identity_hash
+from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
+from night_voyager.dra.live_outcome_postgres import (
+    PostgresLiveOutcomeInspector,
+)
 from night_voyager.identity.demo_seed import DRA_PROOF_CASE_ID
+from night_voyager.identity.models import ActorContext, ActorRole
 
 ORIGIN = "http://127.0.0.1:3000"
 API = "http://127.0.0.1:8000/api/v1"
@@ -221,36 +227,58 @@ def close_human_decision(
     return brief_id, str(decision["receipt_id"]), str(decision["timeline_id"])
 
 
-async def inspect(promoted_version: int) -> None:
+async def inspect(
+    candidate_id: str,
+    promoted_version: int,
+    task_id: str,
+    run_id: str,
+) -> None:
     database_url = os.environ.get("NIGHT_VOYAGER_DATABASE_URL")
     if not database_url:
         raise SystemExit("NIGHT_VOYAGER_DATABASE_URL is required")
     engine = create_async_engine(database_url)
     try:
-        async with engine.begin() as connection:
-            for name, value in (
-                ("night_voyager.organization_id", ORGANIZATION),
-                ("night_voyager.actor_id", "20000000-0000-0000-0000-000000000001"),
-                ("night_voyager.role", "advisor"),
-            ):
-                await connection.execute(
-                    text("SELECT set_config(:name,:value,true)"),
-                    {"name": name, "value": value},
-                )
-            row = (
-                await connection.execute(
-                    text(
-                        "SELECT count(*) FILTER (WHERE authority='externally_verified') external,"
-                        "count(*) FILTER (WHERE claim='australia_program_fit' AND "
-                        "authority='externally_verified') bounded,count(*) total "
-                        "FROM app.evidence_refs WHERE organization_id=:org "
-                        "AND source_pack_id=:pack AND source_pack_version=:version"
-                    ),
-                    {"org": ORGANIZATION, "pack": PACK, "version": promoted_version},
-                )
-            ).mappings().one()
-            if dict(row) != {"external": 1, "bounded": 1, "total": 6}:
-                raise SystemExit("dra_governed_authority_invalid")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        context = ActorContext(
+            organization_id=UUID(ORGANIZATION),
+            actor_id=UUID("20000000-0000-0000-0000-000000000001"),
+            role=ActorRole.ADVISOR,
+            session_id=UUID("30000000-0000-0000-0000-000000000001"),
+        )
+        intent = DraLiveOutcomeIntentV1(
+            intent_sha256="0" * 64,
+            organization_id=context.organization_id,
+            candidate_id=UUID(candidate_id),
+            advisor_actor_identity_sha256=derive_identity_hash(
+                "actor", str(context.actor_id)
+            ),
+            tenant_identity_sha256=derive_identity_hash(
+                "tenant", str(context.organization_id)
+            ),
+        )
+        async with factory() as session:
+            projection = await PostgresLiveOutcomeInspector(
+                session
+            ).inspect(context, intent)
+        expected = {
+            "candidate_id": candidate_id,
+            "promoted_source_pack_id": PACK,
+            "promoted_source_pack_version": promoted_version,
+            "task_id": task_id,
+            "planning_run_id": run_id,
+            "external_claim": "australia_program_fit",
+            "evidence_role": "program_fit",
+            "external_authority": "externally_verified",
+            "verification_count": 1,
+            "governed_task_count": 1,
+            "advisor_review_count": 1,
+            "family_decision_count": 1,
+            "decision_receipt_count": 1,
+            "timeline_plan_count": 1,
+        }
+        observed = projection.model_dump(mode="json")
+        if any(observed[key] != value for key, value in expected.items()):
+            raise SystemExit("dra_governed_authority_invalid")
     finally:
         await engine.dispose()
 
@@ -264,7 +292,7 @@ def verify_fixture_flow() -> None:
     brief_id, receipt_id, timeline_id = close_human_decision(
         advisor, advisor_csrf, run_id
     )
-    asyncio.run(inspect(promoted_version))
+    asyncio.run(inspect(candidate_id, promoted_version, task_id, run_id))
     print(
         "compose-proof: governed DRA fixture-to-decision closure passed "
         f"candidate={candidate_id} task={task_id} run={run_id} brief={brief_id} "
