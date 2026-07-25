@@ -7,6 +7,10 @@ import pytest
 from pydantic import ValidationError
 
 from night_voyager.dra.fixtures import load_live_closure_scenario
+from night_voyager.dra.live_evaluation import (
+    AssertionResultV1,
+    DraLiveEvaluationReportV1,
+)
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
     DraCaptureReceiptV1,
@@ -176,4 +180,27 @@ def test_receipts_are_content_free_and_stage_names_are_unique() -> None:
     with pytest.raises(ValidationError):
         DraFailureReceiptV1.model_validate(
             failure_payload | {"provider_payload": {"secret": "forbidden"}}
+        )
+
+
+def test_evaluation_models_are_closed_and_derive_status() -> None:
+    passed = AssertionResultV1(
+        assertion_id="producer_pin_exact",
+        status="passed",
+        public_code="producer_pin_exact_passed",
+        observed_identity_hashes=("a" * 64,),
+    )
+    report = DraLiveEvaluationReportV1(
+        schema_version="night-voyager.dra-live-evaluation.v1",
+        scenario_id="dra-v0-1-6-live-closure-v1",
+        producer=load_live_closure_scenario().producer,
+        intent_sha256="b" * 64,
+        assertions=(passed,),
+        expected_non_claims=load_live_closure_scenario().expected_non_claims,
+    )
+    assert report.status == "passed"
+    assert report.model_dump(mode="json")["status"] == "passed"
+    with pytest.raises(ValidationError):
+        AssertionResultV1.model_validate(
+            passed.model_dump() | {"assertion_id": "unknown_assertion"}
         )
