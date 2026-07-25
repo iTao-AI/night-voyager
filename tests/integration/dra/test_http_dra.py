@@ -11,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from night_voyager.api import create_app
 from night_voyager.config import Settings
-from night_voyager.dra.fixtures import build_fixture_candidate_import
+from night_voyager.dra.fixtures import (
+    build_fixture_candidate_import,
+    build_v0_1_6_scenario_candidate_import,
+)
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService, IssuedSession
@@ -69,7 +72,9 @@ async def mint(
 
 
 def import_payload() -> dict[str, object]:
-    payload = build_fixture_candidate_import().model_dump(mode="json", exclude_computed_fields=True)
+    payload = build_v0_1_6_scenario_candidate_import().model_dump(
+        mode="json", exclude_computed_fields=True
+    )
     payload.pop("organization_id")
     payload.pop("case_id")
     return payload

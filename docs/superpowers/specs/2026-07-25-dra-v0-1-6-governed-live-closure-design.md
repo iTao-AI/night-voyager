@@ -3,13 +3,13 @@
 
 ## Status
 
-Approved design. Implementation has not started.
+**Implementation status:** PR A foundation implemented provider-free; governed live acceptance remains unimplemented. PR B and PR C remain approved but not implemented.
 
 This document defines the bounded Night Voyager consumer increment after the
-`v0.1.3` local synthetic portfolio release. Approval authorizes this design record
-and subsequent implementation planning. It does not by itself authorize
-implementation, provider execution, credential access, push, pull request creation,
-merge, tag, release, deployment, or cleanup of unrelated resources.
+`v0.1.3` local synthetic portfolio release. PR A implements only the offline
+producer pin, migration, strict projection, deterministic scenario, fake transport,
+and evaluation foundation. It does not authorize or claim provider execution,
+governed live closure, release, or deployment.
 
 The implementation is Night Voyager-owned. Decision Research Agent `v0.1.6` is an
 immutable producer dependency. No DRA runtime, API, schema, release, or repository

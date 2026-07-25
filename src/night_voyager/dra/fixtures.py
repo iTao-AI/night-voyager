@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 from typing import cast
 
+from night_voyager.dra.live_models import DraLiveScenarioV1
 from night_voyager.dra.models import (
     DRA_FIXTURE_SHA256,
+    DRA_LIVE_PRODUCER,
     DraCandidateImportV1,
     DraCanonicalArtifactInputV1,
     DraEvidenceProjectionV1,
@@ -22,6 +24,7 @@ from night_voyager.planning.hashing import canonical_sha256
 DRA_ROOT = Path("fixtures/dra")
 DRA_FIXTURE = DRA_ROOT / "downstream-consumer-contract-v1.json"
 DRA_MANIFEST = DRA_ROOT / "manifest.json"
+DRA_LIVE_SCENARIO = DRA_ROOT / "live-closure-scenario-v1.json"
 
 
 def _as_object(value: object, code: str) -> dict[str, object]:
@@ -176,3 +179,24 @@ def build_fixture_candidate_import() -> DraCandidateImportV1:
     if len(promotable) != 1:
         raise ValueError("dra_promotable_evidence_count_invalid")
     return fixture.canonical_import
+
+
+def load_live_closure_scenario() -> DraLiveScenarioV1:
+    return DraLiveScenarioV1.model_validate_json(DRA_LIVE_SCENARIO.read_bytes())
+
+
+def build_v0_1_6_scenario_candidate_import() -> DraCandidateImportV1:
+    scenario = load_live_closure_scenario()
+    historical = build_fixture_candidate_import()
+    artifact = scenario.result.artifact
+    if (
+        historical.artifact.content_hash != artifact.sha256
+        or historical.artifact.byte_length != artifact.byte_length
+    ):
+        raise ValueError("dra_live_scenario_artifact_identity_mismatch")
+    if (
+        historical.acceptance.run_id != scenario.status.run_id
+        or historical.acceptance.segment_id != scenario.status.segment_id
+    ):
+        raise ValueError("dra_live_scenario_run_identity_mismatch")
+    return historical.model_copy(update={"producer": DRA_LIVE_PRODUCER})

@@ -46,21 +46,5 @@ class DraRunReconciler:
             raise ValueError("dra_idempotency_key_invalid")
         try:
             return await self._transport.create_run(request, idempotency_key)
-        except DraAmbiguousOutcome as ambiguous:
-            try:
-                replay = await self._transport.create_run(request, idempotency_key)
-            except DraAmbiguousOutcome as error:
-                raise DraReconciliationRequired() from error
-            if not replay.idempotent_replay:
-                raise DraReconciliationRequired() from ambiguous
-            if ambiguous.observed is not None and (
-                replay.thread_id,
-                replay.run_id,
-                replay.segment_id,
-            ) != (
-                ambiguous.observed.thread_id,
-                ambiguous.observed.run_id,
-                ambiguous.observed.segment_id,
-            ):
-                raise DraReconciliationRequired() from ambiguous
-            return replay
+        except DraAmbiguousOutcome as error:
+            raise DraReconciliationRequired() from error

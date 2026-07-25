@@ -8,9 +8,12 @@ import pytest
 
 from night_voyager.dra.fixtures import (
     DRA_FIXTURE,
+    DRA_LIVE_SCENARIO,
     DRA_MANIFEST,
     build_fixture_candidate_import,
+    build_v0_1_6_scenario_candidate_import,
     load_dra_fixture,
+    load_live_closure_scenario,
 )
 
 
@@ -46,3 +49,19 @@ def test_fixture_candidate_selects_one_public_source() -> None:
     selected = [item for item in candidate.evidence if item.is_promotable]
     assert len(selected) == 1
     assert str(selected[0].source_url) == selected[0].source_identity
+
+
+def test_live_scenario_is_fixed_path_and_keeps_fixture_immutable() -> None:
+    fixture_before = DRA_FIXTURE.read_bytes()
+    scenario = load_live_closure_scenario()
+    candidate = build_v0_1_6_scenario_candidate_import()
+    assert DRA_LIVE_SCENARIO.name == "live-closure-scenario-v1.json"
+    assert scenario.producer.release == "v0.1.6"
+    assert candidate.producer.release == "v0.1.6"
+    assert candidate.artifact.content_hash == scenario.result.artifact.sha256
+    assert DRA_FIXTURE.read_bytes() == fixture_before
+
+
+def test_live_scenario_loader_has_no_arbitrary_path_argument() -> None:
+    with pytest.raises(TypeError):
+        load_live_closure_scenario(Path("/tmp/untrusted.json"))  # type: ignore[call-arg]

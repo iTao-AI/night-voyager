@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from night_voyager.dra.fixtures import build_fixture_candidate_import
 from night_voyager.planning.fixtures import validate_planning_fixture
 from night_voyager.planning.mixed import materialize_governed_mixed_input
 from night_voyager.planning.trusted import GovernedMixedSnapshotV1
@@ -28,6 +29,10 @@ from .test_postgres_candidate_promotion import (
 
 pytestmark = pytest.mark.database
 SNAPSHOT_SQL = "SELECT app.load_governed_mixed_planning_snapshot(:org,:case,1,:pack,:version,'m3a-policy-v1')"
+HISTORICAL_IMPORT_SQL = IMPORT_SQL.replace(
+    "'v0.1.6',\n  '7d43324b469cb5e445c2e8be83af3be4d841cf1c'",
+    "'v0.1.3',\n  '87b2a8e335385eb865086f7a69fe2b190567cfa2'",
+)
 
 
 def case_id_for(suffix: int) -> UUID:
@@ -82,7 +87,9 @@ async def ensure_mixed_case(case_id: UUID) -> None:
         await engine.dispose()
 
 
-async def approved_pack(suffix: int) -> tuple[UUID, int]:
+async def approved_pack(
+    suffix: int, *, historical_import: bool = False
+) -> tuple[UUID, int]:
     case_id = case_id_for(suffix)
     await ensure_mixed_case(case_id)
     candidate = UUID(f"92000000-0000-0000-0000-{suffix:012d}")
@@ -91,14 +98,31 @@ async def approved_pack(suffix: int) -> tuple[UUID, int]:
     try:
         async with engine.begin() as connection:
             await set_context(connection, ADVISOR, "advisor")
+            params = import_params(
+                candidate,
+                request_hash=hashlib.sha256(f"import-{suffix}".encode()).hexdigest(),
+                key_hash=hashlib.sha256(f"import-key-{suffix}".encode()).hexdigest(),
+                case_id=case_id,
+            )
+            if historical_import:
+                historical = build_fixture_candidate_import()
+                params |= {
+                    "identity_hash": historical.request_identity.request_sha256,
+                    "run_id": historical.run.run_id,
+                    "artifact_bytes": historical.artifact.byte_length,
+                    "artifact_sha": historical.artifact.content_hash,
+                    "evidence": json.dumps(
+                        [
+                            item.model_dump(
+                                mode="json", exclude_computed_fields=True
+                            )
+                            for item in historical.evidence
+                        ]
+                    ),
+                }
             await connection.execute(
-                text(IMPORT_SQL),
-                import_params(
-                    candidate,
-                    request_hash=hashlib.sha256(f"import-{suffix}".encode()).hexdigest(),
-                    key_hash=hashlib.sha256(f"import-key-{suffix}".encode()).hexdigest(),
-                    case_id=case_id,
-                ),
+                text(HISTORICAL_IMPORT_SQL if historical_import else IMPORT_SQL),
+                params,
             )
             result = (
                 await connection.execute(

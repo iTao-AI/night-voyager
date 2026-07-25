@@ -1,5 +1,7 @@
 # DRA v0.1.6 Live Closure PR A Implementation Plan
 
+**Implementation status:** PR A implemented provider-free; PR B and PR C remain approved but not implemented.
+
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. This PR is one serial migration and contract
 > authority chain; do not dispatch parallel agents. Every behavioral change follows

@@ -67,6 +67,7 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0007_conversation_and_memory.py",
         "0008_versioned_skills.py",
         "0009_explicit_planning_start_authority.py",
+        "0010_dra_v0_1_6_live_consumer.py",
     ]
     for relative in (
         "0005_dra_candidate_promotion.py",

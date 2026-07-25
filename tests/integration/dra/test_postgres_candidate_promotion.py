@@ -15,7 +15,10 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
-from night_voyager.dra.fixtures import build_fixture_candidate_import
+from night_voyager.dra.fixtures import (
+    build_fixture_candidate_import,
+    build_v0_1_6_scenario_candidate_import,
+)
 
 pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
@@ -34,8 +37,8 @@ def stable_hash(label: str) -> str:
 
 IMPORT_SQL = """
 SELECT * FROM app.import_dra_research_candidate(
-  :org,:actor,:case,:candidate,1,'v0.1.3',
-  '87b2a8e335385eb865086f7a69fe2b190567cfa2','dra.downstream-consumer.v1',
+  :org,:actor,:case,:candidate,1,'v0.1.6',
+  '7d43324b469cb5e445c2e8be83af3be4d841cf1c','dra.downstream-consumer.v1',
   'cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157',
   'generic',:identity_hash,:run_id,'research-report.md','research_report_markdown',
   'text/markdown',:artifact_bytes,:artifact_sha,CAST(:evidence AS jsonb),
@@ -97,7 +100,7 @@ def import_params(
     key_hash: str,
     case_id: UUID = CASE,
 ) -> dict[str, object]:
-    imported = build_fixture_candidate_import()
+    imported = build_v0_1_6_scenario_candidate_import()
     return {
         "org": ORG,
         "actor": ADVISOR,

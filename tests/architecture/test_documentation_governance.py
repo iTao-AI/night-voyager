@@ -92,6 +92,13 @@ PLAN_STATUS_BINDINGS = (
         "**Implementation status:** Complete, merged as PR #59, and released in v0.1.3.",
     ),
     (
+        "DRA v0.1.6 governed live closure",
+        "PR A implemented provider-free; PR B/C approved but not implemented",
+        "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
+        "**Implementation status:** PR A implemented provider-free; "
+        "PR B and PR C remain approved but not implemented.",
+    ),
+    (
         "High-End Portfolio Entry v1",
         "Implemented and released in v0.1.3",
         "2026-07-23-high-end-portfolio-entry.md",
@@ -308,6 +315,10 @@ def test_implemented_document_statuses_do_not_regress() -> None:
             "released in v0.1.2 as part of Governed Collaboration Core v1",
             "PR B and PR C were delivered under their own plans",
         ),
+        "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
+            "**Implementation status:** PR A foundation implemented provider-free;",
+            "governed live acceptance remains unimplemented",
+        ),
     }
     for relative, required in expected.items():
         source = (ROOT / relative).read_text(encoding="utf-8")
@@ -431,6 +442,22 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
     assert "no fixed lane count" in spec
     assert "ADR 0006 already records M5 as implemented" in spec
     assert "ADR 0006 already records M5 as implemented" in plan
+
+
+def test_root_readmes_bind_current_development_migration_head() -> None:
+    current_graph = (
+        "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
+        "0009 -> 0010`"
+    )
+    stale_graph = (
+        "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
+        "0009`"
+    )
+    for relative in ("README.md", "README_CN.md"):
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        assert source.count(current_graph) == 1, relative
+        assert stale_graph not in source, relative
+        assert "v0.1.3 migration `0009`" in source, relative
 
 
 def test_explicit_planning_start_documents_match_0009_authority() -> None:

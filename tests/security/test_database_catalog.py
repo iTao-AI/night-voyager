@@ -76,15 +76,22 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "policy_count != 38" in verifier
 
 
-def test_database_gate_requires_0009_planning_start_migration_lane() -> None:
+def test_database_gate_requires_0010_head_and_isolated_migration_lanes() -> None:
     script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
 
     assert "inside-planning-start-migration" in script
     assert "tests/integration/tasks/test_planning_start_migration.py" in script
     assert 'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"' in script
+    assert "inside-dra-live-migration" in script
+    assert "tests/integration/dra/test_dra_live_migration.py" in script
+    assert 'run_lane "${BASE_PROJECT_NAME}-dra-live-migration"' in script
     assert "uv run alembic upgrade head" in script
-    assert "uv run alembic current | grep '0009'" in script
+    assert "uv run alembic current | grep '0010'" in script
+    planning_lane = script.split(
+        'if [ "${1:-}" = "inside-planning-start-migration" ]; then', 1
+    )[1].split("fi", 1)[0]
+    assert "uv run alembic current | grep '0009'" in planning_lane
     assert "fact-to-plan-db-check:" in makefile
     assert "scripts/run_db_tests.sh fact-to-plan" in makefile
     assert "scripts/run_db_tests.sh" in makefile.split("db-check:", 1)[1]

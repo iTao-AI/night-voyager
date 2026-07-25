@@ -25,6 +25,12 @@ HISTORICAL_RELEASE_DIGESTS = {
     "docs/how-to/verify-v0.1.2-release.md": (
         "5ffba625c4eb4dd78330a0a51b96065de763f5aab8f0a32928c3bf65cd0f3060"
     ),
+    "docs/releases/v0.1.3.md": (
+        "aa1f7eb6e709641cb8fe5155a95d892ac1f5f441610f431a6f430c784ee6f3c2"
+    ),
+    "docs/how-to/verify-v0.1.3-release.md": (
+        "1f62ca4b1c8db8caa0613df3851ea79b48afb6c5696b590d8b6cc5caa4986162"
+    ),
 }
 
 

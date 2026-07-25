@@ -5,13 +5,13 @@ import ipaddress
 from datetime import date
 from pathlib import PurePosixPath
 from typing import Annotated, Literal, Self, cast
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import (
     AwareDatetime,
     BaseModel,
     ConfigDict,
-    HttpUrl,
     PositiveInt,
     StringConstraints,
     computed_field,
@@ -21,6 +21,9 @@ from pydantic import (
 
 DRA_RELEASE = "v0.1.3"
 DRA_COMMIT = "87b2a8e335385eb865086f7a69fe2b190567cfa2"
+DRA_LIVE_RELEASE = "v0.1.6"
+DRA_LIVE_COMMIT = "7d43324b469cb5e445c2e8be83af3be4d841cf1c"
+DRA_LIVE_TAG_OBJECT = "9e0b0b443c435cf636dfce932c3c77d91d0a43e4"
 DRA_CONTRACT_SCHEMA = "dra.downstream-consumer.v1"
 DRA_FIXTURE_SHA256 = "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
 MAX_ARTIFACT_BYTES = 1024 * 1024
@@ -28,6 +31,7 @@ MAX_ARTIFACT_BYTES = 1024 * 1024
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 BoundedId = Annotated[str, StringConstraints(min_length=1, max_length=200)]
 BoundedText = Annotated[str, StringConstraints(min_length=1, max_length=2048)]
+GitObjectSha = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{40}$")]
 
 
 class FrozenModel(BaseModel):
@@ -49,6 +53,27 @@ def is_public_source_host(host: str) -> bool:
         return "." in normalized
 
 
+def validate_raw_public_https_url(raw_url: str) -> str:
+    if any(character.isspace() or ord(character) < 32 for character in raw_url):
+        raise ValueError("dra_source_url_invalid")
+    try:
+        parsed = urlsplit(raw_url)
+        host = parsed.hostname
+        _ = parsed.port
+    except ValueError as error:
+        raise ValueError("dra_source_url_invalid") from error
+    if (
+        parsed.scheme != "https"
+        or not parsed.netloc
+        or host is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or not is_public_source_host(host)
+    ):
+        raise ValueError("dra_source_url_invalid")
+    return raw_url
+
+
 class DraHealthProjectionV1(FrozenModel):
     status: Literal["ok"]
     service: Literal["decision-research-agent"]
@@ -56,12 +81,28 @@ class DraHealthProjectionV1(FrozenModel):
 
 class DraProducerPinV1(FrozenModel):
     name: Literal["decision-research-agent"] = "decision-research-agent"
-    release: Literal["v0.1.3"] = DRA_RELEASE
-    commit: Literal["87b2a8e335385eb865086f7a69fe2b190567cfa2"] = DRA_COMMIT
+    release: Literal["v0.1.3", "v0.1.6"] = DRA_RELEASE
+    commit: GitObjectSha = DRA_COMMIT
     contract_schema: Literal["dra.downstream-consumer.v1"] = DRA_CONTRACT_SCHEMA
     fixture_sha256: Literal[
         "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
     ] = DRA_FIXTURE_SHA256
+
+    @model_validator(mode="after")
+    def exact_supported_tuple(self) -> Self:
+        if (self.release, self.commit) not in {
+            (DRA_RELEASE, DRA_COMMIT),
+            (DRA_LIVE_RELEASE, DRA_LIVE_COMMIT),
+        }:
+            raise ValueError("dra_producer_identity_invalid")
+        return self
+
+
+DRA_HISTORICAL_PRODUCER = DraProducerPinV1()
+DRA_LIVE_PRODUCER = DraProducerPinV1(
+    release=DRA_LIVE_RELEASE,
+    commit=DRA_LIVE_COMMIT,
+)
 
 
 class DraRunRequestIdentityV1(FrozenModel):
@@ -134,7 +175,7 @@ class DraRunStateProjectionV1(FrozenModel):
 
 class DraEvidenceProjectionV1(FrozenModel):
     evidence_id: BoundedId
-    source_url: HttpUrl | None
+    source_url: BoundedText | None
     source_identity: BoundedText
     retrieved_at: AwareDatetime
     citation_status: Literal["cited"]
@@ -144,16 +185,8 @@ class DraEvidenceProjectionV1(FrozenModel):
     def exact_public_identity(self) -> Self:
         if self.source_url is None:
             return self
-        url = str(self.source_url)
-        if (
-            self.source_url.scheme != "https"
-            or self.source_url.username is not None
-            or self.source_url.password is not None
-            or self.source_url.host is None
-            or not is_public_source_host(self.source_url.host)
-        ):
-            raise ValueError("dra_source_url_invalid")
-        if self.source_identity != url:
+        validate_raw_public_https_url(self.source_url)
+        if self.source_identity != self.source_url:
             raise ValueError("dra_source_identity_mismatch")
         return self
 
@@ -246,7 +279,7 @@ class DraResearchCandidateV1(FrozenModel):
 
 
 class SourceAttestationV1(FrozenModel):
-    canonical_url: HttpUrl
+    canonical_url: BoundedText
     publisher: BoundedText
     institution: BoundedText
     snapshot_date: date
@@ -270,12 +303,7 @@ class SourceAttestationV1(FrozenModel):
     def required_gaps_and_public_url(self) -> Self:
         if not {"applicant_eligibility", "intake_availability"}.issubset(self.known_gaps):
             raise ValueError("dra_source_known_gaps_missing")
-        if (
-            self.canonical_url.scheme != "https"
-            or self.canonical_url.host is None
-            or not is_public_source_host(self.canonical_url.host)
-        ):
-            raise ValueError("dra_source_url_invalid")
+        validate_raw_public_https_url(self.canonical_url)
         return self
 
 

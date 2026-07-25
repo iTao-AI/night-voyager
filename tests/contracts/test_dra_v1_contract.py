@@ -9,10 +9,15 @@ from pydantic import ValidationError
 from night_voyager.dra.models import (
     DRA_COMMIT,
     DRA_CONTRACT_SCHEMA,
+    DRA_HISTORICAL_PRODUCER,
+    DRA_LIVE_COMMIT,
+    DRA_LIVE_PRODUCER,
     DRA_RELEASE,
     DraCanonicalArtifactInputV1,
     DraEvidenceProjectionV1,
+    DraProducerPinV1,
     DraResearchCandidateV1,
+    SourceAttestationV1,
 )
 
 
@@ -33,6 +38,34 @@ def test_exact_producer_pins_are_public_constants() -> None:
     assert DRA_RELEASE == "v0.1.3"
     assert DRA_COMMIT == "87b2a8e335385eb865086f7a69fe2b190567cfa2"
     assert DRA_CONTRACT_SCHEMA == "dra.downstream-consumer.v1"
+    assert DraProducerPinV1() == DRA_HISTORICAL_PRODUCER
+    assert DRA_LIVE_PRODUCER.release == "v0.1.6"
+    assert DRA_LIVE_PRODUCER.commit == DRA_LIVE_COMMIT
+
+
+@pytest.mark.parametrize(
+    ("release", "commit", "error"),
+    (
+        ("v0.1.3", DRA_LIVE_COMMIT, "dra_producer_identity_invalid"),
+        ("v0.1.6", DRA_COMMIT, "dra_producer_identity_invalid"),
+        ("v0.1.5", DRA_COMMIT, None),
+        ("v0.1.7", DRA_LIVE_COMMIT, None),
+    ),
+)
+def test_producer_pin_rejects_unknown_and_mixed_tuples(
+    release: str, commit: str, error: str | None
+) -> None:
+    with pytest.raises(ValidationError, match=error):
+        DraProducerPinV1.model_validate(
+            {
+                "release": release,
+                "commit": commit,
+                "contract_schema": DRA_CONTRACT_SCHEMA,
+                "fixture_sha256": (
+                    "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
+                ),
+            }
+        )
 
 
 def test_canonical_artifact_hashes_exact_utf8_bytes() -> None:
@@ -73,6 +106,26 @@ def test_nullable_upstream_source_is_valid_but_not_promotable() -> None:
     )
     assert evidence.source_url is None
     assert evidence.is_promotable is False
+
+
+def test_source_attestation_preserves_raw_url_identity() -> None:
+    raw_url = "https://example.com/%7Eprogram?b=2&a=1#exact"
+    attestation = SourceAttestationV1.model_validate(
+        {
+            "canonical_url": raw_url,
+            "publisher": "Synthetic Publisher",
+            "institution": "Synthetic Institution",
+            "snapshot_date": "2026-07-25",
+            "freshness_days": 30,
+            "redistribution_class": "link_only",
+            "evidence_class": "institutional",
+            "logical_path": "snapshot/source.html",
+            "snapshot_byte_length": 10,
+            "snapshot_sha256": "a" * 64,
+            "known_gaps": ["applicant_eligibility", "intake_availability"],
+        }
+    )
+    assert attestation.canonical_url == raw_url
 
 
 def test_external_authority_is_not_a_candidate_input() -> None:

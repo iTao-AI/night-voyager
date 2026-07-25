@@ -5,6 +5,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_PATH = ROOT / "migrations/versions/0005_dra_candidate_promotion.py"
+LIVE_MIGRATION_PATH = ROOT / "migrations/versions/0010_dra_v0_1_6_live_consumer.py"
 TABLES = ("dra_research_candidates", "external_evidence_verifications")
 
 
@@ -100,3 +101,49 @@ def test_authority_rows_are_immutable_and_runtime_roles_are_read_only() -> None:
         "app.external_evidence_verifications TO night_voyager_api"
     )
     assert expected_grant in source
+
+
+def test_0010_closes_live_producer_and_outcome_projection_authority() -> None:
+    source = LIVE_MIGRATION_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assignments = {
+        node.targets[0].id: node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in {"revision", "down_revision"}
+        and isinstance(node.value, ast.Constant)
+    }
+    assert assignments == {"revision": "0010", "down_revision": "0009"}
+    for identity_fragment in (
+        "(producer_release='v0.1.3' AND ",
+        "producer_commit='87b2a8e335385eb865086f7a69fe2b190567cfa2') OR ",
+        "(producer_release='v0.1.6' AND ",
+        "producer_commit='7d43324b469cb5e445c2e8be83af3be4d841cf1c'))",
+    ):
+        assert identity_fragment in source
+    assert "p_producer_release<>'v0.1.6'" in source
+    assert "p_producer_commit<>'7d43324b469cb5e445c2e8be83af3be4d841cf1c'" in source
+    assert "CREATE FUNCTION app.project_dra_live_outcome" in source
+    assert "SECURITY DEFINER SET search_path = pg_catalog, pg_temp" in source
+    assert "PERFORM app.assert_m3b_context(p_org,p_actor,'advisor')" in source
+    assert "REVOKE ALL ON FUNCTION {OUTCOME_SIGNATURE} FROM PUBLIC" in source
+    assert "GRANT EXECUTE ON FUNCTION {OUTCOME_SIGNATURE} TO night_voyager_api" in source
+    assert "TO night_voyager_worker" not in source
+    assert "GRANT SELECT ON" not in source
+    assert "GRANT INSERT ON" not in source
+    assert "GRANT UPDATE ON" not in source
+    assert "GRANT DELETE ON" not in source
+    assert (
+        source.count(
+            "ALTER TABLE app.dra_research_candidates NO FORCE ROW LEVEL SECURITY"
+        )
+        == 1
+    )
+    assert (
+        source.count(
+            "ALTER TABLE app.dra_research_candidates FORCE ROW LEVEL SECURITY"
+        )
+        == 1
+    )
+    assert "refusing downgrade: DRA v0.1.6 candidate history exists" in source
