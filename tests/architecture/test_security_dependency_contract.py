@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 NEXT_VERSION = "16.2.11"
-REACT_VERSION = "19.2.7"
+REACT_VERSION = "19.2.8"
 
 
 def _locked_version(packages: list[dict[str, object]], name: str) -> tuple[int, ...]:
