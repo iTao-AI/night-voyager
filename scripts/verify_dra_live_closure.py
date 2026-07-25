@@ -98,6 +98,7 @@ ALLOWED_RECOVERY_COMMAND = (
 CANDIDATE_TASK_PROJECT = "night-voyager-dra-v0-1-6-live-acceptance"
 DOCKER_VM_MINIMUM_KIB = 8_388_608
 HOST_MINIMUM_KIB = 5_242_880
+AUTHORITY_REVIEW_ACK = "independent_authority_review_attested"
 DOCKER_INVENTORY_COMMANDS = (
     ("compose", ("docker", "compose", "ls", "--all", "--format", "json")),
     ("containers", ("docker", "ps", "-a", "--no-trunc", "--format", "json")),
@@ -1247,15 +1248,18 @@ def _validated_candidate_evidence(
         args.authority_review_evidence_file,
         kind="authority_review",
         head=head,
-        schema_version="night-voyager.dra-live-authority-review-evidence.v1",
+        schema_version="night-voyager.dra-live-authority-review-evidence.v2",
         exact_keys=frozenset(
             {
                 "schema_version",
                 "head_sha",
                 "repository",
                 "pull_request",
-                "review_id",
                 "reviewed_head_sha",
+                "verdict",
+                "review_record_id",
+                "review_record_sha256",
+                "acknowledgement",
             }
         ),
     )
@@ -1273,6 +1277,28 @@ def _validated_candidate_evidence(
         inventory_evidence.get("task_project") != CANDIDATE_TASK_PROJECT
         or inventory_evidence.get("minimum_docker_vm_kib")
         != DOCKER_VM_MINIMUM_KIB
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    review_repository = review_evidence.get("repository")
+    pull_request = review_evidence.get("pull_request")
+    reviewed_head_sha = review_evidence.get("reviewed_head_sha")
+    review_record_id = review_evidence.get("review_record_id")
+    review_record_sha256 = review_evidence.get("review_record_sha256")
+    if (
+        not isinstance(review_repository, str)
+        or review_repository != hosted_evidence.get("repository")
+        or not isinstance(pull_request, int)
+        or isinstance(pull_request, bool)
+        or pull_request <= 0
+        or not isinstance(reviewed_head_sha, str)
+        or re.fullmatch(r"[0-9a-f]{40}", reviewed_head_sha) is None
+        or review_evidence.get("verdict") != "CLEAN"
+        or not isinstance(review_record_id, str)
+        or re.fullmatch(r"[a-z0-9][a-z0-9._:-]{0,127}", review_record_id)
+        is None
+        or not isinstance(review_record_sha256, str)
+        or re.fullmatch(r"[0-9a-f]{64}", review_record_sha256) is None
+        or review_evidence.get("acknowledgement") != AUTHORITY_REVIEW_ACK
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
 
@@ -1450,37 +1476,12 @@ def _validated_candidate_evidence(
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
 
-    review_repository = review_evidence.get("repository")
-    pull_request = review_evidence.get("pull_request")
-    review_id = review_evidence.get("review_id")
-    reviewed_head_sha = review_evidence.get("reviewed_head_sha")
-    if (
-        not isinstance(review_repository, str)
-        or review_repository != repository
-        or not isinstance(pull_request, int)
-        or not isinstance(review_id, int)
-        or not isinstance(reviewed_head_sha, str)
-    ):
-        raise ValueError("candidate_evidence_provenance_invalid")
     pull_value: object = json.loads(
         run(("gh", "api", f"repos/{repository}/pulls/{pull_request}"))
     )
-    review_live_value: object = json.loads(
-        run(
-            (
-                "gh",
-                "api",
-                f"repos/{repository}/pulls/{pull_request}/reviews/{review_id}",
-            )
-        )
-    )
-    if (
-        not isinstance(pull_value, dict)
-        or not isinstance(review_live_value, dict)
-    ):
+    if not isinstance(pull_value, dict):
         raise ValueError("candidate_evidence_provenance_invalid")
     pull = cast(dict[str, object], pull_value)
-    review_live = cast(dict[str, object], review_live_value)
     pull_head_value = pull.get("head")
     if (
         pull.get("merged") is not True
@@ -1488,9 +1489,6 @@ def _validated_candidate_evidence(
         or not isinstance(pull_head_value, dict)
         or cast(dict[str, object], pull_head_value).get("sha")
         != reviewed_head_sha
-        or review_live.get("state") != "APPROVED"
-        or review_live.get("commit_id") != reviewed_head_sha
-        or review_live.get("id") != review_id
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
     reviewed_commit_value: object = json.loads(

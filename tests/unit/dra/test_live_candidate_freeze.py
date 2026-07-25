@@ -164,13 +164,16 @@ def _valid_args(tmp_path: Path) -> argparse.Namespace:
             tmp_path / "review.json",
             {
                 "schema_version": (
-                    "night-voyager.dra-live-authority-review-evidence.v1"
+                    "night-voyager.dra-live-authority-review-evidence.v2"
                 ),
                 "head_sha": HEAD,
                 "repository": repository,
                 "pull_request": 70,
-                "review_id": 9,
                 "reviewed_head_sha": REVIEWED_HEAD,
+                "verdict": "CLEAN",
+                "review_record_id": "independent-review-2026-07-25",
+                "review_record_sha256": "d" * 64,
+                "acknowledgement": "independent_authority_review_attested",
             },
         ),
     )
@@ -220,10 +223,10 @@ def _live_runner(
             )
         elif normalized == tuple(RECOVERY_COMMAND):
             output = "47 passed\n"
-        elif normalized[-1].endswith("/reviews/9"):
-            output = json.dumps(
-                {"id": 9, "state": "APPROVED", "commit_id": REVIEWED_HEAD}
-            )
+        elif normalized[-1].endswith("/reviews"):
+            output = "[]"
+        elif "/reviews/" in normalized[-1]:
+            raise AssertionError("GitHub review authority must not be queried")
         elif normalized[-1].endswith(f"/git/commits/{REVIEWED_HEAD}"):
             output = json.dumps({"tree": {"sha": reviewed_tree}})
         elif normalized[-1].endswith(f"/git/commits/{HEAD}"):
@@ -249,7 +252,7 @@ def test_candidate_evidence_requires_all_exact_success_receipts(
         _validated_candidate_evidence(args, HEAD)
 
 
-def test_candidate_evidence_is_independently_reverified(
+def test_candidate_evidence_accepts_independent_review_when_github_reviews_empty(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -260,15 +263,7 @@ def test_candidate_evidence_is_independently_reverified(
         _live_runner(calls),
     )
     assert all(_validated_candidate_evidence(args, HEAD))
-
-    Path(args.authority_review_evidence_file).write_text(
-        Path(args.authority_review_evidence_file)
-        .read_text(encoding="utf-8")
-        .replace('"review_id": 9', '"review_id": 10'),
-        encoding="utf-8",
-    )
-    with pytest.raises(ValueError, match="candidate_evidence_provenance_invalid"):
-        _validated_candidate_evidence(args, HEAD)
+    assert not any("/reviews" in item[-1] for item in calls)
 
 
 def test_candidate_evidence_rejects_unapproved_recovery_before_any_subprocess(
@@ -319,6 +314,49 @@ def test_candidate_evidence_rejects_reviewed_tree_that_differs_from_merge(
     )
 
     with pytest.raises(ValueError, match="candidate_evidence_provenance_invalid"):
+        _validated_candidate_evidence(args, HEAD)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "value"),
+    (
+        ("missing-record-id", None),
+        ("malformed-record-hash", "not-a-sha256"),
+        ("non-clean", "BLOCKED"),
+        ("cross-head", "e" * 40),
+        ("wrong-acknowledgement", "automated_check_completed"),
+        ("extra-field", "self-asserted"),
+    ),
+)
+def test_candidate_evidence_rejects_invalid_human_review_attestation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+    value: object,
+) -> None:
+    args = _valid_args(tmp_path)
+    review = Path(args.authority_review_evidence_file)
+    review_value = json.loads(review.read_text(encoding="utf-8"))
+    if mutation == "missing-record-id":
+        review_value.pop("review_record_id")
+    elif mutation == "malformed-record-hash":
+        review_value["review_record_sha256"] = value
+    elif mutation == "non-clean":
+        review_value["verdict"] = value
+    elif mutation == "cross-head":
+        review_value["reviewed_head_sha"] = value
+    elif mutation == "wrong-acknowledgement":
+        review_value["acknowledgement"] = value
+    else:
+        review_value["unexpected"] = value
+    review.write_text(json.dumps(review_value), encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls),
+    )
+
+    with pytest.raises(ValueError, match=r"candidate_.*evidence"):
         _validated_candidate_evidence(args, HEAD)
 
 

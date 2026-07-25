@@ -67,9 +67,13 @@ code to create product authority.
 18. Candidate freeze rejects an unapproved recovery command before subprocess
     execution, independently runs the default-threshold host/VM preflight, binds
     the canonical task project's complete before/after Docker inventories, and
-    re-queries exact-head hosted checks, final merged-PR head, approved-review
-    commit, and reviewed/merge tree equality. Closed JSON shape and caller-written
-    terminal strings are insufficient.
+    re-queries exact-head hosted checks, final merged-PR head, and reviewed/merge
+    tree equality. Independent human review authority is an explicit closed v2
+    attestation binding the exact reviewed head, `CLEAN` verdict, opaque review
+    record identity and SHA-256, and a fixed human acknowledgement. It is not
+    inferred from PR text, merge state, automation, or GitHub Review state.
+    Missing, malformed, stale, cross-head, non-`CLEAN`, wrongly acknowledged, or
+    extra-field attestations fail closed; the v1 GitHub-review shape is rejected.
 
 ## Consequences
 
