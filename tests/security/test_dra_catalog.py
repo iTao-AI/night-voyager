@@ -158,3 +158,22 @@ def test_live_storage_uses_descriptor_relative_no_follow_operations() -> None:
     assert "os.fsync" in source
     assert "os.link" in source
     assert "resolve(" not in source
+
+
+def test_live_outcome_adapter_uses_only_closed_0010_projection() -> None:
+    source = (
+        ROOT / "src/night_voyager/dra/live_outcome_postgres.py"
+    ).read_text(encoding="utf-8")
+    assert source.count("app.project_dra_live_outcome") == 1
+    for forbidden in (
+        "dra_research_candidates",
+        "external_evidence_verifications",
+        "INSERT ",
+        "UPDATE ",
+        "DELETE ",
+        "SELECT * FROM app.",
+    ):
+        if forbidden == "SELECT * FROM app.":
+            assert source.count(forbidden) == 1
+        else:
+            assert forbidden not in source

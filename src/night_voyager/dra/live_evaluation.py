@@ -426,6 +426,19 @@ def build_evaluation_report(
     )
 
 
+def evaluate_full_closure(
+    scenario: DraLiveScenarioV1,
+    receipts: Sequence[DraEvaluationReceiptV1],
+    expected: DraLiveOutcomeExpectedV1,
+    projection: DraLiveOutcomeProjectionV1,
+) -> DraLiveEvaluationReportV1:
+    return build_evaluation_report(
+        scenario=scenario,
+        receipts=receipts,
+        outcome=evaluate_outcome(expected, projection),
+    )
+
+
 def _reject_content_keys(value: object) -> None:
     if isinstance(value, dict):
         mapping = cast(dict[object, object], value)
