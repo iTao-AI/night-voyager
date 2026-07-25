@@ -73,6 +73,8 @@ def test_capture_intent_is_frozen_once_and_byte_stable() -> None:
     assert intent.canonical_bytes() == reordered.canonical_bytes()
     assert b"selected_url" not in intent.canonical_bytes()
     assert b"session" not in intent.canonical_bytes()
+    restored = DraCaptureIntentV1.model_validate_json(intent.canonical_bytes())
+    assert restored.canonical_bytes() == intent.canonical_bytes()
 
 
 def test_stage_keys_are_stable_domain_separated_and_target_bound() -> None:

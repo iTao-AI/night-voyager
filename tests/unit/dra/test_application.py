@@ -121,6 +121,7 @@ async def test_import_discards_markdown_before_persistence_and_hashes_exact_requ
         context(), candidate_import, "import-key-1234567890"
     )
     assert result.candidate_id == CANDIDATE
+    assert result.verification is None
     assert repository.imported is not None
     assert repository.imported.artifact_content is None
     assert repository.imported.artifact_sha256 == candidate_import.artifact.content_hash

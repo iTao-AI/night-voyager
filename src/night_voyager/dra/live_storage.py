@@ -281,6 +281,15 @@ class LiveReceiptStore:
             return None
         return self._root / ARTIFACT_NAME
 
+    def read_artifact(self, identity: DraArtifactIdentityV1) -> bytes:
+        content = self._read_bytes(ARTIFACT_NAME, receipt=False)
+        if (
+            len(content) != identity.byte_length
+            or hashlib.sha256(content).hexdigest() != identity.sha256
+        ):
+            raise LiveStorageInvalid("artifact_hash_invalid")
+        return content
+
     def delete_artifact(self) -> CleanupResultV1:
         self._ensure_open()
         try:
