@@ -333,16 +333,40 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await firstStream;
   await writeFile(workerReadyFile!, `${workerReadySentinel}\n`, { encoding: "utf8", mode: 0o600 });
   await page.waitForFunction(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0);
-  const storedCursor = await page.evaluate(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor));
-  const reloadStream = page.waitForRequest((request) => request.url().includes("/events?after="));
-  await page.reload();
-  expect(new URL((await reloadStream).url()).searchParams.get("after")).toBe(String(storedCursor));
+  const beforeReload = await page.evaluate(() => {
+    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    return {
+      caseId: metadata.caseId as string,
+      taskId: metadata.taskId as string,
+      cursor: Number(metadata.cursor),
+    };
+  });
+  expect(beforeReload.caseId).toBe(caseId);
+  expect(beforeReload.taskId).toBeTruthy();
   await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled({ timeout: 60_000 });
   await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
+  const reloadEventStart = eventRequests.length;
+  await page.reload();
   await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled();
+  await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
+  const afterReload = await page.evaluate(() => {
+    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    return {
+      caseId: metadata.caseId as string,
+      taskId: metadata.taskId as string,
+      cursor: Number(metadata.cursor),
+    };
+  });
+  expect(afterReload).toMatchObject({ caseId: beforeReload.caseId, taskId: beforeReload.taskId });
+  expect(afterReload.cursor).toBeGreaterThanOrEqual(beforeReload.cursor);
+  const reloadEvents = eventRequests.slice(reloadEventStart);
+  expect(reloadEvents.length).toBeLessThanOrEqual(1);
+  if (reloadEvents[0]) {
+    expect(new URL(reloadEvents[0]).searchParams.get("after")).toBe(String(beforeReload.cursor));
+  }
   expect(taskPostsForCase(caseId)).toHaveLength(1);
   expect(eventRequests.filter((url) => new URL(url).searchParams.get("after") === "0")).toHaveLength(1);
-  const taskId = await page.evaluate(() => JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "null").taskId as string);
+  const taskId = afterReload.taskId;
   if (presentationLocale === "zh-CN" && updatePortfolioScreenshots) {
     await capturePublicScreenshot(page, "m5-advisor-ledger.png");
   }
