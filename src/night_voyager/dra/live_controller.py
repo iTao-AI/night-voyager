@@ -7,6 +7,7 @@ import stat
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from night_voyager.dra.errors import DraAuthorizationError, DraConflictError
 from night_voyager.dra.live_models import (
@@ -14,6 +15,8 @@ from night_voyager.dra.live_models import (
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
+    DraDecisionInputV1,
+    DraDecisionReceiptV1,
     DraInspectionRequiredReceiptV1,
     DraLiveFailurePhase,
     DraPollRecoveryReceiptV1,
@@ -22,12 +25,15 @@ from night_voyager.dra.live_models import (
     DraPromotionReceiptV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
+    DraReviewInputV1,
+    DraReviewReceiptV1,
     DraStageStateV1,
     derive_identity_hash,
     derive_stage_key,
 )
 from night_voyager.dra.live_ports import (
     DraCandidateGatewayPort,
+    DraClosureGatewayPort,
     DraLiveClockPort,
     DraLiveSleepPort,
     DraLiveTransportPort,
@@ -116,16 +122,29 @@ class PromoteCommand:
     snapshot_root: Path
 
 
+@dataclass(frozen=True, slots=True)
+class ReviewCommand:
+    review: DraReviewInputV1
+    context: ActorContext
+
+
+@dataclass(frozen=True, slots=True)
+class DecideCommand:
+    decision: DraDecisionInputV1
+    context: ActorContext
+
+
 class DraLiveClosureController:
     def __init__(
         self,
-        authority: DraPromotionGatewayPort,
+        authority: DraPromotionGatewayPort | DraClosureGatewayPort,
         store: LiveReceiptStore,
     ) -> None:
         self._authority = authority
         self._store = store
 
     async def promote(self, command: PromoteCommand) -> DraPromotionReceiptV1:
+        authority = cast(DraPromotionGatewayPort, self._authority)
         promotion = command.promotion
         stored = self._store.read_receipt("capture.json", DraCaptureReceiptV1)
         if stored != promotion.capture:
@@ -140,7 +159,7 @@ class DraLiveClosureController:
             != promotion.tenant_identity_sha256
         ):
             raise ValueError("promotion_actor_invalid")
-        current = await self._authority.get_candidate(
+        current = await authority.get_candidate(
             context, promotion.case_id, promotion.candidate_id
         )
         if current is None or current.candidate_id != promotion.candidate_id:
@@ -171,9 +190,9 @@ class DraLiveClosureController:
                 raise ValueError("selected_raw_url_invalid")
             if current.verification is None:
                 try:
-                    verification = await self._authority.promote_candidate(context, request, key)
+                    verification = await authority.promote_candidate(context, request, key)
                 except DraAmbiguousOutcome:
-                    reread = await self._authority.get_candidate(
+                    reread = await authority.get_candidate(
                         context,
                         promotion.case_id,
                         promotion.candidate_id,
@@ -209,6 +228,167 @@ class DraLiveClosureController:
             )
             self._store.write_receipt("promotion.json", receipt)
             return receipt
+
+    async def review(self, command: ReviewCommand) -> DraReviewReceiptV1:
+        authority = cast(DraClosureGatewayPort, self._authority)
+        review = command.review
+        stored = self._store.read_receipt(
+            "promotion.json", DraPromotionReceiptV1
+        )
+        if stored != review.promotion:
+            raise ValueError("review_promotion_receipt_invalid")
+        context = command.context
+        if (
+            context.role is not ActorRole.ADVISOR
+            or context.organization_id != review.organization_id
+            or derive_identity_hash("actor", str(context.actor_id))
+            != review.advisor_actor_identity_sha256
+            or derive_identity_hash("tenant", str(context.organization_id))
+            != review.tenant_identity_sha256
+        ):
+            raise ValueError("review_actor_invalid")
+        mapping = await authority.get_promoted_mapping(
+            context, review.case_id, review.candidate_id
+        )
+        if mapping != (
+            review.promoted_source_pack_id,
+            review.promoted_source_pack_version,
+        ):
+            raise ValueError("promoted_mapping_invalid")
+        task_key = derive_stage_key(
+            review.intent_sha256, "planning-task", str(review.case_id)
+        )
+        task = await authority.get_task(context, task_key)
+        if task is None:
+            try:
+                task = await authority.create_task(
+                    context,
+                    review.case_id,
+                    review.expected_case_revision,
+                    review.promoted_source_pack_id,
+                    review.promoted_source_pack_version,
+                    task_key,
+                )
+            except DraAmbiguousOutcome:
+                task = await authority.get_task(context, task_key)
+                if task is None:
+                    raise
+        if (
+            task.operation != "generate_governed_mixed_planning_run_v1"
+            or task.source_pack_id != review.promoted_source_pack_id
+            or task.source_pack_version
+            != review.promoted_source_pack_version
+            or task.status != "ready"
+        ):
+            raise ValueError("planning_task_projection_invalid")
+        review_key = derive_stage_key(
+            review.intent_sha256,
+            "advisor-review",
+            str(task.planning_run_id),
+        )
+        recorded = await authority.get_review(
+            context, review.case_id, task.planning_run_id
+        )
+        if recorded is None:
+            try:
+                recorded = await authority.record_review(
+                    context,
+                    review.case_id,
+                    review.expected_case_revision,
+                    task.planning_run_id,
+                    review.eligible_route_ids,
+                    review_key,
+                )
+            except DraAmbiguousOutcome:
+                recorded = await authority.get_review(
+                    context, review.case_id, task.planning_run_id
+                )
+                if recorded is None:
+                    raise
+        if (
+            recorded.planning_run_id != task.planning_run_id
+            or recorded.eligible_route_ids != review.eligible_route_ids
+        ):
+            raise ValueError("advisor_review_projection_invalid")
+        receipt = DraReviewReceiptV1(
+            intent_sha256=review.intent_sha256,
+            attempt_id=review.promotion.attempt_id,
+            candidate_id=review.candidate_id,
+            source_pack_id=review.promoted_source_pack_id,
+            source_pack_version=review.promoted_source_pack_version,
+            task_key=task_key,
+            review_key=review_key,
+            task=task,
+            review=recorded,
+            stage_states=(
+                *review.promotion.stage_states,
+                DraStageStateV1(stage="review", status="completed"),
+            ),
+        )
+        self._store.write_receipt("review.json", receipt)
+        return receipt
+
+    async def decide(self, command: DecideCommand) -> DraDecisionReceiptV1:
+        authority = cast(DraClosureGatewayPort, self._authority)
+        decision = command.decision
+        stored = self._store.read_receipt(
+            "review.json", DraReviewReceiptV1
+        )
+        if stored != decision.review:
+            raise ValueError("decision_review_receipt_invalid")
+        context = command.context
+        if (
+            context.role not in {ActorRole.PARENT, ActorRole.STUDENT}
+            or context.organization_id != decision.organization_id
+            or derive_identity_hash("actor", str(context.actor_id))
+            != decision.family_actor_identity_sha256
+            or derive_identity_hash("tenant", str(context.organization_id))
+            != decision.tenant_identity_sha256
+        ):
+            raise ValueError("decision_actor_invalid")
+        decision_key = derive_stage_key(
+            decision.intent_sha256, "family-decision", str(decision.brief_id)
+        )
+        recorded = await authority.get_decision(
+            context, decision.brief_id
+        )
+        if recorded is None:
+            try:
+                recorded = await authority.record_decision(
+                    context,
+                    decision.brief_id,
+                    decision.expected_brief_version,
+                    decision.selected_route_id,
+                    decision.accepted_budget_min_minor,
+                    decision.accepted_budget_max_minor,
+                    decision.accepted_trade_offs,
+                    decision_key,
+                )
+            except DraAmbiguousOutcome:
+                recorded = await authority.get_decision(
+                    context, decision.brief_id
+                )
+                if recorded is None:
+                    raise
+        if (
+            recorded.brief_id != decision.brief_id
+            or recorded.selected_route_id != decision.selected_route_id
+        ):
+            raise ValueError("family_decision_projection_invalid")
+        receipt = DraDecisionReceiptV1(
+            intent_sha256=decision.intent_sha256,
+            attempt_id=decision.review.attempt_id,
+            decision_key=decision_key,
+            review_id=decision.review.review.review_id,
+            planning_run_id=decision.review.task.planning_run_id,
+            decision=recorded,
+            stage_states=(
+                *decision.review.stage_states,
+                DraStageStateV1(stage="decide", status="completed"),
+            ),
+        )
+        self._store.write_receipt("decision.json", receipt)
+        return receipt
 
 
 class DraLiveCaptureController:

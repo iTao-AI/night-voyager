@@ -33,6 +33,7 @@ from night_voyager.dra.models import (
     SourceAttestationV1,
     validate_raw_public_https_url,
 )
+from night_voyager.skills.models import SkillRuntimePin
 
 PublicCode = Annotated[str, StringConstraints(min_length=1, max_length=100)]
 SafeLogicalName = Annotated[
@@ -608,6 +609,123 @@ class DraPromotionReceiptV1(FrozenModel):
     stage_states: tuple[DraStageStateV1, ...]
     acknowledgement: Literal["promotion_recorded"] = "promotion_recorded"
     provider_attempt_consumed: Literal[True] = True
+
+
+class DraPlanningTaskProjectionV1(FrozenModel):
+    task_id: UUID
+    operation: Literal["generate_governed_mixed_planning_run_v1"]
+    source_pack_id: UUID
+    source_pack_version: PositiveInt
+    status: Literal["ready"]
+    planning_run_id: UUID
+    terminal_event_id: PositiveInt
+    skill_pin: SkillRuntimePin
+
+
+class DraReviewAuthorityV1(FrozenModel):
+    review_id: UUID
+    planning_run_id: UUID
+    brief_id: UUID
+    eligible_route_ids: tuple[UUID, ...] = Field(min_length=1)
+
+
+class DraReviewInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-review-input.v1"] = (
+        "night-voyager.dra-live-review-input.v1"
+    )
+    intent_sha256: Sha256
+    promotion: DraPromotionReceiptV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    candidate_id: UUID
+    promoted_source_pack_id: UUID
+    promoted_source_pack_version: PositiveInt
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    eligible_route_ids: tuple[UUID, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def exact_promotion_binding(self) -> Self:
+        if (
+            self.promotion.intent_sha256 != self.intent_sha256
+            or self.promotion.candidate_id != self.candidate_id
+            or self.promotion.promoted_source_pack_version
+            != self.promoted_source_pack_version
+            or len(self.eligible_route_ids) != len(set(self.eligible_route_ids))
+        ):
+            raise ValueError("dra_review_promotion_binding_invalid")
+        return self
+
+
+class DraReviewReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-review-receipt.v1"] = (
+        "night-voyager.dra-live-review-receipt.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    candidate_id: UUID
+    source_pack_id: UUID
+    source_pack_version: PositiveInt
+    task_key: Sha256
+    review_key: Sha256
+    task: DraPlanningTaskProjectionV1
+    review: DraReviewAuthorityV1
+    stage_states: tuple[DraStageStateV1, ...]
+    acknowledgement: Literal["review_recorded"] = "review_recorded"
+
+
+class DraDecisionAuthorityV1(FrozenModel):
+    decision_id: UUID
+    decision_receipt_id: UUID
+    timeline_plan_id: UUID
+    brief_id: UUID
+    selected_route_id: UUID
+
+
+class DraDecisionInputV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-decision-input.v1"] = (
+        "night-voyager.dra-live-decision-input.v1"
+    )
+    intent_sha256: Sha256
+    review: DraReviewReceiptV1
+    organization_id: UUID
+    case_id: UUID
+    brief_id: UUID
+    expected_brief_version: PositiveInt
+    selected_route_id: UUID
+    accepted_budget_min_minor: PositiveInt
+    accepted_budget_max_minor: PositiveInt
+    accepted_trade_offs: tuple[BoundedText, ...]
+    family_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+
+    @model_validator(mode="after")
+    def exact_review_binding(self) -> Self:
+        if (
+            self.review.intent_sha256 != self.intent_sha256
+            or self.review.review.brief_id != self.brief_id
+            or self.selected_route_id
+            not in self.review.review.eligible_route_ids
+            or self.accepted_budget_min_minor
+            > self.accepted_budget_max_minor
+        ):
+            raise ValueError("dra_decision_review_binding_invalid")
+        return self
+
+
+class DraDecisionReceiptV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-decision-receipt.v1"] = (
+        "night-voyager.dra-live-decision-receipt.v1"
+    )
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    decision_key: Sha256
+    review_id: UUID
+    planning_run_id: UUID
+    decision: DraDecisionAuthorityV1
+    stage_states: tuple[DraStageStateV1, ...]
+    acknowledgement: Literal["decision_recorded"] = "decision_recorded"
 
 
 class DraFailureReceiptV1(FrozenModel):

@@ -31,6 +31,10 @@ RECEIPT_NAMES = frozenset(
         "capture.json",
         "promotion.json",
         "promotion-ambiguous.json",
+        "review.json",
+        "review-ambiguous.json",
+        "decision.json",
+        "decision-ambiguous.json",
         "failure.json",
         "cleanup.json",
     }
