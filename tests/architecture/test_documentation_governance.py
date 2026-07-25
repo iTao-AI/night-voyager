@@ -444,6 +444,22 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
     assert "ADR 0006 already records M5 as implemented" in plan
 
 
+def test_root_readmes_bind_current_development_migration_head() -> None:
+    current_graph = (
+        "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
+        "0009 -> 0010`"
+    )
+    stale_graph = (
+        "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
+        "0009`"
+    )
+    for relative in ("README.md", "README_CN.md"):
+        source = (ROOT / relative).read_text(encoding="utf-8")
+        assert source.count(current_graph) == 1, relative
+        assert stale_graph not in source, relative
+        assert "v0.1.3 migration `0009`" in source, relative
+
+
 def test_explicit_planning_start_documents_match_0009_authority() -> None:
     adr = (
         ROOT / "docs/decisions/0010-explicit-planning-start-authority.md"

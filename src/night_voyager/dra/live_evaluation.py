@@ -4,7 +4,13 @@ import json
 from collections.abc import Iterable, Sequence
 from typing import Annotated, Literal, Self, cast
 
-from pydantic import Field, PositiveInt, computed_field, model_validator
+from pydantic import (
+    Field,
+    ModelWrapValidatorHandler,
+    PositiveInt,
+    computed_field,
+    model_validator,
+)
 
 from night_voyager.dra.live_models import (
     DraLiveProducerIdentityV1,
@@ -89,6 +95,9 @@ OUTCOME_ASSERTIONS: tuple[OutcomeAssertionId, ...] = (
     "timeline_plan_exactly_one",
     "tenant_isolation_preserved",
     "no_partial_row_set",
+)
+ALL_ASSERTIONS: frozenset[AssertionId] = frozenset(
+    (*TRAJECTORY_ASSERTIONS, *OUTCOME_ASSERTIONS)
 )
 STAGE_ORDER: tuple[EvaluationStage, ...] = (
     "capture-live",
@@ -218,9 +227,13 @@ class DraLiveEvaluationReportV1(FrozenModel):
 
     @model_validator(mode="after")
     def unique_assertions_and_exact_non_claims(self) -> Self:
-        identifiers = [item.assertion_id for item in self.assertions]
+        identifiers: list[AssertionId] = [
+            item.assertion_id for item in self.assertions
+        ]
         if len(identifiers) != len(set(identifiers)):
             raise ValueError("dra_evaluation_assertion_duplicate")
+        if len(identifiers) != len(ALL_ASSERTIONS):
+            raise ValueError("dra_evaluation_assertion_set_invalid")
         if self.expected_non_claims != (
             "provider_quality",
             "source_truth",
@@ -228,7 +241,30 @@ class DraLiveEvaluationReportV1(FrozenModel):
             "admissions_outcome",
         ):
             raise ValueError("dra_expected_non_claims_invalid")
+        object.__setattr__(
+            self,
+            "assertions",
+            tuple(sorted(self.assertions, key=lambda item: item.assertion_id)),
+        )
         return self
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def validate_derived_status(
+        cls,
+        value: object,
+        handler: ModelWrapValidatorHandler[Self],
+    ) -> Self:
+        supplied_status: object | None = None
+        candidate = value
+        if isinstance(value, dict) and "status" in value:
+            payload = cast(dict[str, object], value).copy()
+            supplied_status = payload.pop("status")
+            candidate = payload
+        report = handler(candidate)
+        if supplied_status is not None and supplied_status != report.status:
+            raise ValueError("dra_evaluation_status_invalid")
+        return report
 
     @computed_field
     @property
@@ -365,10 +401,14 @@ def evaluate_outcome(
 def build_evaluation_report(
     *,
     scenario: DraLiveScenarioV1,
-    intent_sha256: str,
-    trajectory: Sequence[AssertionResultV1],
+    receipts: Sequence[DraEvaluationReceiptV1],
     outcome: Sequence[AssertionResultV1],
 ) -> DraLiveEvaluationReportV1:
+    validated_receipts = _validated_receipts(receipts)
+    receipt_root = validated_receipts.get("capture-live")
+    if receipt_root is None:
+        raise ValueError("dra_evaluation_receipt_root_missing")
+    trajectory = evaluate_trajectory(scenario, receipts)
     assertions = tuple(
         sorted((*trajectory, *outcome), key=lambda item: item.assertion_id)
     )
@@ -376,7 +416,7 @@ def build_evaluation_report(
         schema_version="night-voyager.dra-live-evaluation.v1",
         scenario_id=scenario.scenario_id,
         producer=scenario.producer,
-        intent_sha256=intent_sha256,
+        intent_sha256=receipt_root.intent_sha256,
         assertions=assertions,
         expected_non_claims=scenario.expected_non_claims,
     )
