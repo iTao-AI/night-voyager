@@ -1,6 +1,6 @@
 # DRA v0.1.6 Live Closure PR B Implementation Plan
 
-**Implementation status:** PR B implemented provider-free; PR C remains approved but not implemented.
+**Implementation status:** PR A, PR B, and PR C are implemented provider-free; governed live acceptance remains pending.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. Execute serially on top of merged PR A. Do not use

@@ -67,6 +67,7 @@ dra-check: ## Run the deterministic offline DRA consumer contract lane
 	  tests/unit/dra/test_fixtures.py \
 	  tests/unit/dra/test_live_evaluation.py \
 	  tests/unit/dra/test_live_outcome_evaluation.py \
+	  tests/unit/dra/test_live_outcome_postgres.py \
 	  tests/unit/dra/test_live_promotion_controller.py \
 	  tests/unit/dra/test_live_review_controller.py \
 	  tests/unit/dra/test_live_decision_controller.py \

@@ -88,6 +88,8 @@ def test_dra_live_foundation_is_release_verified_without_live_execution() -> Non
         "migrations/versions/0010_dra_v0_1_6_live_consumer.py",
         "src/night_voyager/dra/live_projection.py",
         "src/night_voyager/dra/live_evaluation.py",
+        "src/night_voyager/dra/live_outcome.py",
+        "src/night_voyager/dra/live_outcome_postgres.py",
         "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md",
     ):
         assert required in verifier
@@ -97,6 +99,23 @@ def test_dra_live_foundation_is_release_verified_without_live_execution() -> Non
     assert "verify_dra_consumer.py fixture --json" in (
         ROOT / "Makefile"
     ).read_text()
+
+
+def test_dra_candidate_freeze_is_executable_and_live_lane_stays_optional() -> None:
+    cli = (ROOT / "scripts/verify_dra_live_closure.py").read_text()
+    makefile = (ROOT / "Makefile").read_text()
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text()
+    for required in (
+        '"freeze-candidate"',
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        "required_hosted_checks",
+        "docker_inventory_sha256",
+        "authorization_placeholder",
+    ):
+        assert required in cli
+    assert "dra-consumer-proof" not in workflow
+    assert "make dra-check" in workflow
+    assert "dra-consumer-proof:" in makefile
 
 
 def test_governed_mixed_planning_public_contract_is_closed() -> None:

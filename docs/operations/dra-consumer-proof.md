@@ -50,8 +50,9 @@ service.
 
 ## Separately authorized live proof
 
-Live provider proof was not run. PR B is implemented provider-free; PR C remains approved but not implemented.
-Stage 1 therefore has no governed-live success claim.
+Live provider proof was not run. PR A, PR B, and PR C are implemented provider-free,
+but the capability remains
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. There is no governed-live success claim.
 The live command is not a required CI gate and is excluded from `make check`,
 `make proof`, and Compose. Run it only after separate approval for one provider
 attempt and its cost/deadline.
@@ -126,6 +127,80 @@ operator-selected Evidence row as the existing `UNTRUSTED_CANDIDATE`; confirms t
 no verification/promotion exists; and deletes artifact bytes. Other cited rows from
 the same run are not added to that candidate import. It does not promote Evidence,
 start planning, create an AdvisorReview, or make a family decision.
+
+## Canonical resumable operator transcript
+
+The frozen live journey is one ordered transcript. Each mutation prints a bounded
+actor, tenant, Case, target, and action preview and requires a distinct
+acknowledgement; no global acknowledgement authorizes a later stage.
+
+| Step | Command | Durable predecessor | Ephemeral input | Provider / mutation | Success output | Recovery |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | `preflight-live` | frozen intent | none | no provider, no business mutation | preflight receipt | rerun exact preflight |
+| 2 | `capture-live` | preflight receipt | provider access for one frozen attempt | one provider create plus same-run polling | inspection-required receipt | `reconcile-create` or `resume-poll` |
+| 3 | `select-and-import` | inspection-required receipt | assigned advisor session | candidate import only | capture receipt | `inspect-recovery` |
+| 4 | `promote` | capture receipt plus re-supplied snapshot | fresh assigned advisor session and `acknowledge-promote` | atomic existing promotion authority | `promotion_recorded` | exact-key authority reconciliation |
+| 5 | `review` | promotion receipt | fresh assigned advisor session and `acknowledge-review` | existing task/worker/SSE and AdvisorReview | `review_recorded` | exact-key authority reconciliation |
+| 6 | `decide` | review receipt | fresh parent session and `acknowledge-decide` | existing family decision authority | `decision_recorded` | exact-key authority reconciliation |
+| 7 | `evaluate` | decision receipt | fresh assigned advisor session and `acknowledge-evaluate` | read-only migration `0010` projection | `closure_passed` or bounded failure | re-run evaluation only |
+| 8 | `cleanup` | exact receipt root | cleanup acknowledgement | task-owned filesystem cleanup only | cleanup receipt | inspect residue, then exact cleanup |
+
+Stage 2 never fetches a source. The operator supplies a task-owned mode-`0700`
+root containing the declared mode-`0600` snapshot. Descriptor-bound no-follow
+traversal reads the exact bytes once, checks the original selected URL,
+byte length, SHA-256, and required known gaps, then removes the snapshot on
+success, handled failure, `SIGINT`, or `SIGTERM`. Hard-termination residue is
+detected on the next open and blocks progress until explicit cleanup. Durable
+receipts retain URL identity, length, hash, and bounded metadata only.
+
+Every Stage 2–4 recovery re-reads current product authority before deciding
+whether to synthesize success, replay the exact request/key, or fail closed on
+partial/conflicting state. Fresh processes must re-inject the assigned-advisor
+or parent session. Session identifiers, cookies, headers, auth-file paths, and
+credential material are never receipt, bundle, log, or cleanup content.
+
+`decision_recorded` is not capability completion. A failed evaluator after a
+committed decision leaves a recoverable incomplete state and must not repeat or
+roll back that decision. A bounded retained failure receipt is safe-stop evidence
+only. After a second substantive failure in the same terminal lane, stop and
+investigate; do not authorize another live attempt from the failure receipt.
+
+Auxiliary provider-free checks remain separate:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py rehearse-capture \
+  --receipt-root '<private-rehearsal-root>' --phase capture --json
+uv run python scripts/verify_dra_live_closure.py rehearse-full --json
+```
+
+`rehearse-full` uses the deterministic fixture through real PostgreSQL, FastAPI,
+worker, SSE, review, decision, and the migration `0010` outcome inspector. It
+does not consume the live provider budget.
+
+## Candidate freeze
+
+After PR A/B/C merge and exact merged-main `python`, `frontend`, and `compose`
+checks succeed, produce an executable readiness receipt. First record the
+repository-required Docker host/VM preflight and before/after task inventory in
+one public-safe file, with task-scoped teardown complete and retained
+volumes/shared images/cache preserved. Then run:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py freeze-candidate \
+  --receipt-root '<private-mode-0700-root>' \
+  --merged-main-sha '<exact-40-hex-merged-main>' \
+  --docker-inventory-file '<public-safe-inventory-file>' \
+  --hosted-check python --hosted-check frontend --hosted-check compose \
+  --authorization-placeholder PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION \
+  --json
+```
+
+The readiness receipt binds the exact merged main, spec and PR C plan hashes,
+producer pin, scenario, intent/receipt/CLI schema identities, required hosted
+checks, recovery-matrix result, Docker preflight/inventory, cleanup state, and
+the explicit authorization placeholder. A successful freeze still reports
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. Only a separately authorized frozen live
+attempt whose complete evaluator reports `closure_passed` can change that claim.
 
 ## Recovery and cleanup
 

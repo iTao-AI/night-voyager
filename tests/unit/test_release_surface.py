@@ -70,10 +70,12 @@ def test_release_verifier_tracks_live_capture_controller_and_rehearsal() -> None
     for required in (
         "src/night_voyager/dra/live_controller.py",
         "src/night_voyager/dra/live_storage.py",
+        "src/night_voyager/dra/live_outcome.py",
+        "src/night_voyager/dra/live_outcome_postgres.py",
         "scripts/verify_dra_live_closure.py",
         "tests/integration/dra/test_live_capture_rehearsal.py",
-        "PR B is implemented provider-free",
-        "PR C remains approved but not implemented",
+        "PR A, PR B, and PR C are implemented provider-free",
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
     ):
         assert required in source
 

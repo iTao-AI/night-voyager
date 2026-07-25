@@ -25,6 +25,7 @@ from night_voyager.dra.models import SourceAttestationV1
 from night_voyager.dra.ports import (
     DraCandidateViewV1,
     DraVerificationViewV1,
+    VerifyDraCandidateCommand,
 )
 from night_voyager.identity.models import ActorContext, ActorRole
 
@@ -46,13 +47,23 @@ class FakePromotionGateway:
         self.calls = 0
         self.lose_ack = lose_ack
 
-    async def get_candidate(self, context, case_id, candidate_id):
+    async def get_candidate(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        candidate_id: UUID,
+    ) -> DraCandidateViewV1 | None:
         assert context.organization_id == ORG_ID
         assert case_id == CASE_ID
         assert candidate_id == CANDIDATE_ID
         return self.current
 
-    async def promote_candidate(self, context, command, idempotency_key):
+    async def promote_candidate(
+        self,
+        context: ActorContext,
+        command: VerifyDraCandidateCommand,
+        idempotency_key: str,
+    ) -> DraVerificationViewV1:
         self.calls += 1
         verification = DraVerificationViewV1(
             verification_id=VERIFICATION_ID,
@@ -65,7 +76,7 @@ class FakePromotionGateway:
         if self.lose_ack:
             from night_voyager.dra.reconciliation import DraAmbiguousOutcome
 
-            raise DraAmbiguousOutcome("committed_without_response")
+            raise DraAmbiguousOutcome()
         return verification
 
 

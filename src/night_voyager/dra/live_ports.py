@@ -57,8 +57,8 @@ class DraPromotionGatewayPort(Protocol):
     async def get_candidate(
         self,
         context: ActorContext,
-        case_id: object,
-        candidate_id: object,
+        case_id: UUID,
+        candidate_id: UUID,
     ) -> DraCandidateViewV1 | None: ...
 
     async def promote_candidate(

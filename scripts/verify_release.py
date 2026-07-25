@@ -249,6 +249,8 @@ DRA_SURFACE = (
     "src/night_voyager/dra/live_models.py",
     "src/night_voyager/dra/live_projection.py",
     "src/night_voyager/dra/live_evaluation.py",
+    "src/night_voyager/dra/live_outcome.py",
+    "src/night_voyager/dra/live_outcome_postgres.py",
     "src/night_voyager/dra/live_controller.py",
     "src/night_voyager/dra/live_storage.py",
     "scripts/verify_dra_consumer.py",
@@ -525,13 +527,15 @@ def verify_dra_surface() -> None:
         not in reference
         or "exact copies of the synthetic baseline" not in reference
         or "Live provider proof was not run" not in operations
-        or "PR B is implemented provider-free" not in operations
-        or "PR C remains approved but not implemented" not in operations
+        or "PR A, PR B, and PR C are implemented provider-free"
+        not in operations
+        or "INCOMPLETE_PENDING_LIVE_ACCEPTANCE" not in operations
         or "operator_action_required" not in operations
         or "select-and-import" not in operations
         or "same run" not in operations
         or "no governed-live success claim" not in operations
         or "make compose-proof" not in operations
+        or "freeze-candidate" not in operations
     ):
         raise SystemExit("governed DRA command or status contract drift")
     print("proof DRA surface: offline governed mixed decision closure confirmed")

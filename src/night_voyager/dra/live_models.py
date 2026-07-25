@@ -728,6 +728,45 @@ class DraDecisionReceiptV1(FrozenModel):
     acknowledgement: Literal["decision_recorded"] = "decision_recorded"
 
 
+class DraCandidateReadinessReceiptV1(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-candidate-readiness.v1"
+    ] = "night-voyager.dra-live-candidate-readiness.v1"
+    merged_main_sha: Annotated[
+        str, StringConstraints(pattern=r"^[0-9a-f]{40}$")
+    ]
+    spec_sha256: Sha256
+    plan_sha256: Sha256
+    scenario_sha256: Sha256
+    intent_schema_sha256: Sha256
+    receipt_schema_sha256: Sha256
+    cli_sha256: Sha256
+    producer: DraLiveProducerIdentityV1
+    required_hosted_checks: tuple[
+        Literal["compose", "frontend", "python"], ...
+    ]
+    recovery_matrix_status: Literal["passed"]
+    docker_preflight_status: Literal["passed"]
+    docker_inventory_sha256: Sha256
+    cleanup_state: Literal["clean"]
+    authorization_placeholder: Literal[
+        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    ]
+    capability_status: Literal[
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+    ] = "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+
+    @model_validator(mode="after")
+    def exact_hosted_checks(self) -> Self:
+        if self.required_hosted_checks != (
+            "compose",
+            "frontend",
+            "python",
+        ):
+            raise ValueError("dra_live_required_checks_invalid")
+        return self
+
+
 class DraFailureReceiptV1(FrozenModel):
     schema_version: Literal["night-voyager.dra-live-failure-receipt.v1"]
     intent_sha256: Sha256

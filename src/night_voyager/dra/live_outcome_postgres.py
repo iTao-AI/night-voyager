@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from night_voyager.dra.live_evaluation import DraLiveOutcomeProjectionV1
 from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
 from night_voyager.identity.models import ActorContext
+from night_voyager.identity.repository import IdentityRepository
 
 OUTCOME_PROJECTION_SQL = (
     "SELECT * FROM app.project_dra_live_outcome(:org,:actor,:candidate)"
@@ -34,6 +35,7 @@ class PostgresLiveOutcomeInspector:
         intent: DraLiveOutcomeIntentV1,
     ) -> DraLiveOutcomeProjectionV1:
         intent.validate_context(context)
+        await IdentityRepository(self._session).set_actor_context(context)
         result = await self._session.execute(
             text(OUTCOME_PROJECTION_SQL),
             {

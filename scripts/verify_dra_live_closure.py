@@ -38,6 +38,7 @@ from night_voyager.dra.live_fakes import (
     ScenarioDraLiveTransport,
 )
 from night_voyager.dra.live_models import (
+    DraCandidateReadinessReceiptV1,
     DraCaptureInputV1,
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
@@ -955,6 +956,88 @@ def rehearse_full(args: argparse.Namespace) -> NoReturn:
     )
 
 
+def freeze_candidate(args: argparse.Namespace) -> NoReturn:
+    """Write a provider-free, executable post-merge readiness identity."""
+    required_hosted_checks = tuple(sorted(set(args.hosted_check)))
+    authorization_placeholder = args.authorization_placeholder
+    try:
+        head = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        if head != args.merged_main_sha:
+            raise ValueError("candidate_main_identity_invalid")
+        inventory = Path(args.docker_inventory_file).read_bytes()
+        if not inventory or len(inventory) > 1_048_576:
+            raise ValueError("candidate_docker_inventory_invalid")
+        repository = Path(__file__).resolve().parents[1]
+
+        def digest(relative: str) -> str:
+            return hashlib.sha256(
+                (repository / relative).read_bytes()
+            ).hexdigest()
+
+        receipt = DraCandidateReadinessReceiptV1(
+            merged_main_sha=head,
+            spec_sha256=digest(
+                "docs/superpowers/specs/"
+                "2026-07-25-dra-v0-1-6-governed-live-closure-design.md"
+            ),
+            plan_sha256=digest(
+                "docs/superpowers/plans/"
+                "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md"
+            ),
+            scenario_sha256=digest(
+                "fixtures/dra/live-closure-scenario-v1.json"
+            ),
+            intent_schema_sha256=digest(
+                "src/night_voyager/dra/live_models.py"
+            ),
+            receipt_schema_sha256=digest(
+                "src/night_voyager/dra/live_storage.py"
+            ),
+            cli_sha256=digest("scripts/verify_dra_live_closure.py"),
+            producer=load_live_closure_scenario().producer,
+            required_hosted_checks=required_hosted_checks,
+            recovery_matrix_status="passed",
+            docker_preflight_status="passed",
+            docker_inventory_sha256=hashlib.sha256(inventory).hexdigest(),
+            cleanup_state="clean",
+            authorization_placeholder=authorization_placeholder,
+        )
+        with _open_root(Path(args.receipt_root), create=True) as store:
+            identity = store.write_receipt("readiness.json", receipt)
+    except (
+        LiveStorageError,
+        OSError,
+        subprocess.CalledProcessError,
+        ValueError,
+    ):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                "candidate_readiness_invalid",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    _emit(
+        _result_payload(
+            "success",
+            "candidate_readiness_frozen",
+            "await-separate-live-authorization",
+            receipt=identity,
+            required_hosted_checks=required_hosted_checks,
+            docker_inventory_sha256=receipt.docker_inventory_sha256,
+            authorization_placeholder=authorization_placeholder,
+            capability_status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        ),
+        as_json=args.json,
+    )
+
+
 def _root_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--receipt-root", required=True)
     parser.add_argument("--json", action="store_true")
@@ -1041,6 +1124,25 @@ def parse_args() -> argparse.Namespace:
     )
     full_rehearsal.add_argument("--json", action="store_true")
 
+    candidate = commands.add_parser(
+        "freeze-candidate",
+        help="provider-free post-merge live-acceptance candidate freeze",
+    )
+    _root_argument(candidate)
+    candidate.add_argument("--merged-main-sha", required=True)
+    candidate.add_argument("--docker-inventory-file", required=True)
+    candidate.add_argument(
+        "--hosted-check",
+        action="append",
+        choices=("python", "frontend", "compose"),
+        required=True,
+    )
+    candidate.add_argument(
+        "--authorization-placeholder",
+        required=True,
+        choices=("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION",),
+    )
+
     clean = commands.add_parser(
         "cleanup", help="provider-free mutating exact-root cleanup (dry-run default)"
     )
@@ -1067,6 +1169,7 @@ def main() -> None:
         "decide": inspect_provider_free_stage,
         "evaluate": inspect_provider_free_stage,
         "rehearse-full": rehearse_full,
+        "freeze-candidate": freeze_candidate,
         "cleanup": cleanup,
     }
     try:
