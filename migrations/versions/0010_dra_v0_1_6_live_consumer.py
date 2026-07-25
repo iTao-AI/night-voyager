@@ -17,12 +17,19 @@ IMPORT_SIGNATURE = (
     "integer,text,jsonb,text,text)"
 )
 OUTCOME_SIGNATURE = "app.project_dra_live_outcome(uuid,uuid,uuid)"
+TASK_AUTHORITY_SIGNATURE = "app.project_agent_task_live_authority(uuid,uuid,uuid)"
 
 REVOKE_IMPORT_SQL = f"REVOKE ALL ON FUNCTION {IMPORT_SIGNATURE} FROM PUBLIC"
 GRANT_IMPORT_SQL = f"GRANT EXECUTE ON FUNCTION {IMPORT_SIGNATURE} TO night_voyager_api"
 REVOKE_OUTCOME_SQL = f"REVOKE ALL ON FUNCTION {OUTCOME_SIGNATURE} FROM PUBLIC"
 GRANT_OUTCOME_SQL = (
     f"GRANT EXECUTE ON FUNCTION {OUTCOME_SIGNATURE} TO night_voyager_api"
+)
+REVOKE_TASK_AUTHORITY_SQL = (
+    f"REVOKE ALL ON FUNCTION {TASK_AUTHORITY_SIGNATURE} FROM PUBLIC"
+)
+GRANT_TASK_AUTHORITY_SQL = (
+    f"GRANT EXECUTE ON FUNCTION {TASK_AUTHORITY_SIGNATURE} TO night_voyager_api"
 )
 
 # Exact import authority present at migration 0009. Downgrade restores this byte-for-byte.
@@ -107,12 +114,20 @@ CREATE FUNCTION app.project_dra_live_outcome(
   candidate_id uuid,case_id uuid,case_revision integer,
   producer_release text,producer_commit text,run_id text,artifact_sha256 text,
   verification_count bigint,approved_verification_count bigint,
+  verification_id uuid,
   promoted_source_pack_id uuid,promoted_source_pack_version integer,
   promoted_source_entry_id uuid,promoted_evidence_id uuid,
   external_claim text,evidence_role text,external_authority text,
   governed_task_count bigint,task_id uuid,task_state text,planning_run_id uuid,
-  planning_run_state text,advisor_review_count bigint,family_decision_count bigint,
-  decision_receipt_count bigint,timeline_plan_count bigint
+  planning_run_state text,execution_count bigint,execution_id uuid,
+  execution_planning_run_id uuid,terminal_event_count bigint,
+  terminal_event_id bigint,terminal_event_planning_run_id uuid,sse_cursor bigint,
+  skill_definition_id uuid,skill_version_id uuid,skill_activation_event_id uuid,
+  skill_activation_sequence bigint,runtime_binding_sha256 text,
+  advisor_review_count bigint,review_id uuid,brief_id uuid,
+  family_decision_count bigint,decision_id uuid,
+  decision_receipt_count bigint,decision_receipt_id uuid,
+  timeline_plan_count bigint,timeline_plan_id uuid
 ) LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN
   PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
@@ -134,6 +149,7 @@ BEGIN
     (SELECT count(*) FROM app.external_evidence_verifications vc
       WHERE vc.organization_id=c.organization_id AND vc.candidate_id=c.id
         AND vc.decision='approve'),
+    v.id,
     v.baseline_source_pack_id,v.promoted_source_pack_version,
     v.promoted_source_entry_id,v.promoted_evidence_id,
     v.claim,v.evidence_role,v.authority,
@@ -144,21 +160,36 @@ BEGIN
         AND tc.source_pack_id=v.baseline_source_pack_id
         AND tc.source_pack_version=v.promoted_source_pack_version),
     t.id,t.state,t.result_planning_run_id,r.state,
+    (SELECT count(*) FROM app.agent_executions x
+      WHERE x.organization_id=t.organization_id AND x.task_id=t.id
+        AND x.status='succeeded' AND x.result_planning_run_id=t.result_planning_run_id),
+    x.id,x.result_planning_run_id,
+    (SELECT count(*) FROM app.agent_task_events te
+      WHERE te.organization_id=t.organization_id AND te.task_id=t.id
+        AND te.event_code='waiting_review'
+        AND te.result_planning_run_id=t.result_planning_run_id),
+    te.event_sequence,te.result_planning_run_id,te.event_sequence,
+    t.skill_definition_id,t.skill_version_id,t.skill_activation_event_id,
+    t.skill_activation_sequence,t.runtime_binding_sha256,
     (SELECT count(*) FROM app.advisor_reviews a
       WHERE a.organization_id=c.organization_id
         AND a.planning_run_id=t.result_planning_run_id),
+    a.id,b.id,
     (SELECT count(*) FROM app.family_decisions f
       WHERE f.organization_id=c.organization_id
         AND f.planning_run_id=t.result_planning_run_id),
+    f.id,
     (SELECT count(*) FROM app.family_decisions f
       WHERE f.organization_id=c.organization_id
         AND f.planning_run_id=t.result_planning_run_id
         AND f.receipt_id IS NOT NULL),
+    f.receipt_id,
     (SELECT count(*) FROM app.timeline_plans l
       JOIN app.family_decisions f
         ON f.organization_id=l.organization_id AND f.id=l.family_decision_id
       WHERE f.organization_id=c.organization_id
-        AND f.planning_run_id=t.result_planning_run_id)
+        AND f.planning_run_id=t.result_planning_run_id),
+    l.id
   FROM app.dra_research_candidates c
   LEFT JOIN LATERAL (
     SELECT selected.* FROM app.external_evidence_verifications selected
@@ -180,7 +211,61 @@ BEGIN
   ) t ON true
   LEFT JOIN app.planning_runs r
     ON r.organization_id=t.organization_id AND r.id=t.result_planning_run_id
+  LEFT JOIN LATERAL (
+    SELECT selected.* FROM app.agent_executions selected
+    WHERE selected.organization_id=t.organization_id
+      AND selected.task_id=t.id AND selected.status='succeeded'
+    ORDER BY selected.attempt_no DESC LIMIT 1
+  ) x ON true
+  LEFT JOIN LATERAL (
+    SELECT selected.* FROM app.agent_task_events selected
+    WHERE selected.organization_id=t.organization_id
+      AND selected.task_id=t.id AND selected.event_code='waiting_review'
+    ORDER BY selected.event_sequence DESC LIMIT 1
+  ) te ON true
+  LEFT JOIN LATERAL (
+    SELECT selected.* FROM app.advisor_reviews selected
+    WHERE selected.organization_id=t.organization_id
+      AND selected.planning_run_id=t.result_planning_run_id
+    ORDER BY selected.review_version DESC LIMIT 1
+  ) a ON true
+  LEFT JOIN app.decision_briefs b
+    ON b.organization_id=a.organization_id AND b.advisor_review_id=a.id
+  LEFT JOIN app.family_decisions f
+    ON f.organization_id=b.organization_id AND f.decision_brief_id=b.id
+  LEFT JOIN app.timeline_plans l
+    ON l.organization_id=f.organization_id AND l.family_decision_id=f.id
   WHERE c.organization_id=p_org AND c.id=p_candidate;
+END; $$;
+"""
+
+TASK_AUTHORITY_FUNCTION_SQL = r"""
+CREATE FUNCTION app.project_agent_task_live_authority(
+  p_org uuid,p_actor uuid,p_task uuid
+) RETURNS TABLE(execution_id uuid,terminal_event_id bigint)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
+BEGIN
+  PERFORM app.assert_m3b_context(p_org,p_actor,'advisor');
+  IF NOT EXISTS (
+    SELECT 1 FROM app.agent_tasks t
+    JOIN app.student_case_participants p
+      ON p.organization_id=t.organization_id AND p.case_id=t.case_id
+    WHERE t.organization_id=p_org AND t.id=p_task
+      AND p.actor_id=p_actor AND p.role='advisor'
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE='NV007', MESSAGE='task unavailable';
+  END IF;
+  RETURN QUERY
+  SELECT
+    (SELECT x.id FROM app.agent_executions x
+      JOIN app.agent_tasks t
+        ON t.organization_id=x.organization_id AND t.id=x.task_id
+      WHERE x.organization_id=p_org AND x.task_id=p_task
+        AND x.status='succeeded'
+        AND x.result_planning_run_id=t.result_planning_run_id
+      ORDER BY x.attempt_no DESC LIMIT 1),
+    (SELECT max(e.event_sequence) FROM app.agent_task_events e
+      WHERE e.organization_id=p_org AND e.task_id=p_task);
 END; $$;
 """
 
@@ -210,6 +295,9 @@ def upgrade() -> None:
         "producer_commit='7d43324b469cb5e445c2e8be83af3be4d841cf1c'))"
     )
     _replace_import(IMPORT_FUNCTION_SQL)
+    op.execute(TASK_AUTHORITY_FUNCTION_SQL.strip())
+    op.execute(REVOKE_TASK_AUTHORITY_SQL)
+    op.execute(GRANT_TASK_AUTHORITY_SQL)
     op.execute(OUTCOME_FUNCTION_SQL.strip())
     op.execute(REVOKE_OUTCOME_SQL)
     op.execute(GRANT_OUTCOME_SQL)
@@ -234,6 +322,7 @@ def downgrade() -> None:
     if has_live_history:
         raise RuntimeError("refusing downgrade: DRA v0.1.6 candidate history exists")
     op.execute(f"DROP FUNCTION {OUTCOME_SIGNATURE}")
+    op.execute(f"DROP FUNCTION {TASK_AUTHORITY_SIGNATURE}")
     _replace_import(_0009_IMPORT_FUNCTION_SQL)
     op.execute(
         "ALTER TABLE app.dra_research_candidates "

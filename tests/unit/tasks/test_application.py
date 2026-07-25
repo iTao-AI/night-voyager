@@ -50,6 +50,14 @@ def actor(role: ActorRole = ActorRole.ADVISOR) -> ActorContext:
 def record(*, state: str = "queued", current: bool = True) -> dict[str, object]:
     return {
         "task_id": TASK,
+        "case_id": CASE,
+        "case_revision": 1,
+        "source_pack_id": PACK,
+        "source_pack_version": 1,
+        "policy_version": "m3a-policy-v1",
+        "request_sha256": "a" * 64,
+        "terminal_event_id": 4 if state == "waiting_review" else None,
+        "execution_id": UUID(int=8) if state == "waiting_review" else None,
         "row_version": 2,
         "state": state,
         "attempt_count": 1,
@@ -165,6 +173,35 @@ async def test_get_applies_currentness_override_and_non_enumeration() -> None:
     assert result is not None
     assert result["status"] == "outdated"
     assert result["planning_run_id"] == UUID(int=7)
+
+    authority = await service.get(
+        actor(), TASK, include_live_authority=True
+    )
+    assert authority is not None
+    assert {
+        key: authority[key]
+        for key in (
+            "case_id",
+            "case_revision",
+            "operation",
+            "source_pack_id",
+            "source_pack_version",
+            "policy_version",
+            "request_sha256",
+            "terminal_event_id",
+            "execution_id",
+        )
+    } == {
+        "case_id": CASE,
+        "case_revision": 1,
+        "operation": "generate_planning_run_v1",
+        "source_pack_id": PACK,
+        "source_pack_version": 1,
+        "policy_version": "m3a-policy-v1",
+        "request_sha256": "a" * 64,
+        "terminal_event_id": 4,
+        "execution_id": UUID(int=8),
+    }
 
     repository.row = None
     assert await service.get(actor(), UUID(int=999)) is None

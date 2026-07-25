@@ -63,10 +63,28 @@ class PostgresLiveOutcomeInspector:
                 task_state=None,
                 planning_run_id=None,
                 planning_run_state=None,
+                verification_id=None,
+                execution_count=0,
+                execution_id=None,
+                execution_planning_run_id=None,
+                terminal_event_count=0,
+                terminal_event_id=None,
+                terminal_event_planning_run_id=None,
+                sse_cursor=None,
+                skill_definition_id=None,
+                skill_version_id=None,
+                skill_activation_event_id=None,
+                skill_activation_sequence=None,
+                runtime_binding_sha256=None,
                 advisor_review_count=0,
+                review_id=None,
+                brief_id=None,
                 family_decision_count=0,
+                decision_id=None,
                 decision_receipt_count=0,
+                decision_receipt_id=None,
                 timeline_plan_count=0,
+                timeline_plan_id=None,
                 tenant_isolated=True,
                 partial_row_set_absent=True,
                 observed_identity_hashes=(),
@@ -79,6 +97,13 @@ class PostgresLiveOutcomeInspector:
             "promoted_evidence_id",
             "task_id",
             "planning_run_id",
+            "verification_id",
+            "execution_id",
+            "review_id",
+            "brief_id",
+            "decision_id",
+            "decision_receipt_id",
+            "timeline_plan_id",
         )
         observed = tuple(
             sorted(
@@ -135,17 +160,73 @@ class PostgresLiveOutcomeInspector:
             planning_run_state=cast(
                 str | None, row["planning_run_state"]
             ),
+            verification_id=(
+                None if row["verification_id"] is None else str(row["verification_id"])
+            ),
+            execution_count=int(cast(int, row["execution_count"])),
+            execution_id=(
+                None if row["execution_id"] is None else str(row["execution_id"])
+            ),
+            execution_planning_run_id=(
+                None
+                if row["execution_planning_run_id"] is None
+                else str(row["execution_planning_run_id"])
+            ),
+            terminal_event_count=int(cast(int, row["terminal_event_count"])),
+            terminal_event_id=cast(int | None, row["terminal_event_id"]),
+            terminal_event_planning_run_id=(
+                None
+                if row["terminal_event_planning_run_id"] is None
+                else str(row["terminal_event_planning_run_id"])
+            ),
+            sse_cursor=cast(int | None, row["sse_cursor"]),
+            skill_definition_id=(
+                None
+                if row["skill_definition_id"] is None
+                else str(row["skill_definition_id"])
+            ),
+            skill_version_id=(
+                None
+                if row["skill_version_id"] is None
+                else str(row["skill_version_id"])
+            ),
+            skill_activation_event_id=(
+                None
+                if row["skill_activation_event_id"] is None
+                else str(row["skill_activation_event_id"])
+            ),
+            skill_activation_sequence=cast(
+                int | None, row["skill_activation_sequence"]
+            ),
+            runtime_binding_sha256=cast(
+                str | None, row["runtime_binding_sha256"]
+            ),
             advisor_review_count=int(
                 cast(int, row["advisor_review_count"])
             ),
+            review_id=None if row["review_id"] is None else str(row["review_id"]),
+            brief_id=None if row["brief_id"] is None else str(row["brief_id"]),
             family_decision_count=int(
                 cast(int, row["family_decision_count"])
+            ),
+            decision_id=(
+                None if row["decision_id"] is None else str(row["decision_id"])
             ),
             decision_receipt_count=int(
                 cast(int, row["decision_receipt_count"])
             ),
+            decision_receipt_id=(
+                None
+                if row["decision_receipt_id"] is None
+                else str(row["decision_receipt_id"])
+            ),
             timeline_plan_count=int(
                 cast(int, row["timeline_plan_count"])
+            ),
+            timeline_plan_id=(
+                None
+                if row["timeline_plan_id"] is None
+                else str(row["timeline_plan_id"])
             ),
             tenant_isolated=True,
             partial_row_set_absent=(

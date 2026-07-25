@@ -160,3 +160,13 @@ terminal status. They exclude source bytes, Markdown, snippets, provider
 payloads, credentials, local paths, token/cost data, traces, and internal
 baseline pins. Caller DTOs cannot declare `externally_verified`, promoted IDs,
 tenant claims, role, or authority.
+Lost acknowledgements retain a bounded stage-specific ambiguity receipt containing
+only the parent receipt identity, domain-separated mutation key, exact request
+hash, and target identity hash. A current result is accepted only when all
+request/result fields match; partial or conflicting authority fails closed.
+
+Final trajectory evaluation accepts only the typed `capture`, `promotion`,
+`review`, and `decision` receipts. Caller-supplied assertion identifiers are not
+authority. The closed migration `0010` projection correlates the promoted mapping
+with the exact task execution, terminal event/SSE cursor, five-field Skill pin,
+AdvisorReview/brief, family decision, DecisionReceipt, and TimelinePlan.

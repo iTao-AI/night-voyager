@@ -5,6 +5,7 @@ from uuid import UUID
 
 import pytest
 
+from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.live_controller import (
     DraLiveClosureController,
     ReviewCommand,
@@ -72,6 +73,13 @@ class FakeClosureAuthority:
         self.review: DraReviewAuthorityV1 | None = None
         self.decision: DraDecisionAuthorityV1 | None = None
         self.task_calls = 0
+        self.lose_decision_ack = False
+        self.lose_task_ack = False
+        self.lose_review_ack = False
+        self.conflicting_task_request = False
+        self.conflicting_review_request = False
+        self.committed_budget: tuple[int, int] = (100, 200)
+        self.committed_trade_offs: tuple[str, ...] = ("synthetic proof only",)
 
     async def get_promoted_mapping(
         self,
@@ -98,11 +106,14 @@ class FakeClosureAuthority:
         self.task_calls += 1
         self.task = DraPlanningTaskProjectionV1(
             task_id=TASK,
+            case_id=CASE,
+            case_revision=4,
             operation="generate_governed_mixed_planning_run_v1",
             source_pack_id=PACK,
             source_pack_version=2,
-            status="ready",
+            status="needs_advisor_review",
             planning_run_id=RUN,
+            execution_id=UUID("10000000-0000-4000-8000-000000000023"),
             terminal_event_id=9,
             skill_pin=SkillRuntimePin(
                 skill_definition_id=UUID(
@@ -117,7 +128,23 @@ class FakeClosureAuthority:
                 skill_activation_sequence=1,
                 runtime_binding_sha256="d" * 64,
             ),
+            request_sha256=canonical_request_sha256(
+                {
+                    "case_id": str(UUID(int=999))
+                    if self.conflicting_task_request
+                    else str(CASE),
+                    "operation": "generate_governed_mixed_planning_run_v1",
+                    "expected_case_revision": 4,
+                    "source_pack_id": str(PACK),
+                    "source_pack_version": 2,
+                    "policy_version": "m3a-policy-v1",
+                }
+            ),
         )
+        if self.lose_task_ack:
+            from night_voyager.dra.reconciliation import DraAmbiguousOutcome
+
+            raise DraAmbiguousOutcome()
         return self.task
 
     async def get_review(
@@ -139,10 +166,29 @@ class FakeClosureAuthority:
     ) -> DraReviewAuthorityV1:
         self.review = DraReviewAuthorityV1(
             review_id=REVIEW,
+            case_id=CASE,
+            expected_case_revision=4,
             planning_run_id=RUN,
             brief_id=BRIEF,
             eligible_route_ids=(ROUTE,),
+            request_sha256=canonical_request_sha256(
+                {
+                    "case_id": str(UUID(int=999))
+                    if self.conflicting_review_request
+                    else str(CASE),
+                    "planning_run_id": str(RUN),
+                    "expected_case_revision": 4,
+                    "action": "approve_for_consultation",
+                    "eligible_route_ids": [str(ROUTE)],
+                    "risk_acceptances": [],
+                    "reviewer_notes": None,
+                }
+            ),
         )
+        if self.lose_review_ack:
+            from night_voyager.dra.reconciliation import DraAmbiguousOutcome
+
+            raise DraAmbiguousOutcome()
         return self.review
 
     async def get_decision(
@@ -171,7 +217,27 @@ class FakeClosureAuthority:
             ),
             brief_id=BRIEF,
             selected_route_id=ROUTE,
+            accepted_budget_min_minor=self.committed_budget[0],
+            accepted_budget_max_minor=self.committed_budget[1],
+            currency="CNY",
+            accepted_trade_offs=self.committed_trade_offs,
+            expected_brief_version=1,
+            request_sha256=canonical_request_sha256(
+                {
+                    "brief_id": str(BRIEF),
+                    "expected_brief_version": 1,
+                    "selected_route_id": str(ROUTE),
+                    "accepted_budget_min_minor": self.committed_budget[0],
+                    "accepted_budget_max_minor": self.committed_budget[1],
+                    "currency": "CNY",
+                    "accepted_trade_offs": list(self.committed_trade_offs),
+                }
+            ),
         )
+        if self.lose_decision_ack:
+            from night_voyager.dra.reconciliation import DraAmbiguousOutcome
+
+            raise DraAmbiguousOutcome()
         return self.decision
 
 
@@ -252,3 +318,51 @@ async def test_review_rejects_wrong_promoted_pack_before_task(
                 ReviewCommand(command, advisor_context())
             )
     assert authority.task_calls == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("lost_stage", "expected_code"),
+    (
+        ("task", "planning_task_projection_invalid"),
+        ("review", "advisor_review_projection_invalid"),
+    ),
+)
+async def test_review_lost_ack_rejects_conflicting_committed_request(
+    tmp_path: Path,
+    lost_stage: str,
+    expected_code: str,
+) -> None:
+    root = tmp_path / "receipts"
+    root.mkdir(mode=0o700)
+    promotion = promotion_receipt()
+    authority = FakeClosureAuthority()
+    authority.lose_task_ack = lost_stage == "task"
+    authority.conflicting_task_request = lost_stage == "task"
+    authority.lose_review_ack = lost_stage == "review"
+    authority.conflicting_review_request = lost_stage == "review"
+    review_input = DraReviewInputV1(
+        intent_sha256=promotion.intent_sha256,
+        promotion=promotion,
+        organization_id=ORG,
+        case_id=CASE,
+        expected_case_revision=4,
+        candidate_id=CANDIDATE,
+        promoted_source_pack_id=PACK,
+        promoted_source_pack_version=2,
+        advisor_actor_identity_sha256=derive_identity_hash(
+            "actor", str(ADVISOR)
+        ),
+        tenant_identity_sha256=derive_identity_hash("tenant", str(ORG)),
+        eligible_route_ids=(ROUTE,),
+    )
+    with LiveReceiptStore.open(root) as store:
+        store.write_receipt("promotion.json", promotion)
+        with pytest.raises(ValueError, match=expected_code):
+            await DraLiveClosureController(authority, store).review(
+                ReviewCommand(review_input, advisor_context())
+            )
+        assert "review-ambiguous.json" in {
+            item.logical_name
+            for item in store.verify_recovery_bundle().receipts
+        }

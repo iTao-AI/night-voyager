@@ -35,4 +35,12 @@ def test_cli_and_compose_expose_provider_free_full_rehearsal() -> None:
         assert f'"{command}"' in cli
     assert "verify_dra_governed_flow.py --fixture" in compose
     assert "PostgresLiveOutcomeInspector" in governed
+    assert "DraLiveCaptureController" in governed
+    assert "DraLiveClosureController" in governed
+    assert "supplied_snapshot" not in governed
+    assert "DraPromotionInputV1" in governed
+    assert "evaluate_full_closure" in governed
+    assert "validate_source_snapshot(" not in governed[
+        governed.index("async def _real_live_closure_rehearsal") :
+    ]
     assert "app.evidence_refs" not in governed

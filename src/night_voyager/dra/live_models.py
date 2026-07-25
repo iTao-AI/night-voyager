@@ -613,20 +613,28 @@ class DraPromotionReceiptV1(FrozenModel):
 
 class DraPlanningTaskProjectionV1(FrozenModel):
     task_id: UUID
+    case_id: UUID
+    case_revision: PositiveInt
     operation: Literal["generate_governed_mixed_planning_run_v1"]
     source_pack_id: UUID
     source_pack_version: PositiveInt
-    status: Literal["ready"]
+    status: Literal["needs_advisor_review"]
     planning_run_id: UUID
+    execution_id: UUID
     terminal_event_id: PositiveInt
     skill_pin: SkillRuntimePin
+    request_sha256: Sha256
 
 
 class DraReviewAuthorityV1(FrozenModel):
     review_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
     planning_run_id: UUID
     brief_id: UUID
     eligible_route_ids: tuple[UUID, ...] = Field(min_length=1)
+    action: Literal["approve_for_consultation"] = "approve_for_consultation"
+    request_sha256: Sha256
 
 
 class DraReviewInputV1(FrozenModel):
@@ -681,6 +689,29 @@ class DraDecisionAuthorityV1(FrozenModel):
     timeline_plan_id: UUID
     brief_id: UUID
     selected_route_id: UUID
+    expected_brief_version: PositiveInt
+    accepted_budget_min_minor: PositiveInt
+    accepted_budget_max_minor: PositiveInt
+    currency: Literal["CNY"]
+    accepted_trade_offs: tuple[BoundedText, ...]
+    request_sha256: Sha256
+
+
+class DraMutationAmbiguousReceiptV1(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-mutation-ambiguous.v1"
+    ] = "night-voyager.dra-live-mutation-ambiguous.v1"
+    intent_sha256: Sha256
+    attempt_id: BoundedId
+    stage: Literal["promote", "review", "decide"]
+    parent_receipt: DraReceiptIdentityV1
+    mutation_key: Sha256
+    request_sha256: Sha256
+    target_identity_sha256: Sha256
+    public_code: Literal["mutation_outcome_ambiguous"] = (
+        "mutation_outcome_ambiguous"
+    )
+    permitted_next_command: Literal["promote", "review", "decide"]
 
 
 class DraDecisionInputV1(FrozenModel):
@@ -748,6 +779,9 @@ class DraCandidateReadinessReceiptV1(FrozenModel):
     recovery_matrix_status: Literal["passed"]
     docker_preflight_status: Literal["passed"]
     docker_inventory_sha256: Sha256
+    hosted_checks_evidence_sha256: Sha256
+    recovery_matrix_evidence_sha256: Sha256
+    authority_review_evidence_sha256: Sha256
     cleanup_state: Literal["clean"]
     authorization_placeholder: Literal[
         "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"

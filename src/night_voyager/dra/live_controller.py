@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.errors import DraAuthorizationError, DraConflictError
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
@@ -19,6 +20,7 @@ from night_voyager.dra.live_models import (
     DraDecisionReceiptV1,
     DraInspectionRequiredReceiptV1,
     DraLiveFailurePhase,
+    DraMutationAmbiguousReceiptV1,
     DraPollRecoveryReceiptV1,
     DraPreflightReceiptV1,
     DraPromotionInputV1,
@@ -143,6 +145,12 @@ class DraLiveClosureController:
         self._authority = authority
         self._store = store
 
+    @staticmethod
+    def _target_hash(stage: str, value: object) -> str:
+        return hashlib.sha256(
+            f"night-voyager.dra-live.target.v1\0{stage}\0{value}".encode()
+        ).hexdigest()
+
     async def promote(self, command: PromoteCommand) -> DraPromotionReceiptV1:
         authority = cast(DraPromotionGatewayPort, self._authority)
         promotion = command.promotion
@@ -178,6 +186,8 @@ class DraLiveClosureController:
             reason=promotion.reason,
             source_attestation=promotion.source_attestation,
         )
+        request_sha256 = canonical_request_sha256(request.model_dump(mode="json"))
+        parent_identity = self._store.write_receipt("capture.json", stored)
         with supplied_snapshot(
             command.snapshot_root,
             promotion.source_attestation,
@@ -192,6 +202,21 @@ class DraLiveClosureController:
                 try:
                     verification = await authority.promote_candidate(context, request, key)
                 except DraAmbiguousOutcome:
+                    self._store.write_receipt(
+                        "promotion-ambiguous.json",
+                        DraMutationAmbiguousReceiptV1(
+                            intent_sha256=promotion.intent_sha256,
+                            attempt_id=promotion.capture.attempt_id,
+                            stage="promote",
+                            parent_receipt=parent_identity,
+                            mutation_key=key,
+                            request_sha256=request_sha256,
+                            target_identity_sha256=self._target_hash(
+                                "promote", promotion.candidate_id
+                            ),
+                            permitted_next_command="promote",
+                        ),
+                    )
                     reread = await authority.get_candidate(
                         context,
                         promotion.case_id,
@@ -207,6 +232,7 @@ class DraLiveClosureController:
                 or verification.promoted_source_pack_version is None
                 or verification.promoted_source_entry_id is None
                 or verification.promoted_evidence_id is None
+                or verification.decision_request_sha256 != request_sha256
             ):
                 raise ValueError("promotion_authority_result_invalid")
             receipt = DraPromotionReceiptV1(
@@ -258,6 +284,16 @@ class DraLiveClosureController:
         task_key = derive_stage_key(
             review.intent_sha256, "planning-task", str(review.case_id)
         )
+        task_request_sha256 = canonical_request_sha256(
+            {
+                "case_id": str(review.case_id),
+                "operation": "generate_governed_mixed_planning_run_v1",
+                "expected_case_revision": review.expected_case_revision,
+                "source_pack_id": str(review.promoted_source_pack_id),
+                "source_pack_version": review.promoted_source_pack_version,
+                "policy_version": "m3a-policy-v1",
+            }
+        )
         task = await authority.get_task(context, task_key)
         if task is None:
             try:
@@ -270,21 +306,59 @@ class DraLiveClosureController:
                     task_key,
                 )
             except DraAmbiguousOutcome:
+                self._store.write_receipt(
+                    "review-ambiguous.json",
+                    DraMutationAmbiguousReceiptV1(
+                        intent_sha256=review.intent_sha256,
+                        attempt_id=review.promotion.attempt_id,
+                        stage="review",
+                        parent_receipt=self._store.write_receipt(
+                            "promotion.json", stored
+                        ),
+                        mutation_key=task_key,
+                        request_sha256=task_request_sha256,
+                        target_identity_sha256=self._target_hash(
+                            "review-task", review.case_id
+                        ),
+                        permitted_next_command="review",
+                    ),
+                )
                 task = await authority.get_task(context, task_key)
                 if task is None:
-                    raise
+                    task = await authority.create_task(
+                        context,
+                        review.case_id,
+                        review.expected_case_revision,
+                        review.promoted_source_pack_id,
+                        review.promoted_source_pack_version,
+                        task_key,
+                    )
         if (
             task.operation != "generate_governed_mixed_planning_run_v1"
             or task.source_pack_id != review.promoted_source_pack_id
             or task.source_pack_version
             != review.promoted_source_pack_version
-            or task.status != "ready"
+            or task.status != "needs_advisor_review"
+            or task.case_id != review.case_id
+            or task.case_revision != review.expected_case_revision
+            or task.request_sha256 != task_request_sha256
         ):
             raise ValueError("planning_task_projection_invalid")
         review_key = derive_stage_key(
             review.intent_sha256,
             "advisor-review",
             str(task.planning_run_id),
+        )
+        review_request_sha256 = canonical_request_sha256(
+            {
+                "case_id": str(review.case_id),
+                "planning_run_id": str(task.planning_run_id),
+                "expected_case_revision": review.expected_case_revision,
+                "action": "approve_for_consultation",
+                "eligible_route_ids": [str(item) for item in review.eligible_route_ids],
+                "risk_acceptances": [],
+                "reviewer_notes": None,
+            }
         )
         recorded = await authority.get_review(
             context, review.case_id, task.planning_run_id
@@ -300,14 +374,42 @@ class DraLiveClosureController:
                     review_key,
                 )
             except DraAmbiguousOutcome:
+                self._store.write_receipt(
+                    "review-ambiguous.json",
+                    DraMutationAmbiguousReceiptV1(
+                        intent_sha256=review.intent_sha256,
+                        attempt_id=review.promotion.attempt_id,
+                        stage="review",
+                        parent_receipt=self._store.write_receipt(
+                            "promotion.json", stored
+                        ),
+                        mutation_key=review_key,
+                        request_sha256=review_request_sha256,
+                        target_identity_sha256=self._target_hash(
+                            "review", task.planning_run_id
+                        ),
+                        permitted_next_command="review",
+                    ),
+                )
                 recorded = await authority.get_review(
                     context, review.case_id, task.planning_run_id
                 )
                 if recorded is None:
-                    raise
+                    recorded = await authority.record_review(
+                        context,
+                        review.case_id,
+                        review.expected_case_revision,
+                        task.planning_run_id,
+                        review.eligible_route_ids,
+                        review_key,
+                    )
         if (
             recorded.planning_run_id != task.planning_run_id
             or recorded.eligible_route_ids != review.eligible_route_ids
+            or recorded.case_id != review.case_id
+            or recorded.expected_case_revision != review.expected_case_revision
+            or recorded.action != "approve_for_consultation"
+            or recorded.request_sha256 != review_request_sha256
         ):
             raise ValueError("advisor_review_projection_invalid")
         receipt = DraReviewReceiptV1(
@@ -349,6 +451,17 @@ class DraLiveClosureController:
         decision_key = derive_stage_key(
             decision.intent_sha256, "family-decision", str(decision.brief_id)
         )
+        decision_request_sha256 = canonical_request_sha256(
+            {
+                "brief_id": str(decision.brief_id),
+                "expected_brief_version": decision.expected_brief_version,
+                "selected_route_id": str(decision.selected_route_id),
+                "accepted_budget_min_minor": decision.accepted_budget_min_minor,
+                "accepted_budget_max_minor": decision.accepted_budget_max_minor,
+                "currency": "CNY",
+                "accepted_trade_offs": list(decision.accepted_trade_offs),
+            }
+        )
         recorded = await authority.get_decision(
             context, decision.brief_id
         )
@@ -365,14 +478,48 @@ class DraLiveClosureController:
                     decision_key,
                 )
             except DraAmbiguousOutcome:
+                self._store.write_receipt(
+                    "decision-ambiguous.json",
+                    DraMutationAmbiguousReceiptV1(
+                        intent_sha256=decision.intent_sha256,
+                        attempt_id=decision.review.attempt_id,
+                        stage="decide",
+                        parent_receipt=self._store.write_receipt(
+                            "review.json", stored
+                        ),
+                        mutation_key=decision_key,
+                        request_sha256=decision_request_sha256,
+                        target_identity_sha256=self._target_hash(
+                            "decide", decision.brief_id
+                        ),
+                        permitted_next_command="decide",
+                    ),
+                )
                 recorded = await authority.get_decision(
                     context, decision.brief_id
                 )
                 if recorded is None:
-                    raise
+                    recorded = await authority.record_decision(
+                        context,
+                        decision.brief_id,
+                        decision.expected_brief_version,
+                        decision.selected_route_id,
+                        decision.accepted_budget_min_minor,
+                        decision.accepted_budget_max_minor,
+                        decision.accepted_trade_offs,
+                        decision_key,
+                    )
         if (
             recorded.brief_id != decision.brief_id
             or recorded.selected_route_id != decision.selected_route_id
+            or recorded.expected_brief_version != decision.expected_brief_version
+            or recorded.accepted_budget_min_minor
+            != decision.accepted_budget_min_minor
+            or recorded.accepted_budget_max_minor
+            != decision.accepted_budget_max_minor
+            or recorded.currency != "CNY"
+            or recorded.accepted_trade_offs != decision.accepted_trade_offs
+            or recorded.request_sha256 != decision_request_sha256
         ):
             raise ValueError("family_decision_projection_invalid")
         receipt = DraDecisionReceiptV1(

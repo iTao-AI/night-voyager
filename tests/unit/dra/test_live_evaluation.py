@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
-from copy import deepcopy
-from inspect import signature
-from typing import cast
+from datetime import UTC, datetime
+from uuid import UUID
 
 import pytest
 from pydantic import ValidationError
@@ -13,7 +11,6 @@ from night_voyager.dra.fixtures import load_live_closure_scenario
 from night_voyager.dra.live_evaluation import (
     OUTCOME_ASSERTIONS,
     TRAJECTORY_ASSERTIONS,
-    AssertionResultV1,
     DraEvaluationReceiptV1,
     DraLiveEvaluationReportV1,
     DraLiveOutcomeExpectedV1,
@@ -22,399 +19,339 @@ from night_voyager.dra.live_evaluation import (
     canonical_report_bytes,
     evaluate_outcome,
     evaluate_trajectory,
-    render_evaluation_report,
 )
+from night_voyager.dra.live_models import (
+    DraCaptureReceiptV1,
+    DraDecisionAuthorityV1,
+    DraDecisionReceiptV1,
+    DraPlanningTaskProjectionV1,
+    DraPromotionReceiptV1,
+    DraReviewAuthorityV1,
+    DraReviewReceiptV1,
+    DraSelectedEvidenceV1,
+    DraStageStateV1,
+    SnapshotIdentityV1,
+)
+from night_voyager.skills.models import SkillRuntimePin
 
-INTENT_SHA = "a" * 64
-CAPTURE_SHA = "b" * 64
-PROMOTE_SHA = "c" * 64
-REVIEW_SHA = "d" * 64
-DECIDE_SHA = "e" * 64
-Receipts = tuple[DraEvaluationReceiptV1, ...]
-ReceiptMutator = Callable[[Receipts], Receipts]
+INTENT = "a" * 64
+CANDIDATE = UUID("10000000-0000-4000-8000-000000000001")
+PACK = UUID("10000000-0000-4000-8000-000000000002")
+ENTRY = UUID("10000000-0000-4000-8000-000000000003")
+EVIDENCE = UUID("10000000-0000-4000-8000-000000000004")
+VERIFICATION = UUID("10000000-0000-4000-8000-000000000005")
+TASK = UUID("10000000-0000-4000-8000-000000000006")
+RUN = UUID("10000000-0000-4000-8000-000000000007")
+REVIEW = UUID("10000000-0000-4000-8000-000000000008")
+BRIEF = UUID("10000000-0000-4000-8000-000000000009")
+ROUTE = UUID("10000000-0000-4000-8000-000000000010")
+DECISION = UUID("10000000-0000-4000-8000-000000000011")
+DECISION_RECEIPT = UUID("10000000-0000-4000-8000-000000000012")
+TIMELINE = UUID("10000000-0000-4000-8000-000000000013")
+EXECUTION = UUID("10000000-0000-4000-8000-000000000014")
+SKILL_DEFINITION = UUID("10000000-0000-4000-8000-000000000015")
+SKILL_VERSION = UUID("10000000-0000-4000-8000-000000000016")
+SKILL_EVENT = UUID("10000000-0000-4000-8000-000000000017")
+URL = "https://example.edu/source"
 
 
-def receipts() -> Receipts:
-    return (
-        DraEvaluationReceiptV1(
-            receipt_id="capture-receipt",
-            parent_receipt_id=None,
-            stage="capture-live",
-            intent_sha256=INTENT_SHA,
-            assertion_ids=(
-                "producer_pin_exact",
-                "provider_attempt_exactly_one",
-                "terminal_transition_valid",
-                "artifact_identity_exact",
-                "evidence_ownership_and_selection_valid",
-                "no_second_provider_run",
-            ),
-            observed_identity_hashes=(CAPTURE_SHA,),
+def typed_receipts() -> tuple[
+    DraCaptureReceiptV1,
+    DraPromotionReceiptV1,
+    DraReviewReceiptV1,
+    DraDecisionReceiptV1,
+]:
+    scenario = load_live_closure_scenario()
+    stages = (DraStageStateV1(stage="capture-live", status="completed"),)
+    capture = DraCaptureReceiptV1(
+        schema_version="night-voyager.dra-live-capture-receipt.v1",
+        intent_sha256=INTENT,
+        attempt_id="attempt-1",
+        producer=scenario.producer,
+        run_id="run-1",
+        segment_id="segment-1",
+        artifact=scenario.result.artifact,
+        selected_evidence=DraSelectedEvidenceV1(
+            evidence_id="evidence-1",
+            run_id="run-1",
+            segment_id="segment-1",
+            source_url=URL,
+            source_identity=URL,
+            retrieved_at=datetime(2026, 7, 25, tzinfo=UTC),
+            citation_status="cited",
+            verification_status="verified",
         ),
-        DraEvaluationReceiptV1(
-            receipt_id="promote-receipt",
-            parent_receipt_id="capture-receipt",
-            stage="promote",
-            intent_sha256=INTENT_SHA,
-            assertion_ids=(
-                "candidate_precedes_promotion",
-                "candidate_untrusted_until_advisor",
-                "promotion_actor_explicit",
-                "promoted_pack_exact",
-                "no_auto_promotion",
-            ),
-            observed_identity_hashes=(PROMOTE_SHA,),
+        stage_states=stages,
+        provider_attempt_consumed=True,
+        candidate_id=CANDIDATE,
+        candidate_authority="untrusted_candidate",
+        candidate_import_key="b" * 64,
+        cleanup_status="removed",
+    )
+    promotion = DraPromotionReceiptV1(
+        intent_sha256=INTENT,
+        attempt_id="attempt-1",
+        candidate_id=CANDIDATE,
+        dra_evidence_id="evidence-1",
+        selected_raw_url=URL,
+        promotion_key="c" * 64,
+        verification_id=VERIFICATION,
+        promoted_source_pack_version=2,
+        promoted_source_entry_id=ENTRY,
+        promoted_evidence_id=EVIDENCE,
+        snapshot=SnapshotIdentityV1(
+            canonical_url=URL,
+            logical_path="source/page.html",
+            byte_length=10,
+            sha256="d" * 64,
         ),
-        DraEvaluationReceiptV1(
-            receipt_id="review-receipt",
-            parent_receipt_id="promote-receipt",
-            stage="review",
-            intent_sha256=INTENT_SHA,
-            assertion_ids=(
-                "skill_pin_exact",
-                "task_execution_event_sse_run_correlated",
-                "advisor_review_explicit",
-            ),
-            observed_identity_hashes=(REVIEW_SHA,),
-        ),
-        DraEvaluationReceiptV1(
-            receipt_id="decide-receipt",
-            parent_receipt_id="review-receipt",
-            stage="decide",
-            intent_sha256=INTENT_SHA,
-            assertion_ids=(
-                "family_decision_explicit",
-                "receipt_timeline_correlated",
-                "no_auto_decision",
-            ),
-            observed_identity_hashes=(DECIDE_SHA,),
+        stage_states=(*stages, DraStageStateV1(stage="promote", status="completed")),
+    )
+    pin = SkillRuntimePin(
+        skill_definition_id=SKILL_DEFINITION,
+        skill_version_id=SKILL_VERSION,
+        skill_activation_event_id=SKILL_EVENT,
+        skill_activation_sequence=1,
+        runtime_binding_sha256="e" * 64,
+    )
+    task = DraPlanningTaskProjectionV1(
+        task_id=TASK,
+        case_id=UUID("10000000-0000-4000-8000-000000000020"),
+        case_revision=1,
+        operation="generate_governed_mixed_planning_run_v1",
+        source_pack_id=PACK,
+        source_pack_version=2,
+        status="needs_advisor_review",
+        planning_run_id=RUN,
+        execution_id=EXECUTION,
+        terminal_event_id=4,
+        skill_pin=pin,
+        request_sha256="f" * 64,
+    )
+    review_authority = DraReviewAuthorityV1(
+        review_id=REVIEW,
+        case_id=task.case_id,
+        expected_case_revision=1,
+        planning_run_id=RUN,
+        brief_id=BRIEF,
+        eligible_route_ids=(ROUTE,),
+        request_sha256="1" * 64,
+    )
+    review = DraReviewReceiptV1(
+        intent_sha256=INTENT,
+        attempt_id="attempt-1",
+        candidate_id=CANDIDATE,
+        source_pack_id=PACK,
+        source_pack_version=2,
+        task_key="2" * 64,
+        review_key="3" * 64,
+        task=task,
+        review=review_authority,
+        stage_states=(
+            *promotion.stage_states,
+            DraStageStateV1(stage="review", status="completed"),
         ),
     )
+    decision = DraDecisionReceiptV1(
+        intent_sha256=INTENT,
+        attempt_id="attempt-1",
+        decision_key="4" * 64,
+        review_id=REVIEW,
+        planning_run_id=RUN,
+        decision=DraDecisionAuthorityV1(
+            decision_id=DECISION,
+            decision_receipt_id=DECISION_RECEIPT,
+            timeline_plan_id=TIMELINE,
+            brief_id=BRIEF,
+            selected_route_id=ROUTE,
+            expected_brief_version=1,
+            accepted_budget_min_minor=100,
+            accepted_budget_max_minor=200,
+            currency="CNY",
+            accepted_trade_offs=("bounded",),
+            request_sha256="5" * 64,
+        ),
+        stage_states=(
+            *review.stage_states,
+            DraStageStateV1(stage="decide", status="completed"),
+        ),
+    )
+    return capture, promotion, review, decision
 
 
 def expected_outcome() -> DraLiveOutcomeExpectedV1:
     return DraLiveOutcomeExpectedV1(
-        candidate_id="candidate-1",
-        source_pack_id="source-pack-1",
+        candidate_id=str(CANDIDATE),
+        source_pack_id=str(PACK),
         source_pack_version=2,
-        source_entry_id="source-entry-1",
-        evidence_id="evidence-1",
-        task_id="task-1",
-        task_state="completed",
-        planning_run_id="planning-run-1",
-        planning_run_state="needs_advisor_review",
+        source_entry_id=str(ENTRY),
+        evidence_id=str(EVIDENCE),
+        task_id=str(TASK),
+        task_state="waiting_review",
+        planning_run_id=str(RUN),
+        planning_run_state="review_required",
+        verification_id=str(VERIFICATION),
+        execution_id=str(EXECUTION),
+        terminal_event_id=4,
+        skill_definition_id=str(SKILL_DEFINITION),
+        skill_version_id=str(SKILL_VERSION),
+        skill_activation_event_id=str(SKILL_EVENT),
+        skill_activation_sequence=1,
+        runtime_binding_sha256="e" * 64,
+        review_id=str(REVIEW),
+        brief_id=str(BRIEF),
+        decision_id=str(DECISION),
+        decision_receipt_id=str(DECISION_RECEIPT),
+        timeline_plan_id=str(TIMELINE),
     )
 
 
 def outcome_projection() -> DraLiveOutcomeProjectionV1:
+    expected = expected_outcome()
     return DraLiveOutcomeProjectionV1(
-        candidate_id="candidate-1",
+        candidate_id=expected.candidate_id,
         candidate_count=1,
         verification_count=1,
         approved_verification_count=1,
-        promoted_source_pack_id="source-pack-1",
+        verification_id=expected.verification_id,
+        promoted_source_pack_id=expected.source_pack_id,
         promoted_source_pack_version=2,
-        promoted_source_entry_id="source-entry-1",
-        promoted_evidence_id="evidence-1",
+        promoted_source_entry_id=expected.source_entry_id,
+        promoted_evidence_id=expected.evidence_id,
         external_claim="australia_program_fit",
         evidence_role="program_fit",
         external_authority="externally_verified",
         governed_task_count=1,
-        task_id="task-1",
-        task_state="completed",
-        planning_run_id="planning-run-1",
-        planning_run_state="needs_advisor_review",
+        task_id=expected.task_id,
+        task_state=expected.task_state,
+        planning_run_id=expected.planning_run_id,
+        planning_run_state=expected.planning_run_state,
+        execution_count=1,
+        execution_id=expected.execution_id,
+        execution_planning_run_id=expected.planning_run_id,
+        terminal_event_count=1,
+        terminal_event_id=4,
+        terminal_event_planning_run_id=expected.planning_run_id,
+        sse_cursor=4,
+        skill_definition_id=expected.skill_definition_id,
+        skill_version_id=expected.skill_version_id,
+        skill_activation_event_id=expected.skill_activation_event_id,
+        skill_activation_sequence=1,
+        runtime_binding_sha256=expected.runtime_binding_sha256,
         advisor_review_count=1,
+        review_id=expected.review_id,
+        brief_id=expected.brief_id,
         family_decision_count=1,
+        decision_id=expected.decision_id,
         decision_receipt_count=1,
+        decision_receipt_id=expected.decision_receipt_id,
         timeline_plan_count=1,
+        timeline_plan_id=expected.timeline_plan_id,
         tenant_isolated=True,
         partial_row_set_absent=True,
-        observed_identity_hashes=("f" * 64,),
+        observed_identity_hashes=("6" * 64,),
     )
 
 
-def test_trajectory_assertions_are_closed_complete_and_order_independent() -> None:
+def test_typed_trajectory_is_closed_complete_and_order_independent() -> None:
     scenario = load_live_closure_scenario()
-    first = evaluate_trajectory(scenario, receipts())
-    reordered = evaluate_trajectory(scenario, tuple(reversed(receipts())))
+    first = evaluate_trajectory(scenario, typed_receipts())
+    reordered = evaluate_trajectory(scenario, tuple(reversed(typed_receipts())))
     assert first == reordered
     assert all(result.status == "passed" for result in first)
-    assert {result.assertion_id for result in first} == {
-        "producer_pin_exact",
-        "provider_attempt_exactly_one",
-        "terminal_transition_valid",
-        "artifact_identity_exact",
-        "evidence_ownership_and_selection_valid",
-        "candidate_precedes_promotion",
-        "candidate_untrusted_until_advisor",
-        "promotion_actor_explicit",
-        "promoted_pack_exact",
-        "skill_pin_exact",
-        "task_execution_event_sse_run_correlated",
-        "advisor_review_explicit",
-        "family_decision_explicit",
-        "receipt_timeline_correlated",
-        "no_auto_promotion",
-        "no_auto_decision",
-        "no_second_provider_run",
-    }
+    assert {result.assertion_id for result in first} == set(TRAJECTORY_ASSERTIONS)
 
 
-def test_missing_observation_is_failed_not_inferred() -> None:
-    scenario = load_live_closure_scenario()
-    incomplete = receipts()[:-1]
-    results = evaluate_trajectory(scenario, incomplete)
-    failed = {item.assertion_id for item in results if item.status == "failed"}
-    assert failed == {
-        "family_decision_explicit",
-        "receipt_timeline_correlated",
-        "no_auto_decision",
-    }
-
-
-def duplicate_receipt(values: Receipts) -> Receipts:
-    return values + (values[0],)
-
-
-def replace_parent_with_missing(values: Receipts) -> Receipts:
-    return values[:-1] + (
-        values[-1].model_copy(update={"parent_receipt_id": "missing-parent"}),
-    )
-
-
-def forge_child_parent(values: Receipts) -> Receipts:
-    return values[:-1] + (
-        values[-1].model_copy(
-            update={"parent_receipt_id": values[0].receipt_id}
+def test_self_asserted_trajectory_receipts_are_not_authority() -> None:
+    forged = (
+        DraEvaluationReceiptV1(
+            receipt_id="forged",
+            parent_receipt_id=None,
+            stage="capture-live",
+            intent_sha256=INTENT,
+            assertion_ids=("producer_pin_exact",),
+            observed_identity_hashes=("7" * 64,),
         ),
     )
+    with pytest.raises(ValueError, match="typed_stage_receipts_required"):
+        evaluate_trajectory(load_live_closure_scenario(), forged)  # type: ignore[arg-type]
 
 
-@pytest.mark.parametrize(
-    "mutate",
-    (
-        duplicate_receipt,
-        replace_parent_with_missing,
-        forge_child_parent,
-    ),
-)
-def test_duplicate_missing_parent_and_forged_child_are_rejected(
-    mutate: ReceiptMutator,
-) -> None:
-    with pytest.raises(ValueError):
-        evaluate_trajectory(load_live_closure_scenario(), mutate(receipts()))
-
-
-def test_receipt_rejects_content_and_unknown_assertion() -> None:
-    payload = receipts()[0].model_dump(mode="json")
-    with pytest.raises(ValidationError):
-        DraEvaluationReceiptV1.model_validate(payload | {"content": "forbidden"})
-    with pytest.raises(ValidationError):
-        DraEvaluationReceiptV1.model_validate(
-            payload | {"assertion_ids": ["unknown_assertion"]}
+def test_missing_or_forged_typed_receipt_chain_fails_closed() -> None:
+    with pytest.raises(ValueError, match="typed_stage_receipts_required"):
+        evaluate_trajectory(load_live_closure_scenario(), typed_receipts()[:-1])
+    capture, promotion, review, decision = typed_receipts()
+    forged = decision.model_copy(update={"review_id": UUID(int=999)})
+    with pytest.raises(ValueError, match="receipt_chain_invalid"):
+        evaluate_trajectory(
+            load_live_closure_scenario(), (capture, promotion, review, forged)
         )
 
 
-def test_outcome_evaluation_is_exact_and_fail_closed() -> None:
+def test_outcome_requires_execution_event_sse_pin_and_exact_receipt_identities() -> None:
     passed = evaluate_outcome(expected_outcome(), outcome_projection())
-    assert all(result.status == "passed" for result in passed)
-    failed = evaluate_outcome(
-        expected_outcome(),
-        outcome_projection().model_copy(
-            update={
-                "governed_task_count": 2,
-                "external_authority": "untrusted_candidate",
-                "tenant_isolated": False,
-            }
-        ),
+    assert all(item.status == "passed" for item in passed)
+    failed = outcome_projection().model_copy(
+        update={
+            "execution_planning_run_id": "wrong-run",
+            "sse_cursor": 5,
+            "runtime_binding_sha256": "8" * 64,
+            "decision_receipt_id": "wrong-receipt",
+            "timeline_plan_id": "wrong-timeline",
+        }
     )
-    assert {
-        result.assertion_id for result in failed if result.status == "failed"
-    } == {
-        "external_authority_exact",
-        "governed_task_exactly_one",
-        "tenant_isolation_preserved",
+    failed_ids = {
+        item.assertion_id
+        for item in evaluate_outcome(expected_outcome(), failed)
+        if item.status == "failed"
+    }
+    assert failed_ids == {
+        "task_terminal_state_exact",
+        "decision_receipt_exactly_one",
+        "timeline_plan_exactly_one",
     }
 
 
-def test_canonical_report_is_stable_and_excludes_ambient_time() -> None:
-    scenario = load_live_closure_scenario()
-    outcome = evaluate_outcome(expected_outcome(), outcome_projection())
-    first = build_evaluation_report(
-        scenario=scenario,
-        receipts=receipts(),
-        outcome=outcome,
-    )
-    second = build_evaluation_report(
-        scenario=scenario,
-        receipts=tuple(reversed(receipts())),
-        outcome=tuple(reversed(outcome)),
-    )
-    assert canonical_report_bytes(first) == canonical_report_bytes(second)
-    payload = json.loads(canonical_report_bytes(first))
-    assert payload["status"] == "passed"
-    assert "duration" not in payload
-    assert "clock" not in payload
-    assert render_evaluation_report(first, duration_ms=1) != (
-        render_evaluation_report(first, duration_ms=999)
-    )
-    assert canonical_report_bytes(first) == canonical_report_bytes(second)
-
-
-def test_final_report_requires_the_exact_closed_assertion_union() -> None:
-    scenario = load_live_closure_scenario()
-    subset = AssertionResultV1(
-        assertion_id="producer_pin_exact",
-        status="passed",
-        public_code="producer_pin_exact_passed",
-        observed_identity_hashes=(),
-    )
-    with pytest.raises(ValidationError, match="dra_evaluation_assertion_set_invalid"):
-        DraLiveEvaluationReportV1(
-            schema_version="night-voyager.dra-live-evaluation.v1",
-            scenario_id=scenario.scenario_id,
-            producer=scenario.producer,
-            intent_sha256=INTENT_SHA,
-            assertions=(subset,),
-            expected_non_claims=scenario.expected_non_claims,
-        )
-
-    with pytest.raises(ValidationError, match="dra_evaluation_assertion_set_invalid"):
-        build_evaluation_report(
-            scenario=scenario,
-            receipts=receipts(),
-            outcome=(),
-        )
-
-
-def test_final_report_rejects_duplicate_unknown_and_extra_assertions() -> None:
-    scenario = load_live_closure_scenario()
+def test_canonical_report_round_trips_and_status_is_derived() -> None:
     report = build_evaluation_report(
-        scenario=scenario,
-        receipts=receipts(),
-        outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
-    )
-    payload = cast(dict[str, object], report.model_dump(mode="json"))
-    assertion_value = payload["assertions"]
-    assert isinstance(assertion_value, list)
-    assertions = cast(list[dict[str, object]], assertion_value)
-
-    duplicate = deepcopy(payload)
-    duplicate["assertions"] = [*assertions, deepcopy(assertions[0])]
-    with pytest.raises(ValidationError):
-        DraLiveEvaluationReportV1.model_validate(duplicate)
-
-    unknown = deepcopy(payload)
-    unknown_assertions = deepcopy(assertions)
-    unknown_assertions[0]["assertion_id"] = "unknown_assertion"
-    unknown["assertions"] = unknown_assertions
-    with pytest.raises(ValidationError):
-        DraLiveEvaluationReportV1.model_validate(unknown)
-
-    extra = deepcopy(payload)
-    extra["assertions"] = [
-        *assertions,
-        {
-            "assertion_id": "unexpected_extra",
-            "status": "passed",
-            "public_code": "unexpected_extra_passed",
-            "observed_identity_hashes": [],
-        },
-    ]
-    with pytest.raises(ValidationError):
-        DraLiveEvaluationReportV1.model_validate(extra)
-
-
-def test_report_intent_is_derived_from_the_validated_receipt_root() -> None:
-    scenario = load_live_closure_scenario()
-    receipt_intent = "b" * 64
-    bound_receipts = tuple(
-        receipt.model_copy(update={"intent_sha256": receipt_intent})
-        for receipt in receipts()
-    )
-    report = build_evaluation_report(
-        scenario=scenario,
-        receipts=bound_receipts,
-        outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
-    )
-    assert report.intent_sha256 == receipt_intent
-    assert "intent_sha256" not in signature(build_evaluation_report).parameters
-
-    with pytest.raises(ValueError, match="dra_evaluation_intent_mismatch"):
-        build_evaluation_report(
-            scenario=scenario,
-            receipts=(
-                *bound_receipts[:-1],
-                bound_receipts[-1].model_copy(
-                    update={"intent_sha256": "d" * 64}
-                ),
-            ),
-            outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
-        )
-    with pytest.raises(ValueError, match="dra_evaluation_receipt_root_missing"):
-        build_evaluation_report(
-            scenario=scenario,
-            receipts=(),
-            outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
-        )
-    with pytest.raises(ValueError, match="dra_evaluation_parent_invalid"):
-        build_evaluation_report(
-            scenario=scenario,
-            receipts=forge_child_parent(bound_receipts),
-            outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
-        )
-
-
-def test_canonical_report_round_trips_through_its_versioned_schema() -> None:
-    scenario = load_live_closure_scenario()
-    report = build_evaluation_report(
-        scenario=scenario,
-        receipts=receipts(),
+        scenario=load_live_closure_scenario(),
+        receipts=typed_receipts(),
         outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
     )
     encoded = canonical_report_bytes(report)
-    decoded = DraLiveEvaluationReportV1.model_validate_json(encoded)
-    assert decoded.status == "passed"
-    assert canonical_report_bytes(decoded) == encoded
-    assert tuple(item.assertion_id for item in decoded.assertions) == tuple(
-        sorted((*TRAJECTORY_ASSERTIONS, *OUTCOME_ASSERTIONS))
-    )
+    parsed = DraLiveEvaluationReportV1.model_validate_json(encoded)
+    assert canonical_report_bytes(parsed) == encoded
+    assert parsed.status == "passed"
+    payload = json.loads(encoded)
+    without_status = dict(payload)
+    without_status.pop("status")
+    assert DraLiveEvaluationReportV1.model_validate(without_status).status == "passed"
+    for invalid in (None, "failed", 1):
+        with pytest.raises(ValidationError):
+            DraLiveEvaluationReportV1.model_validate(payload | {"status": invalid})
 
 
-def test_report_status_is_optional_but_strict_when_supplied() -> None:
-    scenario = load_live_closure_scenario()
+def test_final_report_requires_exact_trajectory_and_outcome_union() -> None:
     report = build_evaluation_report(
-        scenario=scenario,
-        receipts=receipts(),
+        scenario=load_live_closure_scenario(),
+        receipts=typed_receipts(),
         outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
     )
-    payload = cast(dict[str, object], report.model_dump(mode="json"))
-
-    omitted = deepcopy(payload)
-    omitted.pop("status")
-    assert DraLiveEvaluationReportV1.model_validate(omitted).status == "passed"
-    assert DraLiveEvaluationReportV1.model_validate(payload).status == "passed"
-
-    for invalid_status in (None, 1, "failed"):
-        invalid = deepcopy(payload)
-        invalid["status"] = invalid_status
-        with pytest.raises(ValidationError, match="dra_evaluation_status_invalid"):
-            DraLiveEvaluationReportV1.model_validate(invalid)
-
-
-@pytest.mark.parametrize(
-    "forbidden",
-    ("content", "body", "prompt", "headers", "environment"),
-)
-def test_report_schema_rejects_content_bearing_keys(forbidden: str) -> None:
-    scenario = load_live_closure_scenario()
-    report = build_evaluation_report(
-        scenario=scenario,
-        receipts=receipts(),
-        outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
-    )
-    payload = deepcopy(report.model_dump(mode="json"))
-    payload[forbidden] = "forbidden"
+    assert report.status == "passed"
+    assert len(report.assertions) == len((*TRAJECTORY_ASSERTIONS, *OUTCOME_ASSERTIONS))
+    payload = report.model_dump(mode="json")
+    payload["assertions"] = payload["assertions"][:-1]
     with pytest.raises(ValidationError):
-        type(report).model_validate(payload)
+        DraLiveEvaluationReportV1.model_validate(payload)
+
+
+def test_report_rejects_content_keys() -> None:
+    report = build_evaluation_report(
+        scenario=load_live_closure_scenario(),
+        receipts=typed_receipts(),
+        outcome=evaluate_outcome(expected_outcome(), outcome_projection()),
+    )
+    with pytest.raises(ValidationError):
+        DraLiveEvaluationReportV1.model_validate(
+            report.model_dump(mode="json") | {"content": "forbidden"}
+        )

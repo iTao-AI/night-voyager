@@ -130,6 +130,7 @@ def create_task_router(
     async def get_agent_task(  # pyright: ignore[reportUnusedFunction]
         task_id: UUID,
         response: Response,
+        live_authority: bool = False,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     ) -> dict[str, object] | JSONResponse:
         async with session_factory() as session, session.begin():
@@ -137,7 +138,11 @@ def create_task_router(
             try:
                 result = await TaskService(
                     PostgresTaskRepository(session), registry=task_registry()
-                ).get(context, task_id)
+                ).get(
+                    context,
+                    task_id,
+                    include_live_authority=live_authority,
+                )
             except TaskAuthorizationError:
                 result = None
         if result is None:

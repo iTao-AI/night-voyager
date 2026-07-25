@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 
+from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.live_controller import (
     DraLiveClosureController,
     PromoteCommand,
@@ -42,10 +43,16 @@ CONTENT = b"public source snapshot\n"
 
 
 class FakePromotionGateway:
-    def __init__(self, *, lose_ack: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        lose_ack: bool = False,
+        committed_command: VerifyDraCandidateCommand | None = None,
+    ) -> None:
         self.current = DraCandidateViewV1(candidate_id=CANDIDATE_ID, verification=None)
         self.calls = 0
         self.lose_ack = lose_ack
+        self.committed_command = committed_command
 
     async def get_candidate(
         self,
@@ -71,6 +78,9 @@ class FakePromotionGateway:
             promoted_source_pack_version=2,
             promoted_source_entry_id=SOURCE_ENTRY_ID,
             promoted_evidence_id=PROMOTED_EVIDENCE_ID,
+            decision_request_sha256=canonical_request_sha256(
+                (self.committed_command or command).model_dump(mode="json")
+            ),
         )
         self.current = DraCandidateViewV1(candidate_id=CANDIDATE_ID, verification=verification)
         if self.lose_ack:
@@ -235,3 +245,37 @@ async def test_promote_rejects_cross_tenant_actor_before_authority(
         with pytest.raises(ValueError, match="promotion_actor_invalid"):
             await DraLiveClosureController(gateway, store).promote(command)
     assert gateway.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_promote_lost_ack_rejects_different_committed_evidence_and_attestation(
+    tmp_path: Path,
+) -> None:
+    receipt_root, snapshot_root = _private_roots(tmp_path)
+    command = _command(snapshot_root)
+    conflicting_attestation = _attestation().model_copy(
+        update={"publisher": "Different institution"}
+    )
+    conflicting = VerifyDraCandidateCommand(
+        case_id=CASE_ID,
+        candidate_id=CANDIDATE_ID,
+        expected_case_revision=3,
+        dra_evidence_id="different-evidence",
+        decision="approve",
+        reason="Different operator decision.",
+        source_attestation=conflicting_attestation,
+    )
+    gateway = FakePromotionGateway(
+        lose_ack=True,
+        committed_command=conflicting,
+    )
+    with LiveReceiptStore.open(receipt_root) as store:
+        store.write_receipt("capture.json", _capture())
+        with pytest.raises(ValueError, match="promotion_authority_result_invalid"):
+            await DraLiveClosureController(gateway, store).promote(command)
+
+        names = {
+            item.logical_name
+            for item in store.verify_recovery_bundle().receipts
+        }
+        assert "promotion-ambiguous.json" in names

@@ -1,0 +1,432 @@
+# pyright: reportPrivateUsage=false
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import threading
+from collections.abc import Generator
+from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any, cast
+from uuid import UUID
+
+import pytest
+
+from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
+from night_voyager.dra.live_http import (
+    EphemeralHttpAuthority,
+    NightVoyagerAuthorityGateway,
+)
+from night_voyager.dra.live_storage import LiveReceiptStore
+from night_voyager.identity.models import ActorContext, ActorRole
+from scripts import verify_dra_governed_flow as governed_flow
+
+from .test_live_promotion_controller import (  # pyright: ignore[reportPrivateUsage]
+    _capture,
+    _command,
+    _private_roots,
+)
+
+ROOT = Path(__file__).resolve().parents[3]
+CLI = ROOT / "scripts/verify_dra_live_closure.py"
+GOVERNED_PROOF = ROOT / "scripts/verify_dra_governed_flow.py"
+
+
+def _run(*arguments: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ("uv", "run", "python", str(CLI), *arguments),
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
+def test_promote_is_a_real_stage_command_not_a_preflight_stub(
+    tmp_path: Path,
+) -> None:
+    receipts = tmp_path / "receipts"
+    receipts.mkdir(mode=0o700)
+    with LiveReceiptStore.open(receipts) as store:
+        store.write_receipt("capture.json", _capture())
+
+    result = _run(
+        "promote",
+        "--receipt-root",
+        str(receipts),
+        "--ack",
+        "acknowledge-promote",
+        "--json",
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 30
+    assert payload["problem_code"] == "promotion_input_required"
+    assert "mutation_performed" not in payload
+
+
+def test_promote_emits_bounded_preview_before_authority_access(
+    tmp_path: Path,
+) -> None:
+    receipts, snapshot_root = _private_roots(tmp_path)
+    with LiveReceiptStore.open(receipts) as store:
+        store.write_receipt("capture.json", _capture())
+    stage_input = tmp_path / "promotion.json"
+    stage_input.write_text(
+        _command(snapshot_root).promotion.model_dump_json(),
+        encoding="utf-8",
+    )
+
+    result = _run(
+        "promote",
+        "--receipt-root",
+        str(receipts),
+        "--snapshot-root",
+        str(snapshot_root),
+        "--input-file",
+        str(stage_input),
+        "--ack",
+        "acknowledge-promote",
+        "--json",
+    )
+
+    preview = json.loads(result.stderr)
+    assert result.returncode == 30
+    assert preview == {
+        "schema_version": "night-voyager.dra-live-mutation-preview.v1",
+        "stage": "promote",
+        "input_sha256": preview["input_sha256"],
+        "acknowledgement": "accepted",
+    }
+    assert len(preview["input_sha256"]) == 64
+    assert "session" not in result.stderr
+
+
+def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
+    tmp_path: Path,
+) -> None:
+    receipts = tmp_path / "readiness"
+    inventory = tmp_path / "inventory.txt"
+    inventory.write_text("not a verified Docker evidence receipt\n", encoding="utf-8")
+    head = subprocess.run(
+        ("git", "rev-parse", "HEAD"),
+        cwd=ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    ).stdout.strip()
+
+    result = _run(
+        "freeze-candidate",
+        "--receipt-root",
+        str(receipts),
+        "--merged-main-sha",
+        head,
+        "--docker-inventory-file",
+        str(inventory),
+        "--hosted-check",
+        "python",
+        "--hosted-check",
+        "frontend",
+        "--hosted-check",
+        "compose",
+        "--authorization-placeholder",
+        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION",
+        "--json",
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 30
+    assert payload["problem_code"] == "candidate_readiness_invalid"
+    assert not receipts.exists()
+
+
+def test_governed_proof_imports_with_exact_core_runtime_export() -> None:
+    exported = subprocess.run(
+        ("uv", "export", "--frozen", "--no-dev", "--no-emit-project"),
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    ).stdout
+    assert "\nhttpx2==" not in f"\n{exported}"
+
+    code = f"""
+import builtins
+import runpy
+
+original_import = builtins.__import__
+
+def core_runtime_import(name, *args, **kwargs):
+    if name == "httpx2" or name.startswith("httpx2."):
+        raise ModuleNotFoundError("core runtime excludes optional dra dependencies")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = core_runtime_import
+runpy.run_path({str(GOVERNED_PROOF)!r}, run_name="core_runtime_proof")
+"""
+    imported = subprocess.run(
+        (sys.executable, "-c", code),
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    assert imported.returncode == 0, imported.stderr
+
+
+class _ProofHandler(BaseHTTPRequestHandler):
+    response_status = 200
+    response_body = b'{"status":"ok"}'
+    requests: list[dict[str, object]] = []
+
+    def do_GET(self) -> None:  # noqa: N802
+        self._handle()
+
+    def do_POST(self) -> None:  # noqa: N802
+        self._handle()
+
+    def _handle(self) -> None:
+        content_length = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(content_length)
+        type(self).requests.append(
+            {
+                "method": self.command,
+                "path": self.path,
+                "headers": dict(self.headers.items()),
+                "body": body,
+            }
+        )
+        self.send_response(type(self).response_status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(type(self).response_body)
+
+    def log_message(self, format: str, *args: Any) -> None:
+        del format, args
+
+
+@contextmanager
+def _proof_server(
+    *,
+    status: int = 200,
+    body: bytes = b'{"status":"ok"}',
+) -> Generator[tuple[str, list[dict[str, object]]]]:
+    handler = type(
+        "ProofHandler",
+        (_ProofHandler,),
+        {"response_status": status, "response_body": body, "requests": []},
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        host = str(server.server_address[0])
+        port = int(server.server_address[1])
+        yield f"http://{host}:{port}", handler.requests
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+
+
+@pytest.mark.asyncio
+async def test_stdlib_async_client_preserves_authority_and_json_request() -> None:
+    client_type = getattr(governed_flow, "_StdlibAsyncHttpClient", None)
+    assert client_type is not None
+    with _proof_server() as (base_url, requests):
+        async with client_type(base_url=base_url, timeout=1) as client:
+            response = await client.post(
+                "/api/v1/mutate",
+                headers={
+                    "Origin": "http://127.0.0.1:3000",
+                    "X-CSRF-Token": "bounded-csrf",
+                    "Cookie": "night_voyager_session=bounded-session",
+                    "Idempotency-Key": "bounded-idempotency-key",
+                },
+                json={"schema_version": 1},
+            )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    response.raise_for_status()
+    assert len(requests) == 1
+    request = requests[0]
+    assert request["method"] == "POST"
+    assert request["path"] == "/api/v1/mutate"
+    assert request["body"] == b'{"schema_version":1}'
+    headers = request["headers"]
+    assert isinstance(headers, dict)
+    observed_headers = {
+        key.lower(): value
+        for key, value in cast(dict[str, str], headers).items()
+    }
+    assert observed_headers["content-type"] == "application/json"
+    assert observed_headers["origin"] == "http://127.0.0.1:3000"
+    assert observed_headers["x-csrf-token"] == "bounded-csrf"
+    assert observed_headers["cookie"] == "night_voyager_session=bounded-session"
+    assert observed_headers["idempotency-key"] == "bounded-idempotency-key"
+
+
+@pytest.mark.asyncio
+async def test_stdlib_async_client_preserves_404_for_gateway_handling() -> None:
+    client_type = getattr(governed_flow, "_StdlibAsyncHttpClient", None)
+    assert client_type is not None
+    with _proof_server(status=404, body=b'{"code":"resource_unavailable"}') as (
+        base_url,
+        requests,
+    ):
+        async with client_type(base_url=base_url, timeout=1) as client:
+            response = await client.get(
+                "/api/v1/missing",
+                headers={"Origin": "http://127.0.0.1:3000"},
+            )
+
+    assert requests[0]["path"] == "/api/v1/missing"
+    assert response.status_code == 404
+    assert response.json() == {"code": "resource_unavailable"}
+
+
+@pytest.mark.asyncio
+async def test_stdlib_async_client_rejects_non_success_and_invalid_json() -> None:
+    client_type = getattr(governed_flow, "_StdlibAsyncHttpClient", None)
+    assert client_type is not None
+    with _proof_server(status=503, body=b'{"code":"temporarily_unavailable"}') as (
+        base_url,
+        _,
+    ):
+        async with client_type(base_url=base_url, timeout=1) as client:
+            unavailable = await client.get("/api/v1/status", headers={})
+    with pytest.raises(RuntimeError, match="night_voyager_http_status_503"):
+        unavailable.raise_for_status()
+
+    with _proof_server(body=b"not-json") as (base_url, _):
+        async with client_type(base_url=base_url, timeout=1) as client:
+            invalid = await client.get("/api/v1/status", headers={})
+    with pytest.raises(json.JSONDecodeError):
+        invalid.json()
+
+
+@pytest.mark.asyncio
+async def test_core_proof_gateway_accepts_versioned_candidate_http_envelope() -> None:
+    candidate_id = UUID("00000000-0000-4000-8000-000000000099")
+    body = json.dumps(
+        {
+            "schema_version": 1,
+            "candidate_id": str(candidate_id),
+            "verification": None,
+            "replayed": False,
+        }
+    ).encode()
+    candidate_import = build_v0_1_6_scenario_candidate_import()
+    context = ActorContext(
+        organization_id=candidate_import.organization_id,
+        actor_id=UUID("20000000-0000-0000-0000-000000000001"),
+        role=ActorRole.ADVISOR,
+        session_id=UUID("30000000-0000-0000-0000-000000000001"),
+    )
+
+    client_type = getattr(governed_flow, "_StdlibAsyncHttpClient", None)
+    assert client_type is not None
+    with _proof_server(status=201, body=body) as (base_url, _):
+        async with client_type(base_url=base_url, timeout=1) as client:
+            imported = await NightVoyagerAuthorityGateway(
+                client,
+                EphemeralHttpAuthority(
+                    origin="http://127.0.0.1:3000",
+                    session_value="bounded-session",
+                    csrf_value="bounded-csrf",
+                ),
+            ).import_candidate(
+                context,
+                candidate_import,
+                "bounded-idempotency-key",
+            )
+
+    assert imported.candidate_id == candidate_id
+    assert imported.verification is None
+
+
+@pytest.mark.asyncio
+async def test_core_proof_gateway_parses_task_skill_pin_from_http_json() -> None:
+    case_id = UUID("10000000-0000-0000-0000-000000000001")
+    task_id = UUID("10000000-0000-0000-0000-000000000002")
+    source_pack_id = UUID("10000000-0000-0000-0000-000000000003")
+    planning_run_id = UUID("10000000-0000-0000-0000-000000000004")
+    execution_id = UUID("10000000-0000-0000-0000-000000000005")
+
+    class _Response:
+        status_code = 200
+
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._payload = payload
+
+        def json(self) -> object:
+            return self._payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class _Client:
+        async def post(self, *args: object, **kwargs: object) -> _Response:
+            del args, kwargs
+            return _Response({"schema_version": 1, "task_id": str(task_id)})
+
+        async def get(self, *args: object, **kwargs: object) -> _Response:
+            del args, kwargs
+            return _Response(
+                {
+                    "schema_version": 1,
+                    "task_id": str(task_id),
+                    "case_id": str(case_id),
+                    "case_revision": 7,
+                    "source_pack_id": str(source_pack_id),
+                    "source_pack_version": 3,
+                    "status": "needs_advisor_review",
+                    "planning_run_id": str(planning_run_id),
+                    "execution_id": str(execution_id),
+                    "terminal_event_id": 11,
+                    "skill_pin": {
+                        "skill_definition_id": (
+                            "81000000-0000-0000-0000-000000000002"
+                        ),
+                        "skill_version_id": "82000000-0000-0000-0000-000000000002",
+                        "skill_activation_event_id": (
+                            "84000000-0000-0000-0000-000000000001"
+                        ),
+                        "skill_activation_sequence": 1,
+                        "runtime_binding_sha256": "d" * 64,
+                    },
+                    "request_sha256": "e" * 64,
+                }
+            )
+
+    context = ActorContext(
+        organization_id=UUID("10000000-0000-0000-0000-000000000006"),
+        actor_id=UUID("10000000-0000-0000-0000-000000000007"),
+        role=ActorRole.ADVISOR,
+        session_id=UUID("10000000-0000-0000-0000-000000000008"),
+    )
+    task = await NightVoyagerAuthorityGateway(
+        _Client(),
+        EphemeralHttpAuthority(
+            origin="http://127.0.0.1:3000",
+            session_value="bounded-session",
+            csrf_value="bounded-csrf",
+        ),
+    ).create_task(
+        context,
+        case_id,
+        7,
+        source_pack_id,
+        3,
+        "bounded-idempotency-key",
+    )
+
+    assert task.task_id == task_id
+    assert task.skill_pin.skill_definition_id == UUID(
+        "81000000-0000-0000-0000-000000000002"
+    )

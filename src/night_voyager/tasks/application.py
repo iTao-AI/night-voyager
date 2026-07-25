@@ -57,11 +57,19 @@ class TaskService:
         return self._project(row)
 
     async def get(
-        self, context: ActorContext, task_id: UUID
+        self,
+        context: ActorContext,
+        task_id: UUID,
+        *,
+        include_live_authority: bool = False,
     ) -> dict[str, object] | None:
         self._require_advisor(context)
         row = await self._repository.get(context, task_id)
-        return None if row is None else self._project(row)
+        return (
+            None
+            if row is None
+            else self._project(row, include_live_authority=include_live_authority)
+        )
 
     async def cancel(
         self,
@@ -79,7 +87,12 @@ class TaskService:
         if context.role is not ActorRole.ADVISOR:
             raise TaskAuthorizationError
 
-    def _project(self, row: Mapping[str, object]) -> dict[str, object]:
+    def _project(
+        self,
+        row: Mapping[str, object],
+        *,
+        include_live_authority: bool = False,
+    ) -> dict[str, object]:
         state = AgentTaskState(str(row["state"]))
         skill_pin = self._project_skill_pin(row)
         projected = {
@@ -99,6 +112,20 @@ class TaskService:
         }
         if "replayed" in row:
             projected["replayed"] = row["replayed"]
+        if include_live_authority:
+            projected.update(
+                {
+                    "case_id": row["case_id"],
+                    "case_revision": row["case_revision"],
+                    "operation": row["operation"],
+                    "source_pack_id": row["source_pack_id"],
+                    "source_pack_version": row["source_pack_version"],
+                    "policy_version": row["policy_version"],
+                    "request_sha256": row["request_sha256"],
+                    "terminal_event_id": row.get("terminal_event_id"),
+                    "execution_id": row.get("execution_id"),
+                }
+            )
         return projected
 
     @staticmethod

@@ -20,6 +20,7 @@ from uuid import UUID
 
 import httpx2
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from night_voyager.adapters.dra_readonly import (
     DraClientConfig,
@@ -28,14 +29,27 @@ from night_voyager.adapters.dra_readonly import (
 from night_voyager.dra.fixtures import load_live_closure_scenario
 from night_voyager.dra.live_controller import (
     CaptureLiveCommand,
+    DecideCommand,
     DraLiveCaptureController,
+    DraLiveClosureController,
+    PromoteCommand,
     ReconcileCreateCommand,
     ResumePollCommand,
+    ReviewCommand,
     SelectAndImportCommand,
+)
+from night_voyager.dra.live_evaluation import (
+    DraLiveEvaluationReportV1,
+    DraLiveOutcomeExpectedV1,
+    evaluate_full_closure,
 )
 from night_voyager.dra.live_fakes import (
     ScenarioCandidateGateway,
     ScenarioDraLiveTransport,
+)
+from night_voyager.dra.live_http import (
+    EphemeralHttpAuthority,
+    NightVoyagerAuthorityGateway,
 )
 from night_voyager.dra.live_models import (
     DraCandidateReadinessReceiptV1,
@@ -43,14 +57,22 @@ from night_voyager.dra.live_models import (
     DraCaptureIntentV1,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
+    DraDecisionInputV1,
+    DraDecisionReceiptV1,
     DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPollRecoveryReceiptV1,
     DraPreflightReceiptV1,
+    DraPromotionInputV1,
+    DraPromotionReceiptV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
+    DraReviewInputV1,
+    DraReviewReceiptV1,
     derive_identity_hash,
 )
+from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
+from night_voyager.dra.live_outcome_postgres import PostgresLiveOutcomeInspector
 from night_voyager.dra.live_storage import (
     CleanupResultV1,
     LiveReceiptStore,
@@ -131,6 +153,27 @@ def _result_payload(
         payload["receipt"] = receipt.model_dump(mode="json")
     payload.update(extra)
     return payload
+
+
+def _emit_mutation_preview(stage: str, payload: dict[str, object]) -> None:
+    """Emit a bounded, content-free preview before any Stage 2-4 authority call."""
+    preview = {
+        "schema_version": "night-voyager.dra-live-mutation-preview.v1",
+        "stage": stage,
+        "input_sha256": hashlib.sha256(
+            json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            ).encode("utf-8")
+        ).hexdigest(),
+        "acknowledgement": "accepted",
+    }
+    print(
+        json.dumps(preview, sort_keys=True, separators=(",", ":")),
+        file=sys.stderr,
+    )
 
 
 def _open_root(path: Path, *, create: bool = False) -> LiveReceiptStore:
@@ -880,7 +923,7 @@ def rehearse_capture(args: argparse.Namespace) -> NoReturn:
 
 
 def inspect_provider_free_stage(args: argparse.Namespace) -> NoReturn:
-    """Validate the durable predecessor before a separately acknowledged stage."""
+    """Run one provider-free Stage 2-4 mutation or final evaluation."""
     stage = str(args.command)
     if args.ack != f"acknowledge-{stage}":
         _emit(
@@ -891,39 +934,173 @@ def inspect_provider_free_stage(args: argparse.Namespace) -> NoReturn:
             ),
             as_json=args.json,
         )
-    predecessor = {
-        "promote": "capture.json",
-        "review": "promotion.json",
-        "decide": "review.json",
-        "evaluate": "decision.json",
-    }[stage]
-    try:
-        with _open_root(Path(args.receipt_root)) as store:
-            names = {
-                identity.logical_name
-                for identity in store.verify_recovery_bundle().receipts
-            }
-            if predecessor not in names:
-                raise ValueError("stage_predecessor_missing")
-    except (LiveStorageError, ValueError):
+    if not getattr(args, "input_file", None):
         _emit(
             _result_payload(
                 "terminal_failure",
-                f"{stage}_predecessor_invalid",
+                f"{stage if stage != 'promote' else 'promotion'}_input_required",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    try:
+        payload_value = json.loads(Path(args.input_file).read_text(encoding="utf-8"))
+        if not isinstance(payload_value, dict):
+            raise ValueError("stage_input_invalid")
+        payload = cast(dict[str, object], payload_value)
+        _emit_mutation_preview(stage, payload)
+        result, identity = asyncio.run(_execute_provider_free_stage(args, payload))
+    except (LiveStorageError, OSError, ValueError, httpx2.HTTPError):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                f"{stage}_authority_invalid",
                 "stop",
             ),
             as_json=args.json,
         )
     _emit(
         _result_payload(
-            "safe_pause",
-            f"{stage}_ephemeral_authority_required",
-            stage,
-            predecessor=predecessor,
-            mutation_performed=False,
+            "success",
+            {
+                "promote": "promotion_recorded",
+                "review": "review_recorded",
+                "decide": "decision_recorded",
+                "evaluate": "closure_passed",
+            }[stage],
+            "cleanup" if stage == "evaluate" else (
+                "review" if stage == "promote" else "decide" if stage == "review" else "evaluate"
+            ),
+            receipt=identity,
+            preview={
+                "stage": stage,
+                "intent_sha256": str(result.intent_sha256),
+                "attempt_id": (
+                    str(result.attempt_id)
+                    if not isinstance(result, DraLiveEvaluationReportV1)
+                    else "evaluation"
+                ),
+            },
+            mutation_performed=stage != "evaluate",
         ),
         as_json=args.json,
     )
+
+
+def _ephemeral_context(role: ActorRole) -> tuple[ActorContext, EphemeralHttpAuthority, str]:
+    required = (
+        "NIGHT_VOYAGER_LIVE_API_BASE_URL",
+        "NIGHT_VOYAGER_LIVE_SESSION",
+        "NIGHT_VOYAGER_LIVE_CSRF",
+        "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+        "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+        "NIGHT_VOYAGER_LIVE_SESSION_ID",
+    )
+    if any(not os.environ.get(name) for name in required):
+        raise ValueError("stage_environment_incomplete")
+    base_url = os.environ[required[0]].rstrip("/")
+    parsed = urlsplit(base_url)
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "::1", "localhost"}
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("stage_environment_invalid")
+    context = ActorContext(
+        organization_id=UUID(os.environ[required[3]]),
+        actor_id=UUID(os.environ[required[4]]),
+        role=role,
+        session_id=UUID(os.environ[required[5]]),
+    )
+    return (
+        context,
+        EphemeralHttpAuthority(
+            origin=f"{parsed.scheme}://{parsed.netloc}",
+            session_value=os.environ[required[1]],
+            csrf_value=os.environ[required[2]],
+        ),
+        base_url,
+    )
+
+
+async def _execute_provider_free_stage(
+    args: argparse.Namespace, payload: dict[str, object]
+) -> tuple[
+    DraPromotionReceiptV1
+    | DraReviewReceiptV1
+    | DraDecisionReceiptV1
+    | DraLiveEvaluationReportV1,
+    DraReceiptIdentityV1,
+]:
+    stage = str(args.command)
+    role = ActorRole.PARENT if stage == "decide" else ActorRole.ADVISOR
+    context, authority, base_url = _ephemeral_context(role)
+    with _open_root(Path(args.receipt_root)) as store:
+        if stage == "evaluate":
+            expected = DraLiveOutcomeExpectedV1.model_validate(payload)
+            capture = store.read_receipt("capture.json", DraCaptureReceiptV1)
+            promotion = store.read_receipt("promotion.json", DraPromotionReceiptV1)
+            review = store.read_receipt("review.json", DraReviewReceiptV1)
+            decision = store.read_receipt("decision.json", DraDecisionReceiptV1)
+            database_url = os.environ.get("NIGHT_VOYAGER_DATABASE_URL")
+            if not database_url:
+                raise ValueError("stage_environment_incomplete")
+            engine = create_async_engine(database_url)
+            try:
+                factory = async_sessionmaker(engine, expire_on_commit=False)
+                async with factory() as session:
+                    projection = await PostgresLiveOutcomeInspector(session).inspect(
+                        context,
+                        DraLiveOutcomeIntentV1(
+                            intent_sha256=capture.intent_sha256,
+                            organization_id=context.organization_id,
+                            candidate_id=promotion.candidate_id,
+                            advisor_actor_identity_sha256=derive_identity_hash(
+                                "actor", str(context.actor_id)
+                            ),
+                            tenant_identity_sha256=derive_identity_hash(
+                                "tenant", str(context.organization_id)
+                            ),
+                        ),
+                    )
+            finally:
+                await engine.dispose()
+            report = evaluate_full_closure(
+                load_live_closure_scenario(),
+                (capture, promotion, review, decision),
+                expected,
+                projection,
+            )
+            if report.status != "passed":
+                raise ValueError("closure_evaluation_failed")
+            return report, store.write_receipt("evaluation.json", report)
+        async with httpx2.AsyncClient(
+            base_url=base_url,
+            trust_env=False,
+            follow_redirects=False,
+            timeout=30,
+        ) as client:
+            gateway = NightVoyagerAuthorityGateway(client, authority)
+            controller = DraLiveClosureController(gateway, store)
+            if stage == "promote":
+                model = DraPromotionInputV1.model_validate(payload)
+                snapshot_root = getattr(args, "snapshot_root", None)
+                if not snapshot_root:
+                    raise ValueError("promotion_snapshot_root_required")
+                result = await controller.promote(
+                    PromoteCommand(model, context, Path(snapshot_root))
+                )
+                return result, store.write_receipt("promotion.json", result)
+            if stage == "review":
+                model = DraReviewInputV1.model_validate(payload)
+                result = await controller.review(ReviewCommand(model, context))
+                return result, store.write_receipt("review.json", result)
+            model = DraDecisionInputV1.model_validate(payload)
+            result = await controller.decide(DecideCommand(model, context))
+            return result, store.write_receipt("decision.json", result)
 
 
 def rehearse_full(args: argparse.Namespace) -> NoReturn:
@@ -956,22 +1133,156 @@ def rehearse_full(args: argparse.Namespace) -> NoReturn:
     )
 
 
+def _read_candidate_evidence(
+    path_value: str | None,
+    *,
+    kind: str,
+    head: str,
+    schema_version: str,
+    exact_keys: frozenset[str],
+) -> tuple[bytes, dict[str, object]]:
+    if not path_value:
+        raise ValueError(f"candidate_{kind}_evidence_missing")
+    raw = Path(path_value).read_bytes()
+    if not raw or len(raw) > 1_048_576:
+        raise ValueError(f"candidate_{kind}_evidence_invalid")
+    parsed_value = json.loads(raw)
+    if not isinstance(parsed_value, dict):
+        raise ValueError(f"candidate_{kind}_evidence_invalid")
+    parsed = cast(dict[str, object], parsed_value)
+    if (
+        frozenset(parsed) != exact_keys
+        or parsed.get("schema_version") != schema_version
+        or parsed.get("head_sha") != head
+    ):
+        raise ValueError(f"candidate_{kind}_evidence_invalid")
+    return raw, parsed
+
+
+def _validated_candidate_evidence(
+    args: argparse.Namespace,
+    head: str,
+) -> tuple[bytes, bytes, bytes, bytes]:
+    inventory, inventory_evidence = _read_candidate_evidence(
+        args.docker_inventory_file,
+        kind="docker",
+        head=head,
+        schema_version="night-voyager.dra-live-docker-evidence.v1",
+        exact_keys=frozenset(
+            {
+                "schema_version",
+                "head_sha",
+                "docker_preflight_status",
+                "teardown_status",
+                "cleanup_state",
+                "compose_projects_after",
+            }
+        ),
+    )
+    hosted, hosted_evidence = _read_candidate_evidence(
+        args.hosted_check_evidence_file,
+        kind="hosted_checks",
+        head=head,
+        schema_version="night-voyager.dra-live-hosted-checks-evidence.v1",
+        exact_keys=frozenset({"schema_version", "head_sha", "checks"}),
+    )
+    recovery, recovery_evidence = _read_candidate_evidence(
+        args.recovery_evidence_file,
+        kind="recovery",
+        head=head,
+        schema_version="night-voyager.dra-live-recovery-evidence.v1",
+        exact_keys=frozenset(
+            {"schema_version", "head_sha", "recovery_matrix_status"}
+        ),
+    )
+    review, review_evidence = _read_candidate_evidence(
+        args.authority_review_evidence_file,
+        kind="authority_review",
+        head=head,
+        schema_version="night-voyager.dra-live-authority-review-evidence.v1",
+        exact_keys=frozenset(
+            {"schema_version", "head_sha", "authority_review_status"}
+        ),
+    )
+    if (
+        inventory_evidence.get("docker_preflight_status") != "passed"
+        or inventory_evidence.get("teardown_status") != "passed"
+        or inventory_evidence.get("cleanup_state") != "clean"
+        or inventory_evidence.get("compose_projects_after") != []
+        or recovery_evidence.get("recovery_matrix_status") != "passed"
+        or review_evidence.get("authority_review_status") != "CLEAN"
+    ):
+        raise ValueError("candidate_evidence_status_invalid")
+    checks_value = hosted_evidence.get("checks")
+    if not isinstance(checks_value, dict):
+        raise ValueError("candidate_hosted_checks_invalid")
+    checks = cast(dict[object, object], checks_value)
+    if {str(name): str(value) for name, value in checks.items()} != {
+        "python": "SUCCESS",
+        "frontend": "SUCCESS",
+        "compose": "SUCCESS",
+    }:
+        raise ValueError("candidate_hosted_checks_invalid")
+    return inventory, hosted, recovery, review
+
+
 def freeze_candidate(args: argparse.Namespace) -> NoReturn:
     """Write a provider-free, executable post-merge readiness identity."""
     required_hosted_checks = tuple(sorted(set(args.hosted_check)))
     authorization_placeholder = args.authorization_placeholder
     try:
+        if required_hosted_checks != ("compose", "frontend", "python"):
+            raise ValueError("candidate_hosted_check_names_invalid")
         head = subprocess.run(
             ["git", "rev-parse", "HEAD"],
             check=True,
             text=True,
             capture_output=True,
         ).stdout.strip()
-        if head != args.merged_main_sha:
+        branch = subprocess.run(
+            ["git", "branch", "--show-current"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout
+        local_main = subprocess.run(
+            ["git", "rev-parse", "main"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        origin_main = subprocess.run(
+            ["git", "rev-parse", "origin/main"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.strip()
+        if (
+            head != args.merged_main_sha
+            or branch != "main"
+            or status
+            or local_main != head
+            or origin_main != head
+        ):
             raise ValueError("candidate_main_identity_invalid")
-        inventory = Path(args.docker_inventory_file).read_bytes()
-        if not inventory or len(inventory) > 1_048_576:
-            raise ValueError("candidate_docker_inventory_invalid")
+        live_main = subprocess.run(
+            ["git", "ls-remote", "origin", "refs/heads/main"],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout.split()[0]
+        if live_main != head:
+            raise ValueError("candidate_main_identity_invalid")
+
+        inventory, hosted, recovery, review = _validated_candidate_evidence(
+            args, head
+        )
         repository = Path(__file__).resolve().parents[1]
 
         def digest(relative: str) -> str:
@@ -1004,6 +1315,9 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
             recovery_matrix_status="passed",
             docker_preflight_status="passed",
             docker_inventory_sha256=hashlib.sha256(inventory).hexdigest(),
+            hosted_checks_evidence_sha256=hashlib.sha256(hosted).hexdigest(),
+            recovery_matrix_evidence_sha256=hashlib.sha256(recovery).hexdigest(),
+            authority_review_evidence_sha256=hashlib.sha256(review).hexdigest(),
             cleanup_state="clean",
             authorization_placeholder=authorization_placeholder,
         )
@@ -1117,6 +1431,9 @@ def parse_args() -> argparse.Namespace:
         )
         _root_argument(stage_parser)
         stage_parser.add_argument("--ack", required=True)
+        stage_parser.add_argument("--input-file")
+        if stage == "promote":
+            stage_parser.add_argument("--snapshot-root")
 
     full_rehearsal = commands.add_parser(
         "rehearse-full",
@@ -1131,6 +1448,9 @@ def parse_args() -> argparse.Namespace:
     _root_argument(candidate)
     candidate.add_argument("--merged-main-sha", required=True)
     candidate.add_argument("--docker-inventory-file", required=True)
+    candidate.add_argument("--hosted-check-evidence-file")
+    candidate.add_argument("--recovery-evidence-file")
+    candidate.add_argument("--authority-review-evidence-file")
     candidate.add_argument(
         "--hosted-check",
         action="append",

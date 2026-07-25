@@ -90,7 +90,8 @@ class PostgresDraCandidateRepository:
             text(
                 "SELECT c.id AS candidate_id,v.id AS verification_id,v.decision,"
                 "v.promoted_source_pack_version,v.promoted_source_entry_id,"
-                "v.promoted_evidence_id FROM app.dra_research_candidates c "
+                "v.promoted_evidence_id,v.decision_request_sha256 "
+                "FROM app.dra_research_candidates c "
                 "JOIN app.student_case_participants p ON p.organization_id=c.organization_id "
                 "AND p.case_id=c.case_id AND p.actor_id=:actor AND p.role='advisor' "
                 "LEFT JOIN app.external_evidence_verifications v "
@@ -115,6 +116,7 @@ class PostgresDraCandidateRepository:
                 promoted_source_pack_version=row["promoted_source_pack_version"],
                 promoted_source_entry_id=row["promoted_source_entry_id"],
                 promoted_evidence_id=row["promoted_evidence_id"],
+                decision_request_sha256=row["decision_request_sha256"],
             )
         return DraCandidateViewV1(candidate_id=row["candidate_id"], verification=verification)
 
@@ -188,6 +190,7 @@ class PostgresDraCandidateRepository:
             promoted_source_pack_version=row["promoted_source_pack_version"],
             promoted_source_entry_id=row["promoted_source_entry_id"],
             promoted_evidence_id=row["promoted_evidence_id"],
+            decision_request_sha256=request_hash,
             replayed=row["replayed"],
         )
 

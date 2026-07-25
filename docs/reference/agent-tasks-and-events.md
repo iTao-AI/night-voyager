@@ -125,8 +125,15 @@ advisor-review product projections contain selected countries only.
 | `cancelled` | `cancelled` |
 | non-current waiting/succeeded result | `outdated` |
 
-Public task and event projections omit organization, actor, session, lease,
-dispatch, internal error, and adapter-payload fields.
+The default public task projection remains unchanged. An assigned advisor may
+request the narrow `?live_authority=true` projection on the same task route; it
+adds the exact Case/source/policy request pins and request SHA-256. For a
+completed governed-live task it additionally exposes the successful
+`execution_id` and durable `terminal_event_id`; migration `0010` obtains those
+two correlations through an assigned-advisor-only `SECURITY DEFINER` projection,
+without granting the API role table access to `app.agent_executions`. Public task
+and event projections omit organization, actor, session, lease, dispatch,
+internal error, and adapter-payload fields.
 
 ## Lease and retry contract
 

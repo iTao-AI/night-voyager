@@ -159,6 +159,40 @@ partial/conflicting state. Fresh processes must re-inject the assigned-advisor
 or parent session. Session identifiers, cookies, headers, auth-file paths, and
 credential material are never receipt, bundle, log, or cleanup content.
 
+Each provider-free command consumes one bounded public-safe JSON input whose
+embedded parent receipt must byte-match the durable predecessor. The snapshot
+root is supplied only to `promote`; session values remain process-only:
+
+```bash
+uv run python scripts/verify_dra_live_closure.py promote \
+  --receipt-root '<same-private-root>' \
+  --input-file '<promotion-input.json>' \
+  --snapshot-root '<private-snapshot-root>' \
+  --ack acknowledge-promote --json
+uv run python scripts/verify_dra_live_closure.py review \
+  --receipt-root '<same-private-root>' \
+  --input-file '<review-input.json>' \
+  --ack acknowledge-review --json
+uv run python scripts/verify_dra_live_closure.py decide \
+  --receipt-root '<same-private-root>' \
+  --input-file '<decision-input.json>' \
+  --ack acknowledge-decide --json
+uv run python scripts/verify_dra_live_closure.py evaluate \
+  --receipt-root '<same-private-root>' \
+  --input-file '<receipt-derived-expected-outcome.json>' \
+  --ack acknowledge-evaluate --json
+```
+
+After input and acknowledgement validation, each mutation command writes a
+content-free preview to standard error before accessing product authority. The
+preview binds only the stage and canonical input SHA-256; the final JSON result
+is written separately to standard output.
+
+The evaluator rejects an expected outcome that is not exactly derivable from the
+four typed durable stage receipts. Migration `0010` separately proves the exact
+execution, terminal event/SSE cursor, five-field Skill pin, AdvisorReview,
+DecisionReceipt, and TimelinePlan identities.
+
 `decision_recorded` is not capability completion. A failed evaluator after a
 committed decision leaves a recoverable incomplete state and must not repeat or
 roll back that decision. A bounded retained failure receipt is safe-stop evidence
@@ -189,11 +223,30 @@ volumes/shared images/cache preserved. Then run:
 uv run python scripts/verify_dra_live_closure.py freeze-candidate \
   --receipt-root '<private-mode-0700-root>' \
   --merged-main-sha '<exact-40-hex-merged-main>' \
-  --docker-inventory-file '<public-safe-inventory-file>' \
+  --docker-inventory-file '<verified-docker-evidence.json>' \
+  --hosted-check-evidence-file '<exact-head-checks.json>' \
+  --recovery-evidence-file '<recovery-matrix.json>' \
+  --authority-review-evidence-file '<authority-review.json>' \
   --hosted-check python --hosted-check frontend --hosted-check compose \
   --authorization-placeholder PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION \
   --json
 ```
+
+Each evidence JSON is bound to the same exact merged-main SHA. Docker evidence
+must record a passed preflight and teardown, an empty task Compose inventory, and
+clean task state; hosted evidence must record terminal `SUCCESS` for the exact
+`python`, `frontend`, and `compose` checks; recovery and authority-review evidence
+must be terminal `passed` and `CLEAN`. Arbitrary files, feature-branch HEADs,
+missing/failed checks, stale evidence, dirty main, or local/origin/live main drift
+fail closed.
+
+The four files use closed schemas:
+`night-voyager.dra-live-docker-evidence.v1`,
+`night-voyager.dra-live-hosted-checks-evidence.v1`,
+`night-voyager.dra-live-recovery-evidence.v1`, and
+`night-voyager.dra-live-authority-review-evidence.v1`. Extra keys are rejected;
+each file must contain its exact `head_sha` and the stage-specific terminal fields
+described above.
 
 The readiness receipt binds the exact merged main, spec and PR C plan hashes,
 producer pin, scenario, intent/receipt/CLI schema identities, required hosted
