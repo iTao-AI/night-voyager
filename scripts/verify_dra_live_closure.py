@@ -1731,8 +1731,19 @@ def _validated_candidate_evidence(
     }:
         raise ValueError("candidate_evidence_provenance_invalid")
 
-    recovery_output = run(recovery_command)
-    if _recovery_passed_count(recovery_output) != recovery_passed_count:
+    try:
+        recovery_result = subprocess.run(
+            recovery_command,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("candidate_evidence_provenance_invalid") from error
+    if (
+        recovery_result.stderr != ""
+        or _recovery_passed_count(recovery_result.stdout) != recovery_passed_count
+    ):
         raise ValueError("candidate_evidence_provenance_invalid")
 
     pull_value: object = json.loads(

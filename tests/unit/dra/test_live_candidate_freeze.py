@@ -238,6 +238,7 @@ def _live_runner(
     merge_tree: str = "c" * 40,
     doctor_output: str = DOCTOR_OUTPUT,
     recovery_output: str = "47 passed in 1.23s\n",
+    recovery_stderr: str = "",
     inventory_outputs: Mapping[tuple[str, ...], str | tuple[str, str]] = INVENTORY_OUTPUTS,
     environments: list[dict[str, str] | None] | None = None,
 ):
@@ -306,7 +307,8 @@ def _live_runner(
                     "head": {"sha": pull_head},
                 }
             )
-        return SimpleNamespace(stdout=output)
+        stderr = recovery_stderr if normalized == tuple(RECOVERY_COMMAND) else ""
+        return SimpleNamespace(stdout=output, stderr=stderr)
 
     return run
 
@@ -362,6 +364,21 @@ def test_candidate_evidence_accepts_recovery_elapsed_time_drift(
     )
 
     assert all(_validated_candidate_evidence(args, HEAD))
+
+
+def test_candidate_evidence_rejects_recovery_stderr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _valid_args(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, recovery_stderr="WARNING: degraded recovery proof\n"),
+    )
+
+    with pytest.raises(ValueError, match="candidate_evidence_provenance_invalid"):
+        _validated_candidate_evidence(args, HEAD)
 
 
 @pytest.mark.parametrize(

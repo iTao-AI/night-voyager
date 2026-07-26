@@ -277,8 +277,8 @@ fails closed. Hosted evidence binds repository and the three exact check run IDs
 Recovery evidence binds the closed command and its positive exact passed count.
 Freeze runs the allowlisted command fresh with `check=True`, parses the closed
 successful pytest summary, and ignores only elapsed-time presentation. A count
-change or any failed, error, skipped, xfailed, xpassed, warning, or malformed
-summary fails closed.
+change, non-empty stderr, or any failed, error, skipped, xfailed, xpassed,
+warning, or malformed summary fails closed.
 
 Docker evidence v3 hashes a closed semantic projection, not Docker CLI
 presentation bytes. Compose inventory is parsed as a JSON array; container,
