@@ -115,6 +115,8 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
     receipts = tmp_path / "readiness"
     inventory = tmp_path / "inventory.txt"
     inventory.write_text("not a verified Docker evidence receipt\n", encoding="utf-8")
+    query = tmp_path / "query.txt"
+    query.write_text("bounded synthetic query", encoding="utf-8")
     head = subprocess.run(
         ("git", "rev-parse", "HEAD"),
         cwd=ROOT,
@@ -129,6 +131,8 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
         str(receipts),
         "--merged-main-sha",
         head,
+        "--query-file",
+        str(query),
         "--docker-inventory-file",
         str(inventory),
         "--hosted-check",

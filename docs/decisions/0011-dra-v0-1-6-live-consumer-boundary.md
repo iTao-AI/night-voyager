@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted. PR A, PR B, and PR C are implemented provider-free. Live provider proof
-was not run, and governed live acceptance remains
-`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
+Accepted. PR A, PR B, and PR C are implemented provider-free. One bounded live
+attempt projected 25 Evidence rows, all `uncited`, and stopped safely before
+candidate import with no Night Voyager business mutation. Governed live acceptance
+remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
 
 ## Context
 
@@ -86,6 +87,17 @@ code to create product authority.
     malformed, stale, cross-head, non-`CLEAN`, wrongly acknowledged, or
     extra-field attestations fail closed; superseded v1 evidence shapes are
     rejected.
+19. The current provider request uses
+    `night-voyager.dra-live-effective-query.v2`. Night Voyager deterministically
+    composes one operator-supplied bounded base business query with a code-owned
+    citation clause. The clause requires at least one public HTTPS source actually
+    returned by `internet_search` and admitted by the current source-admission
+    contract to appear in the final canonical report as its exact raw URL; it
+    forbids inventing, altering, normalizing, or guessing a URL. Candidate readiness,
+    frozen intent, provider create bytes, candidate request identity, and
+    pre-provider revalidation bind the same effective query hash. Legacy v1
+    readiness/intent identities, reserved-marker injection, clause replacement,
+    CR/LF, empty input, hash drift, and post-composition oversize fail closed.
 
 ## Consequences
 
@@ -97,7 +109,8 @@ code to create product authority.
 - The deterministic Compose governed-flow proof imports the v0.1.6 scenario
   candidate, but still uses checked-in synthetic bytes and no provider.
 - PR A, PR B, and PR C supply the provider-free implementation and deterministic
-  recovery proof. Candidate freeze, separately authorized live acceptance, and its
+  recovery proof. The first bounded attempt is retained only as safe-stop evidence;
+  a new v2 candidate freeze, separately authorized live acceptance, and successful
   terminal evaluation remain outstanding.
 
 ## Non-claims

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import UUID
@@ -20,14 +19,17 @@ from night_voyager.dra.live_fakes import (
     ScenarioDraLiveTransport,
 )
 from night_voyager.dra.live_models import (
-    DraCaptureInputV1,
-    DraCaptureIntentV1,
+    DRA_LIVE_CITATION_CLAUSE_MARKER_V2,
+    DRA_LIVE_CITATION_CLAUSE_V2,
+    DraCandidateReadinessReceiptV2,
+    DraCaptureInputV2,
+    DraCaptureIntentV2,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
-    DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPollRecoveryReceiptV1,
     DraReconciliationRequiredReceiptV1,
+    compose_effective_query_v2,
     derive_identity_hash,
 )
 from night_voyager.dra.live_storage import LiveReceiptStore
@@ -71,10 +73,34 @@ def private_root(tmp_path: Path) -> Path:
     return root
 
 
-def frozen_intent() -> DraCaptureIntentV1:
+def frozen_intent(store: LiveReceiptStore) -> DraCaptureIntentV2:
     scenario = load_live_closure_scenario()
-    return DraCaptureIntentV1.freeze(
-        DraCaptureInputV1(
+    _, request = compose_effective_query_v2(QUERY, logical_name="query.txt")
+    readiness = DraCandidateReadinessReceiptV2(
+        merged_main_sha="a" * 40,
+        request=request,
+        spec_sha256="1" * 64,
+        plan_sha256="2" * 64,
+        scenario_sha256="3" * 64,
+        intent_schema_sha256="4" * 64,
+        receipt_schema_sha256="5" * 64,
+        cli_sha256="6" * 64,
+        producer=scenario.producer,
+        required_hosted_checks=("compose", "frontend", "python"),
+        recovery_matrix_status="passed",
+        docker_preflight_status="passed",
+        docker_inventory_sha256="7" * 64,
+        hosted_checks_evidence_sha256="8" * 64,
+        recovery_matrix_evidence_sha256="9" * 64,
+        authority_review_evidence_sha256="a" * 64,
+        cleanup_state="clean",
+        authorization_placeholder=(
+            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+        ),
+    )
+    readiness_identity = store.write_receipt("readiness.json", readiness)
+    return DraCaptureIntentV2.freeze(
+        DraCaptureInputV2(
             scenario_id=scenario.scenario_id,
             producer=scenario.producer,
             organization_id=ORGANIZATION_ID,
@@ -86,12 +112,8 @@ def frozen_intent() -> DraCaptureIntentV1:
             tenant_identity_sha256=derive_identity_hash(
                 "tenant", str(ORGANIZATION_ID)
             ),
-            request=DraFrozenRequestV1(
-                logical_name="query.txt",
-                encoding="utf-8",
-                byte_length=len(QUERY),
-                sha256=hashlib.sha256(QUERY).hexdigest(),
-            ),
+            request=request,
+            candidate_readiness_sha256=readiness_identity.sha256,
             receipt_root_id="dra-live-capture-root",
             one_attempt_authorized=True,
         ),
@@ -100,13 +122,16 @@ def frozen_intent() -> DraCaptureIntentV1:
 
 
 def timed_intent(
-    *, deadline_seconds: int, poll_seconds: float
-) -> DraCaptureIntentV1:
-    capture = frozen_intent().capture.model_dump(mode="json")
+    store: LiveReceiptStore,
+    *,
+    deadline_seconds: int,
+    poll_seconds: float,
+) -> DraCaptureIntentV2:
+    capture = frozen_intent(store).capture.model_dump(mode="json")
     capture["deadline_seconds"] = deadline_seconds
     capture["poll_seconds"] = poll_seconds
-    return DraCaptureIntentV1.freeze(
-        DraCaptureInputV1.model_validate(capture),
+    return DraCaptureIntentV2.freeze(
+        DraCaptureInputV2.model_validate(capture),
         attempt_id_factory=lambda: "attempt-0000000000000001",
     )
 
@@ -127,7 +152,7 @@ async def test_capture_pauses_for_inspection_then_imports_without_second_run(
     gateway = ScenarioCandidateGateway()
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
         controller = DraLiveCaptureController(transport, gateway, store)
-        intent = frozen_intent()
+        intent = frozen_intent(store)
         preflight = controller.preflight(intent)
         assert preflight.environment_values_read is False
         assert preflight.filesystem_primitives_ready is True
@@ -145,6 +170,13 @@ async def test_capture_pauses_for_inspection_then_imports_without_second_run(
         assert inspection.permitted_next_command == "select-and-import"
         assert store.artifact_path() is not None
         assert gateway.import_calls == 0
+        effective = (
+            QUERY + b"\n\n" + DRA_LIVE_CITATION_CLAUSE_V2
+        ).decode("utf-8")
+        assert transport.requests == [
+            {"profile_id": "generic", "query": effective}
+        ]
+        assert transport.requests[0]["query"] != QUERY.decode("utf-8")
 
         final = await controller.select_and_import(
             SelectAndImportCommand(
@@ -175,7 +207,7 @@ async def test_request_bytes_are_rechecked_before_any_provider_access(
     path = query_file(tmp_path)
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
         controller = DraLiveCaptureController(transport, gateway, store)
-        intent = frozen_intent()
+        intent = frozen_intent(store)
         preflight = controller.preflight(intent)
         path.write_text("mutated", encoding="utf-8")
         result = await controller.capture(
@@ -193,6 +225,31 @@ async def test_request_bytes_are_rechecked_before_any_provider_access(
 
 
 @pytest.mark.asyncio
+async def test_reserved_clause_in_operator_file_fails_before_provider_access(
+    tmp_path: Path,
+) -> None:
+    transport = ScenarioDraLiveTransport(load_live_closure_scenario())
+    path = query_file(tmp_path)
+    path.write_bytes(QUERY + b" " + DRA_LIVE_CITATION_CLAUSE_MARKER_V2)
+    with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        controller = DraLiveCaptureController(
+            transport, ScenarioCandidateGateway(), store
+        )
+        intent = frozen_intent(store)
+        result = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=path,
+            )
+        )
+    assert isinstance(result, DraControllerStopReceiptV1)
+    assert result.provider_attempt_consumed is False
+    assert transport.health_calls == 0
+    assert transport.create_calls == 0
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_create_stops_and_only_exact_authorized_replay_resumes(
     tmp_path: Path,
 ) -> None:
@@ -203,7 +260,7 @@ async def test_ambiguous_create_stops_and_only_exact_authorized_replay_resumes(
     path = query_file(tmp_path)
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
         controller = DraLiveCaptureController(transport, gateway, store)
-        intent = frozen_intent()
+        intent = frozen_intent(store)
         preflight = controller.preflight(intent)
         stopped = await controller.capture(
             CaptureLiveCommand(intent=intent, preflight=preflight, query_path=path)
@@ -254,7 +311,9 @@ async def test_poll_timeout_resumes_only_the_same_run(tmp_path: Path) -> None:
             clock=first_time,
             sleeper=first_time,
         )
-        intent = timed_intent(deadline_seconds=1, poll_seconds=1)
+        intent = timed_intent(
+            store, deadline_seconds=1, poll_seconds=1
+        )
         preflight = controller.preflight(intent)
         stopped = await controller.capture(
             CaptureLiveCommand(intent=intent, preflight=preflight, query_path=path)
@@ -297,7 +356,9 @@ async def test_polling_sleeps_at_frozen_interval_until_later_terminal(
             clock=fake_time,
             sleeper=fake_time,
         )
-        intent = timed_intent(deadline_seconds=10, poll_seconds=2)
+        intent = timed_intent(
+            store, deadline_seconds=10, poll_seconds=2
+        )
         result = await controller.capture(
             CaptureLiveCommand(
                 intent=intent,
@@ -322,7 +383,7 @@ async def test_recovery_rejects_missing_or_forged_durable_prior_without_provider
         controller = DraLiveCaptureController(
             transport, ScenarioCandidateGateway(), store
         )
-        intent = frozen_intent()
+        intent = frozen_intent(store)
         preflight = controller.preflight(intent)
         prior = await controller.capture(
             CaptureLiveCommand(intent=intent, preflight=preflight, query_path=path)
@@ -371,7 +432,9 @@ async def test_resume_rejects_cross_run_prior_before_provider_access(
     )
     root = private_root(tmp_path)
     with LiveReceiptStore.open(root) as store:
-        intent = timed_intent(deadline_seconds=1, poll_seconds=1)
+        intent = timed_intent(
+            store, deadline_seconds=1, poll_seconds=1
+        )
         controller = DraLiveCaptureController(
             transport,
             ScenarioCandidateGateway(),
@@ -433,7 +496,7 @@ async def test_selection_and_actor_fail_closed_without_second_run(
     gateway = ScenarioCandidateGateway()
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
         controller = DraLiveCaptureController(transport, gateway, store)
-        intent = frozen_intent()
+        intent = frozen_intent(store)
         inspection = await controller.capture(
             CaptureLiveCommand(
                 intent=intent,
@@ -477,7 +540,7 @@ async def test_multiple_cited_rows_import_only_exact_operator_selection(
     gateway = ScenarioCandidateGateway()
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
         controller = DraLiveCaptureController(transport, gateway, store)
-        intent = frozen_intent()
+        intent = frozen_intent(store)
         inspection = await controller.capture(
             CaptureLiveCommand(
                 intent=intent,
@@ -498,3 +561,41 @@ async def test_multiple_cited_rows_import_only_exact_operator_selection(
     assert gateway.last_import is not None
     assert len(gateway.last_import.evidence) == 1
     assert gateway.last_import.evidence[0].source_url == SECOND_SOURCE_URL
+
+
+@pytest.mark.asyncio
+async def test_zero_cited_evidence_stops_before_candidate_import(
+    tmp_path: Path,
+) -> None:
+    transport = ScenarioDraLiveTransport(load_live_closure_scenario())
+    only = transport.run.evidence[0]
+    transport.run = transport.run.model_copy(
+        update={
+            "evidence": (
+                only.model_copy(update={"citation_status": "uncited"}),
+            )
+        }
+    )
+    gateway = ScenarioCandidateGateway()
+    with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        controller = DraLiveCaptureController(transport, gateway, store)
+        intent = frozen_intent(store)
+        inspection = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+        assert isinstance(inspection, DraInspectionRequiredReceiptV1)
+        stopped = await controller.select_and_import(
+            SelectAndImportCommand(
+                intent=intent,
+                inspection=inspection,
+                declared_raw_url=SOURCE_URL,
+                context=context(),
+            )
+        )
+    assert isinstance(stopped, DraControllerStopReceiptV1)
+    assert stopped.public_code == "source_selection_invalid"
+    assert gateway.import_calls == 0

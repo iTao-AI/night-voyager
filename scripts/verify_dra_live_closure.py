@@ -54,23 +54,23 @@ from night_voyager.dra.live_http import (
     NightVoyagerAuthorityGateway,
 )
 from night_voyager.dra.live_models import (
-    DraCandidateReadinessReceiptV1,
-    DraCaptureInputV1,
-    DraCaptureIntentV1,
+    DraCandidateReadinessReceiptV2,
+    DraCaptureInputV2,
+    DraCaptureIntentV2,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
     DraDecisionInputV1,
     DraDecisionReceiptV1,
-    DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPollRecoveryReceiptV1,
-    DraPreflightReceiptV1,
+    DraPreflightReceiptV2,
     DraPromotionInputV1,
     DraPromotionReceiptV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
     DraReviewInputV1,
     DraReviewReceiptV1,
+    compose_effective_query_v2,
     derive_identity_hash,
 )
 from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
@@ -269,12 +269,12 @@ def open_receipt_root(
     return _open_root(path, create=create)
 
 
-def _read_intent(store: LiveReceiptStore) -> DraCaptureIntentV1:
-    return store.read_receipt("intent.json", DraCaptureIntentV1)
+def _read_intent(store: LiveReceiptStore) -> DraCaptureIntentV2:
+    return store.read_receipt("intent.json", DraCaptureIntentV2)
 
 
-def _preflight_receipt(store: LiveReceiptStore) -> DraPreflightReceiptV1:
-    return store.read_receipt("preflight.json", DraPreflightReceiptV1)
+def _preflight_receipt(store: LiveReceiptStore) -> DraPreflightReceiptV2:
+    return store.read_receipt("preflight.json", DraPreflightReceiptV2)
 
 
 def _ensure_no_orphaned_artifact(store: LiveReceiptStore) -> None:
@@ -368,7 +368,7 @@ class _NightVoyagerCandidateGateway:
             raise ValueError("candidate_import_failed") from error
 
 
-def _actor_from_environment(intent: DraCaptureIntentV1) -> ActorContext:
+def _actor_from_environment(intent: DraCaptureIntentV2) -> ActorContext:
     try:
         organization_id = UUID(
             os.environ["NIGHT_VOYAGER_LIVE_ORGANIZATION_ID"]
@@ -388,7 +388,7 @@ def _actor_from_environment(intent: DraCaptureIntentV1) -> ActorContext:
 
 
 def _live_transport(
-    intent: DraCaptureIntentV1,
+    intent: DraCaptureIntentV2,
 ) -> Httpx2DraTransport:
     try:
         base_url = os.environ["DRA_BASE_URL"]
@@ -420,24 +420,44 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
     query_path = Path(args.query_file)
     try:
         query = query_path.read_bytes()
-        query.decode("utf-8", errors="strict")
-    except (OSError, UnicodeDecodeError):
+        _, request = compose_effective_query_v2(
+            query,
+            logical_name=query_path.name,
+        )
+    except (OSError, ValueError):
         _emit(
             _result_payload(
                 "terminal_failure", "request_identity_invalid", "stop"
             ),
             as_json=args.json,
         )
-    if not query or len(query) > 1_048_576:
+    try:
+        with _open_root(Path(args.receipt_root)) as store:
+            readiness = store.read_receipt(
+                "readiness.json",
+                DraCandidateReadinessReceiptV2,
+            )
+            readiness_identity = store.write_receipt(
+                "readiness.json",
+                readiness,
+            )
+    except (LiveStorageError, ValueError):
         _emit(
             _result_payload(
-                "terminal_failure", "request_identity_invalid", "stop"
+                "terminal_failure", "candidate_readiness_invalid", "stop"
+            ),
+            as_json=args.json,
+        )
+    if readiness.request != request:
+        _emit(
+            _result_payload(
+                "terminal_failure", "candidate_readiness_invalid", "stop"
             ),
             as_json=args.json,
         )
     scenario = load_live_closure_scenario()
-    intent = DraCaptureIntentV1.freeze(
-        DraCaptureInputV1(
+    intent = DraCaptureIntentV2.freeze(
+        DraCaptureInputV2(
             scenario_id=scenario.scenario_id,
             producer=scenario.producer,
             organization_id=UUID(args.organization_id),
@@ -449,12 +469,8 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
             tenant_identity_sha256=derive_identity_hash(
                 "tenant", args.organization_id
             ),
-            request=DraFrozenRequestV1(
-                logical_name=query_path.name,
-                encoding="utf-8",
-                byte_length=len(query),
-                sha256=hashlib.sha256(query).hexdigest(),
-            ),
+            request=request,
+            candidate_readiness_sha256=readiness_identity.sha256,
             deadline_seconds=args.deadline_seconds,
             poll_seconds=args.poll_seconds,
             receipt_root_id=Path(args.receipt_root).name,
@@ -462,7 +478,7 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
         ),
         attempt_id_factory=lambda: f"attempt-{uuid.uuid4().hex}",
     )
-    with _open_root(Path(args.receipt_root), create=True) as store:
+    with _open_root(Path(args.receipt_root)) as store:
         receipt = store.write_receipt("intent.json", intent)
     _emit(
         _result_payload(
@@ -861,8 +877,39 @@ def _rehearsal_capture(root: Path, *, as_json: bool) -> NoReturn:
     query_path.write_bytes(REHEARSAL_QUERY)
     query_path.chmod(0o600)
     scenario = load_live_closure_scenario()
-    intent = DraCaptureIntentV1.freeze(
-        DraCaptureInputV1(
+    _, request = compose_effective_query_v2(
+        REHEARSAL_QUERY,
+        logical_name=query_path.name,
+    )
+    readiness = DraCandidateReadinessReceiptV2(
+        merged_main_sha="0" * 40,
+        request=request,
+        spec_sha256="1" * 64,
+        plan_sha256="2" * 64,
+        scenario_sha256="3" * 64,
+        intent_schema_sha256="4" * 64,
+        receipt_schema_sha256="5" * 64,
+        cli_sha256="6" * 64,
+        producer=scenario.producer,
+        required_hosted_checks=("compose", "frontend", "python"),
+        recovery_matrix_status="passed",
+        docker_preflight_status="passed",
+        docker_inventory_sha256="7" * 64,
+        hosted_checks_evidence_sha256="8" * 64,
+        recovery_matrix_evidence_sha256="9" * 64,
+        authority_review_evidence_sha256="a" * 64,
+        cleanup_state="clean",
+        authorization_placeholder=(
+            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+        ),
+    )
+    with _open_root(root) as store:
+        readiness_identity = store.write_receipt(
+            "readiness.json",
+            readiness,
+        )
+    intent = DraCaptureIntentV2.freeze(
+        DraCaptureInputV2(
             scenario_id=scenario.scenario_id,
             producer=scenario.producer,
             organization_id=REHEARSAL_ORGANIZATION,
@@ -874,12 +921,8 @@ def _rehearsal_capture(root: Path, *, as_json: bool) -> NoReturn:
             tenant_identity_sha256=derive_identity_hash(
                 "tenant", str(REHEARSAL_ORGANIZATION)
             ),
-            request=DraFrozenRequestV1(
-                logical_name=query_path.name,
-                encoding="utf-8",
-                byte_length=len(REHEARSAL_QUERY),
-                sha256=hashlib.sha256(REHEARSAL_QUERY).hexdigest(),
-            ),
+            request=request,
+            candidate_readiness_sha256=readiness_identity.sha256,
             receipt_root_id=root.name,
             one_attempt_authorized=True,
         ),
@@ -1856,6 +1899,11 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
         inventory, hosted, recovery, review = _validated_candidate_evidence(
             args, head
         )
+        query_path = Path(args.query_file)
+        _, request = compose_effective_query_v2(
+            query_path.read_bytes(),
+            logical_name=query_path.name,
+        )
         repository = Path(__file__).resolve().parents[1]
 
         def digest(relative: str) -> str:
@@ -1863,8 +1911,9 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
                 (repository / relative).read_bytes()
             ).hexdigest()
 
-        receipt = DraCandidateReadinessReceiptV1(
+        receipt = DraCandidateReadinessReceiptV2(
             merged_main_sha=head,
+            request=request,
             spec_sha256=digest(
                 "docs/superpowers/specs/"
                 "2026-07-25-dra-v0-1-6-governed-live-closure-design.md"
@@ -2020,6 +2069,7 @@ def parse_args() -> argparse.Namespace:
     )
     _root_argument(candidate)
     candidate.add_argument("--merged-main-sha", required=True)
+    candidate.add_argument("--query-file", required=True)
     candidate.add_argument("--docker-inventory-file", required=True)
     candidate.add_argument("--hosted-check-evidence-file")
     candidate.add_argument("--recovery-evidence-file")

@@ -1,6 +1,9 @@
 # DRA v0.1.6 Live Closure PR B Implementation Plan
 
-**Implementation status:** PR A, PR B, and PR C are implemented provider-free; governed live acceptance remains pending.
+**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are
+implemented provider-free. One bounded live attempt projected 25 Evidence rows, all
+`uncited`, and stopped safely before candidate import; governed live acceptance
+remains pending.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. Execute serially on top of merged PR A. Do not use
@@ -452,10 +455,17 @@ These corrections are normative and supersede any earlier ambiguous task wording
    conflict. Fsync both file and parent directory. Add Linux tests for root/parent
    rename, symlink swap, same/same and same/different two-process races. Platforms
    lacking the required primitives fail closed for live commands.
-4. **Frozen request bytes are checked immediately before provider access.** Re-read
-   the bounded UTF-8 query and compare encoding, byte length, and SHA-256 with the
-   intent before `health()` or `create_run()`. Same-path mutation, empty/oversize/
-   invalid UTF-8, or hash drift fails without consuming the provider attempt.
+4. **Frozen effective request bytes are checked immediately before provider
+   access.** Re-read the bounded single-line UTF-8 base query, reject the reserved
+   citation-clause marker, and deterministically compose
+   `night-voyager.dra-live-effective-query.v2`. Compare the base/effective lengths
+   and SHA-256 identities plus code-owned clause hash with both candidate readiness
+   and intent before `health()` or `create_run()`. The clause requires one admitted
+   `internet_search` public HTTPS source's exact raw URL in the final canonical
+   report and forbids invented, altered, normalized, or guessed URLs. Legacy v1
+   readiness/intent, same-path mutation, duplicate/replaced clause, CR/LF,
+   empty/oversize/invalid UTF-8, or hash drift fails without consuming the provider
+   attempt.
 5. **Preflight and operator output are executable contracts.** Add provider-free
    `preflight-live`, producing a hash-bound readiness receipt over exact
    intent/scenario/schema/commit identities, receipt-root safety, candidate freeze,

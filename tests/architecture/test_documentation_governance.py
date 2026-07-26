@@ -93,24 +93,31 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B/C implemented provider-free; live acceptance pending",
+        "PR A/B/C and effective-query v2 implemented provider-free; "
+        "first live attempt safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
         "**Implementation status:** PR A, PR B, and PR C are implemented "
         "provider-free; governed live acceptance remains pending.",
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B/C implemented provider-free; live acceptance pending",
+        "PR A/B/C and effective-query v2 implemented provider-free; "
+        "first live attempt safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-b-implementation-plan.md",
-        "**Implementation status:** PR A, PR B, and PR C are implemented "
-        "provider-free; governed live acceptance remains pending.",
+        "**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are\n"
+        "implemented provider-free. One bounded live attempt projected 25 Evidence rows, all\n"
+        "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
+        "remains pending.",
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B/C implemented provider-free; live acceptance pending",
+        "PR A/B/C and effective-query v2 implemented provider-free; "
+        "first live attempt safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md",
-        "**Implementation status:** PR A, PR B, and PR C are implemented "
-        "provider-free; governed live acceptance remains pending.",
+        "**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are\n"
+        "implemented provider-free. One bounded live attempt projected 25 Evidence rows, all\n"
+        "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
+        "remains pending.",
     ),
     (
         "High-End Portfolio Entry v1",
@@ -149,9 +156,12 @@ def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
         "URL-only",
         "UNTRUSTED_CANDIDATE",
         "no remote cancellation",
-        "Live provider proof was not run",
         "PR A, PR B, and PR C are implemented provider-free",
         "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        "25",
+        "uncited",
+        "before candidate import",
+        "night-voyager.dra-live-effective-query.v2",
         "safe-stop evidence",
         "second substantive failure",
         "snapshot",
@@ -374,8 +384,12 @@ def test_implemented_document_statuses_do_not_regress() -> None:
             "PR B and PR C were delivered under their own plans",
         ),
         "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
-            "**Implementation status:** PR A, PR B, and PR C are implemented "
-            "provider-free; governed live acceptance remains pending.",
+            "**Implementation status:** PR A, PR B, PR C, and the "
+            "effective-query v2 repair are\n"
+            "implemented provider-free. One bounded live attempt "
+            "projected 25 Evidence rows, all\n"
+            "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
+            "remains pending.",
             "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
         ),
     }

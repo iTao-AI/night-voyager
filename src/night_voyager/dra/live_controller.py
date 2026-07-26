@@ -13,7 +13,8 @@ from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.errors import DraAuthorizationError, DraConflictError
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
-    DraCaptureIntentV1,
+    DraCandidateReadinessReceiptV2,
+    DraCaptureIntentV2,
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
     DraDecisionInputV1,
@@ -22,7 +23,7 @@ from night_voyager.dra.live_models import (
     DraLiveFailurePhase,
     DraMutationAmbiguousReceiptV1,
     DraPollRecoveryReceiptV1,
-    DraPreflightReceiptV1,
+    DraPreflightReceiptV2,
     DraPromotionInputV1,
     DraPromotionReceiptV1,
     DraProviderAttemptEvidenceV1,
@@ -33,6 +34,7 @@ from night_voyager.dra.live_models import (
     DraStageStateV1,
     derive_identity_hash,
     derive_stage_key,
+    validate_effective_query_v2,
 )
 from night_voyager.dra.live_ports import (
     DraCandidateGatewayPort,
@@ -90,15 +92,15 @@ class _AsyncioSleeper:
 
 @dataclass(frozen=True, slots=True)
 class CaptureLiveCommand:
-    intent: DraCaptureIntentV1
-    preflight: DraPreflightReceiptV1
+    intent: DraCaptureIntentV2
+    preflight: DraPreflightReceiptV2
     query_path: Path
 
 
 @dataclass(frozen=True, slots=True)
 class ReconcileCreateCommand:
-    intent: DraCaptureIntentV1
-    preflight: DraPreflightReceiptV1
+    intent: DraCaptureIntentV2
+    preflight: DraPreflightReceiptV2
     prior: DraReconciliationRequiredReceiptV1
     query_path: Path
     exact_replay_authorized: bool
@@ -106,13 +108,13 @@ class ReconcileCreateCommand:
 
 @dataclass(frozen=True, slots=True)
 class ResumePollCommand:
-    intent: DraCaptureIntentV1
+    intent: DraCaptureIntentV2
     prior: DraPollRecoveryReceiptV1
 
 
 @dataclass(frozen=True, slots=True)
 class SelectAndImportCommand:
-    intent: DraCaptureIntentV1
+    intent: DraCaptureIntentV2
     inspection: DraInspectionRequiredReceiptV1
     declared_raw_url: str
     context: ActorContext
@@ -555,13 +557,29 @@ class DraLiveCaptureController:
         self._clock = clock or _SystemClock()
         self._sleeper = sleeper or _AsyncioSleeper()
 
-    def preflight(self, intent: DraCaptureIntentV1) -> DraPreflightReceiptV1:
+    def preflight(self, intent: DraCaptureIntentV2) -> DraPreflightReceiptV2:
         capture = intent.capture
+        readiness = self._store.read_receipt(
+            "readiness.json",
+            DraCandidateReadinessReceiptV2,
+        )
+        readiness_identity = self._store.write_receipt(
+            "readiness.json",
+            readiness,
+        )
+        if (
+            readiness_identity.sha256 != capture.candidate_readiness_sha256
+            or readiness.request != capture.request
+            or readiness.producer != capture.producer
+        ):
+            raise ValueError("candidate_readiness_identity_invalid")
         intent_receipt = self._store.write_receipt("intent.json", intent)
-        receipt = DraPreflightReceiptV1(
+        receipt = DraPreflightReceiptV2(
             intent_sha256=intent.intent_sha256,
             attempt_id=intent.attempt_id,
             intent_receipt=intent_receipt,
+            candidate_readiness_receipt=readiness_identity,
+            effective_request_sha256=capture.request.effective_sha256,
             scenario_id=capture.scenario_id,
             producer=capture.producer,
             advisor_actor_identity_sha256=(capture.advisor_actor_identity_sha256),
@@ -573,16 +591,33 @@ class DraLiveCaptureController:
 
     def _validate_preflight(
         self,
-        intent: DraCaptureIntentV1,
-        preflight: DraPreflightReceiptV1,
+        intent: DraCaptureIntentV2,
+        preflight: DraPreflightReceiptV2,
     ) -> DraReceiptIdentityV1:
-        stored_intent = self._store.read_receipt("intent.json", DraCaptureIntentV1)
-        stored_preflight = self._store.read_receipt("preflight.json", DraPreflightReceiptV1)
+        stored_intent = self._store.read_receipt("intent.json", DraCaptureIntentV2)
+        stored_preflight = self._store.read_receipt(
+            "preflight.json",
+            DraPreflightReceiptV2,
+        )
+        readiness = self._store.read_receipt(
+            "readiness.json",
+            DraCandidateReadinessReceiptV2,
+        )
+        readiness_identity = self._store.write_receipt(
+            "readiness.json",
+            readiness,
+        )
         if (
             stored_intent != intent
             or stored_preflight != preflight
             or preflight.intent_sha256 != intent.intent_sha256
             or preflight.attempt_id != intent.attempt_id
+            or preflight.candidate_readiness_receipt != readiness_identity
+            or readiness_identity.sha256
+            != intent.capture.candidate_readiness_sha256
+            or readiness.request != intent.capture.request
+            or preflight.effective_request_sha256
+            != intent.capture.request.effective_sha256
         ):
             raise ValueError("preflight_identity_invalid")
         return self._store.write_receipt("preflight.json", preflight)
@@ -601,7 +636,7 @@ class DraLiveCaptureController:
             if (
                 not stat.S_ISREG(metadata.st_mode)
                 or metadata.st_uid != os.getuid()
-                or metadata.st_size != expected.byte_length
+                or metadata.st_size != expected.base_byte_length
                 or metadata.st_size < 1
                 or metadata.st_size > 1_048_576
             ):
@@ -623,16 +658,15 @@ class DraLiveCaptureController:
             if descriptor >= 0:
                 os.close(descriptor)
         encoded = bytes(content)
-        if hashlib.sha256(encoded).hexdigest() != expected.sha256:
-            raise ValueError("request_identity_mismatch")
         try:
-            return encoded.decode("utf-8", errors="strict")
-        except UnicodeDecodeError as error:
+            effective = validate_effective_query_v2(encoded, expected)
+            return effective.decode("utf-8", errors="strict")
+        except (UnicodeDecodeError, ValueError) as error:
             raise ValueError("request_identity_mismatch") from error
 
     def _stop(
         self,
-        intent: DraCaptureIntentV1,
+        intent: DraCaptureIntentV2,
         *,
         phase: DraLiveFailurePhase,
         public_code: str,
@@ -760,7 +794,7 @@ class DraLiveCaptureController:
 
     async def _poll_to_inspection(
         self,
-        intent: DraCaptureIntentV1,
+        intent: DraCaptureIntentV2,
         preflight_identity: DraReceiptIdentityV1,
         acceptance: DraRunAcceptanceV1,
     ) -> CaptureResult:
@@ -849,7 +883,10 @@ class DraLiveCaptureController:
         prior = command.prior
         try:
             stored_prior = self._store.read_receipt("poll-recovery.json", DraPollRecoveryReceiptV1)
-            stored_preflight = self._store.read_receipt("preflight.json", DraPreflightReceiptV1)
+            stored_preflight = self._store.read_receipt(
+                "preflight.json",
+                DraPreflightReceiptV2,
+            )
             preflight_identity = self._validate_preflight(command.intent, stored_preflight)
         except (LiveStorageError, ValueError) as error:
             raise ValueError("poll_recovery_identity_invalid") from error
@@ -953,7 +990,7 @@ class DraLiveCaptureController:
             producer=capture.producer.pin,
             request_identity=DraRunRequestIdentityV1(
                 profile_id="generic",
-                request_sha256=capture.request.sha256,
+                request_sha256=capture.request.effective_sha256,
             ),
             acceptance=DraRunAcceptanceV1(
                 thread_id=inspection.thread_id,
