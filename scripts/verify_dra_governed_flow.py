@@ -49,17 +49,18 @@ from night_voyager.dra.live_http import (
     NightVoyagerAuthorityGateway,
 )
 from night_voyager.dra.live_models import (
-    DraCaptureInputV1,
-    DraCaptureIntentV1,
+    DraCandidateReadinessReceiptV2,
+    DraCaptureInputV2,
+    DraCaptureIntentV2,
     DraCaptureReceiptV1,
     DraDecisionInputV1,
     DraDecisionReceiptV1,
-    DraFrozenRequestV1,
     DraInspectionRequiredReceiptV1,
     DraPromotionInputV1,
     DraPromotionReceiptV1,
     DraReviewInputV1,
     DraReviewReceiptV1,
+    compose_effective_query_v2,
     derive_identity_hash,
 )
 from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
@@ -629,8 +630,39 @@ async def _real_live_closure_rehearsal() -> tuple[str, str, str]:
         query_path = task_root / "query.txt"
         query_path.write_bytes(query)
         query_path.chmod(0o600)
-        intent = DraCaptureIntentV1.freeze(
-            DraCaptureInputV1(
+        _, request = compose_effective_query_v2(
+            query,
+            logical_name=query_path.name,
+        )
+        readiness = DraCandidateReadinessReceiptV2(
+            merged_main_sha="0" * 40,
+            request=request,
+            spec_sha256="1" * 64,
+            plan_sha256="2" * 64,
+            scenario_sha256="3" * 64,
+            intent_schema_sha256="4" * 64,
+            receipt_schema_sha256="5" * 64,
+            cli_sha256="6" * 64,
+            producer=scenario.producer,
+            required_hosted_checks=("compose", "frontend", "python"),
+            recovery_matrix_status="passed",
+            docker_preflight_status="passed",
+            docker_inventory_sha256="7" * 64,
+            hosted_checks_evidence_sha256="8" * 64,
+            recovery_matrix_evidence_sha256="9" * 64,
+            authority_review_evidence_sha256="a" * 64,
+            cleanup_state="clean",
+            authorization_placeholder=(
+                "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+            ),
+        )
+        with LiveReceiptStore.open(receipt_root) as store:
+            readiness_identity = store.write_receipt(
+                "readiness.json",
+                readiness,
+            )
+        intent = DraCaptureIntentV2.freeze(
+            DraCaptureInputV2(
                 scenario_id=scenario.scenario_id,
                 producer=scenario.producer,
                 organization_id=advisor_context.organization_id,
@@ -642,12 +674,8 @@ async def _real_live_closure_rehearsal() -> tuple[str, str, str]:
                 tenant_identity_sha256=derive_identity_hash(
                     "tenant", str(advisor_context.organization_id)
                 ),
-                request=DraFrozenRequestV1(
-                    logical_name=query_path.name,
-                    encoding="utf-8",
-                    byte_length=len(query),
-                    sha256=hashlib.sha256(query).hexdigest(),
-                ),
+                request=request,
+                candidate_readiness_sha256=readiness_identity.sha256,
                 receipt_root_id=receipt_root.name,
                 one_attempt_authorized=True,
             ),

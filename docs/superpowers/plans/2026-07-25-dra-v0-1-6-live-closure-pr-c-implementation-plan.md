@@ -1,6 +1,9 @@
 # DRA v0.1.6 Live Closure PR C Implementation Plan
 
-**Implementation status:** PR A, PR B, and PR C are implemented provider-free; governed live acceptance remains pending.
+**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are
+implemented provider-free. One bounded live attempt projected 25 Evidence rows, all
+`uncited`, and stopped safely before candidate import; governed live acceptance
+remains pending.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. Execute serially on top of merged PR B. Do not
@@ -506,9 +509,12 @@ These corrections are normative and supersede any earlier ambiguous task wording
    a separate reference.
 8. **Candidate freeze is executable, not prose-only.** Produce a provider-free
    readiness receipt binding exact merged-main SHA, spec/plan hashes, producer pin,
-   intent/scenario/receipt/CLI schema hashes, required hosted checks, recovery-matrix
-   result, Docker preflight/inventory, cleanup state, and explicit authorization
-   placeholder. A successful implementation/merge leaves capability
+   intent/scenario/receipt/CLI schema hashes, the
+   `night-voyager.dra-live-effective-query.v2` base/effective request identities and
+   code-owned citation-clause hash, required hosted checks, recovery-matrix result,
+   Docker preflight/inventory, cleanup state, and explicit authorization placeholder.
+   Legacy v1 readiness cannot authorize the v2 request. A successful
+   implementation/merge leaves capability
    `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`; only one separately authorized frozen full
    closure may change that claim.
 

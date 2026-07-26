@@ -7,17 +7,52 @@ import subprocess
 import sys
 from pathlib import Path
 
+from night_voyager.dra.fixtures import load_live_closure_scenario
 from night_voyager.dra.live_models import (
-    DraCaptureIntentV1,
+    DraCandidateReadinessReceiptV1,
+    DraCandidateReadinessReceiptV2,
+    DraCaptureIntentV2,
     DraPollRecoveryReceiptV1,
-    DraPreflightReceiptV1,
+    DraPreflightReceiptV2,
     DraReconciliationRequiredReceiptV1,
+    compose_effective_query_v2,
     derive_stage_key,
 )
 from night_voyager.dra.live_storage import LiveReceiptStore
 
 ROOT = Path(__file__).parents[3]
 SOURCE_URL = "https://example.com/contract-source-1"
+
+
+def write_candidate_readiness(root: Path, query: bytes) -> None:
+    root.mkdir(mode=0o700)
+    root.chmod(0o700)
+    _, request = compose_effective_query_v2(query, logical_name="query.txt")
+    scenario = load_live_closure_scenario()
+    readiness = DraCandidateReadinessReceiptV2(
+        merged_main_sha="a" * 40,
+        request=request,
+        spec_sha256="1" * 64,
+        plan_sha256="2" * 64,
+        scenario_sha256="3" * 64,
+        intent_schema_sha256="4" * 64,
+        receipt_schema_sha256="5" * 64,
+        cli_sha256="6" * 64,
+        producer=scenario.producer,
+        required_hosted_checks=("compose", "frontend", "python"),
+        recovery_matrix_status="passed",
+        docker_preflight_status="passed",
+        docker_inventory_sha256="7" * 64,
+        hosted_checks_evidence_sha256="8" * 64,
+        recovery_matrix_evidence_sha256="9" * 64,
+        authority_review_evidence_sha256="a" * 64,
+        cleanup_state="clean",
+        authorization_placeholder=(
+            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+        ),
+    )
+    with LiveReceiptStore.open(root) as store:
+        store.write_receipt("readiness.json", readiness)
 
 
 def run_rehearsal(*arguments: str) -> subprocess.CompletedProcess[str]:
@@ -144,6 +179,7 @@ def test_recovery_cli_derives_provider_consumption_from_durable_receipts(
     root = tmp_path / "receipts"
     query = tmp_path / "query.txt"
     query.write_text("bounded synthetic query", encoding="utf-8")
+    write_candidate_readiness(root, query.read_bytes())
     frozen = run_command(
         "freeze-intent",
         "--receipt-root",
@@ -171,9 +207,9 @@ def test_recovery_cli_derives_provider_consumption_from_durable_receipts(
     assert json.loads(inspected.stdout)["provider_attempt_consumed"] is False
 
     with LiveReceiptStore.open(root) as store:
-        intent = store.read_receipt("intent.json", DraCaptureIntentV1)
+        intent = store.read_receipt("intent.json", DraCaptureIntentV2)
         preflight_receipt = store.read_receipt(
-            "preflight.json", DraPreflightReceiptV1
+            "preflight.json", DraPreflightReceiptV2
         )
         reconciliation = DraReconciliationRequiredReceiptV1(
             schema_version=(
@@ -217,3 +253,88 @@ def test_recovery_cli_derives_provider_consumption_from_durable_receipts(
         "inspect-recovery", "--receipt-root", str(root)
     )
     assert json.loads(inspected.stdout)["provider_attempt_consumed"] is True
+
+
+def test_freeze_intent_rejects_legacy_candidate_readiness(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "legacy-readiness"
+    root.mkdir(mode=0o700)
+    scenario = load_live_closure_scenario()
+    legacy = DraCandidateReadinessReceiptV1(
+        merged_main_sha="a" * 40,
+        spec_sha256="1" * 64,
+        plan_sha256="2" * 64,
+        scenario_sha256="3" * 64,
+        intent_schema_sha256="4" * 64,
+        receipt_schema_sha256="5" * 64,
+        cli_sha256="6" * 64,
+        producer=scenario.producer,
+        required_hosted_checks=("compose", "frontend", "python"),
+        recovery_matrix_status="passed",
+        docker_preflight_status="passed",
+        docker_inventory_sha256="7" * 64,
+        hosted_checks_evidence_sha256="8" * 64,
+        recovery_matrix_evidence_sha256="9" * 64,
+        authority_review_evidence_sha256="a" * 64,
+        cleanup_state="clean",
+        authorization_placeholder=(
+            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+        ),
+    )
+    with LiveReceiptStore.open(root) as store:
+        store.write_receipt("readiness.json", legacy)
+    query = tmp_path / "query.txt"
+    query.write_text("bounded synthetic query", encoding="utf-8")
+    result = run_command(
+        "freeze-intent",
+        "--receipt-root",
+        str(root),
+        "--query-file",
+        str(query),
+        "--organization-id",
+        "10000000-0000-0000-0000-000000000001",
+        "--case-id",
+        "40000000-0000-0000-0000-000000000003",
+        "--expected-case-revision",
+        "1",
+        "--advisor-actor-id",
+        "20000000-0000-0000-0000-000000000001",
+        "--one-attempt-ack",
+        "separately-authorized-one-attempt",
+    )
+    assert result.returncode != 0
+    assert json.loads(result.stdout)["problem_code"] == (
+        "candidate_readiness_invalid"
+    )
+
+
+def test_freeze_intent_rejects_query_that_differs_from_readiness(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "readiness"
+    query = tmp_path / "query.txt"
+    query.write_text("bounded synthetic query", encoding="utf-8")
+    write_candidate_readiness(root, query.read_bytes())
+    query.write_text("replacement synthetic query", encoding="utf-8")
+    result = run_command(
+        "freeze-intent",
+        "--receipt-root",
+        str(root),
+        "--query-file",
+        str(query),
+        "--organization-id",
+        "10000000-0000-0000-0000-000000000001",
+        "--case-id",
+        "40000000-0000-0000-0000-000000000003",
+        "--expected-case-revision",
+        "1",
+        "--advisor-actor-id",
+        "20000000-0000-0000-0000-000000000001",
+        "--one-attempt-ack",
+        "separately-authorized-one-attempt",
+    )
+    assert result.returncode != 0
+    assert json.loads(result.stdout)["problem_code"] == (
+        "candidate_readiness_invalid"
+    )

@@ -50,16 +50,32 @@ service.
 
 ## Separately authorized live proof
 
-Live provider proof was not run. PR A, PR B, and PR C are implemented provider-free,
-but the capability remains
-`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. There is no governed-live success claim.
+PR A, PR B, and PR C are implemented provider-free. One separately authorized live
+attempt accepted one producer run and projected 25 same-run Evidence rows, but all
+25 were `uncited`; it therefore stopped safely before candidate import with no
+Night Voyager business mutation. The capability remains
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. This is bounded safe-stop evidence, not a
+governed-live success claim; the current contract still makes no governed-live success claim.
+The earlier status sentence `Live provider proof was not run` is historical and is
+superseded by this bounded safe-stop result.
 The live command is not a required CI gate and is excluded from `make check`,
 `make proof`, and Compose. Run it only after separate approval for one provider
 attempt and its cost/deadline.
 
-The command journey is deliberately two-step. First freeze the exact Case, actor,
-tenant, query identity, receipt root, and one-attempt authorization; then create the
-provider-free preflight receipt:
+The request contract is
+`night-voyager.dra-live-effective-query.v2`. Night Voyager owns both layers:
+the operator supplies one bounded single-line UTF-8 base business query, while code
+deterministically appends the reserved citation clause. The effective query requires
+at least one public HTTPS source actually returned by `internet_search` and admitted
+by the current source-admission contract to appear in the final canonical report as
+its exact raw URL. It forbids inventing, altering, normalizing, or guessing a URL.
+The operator cannot supply, remove, repeat, or replace the reserved marker or clause.
+
+Candidate freeze and the later intent bind the base and effective byte lengths and
+SHA-256 identities plus the code-owned clause hash. The command journey is
+deliberately two-step. First freeze the exact Case, actor, tenant, effective query
+identity, readiness receipt, receipt root, and one-attempt authorization; then create
+the provider-free preflight receipt:
 
 ```bash
 uv run python scripts/verify_dra_live_closure.py freeze-intent \
@@ -76,8 +92,11 @@ uv run python scripts/verify_dra_live_closure.py preflight-live \
   --receipt-root '<same-private-root>' --json
 ```
 
-`preflight-live` reads no environment values and performs no provider access. Its
-receipt binds the intent, exact v0.1.6 producer, scenario/schema identities,
+`freeze-intent` refuses a legacy v1 readiness receipt, a different base query, a
+reserved-marker injection, CR/LF, empty input, or a base whose composed effective
+query exceeds the closed byte limit. `preflight-live` reads no environment values
+and performs no provider access. Its receipt binds the v2 readiness predecessor,
+intent, exact effective request hash, v0.1.6 producer, scenario/schema identities,
 filesystem readiness, frozen monotonic deadline/poll interval,
 `UNTRUSTED_CANDIDATE` freeze, and one-shot budget.
 
@@ -100,8 +119,10 @@ Set all values in the operator environment before exporting the names; do not pl
 credential or session values in shell history, files, command arguments, receipts,
 logs, or proof output. `DRA_POLL_DEADLINE_SECONDS` must equal the deadline frozen by
 `freeze-intent`; the frozen poll interval is not read from ambient state.
-`capture-live` re-reads the exact query bytes immediately
-before `/health` and create. It performs at most one keyed create, validates the
+`capture-live` re-reads the exact base-query bytes and recomposes the effective query
+immediately before `/health` and create. The bytes sent in the create request must
+equal the effective-query identity frozen by readiness and intent. It performs at
+most one keyed create, validates the
 strict terminal projection, polls at the frozen interval until the frozen monotonic
 deadline, writes the canonical artifact only under the private receipt root, then
 stops with `operator_action_required`. If the descriptor-bound receipt root and its
@@ -232,6 +253,7 @@ volumes/shared images/cache preserved. Then run:
 uv run python scripts/verify_dra_live_closure.py freeze-candidate \
   --receipt-root '<private-mode-0700-root>' \
   --merged-main-sha '<exact-40-hex-merged-main>' \
+  --query-file '<bounded-public-safe-utf8-base-query>' \
   --docker-inventory-file '<verified-docker-evidence.json>' \
   --hosted-check-evidence-file '<exact-head-checks.json>' \
   --recovery-evidence-file '<recovery-matrix.json>' \
@@ -319,8 +341,9 @@ requires zero GitHub approvals, including a PR whose GitHub reviews list is
 empty, therefore remains compatible with an explicit independent human review;
 GitHub review state is neither required nor treated as human-review authority.
 
-The readiness receipt binds the exact merged main, spec and PR C plan hashes,
-producer pin, scenario, intent/receipt/CLI schema identities, required hosted
+The v2 readiness receipt binds the exact merged main, base/effective query and
+code-owned citation-clause identities, spec and PR C plan hashes, producer pin,
+scenario, intent/receipt/CLI schema identities, required hosted
 checks, recovery-matrix result, Docker preflight/inventory, cleanup state, and
 the explicit authorization placeholder. A successful freeze still reports
 `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. Only a separately authorized frozen live
@@ -369,7 +392,8 @@ Normal completion, handled failure, `SIGINT`, and `SIGTERM` clean task-owned art
 bytes synchronously. `SIGKILL`, host crash, and power loss cannot guarantee cleanup;
 an orphaned artifact blocks recovery until explicit cleanup. Identity/preflight,
 inspection, recovery, failure, capture, and cleanup receipts are retained for audit;
-query, artifact, credential, and session bytes are not durable receipt content.
+base/effective query, artifact, credential, and session bytes are not durable receipt
+content.
 
 For the required provider-free proof, `rehearse-capture` performs the same inspection
 pause/resume contract with fake transport. It is already run by `make dra-check`;

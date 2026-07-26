@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -22,11 +24,13 @@ from night_voyager.dra.live_http import (
     EphemeralHttpAuthority,
     NightVoyagerAuthorityGateway,
 )
+from night_voyager.dra.live_models import DraCandidateReadinessReceiptV2
 from night_voyager.dra.live_storage import LiveReceiptStore
 from night_voyager.dra.ports import VerifyDraCandidateCommand
 from night_voyager.dra.reconciliation import DraAmbiguousOutcome
 from night_voyager.identity.models import ActorContext, ActorRole
 from scripts import verify_dra_governed_flow as governed_flow
+from scripts import verify_dra_live_closure as live_cli
 
 from .test_live_promotion_controller import (  # pyright: ignore[reportPrivateUsage]
     _capture,
@@ -115,6 +119,8 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
     receipts = tmp_path / "readiness"
     inventory = tmp_path / "inventory.txt"
     inventory.write_text("not a verified Docker evidence receipt\n", encoding="utf-8")
+    query = tmp_path / "query.txt"
+    query.write_text("bounded synthetic query", encoding="utf-8")
     head = subprocess.run(
         ("git", "rev-parse", "HEAD"),
         cwd=ROOT,
@@ -129,6 +135,8 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
         str(receipts),
         "--merged-main-sha",
         head,
+        "--query-file",
+        str(query),
         "--docker-inventory-file",
         str(inventory),
         "--hosted-check",
@@ -146,6 +154,117 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
     assert result.returncode == 30
     assert payload["problem_code"] == "candidate_readiness_invalid"
     assert not receipts.exists()
+
+
+def test_freeze_candidate_writes_canonical_v2_effective_query_readiness(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    head = "e" * 40
+    query_bytes = b"Compare one bounded synthetic source."
+    exact_clause = (
+        b"[NIGHT_VOYAGER_DRA_LIVE_CITATION_CONTRACT_V2]\n"
+        b"Use internet_search. The final canonical report must include the exact raw "
+        b"URL of at least one public HTTPS source that internet_search actually returned "
+        b"and that passes the current source-admission contract. Do not invent, alter, "
+        b"normalize, or guess any URL."
+    )
+    effective_bytes = query_bytes + b"\n\n" + exact_clause
+    query = tmp_path / "query.txt"
+    query.write_bytes(query_bytes)
+    receipts = tmp_path / "readiness"
+    git_outputs: dict[tuple[str, ...], str] = {
+        ("git", "rev-parse", "HEAD"): f"{head}\n",
+        ("git", "branch", "--show-current"): "main\n",
+        ("git", "status", "--porcelain"): "",
+        ("git", "rev-parse", "main"): f"{head}\n",
+        ("git", "rev-parse", "origin/main"): f"{head}\n",
+        (
+            "git",
+            "ls-remote",
+            "origin",
+            "refs/heads/main",
+        ): f"{head}\trefs/heads/main\n",
+    }
+
+    def completed_git(
+        command: list[str],
+        **_: object,
+    ) -> subprocess.CompletedProcess[str]:
+        output = git_outputs.get(tuple(command))
+        if output is None:
+            raise AssertionError(f"unexpected subprocess: {command!r}")
+        return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
+
+    def validated_evidence(
+        _args: argparse.Namespace,
+        _head: str,
+    ) -> tuple[bytes, bytes, bytes, bytes]:
+        return (
+            b"validated-docker-evidence",
+            b"validated-hosted-evidence",
+            b"validated-recovery-evidence",
+            b"validated-review-evidence",
+        )
+
+    monkeypatch.setattr(live_cli.subprocess, "run", completed_git)
+    monkeypatch.setattr(
+        live_cli,
+        "_validated_candidate_evidence",
+        validated_evidence,
+    )
+    args = argparse.Namespace(
+        hosted_check=["python", "frontend", "compose"],
+        authorization_placeholder=(
+            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+        ),
+        merged_main_sha=head,
+        query_file=str(query),
+        receipt_root=str(receipts),
+        json=True,
+    )
+
+    with pytest.raises(SystemExit) as stopped:
+        live_cli.freeze_candidate(args)
+
+    assert stopped.value.code == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["problem_code"] == "candidate_readiness_frozen"
+    readiness_bytes = (receipts / "readiness.json").read_bytes()
+    readiness = DraCandidateReadinessReceiptV2.model_validate_json(
+        readiness_bytes
+    )
+    assert readiness.schema_version == (
+        "night-voyager.dra-live-candidate-readiness.v2"
+    )
+    assert readiness.merged_main_sha == head
+    assert readiness.request.schema_version == (
+        "night-voyager.dra-live-effective-query.v2"
+    )
+    assert readiness.request.logical_name == query.name
+    assert readiness.request.encoding == "utf-8"
+    assert readiness.request.base_byte_length == len(query_bytes)
+    assert readiness.request.base_sha256 == hashlib.sha256(
+        query_bytes
+    ).hexdigest()
+    assert readiness.request.effective_byte_length == len(effective_bytes)
+    assert readiness.request.effective_sha256 == hashlib.sha256(
+        effective_bytes
+    ).hexdigest()
+    assert readiness.request.citation_clause_sha256 == hashlib.sha256(
+        exact_clause
+    ).hexdigest()
+    canonical_round_trip = json.dumps(
+        readiness.model_dump(mode="json"),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    assert canonical_round_trip == readiness_bytes
+    assert result["receipt"]["sha256"] == hashlib.sha256(
+        readiness_bytes
+    ).hexdigest()
 
 
 @pytest.mark.asyncio

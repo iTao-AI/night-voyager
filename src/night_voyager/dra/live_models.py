@@ -45,6 +45,18 @@ SafeIdentity = Annotated[
     StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"),
 ]
 _INTENT_HASH_NOT_SUPPLIED = object()
+DRA_LIVE_CITATION_CLAUSE_MARKER_V2 = (
+    b"[NIGHT_VOYAGER_DRA_LIVE_CITATION_CONTRACT_V2]"
+)
+DRA_LIVE_CITATION_CLAUSE_V2 = (
+    DRA_LIVE_CITATION_CLAUSE_MARKER_V2
+    + b"\nUse internet_search. The final canonical report must include the exact raw "
+    b"URL of at least one public HTTPS source that internet_search actually returned "
+    b"and that passes the current source-admission contract. Do not invent, alter, "
+    b"normalize, or guess any URL."
+)
+_DRA_LIVE_EFFECTIVE_QUERY_SEPARATOR_V2 = b"\n\n"
+_DRA_LIVE_MAX_QUERY_BYTES = 1_048_576
 
 
 class DraLiveFailurePhase(StrEnum):
@@ -274,6 +286,82 @@ class DraFrozenRequestV1(FrozenModel):
     sha256: Sha256
 
 
+class DraFrozenRequestV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-effective-query.v2"] = (
+        "night-voyager.dra-live-effective-query.v2"
+    )
+    logical_name: SafeLogicalName
+    encoding: Literal["utf-8"] = "utf-8"
+    base_byte_length: PositiveInt = Field(le=_DRA_LIVE_MAX_QUERY_BYTES)
+    base_sha256: Sha256
+    effective_byte_length: PositiveInt = Field(le=_DRA_LIVE_MAX_QUERY_BYTES)
+    effective_sha256: Sha256
+    citation_clause_sha256: Sha256
+
+    @model_validator(mode="after")
+    def exact_code_owned_clause(self) -> Self:
+        if self.citation_clause_sha256 != hashlib.sha256(
+            DRA_LIVE_CITATION_CLAUSE_V2
+        ).hexdigest():
+            raise ValueError("dra_effective_query_clause_invalid")
+        if self.effective_byte_length != (
+            self.base_byte_length
+            + len(_DRA_LIVE_EFFECTIVE_QUERY_SEPARATOR_V2)
+            + len(DRA_LIVE_CITATION_CLAUSE_V2)
+        ):
+            raise ValueError("dra_effective_query_length_invalid")
+        return self
+
+
+def compose_effective_query_v2(
+    base_query: bytes,
+    *,
+    logical_name: str,
+) -> tuple[bytes, DraFrozenRequestV2]:
+    try:
+        decoded = base_query.decode("utf-8", errors="strict")
+    except UnicodeDecodeError as error:
+        raise ValueError("dra_effective_query_invalid") from error
+    if (
+        not decoded.strip()
+        or b"\r" in base_query
+        or b"\n" in base_query
+        or DRA_LIVE_CITATION_CLAUSE_MARKER_V2 in base_query
+    ):
+        raise ValueError("dra_effective_query_invalid")
+    effective = (
+        base_query
+        + _DRA_LIVE_EFFECTIVE_QUERY_SEPARATOR_V2
+        + DRA_LIVE_CITATION_CLAUSE_V2
+    )
+    if len(effective) > _DRA_LIVE_MAX_QUERY_BYTES:
+        raise ValueError("dra_effective_query_invalid")
+    identity = DraFrozenRequestV2(
+        logical_name=logical_name,
+        base_byte_length=len(base_query),
+        base_sha256=hashlib.sha256(base_query).hexdigest(),
+        effective_byte_length=len(effective),
+        effective_sha256=hashlib.sha256(effective).hexdigest(),
+        citation_clause_sha256=hashlib.sha256(
+            DRA_LIVE_CITATION_CLAUSE_V2
+        ).hexdigest(),
+    )
+    return effective, identity
+
+
+def validate_effective_query_v2(
+    base_query: bytes,
+    expected: DraFrozenRequestV2,
+) -> bytes:
+    effective, observed = compose_effective_query_v2(
+        base_query,
+        logical_name=expected.logical_name,
+    )
+    if observed != expected:
+        raise ValueError("dra_effective_query_identity_mismatch")
+    return effective
+
+
 class DraCaptureInputV1(FrozenModel):
     schema_version: Literal["night-voyager.dra-live-capture-input.v1"] = (
         "night-voyager.dra-live-capture-input.v1"
@@ -287,6 +375,26 @@ class DraCaptureInputV1(FrozenModel):
     tenant_identity_sha256: Sha256
     actor_role: Literal["advisor"] = "advisor"
     request: DraFrozenRequestV1
+    deadline_seconds: PositiveInt = Field(default=900, le=3600)
+    poll_seconds: float = Field(default=2.0, gt=0, le=60)
+    receipt_root_id: SafeLogicalName
+    one_attempt_authorized: Literal[True]
+
+
+class DraCaptureInputV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-capture-input.v2"] = (
+        "night-voyager.dra-live-capture-input.v2"
+    )
+    scenario_id: Literal["dra-v0-1-6-live-closure-v1"]
+    producer: DraLiveProducerIdentityV1
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    actor_role: Literal["advisor"] = "advisor"
+    request: DraFrozenRequestV2
+    candidate_readiness_sha256: Sha256
     deadline_seconds: PositiveInt = Field(default=900, le=3600)
     poll_seconds: float = Field(default=2.0, gt=0, le=60)
     receipt_root_id: SafeLogicalName
@@ -354,6 +462,70 @@ class DraCaptureIntentV1(FrozenModel):
         return intent
 
 
+class DraCaptureIntentV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-capture-intent.v2"] = (
+        "night-voyager.dra-live-capture-intent.v2"
+    )
+    capture: DraCaptureInputV2
+    attempt_id: SafeIdentity
+
+    @classmethod
+    def freeze(
+        cls,
+        capture: DraCaptureInputV2,
+        *,
+        attempt_id_factory: Callable[[], str],
+    ) -> DraCaptureIntentV2:
+        return cls(capture=capture, attempt_id=attempt_id_factory())
+
+    def _identity_payload(self) -> dict[str, object]:
+        return self.model_dump(
+            mode="json",
+            exclude={"intent_sha256"},
+            exclude_computed_fields=True,
+        )
+
+    @computed_field
+    @property
+    def intent_sha256(self) -> str:
+        encoded = json.dumps(
+            self._identity_payload(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    def canonical_bytes(self) -> bytes:
+        return json.dumps(
+            self.model_dump(mode="json"),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def validate_derived_intent_hash(
+        cls,
+        value: object,
+        handler: ModelWrapValidatorHandler[Self],
+    ) -> Self:
+        supplied_hash: object = _INTENT_HASH_NOT_SUPPLIED
+        candidate = value
+        if isinstance(value, dict) and "intent_sha256" in value:
+            payload = cast(dict[str, object], value).copy()
+            supplied_hash = payload.pop("intent_sha256")
+            candidate = payload
+        intent = handler(candidate)
+        if (
+            supplied_hash is not _INTENT_HASH_NOT_SUPPLIED
+            and supplied_hash != intent.intent_sha256
+        ):
+            raise ValueError("dra_live_intent_sha256_invalid")
+        return intent
+
+
 def derive_stage_key(
     intent_sha256: str,
     stage: str,
@@ -402,6 +574,46 @@ class DraPreflightReceiptV1(FrozenModel):
     intent_sha256: Sha256
     attempt_id: SafeIdentity
     intent_receipt: DraReceiptIdentityV1
+    scenario_id: Literal["dra-v0-1-6-live-closure-v1"]
+    producer: DraLiveProducerIdentityV1
+    advisor_actor_identity_sha256: Sha256
+    tenant_identity_sha256: Sha256
+    receipt_root_id: SafeLogicalName
+    candidate_freeze: Literal["untrusted_candidate_only"] = "untrusted_candidate_only"
+    provider_access: Literal["not_attempted"] = "not_attempted"
+    environment_values_read: Literal[False] = False
+    required_environment_names: tuple[
+        Literal[
+            "DECISION_RESEARCH_AGENT_API_KEY",
+            "DRA_BASE_URL",
+            "DRA_POLL_DEADLINE_SECONDS",
+            "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+            "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+            "NIGHT_VOYAGER_LIVE_SESSION_ID",
+        ],
+        ...,
+    ] = (
+        "DECISION_RESEARCH_AGENT_API_KEY",
+        "DRA_BASE_URL",
+        "DRA_POLL_DEADLINE_SECONDS",
+        "NIGHT_VOYAGER_LIVE_ACTOR_ID",
+        "NIGHT_VOYAGER_LIVE_ORGANIZATION_ID",
+        "NIGHT_VOYAGER_LIVE_SESSION_ID",
+    )
+    filesystem_primitives_ready: Literal[True] = True
+    one_shot_budget: Literal[1] = 1
+    permitted_next_command: Literal["capture-live"] = "capture-live"
+
+
+class DraPreflightReceiptV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-preflight.v2"] = (
+        "night-voyager.dra-live-preflight.v2"
+    )
+    intent_sha256: Sha256
+    attempt_id: SafeIdentity
+    intent_receipt: DraReceiptIdentityV1
+    candidate_readiness_receipt: DraReceiptIdentityV1
+    effective_request_sha256: Sha256
     scenario_id: Literal["dra-v0-1-6-live-closure-v1"]
     producer: DraLiveProducerIdentityV1
     advisor_actor_identity_sha256: Sha256
@@ -779,6 +991,49 @@ class DraCandidateReadinessReceiptV1(FrozenModel):
     merged_main_sha: Annotated[
         str, StringConstraints(pattern=r"^[0-9a-f]{40}$")
     ]
+    spec_sha256: Sha256
+    plan_sha256: Sha256
+    scenario_sha256: Sha256
+    intent_schema_sha256: Sha256
+    receipt_schema_sha256: Sha256
+    cli_sha256: Sha256
+    producer: DraLiveProducerIdentityV1
+    required_hosted_checks: tuple[
+        Literal["compose", "frontend", "python"], ...
+    ]
+    recovery_matrix_status: Literal["passed"]
+    docker_preflight_status: Literal["passed"]
+    docker_inventory_sha256: Sha256
+    hosted_checks_evidence_sha256: Sha256
+    recovery_matrix_evidence_sha256: Sha256
+    authority_review_evidence_sha256: Sha256
+    cleanup_state: Literal["clean"]
+    authorization_placeholder: Literal[
+        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    ]
+    capability_status: Literal[
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+    ] = "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+
+    @model_validator(mode="after")
+    def exact_hosted_checks(self) -> Self:
+        if self.required_hosted_checks != (
+            "compose",
+            "frontend",
+            "python",
+        ):
+            raise ValueError("dra_live_required_checks_invalid")
+        return self
+
+
+class DraCandidateReadinessReceiptV2(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-candidate-readiness.v2"
+    ] = "night-voyager.dra-live-candidate-readiness.v2"
+    merged_main_sha: Annotated[
+        str, StringConstraints(pattern=r"^[0-9a-f]{40}$")
+    ]
+    request: DraFrozenRequestV2
     spec_sha256: Sha256
     plan_sha256: Sha256
     scenario_sha256: Sha256

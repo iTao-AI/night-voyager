@@ -3,8 +3,11 @@
 
 ## Status
 
-**Implementation status:** PR A, PR B, and PR C are implemented provider-free; governed live acceptance remains pending.
-Capability status remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
+**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are
+implemented provider-free. One bounded live attempt projected 25 Evidence rows, all
+`uncited`, and stopped safely before candidate import; governed live acceptance
+remains pending. Capability status remains
+`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
 
 This document defines the bounded Night Voyager consumer increment after the
 `v0.1.3` local synthetic portfolio release. PR A implements only the offline
@@ -252,6 +255,11 @@ Skills, promote Evidence, or decide for an advisor or family.
     logs, database rows, Git, and release artifacts; resumable promotion re-supplies
     the same snapshot identity instead of relying on process memory.
 20. Prove cleanup and resource ownership before claiming a live acceptance.
+21. Compose the provider request from a bounded base business query plus one
+    code-owned citation clause requiring an admitted `internet_search` public HTTPS
+    source's exact raw URL in the final canonical report, and bind those effective
+    bytes across candidate readiness, intent, create, capture revalidation, and
+    candidate request identity.
 
 ## Non-goals
 
@@ -577,7 +585,7 @@ candidate, promotion, review, or family business authority.
 
 ### Frozen live intent
 
-Before provider execution, the controller freezes a canonical intent containing:
+Before provider execution, the controller freezes a canonical v2 intent containing:
 
 ```text
 schema_version
@@ -593,6 +601,18 @@ expected terminal contract
 privacy policy
 receipt schema version
 ```
+
+The bounded query identity is
+`night-voyager.dra-live-effective-query.v2`. The operator supplies only the
+single-line UTF-8 base business query. Night Voyager appends a reserved,
+code-owned citation clause that requires at least one public HTTPS source actually
+returned by `internet_search` and admitted by the current source-admission contract
+to appear in the final canonical report as its exact raw URL. The clause forbids
+inventing, altering, normalizing, or guessing URLs. Candidate readiness freezes the
+base/effective lengths and hashes plus the clause hash; intent and pre-provider
+capture revalidation must match that same identity. Legacy v1 readiness/intent,
+reserved-marker injection, clause duplication/replacement, wrong version/hash,
+CR/LF, empty input, and post-composition oversize fail closed.
 
 `attempt_id` is generated once and retained. The canonical intent hash is the root
 identity for all stage receipts.
@@ -1062,6 +1082,7 @@ The live acceptance uses:
 - one manifest;
 - one `attempt_id`;
 - one run intent;
+- one v2 effective query frozen by candidate readiness;
 - no automatic retry;
 - no second provider run;
 - one selected source;
