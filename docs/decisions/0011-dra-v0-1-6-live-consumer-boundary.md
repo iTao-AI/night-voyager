@@ -68,10 +68,17 @@ code to create product authority.
     execution, independently runs the default-threshold host/VM preflight, binds
     the canonical task project's complete before/after Docker inventories, and
     re-queries exact-head hosted checks, final merged-PR head, and reviewed/merge
-    tree equality. Docker evidence v2 hashes a closed, deterministically ordered
+    tree equality. Docker evidence v3 hashes a closed, deterministically ordered
     semantic projection of all six inventories rather than raw CLI presentation
     bytes; unordered labels and parent sets are normalized, display-relative time
     fields are excluded, and malformed or duplicate identities fail closed.
+    Recorded and live host/VM availability are independently checked against the
+    fixed thresholds rather than compared to each other. The doctor semantic hash
+    normalizes only those two numeric observations while retaining the complete
+    closed pass-marker contract. Recovery evidence v2 binds the exact allowlisted
+    command to a positive pytest passed count; freeze reruns it with `check=True`
+    and ignores elapsed-time presentation only. Superseded Docker v1/v2 and
+    recovery v1 evidence fail closed.
     Independent human review authority is an explicit closed v2 attestation
     binding the exact reviewed head, `CLEAN` verdict, opaque review record
     identity and SHA-256, and a fixed human acknowledgement. It is not inferred

@@ -100,6 +100,26 @@ CANDIDATE_TASK_PROJECT = "night-voyager-dra-v0-1-6-live-acceptance"
 DOCKER_VM_MINIMUM_KIB = 8_388_608
 HOST_MINIMUM_KIB = 5_242_880
 AUTHORITY_REVIEW_ACK = "independent_authority_review_attested"
+DOCTOR_SEMANTIC_OUTPUT = (
+    "PASSED CHECK: Docker daemon and Compose --wait are available\n"
+    "PASSED CHECK: host project filesystem <available-kib> KiB available\n"
+    "PASSED CHECK: Docker VM filesystem <available-kib> KiB available\n"
+    "PASSED CHECK: port 127.0.0.1:3000 is free\n"
+    "PASSED CHECK: port 127.0.0.1:8000 is free\n"
+    "PASSED CHECK: port 127.0.0.1:55432 is free\n"
+    "PASSED CHECK: contributor Python/uv/Node/npm toolchain is available\n"
+    "doctor: dev preflight passed\n"
+)
+DOCTOR_OUTPUT_PATTERN = re.compile(
+    r"PASSED CHECK: Docker daemon and Compose --wait are available\n"
+    r"PASSED CHECK: host project filesystem ([0-9]+) KiB available\n"
+    r"PASSED CHECK: Docker VM filesystem ([0-9]+) KiB available\n"
+    r"PASSED CHECK: port 127\.0\.0\.1:3000 is free\n"
+    r"PASSED CHECK: port 127\.0\.0\.1:8000 is free\n"
+    r"PASSED CHECK: port 127\.0\.0\.1:55432 is free\n"
+    r"PASSED CHECK: contributor Python/uv/Node/npm toolchain is available\n"
+    r"doctor: dev preflight passed\n"
+)
 DOCKER_INVENTORY_COMMANDS = (
     ("compose", ("docker", "compose", "ls", "--all", "--format", "json")),
     ("containers", ("docker", "ps", "-a", "--no-trunc", "--format", "json")),
@@ -1427,6 +1447,31 @@ def _canonical_docker_inventory_bytes(
     ).encode()
 
 
+def _doctor_semantic_result(output: str) -> tuple[int, int, str]:
+    match = DOCTOR_OUTPUT_PATTERN.fullmatch(output)
+    if match is None:
+        raise ValueError("candidate_evidence_provenance_invalid")
+    host_available_kib = int(match.group(1))
+    docker_vm_available_kib = int(match.group(2))
+    semantic_sha256 = hashlib.sha256(DOCTOR_SEMANTIC_OUTPUT.encode()).hexdigest()
+    return host_available_kib, docker_vm_available_kib, semantic_sha256
+
+
+def _recovery_passed_count(output: str) -> int:
+    lines = output.splitlines()
+    if not lines:
+        raise ValueError("candidate_evidence_provenance_invalid")
+    summary_match = re.fullmatch(
+        r"([1-9][0-9]*) passed in [0-9]+(?:\.[0-9]+)?s",
+        lines[-1],
+    )
+    if summary_match is None or any(
+        re.fullmatch(r"\.+(?:\s+\[\s*[0-9]+%\])?", line) is None for line in lines[:-1]
+    ):
+        raise ValueError("candidate_evidence_provenance_invalid")
+    return int(summary_match.group(1))
+
+
 def _validated_candidate_evidence(
     args: argparse.Namespace,
     head: str,
@@ -1435,16 +1480,17 @@ def _validated_candidate_evidence(
         args.docker_inventory_file,
         kind="docker",
         head=head,
-        schema_version="night-voyager.dra-live-docker-evidence.v2",
+        schema_version="night-voyager.dra-live-docker-evidence.v3",
         exact_keys=frozenset(
             {
                 "schema_version",
                 "head_sha",
                 "task_project",
+                "minimum_host_kib",
                 "minimum_docker_vm_kib",
                 "host_available_kib",
                 "docker_vm_available_kib",
-                "doctor_stdout_sha256",
+                "doctor_semantic_sha256",
                 "before_inventory_sha256",
                 "after_inventory_sha256",
                 "retained_resources",
@@ -1469,13 +1515,13 @@ def _validated_candidate_evidence(
         args.recovery_evidence_file,
         kind="recovery",
         head=head,
-        schema_version="night-voyager.dra-live-recovery-evidence.v1",
+        schema_version="night-voyager.dra-live-recovery-evidence.v2",
         exact_keys=frozenset(
             {
                 "schema_version",
                 "head_sha",
                 "command",
-                "stdout_sha256",
+                "passed_count",
             }
         ),
     )
@@ -1508,10 +1554,25 @@ def _validated_candidate_evidence(
     recovery_command = tuple(cast(list[str], command_items))
     if recovery_command != ALLOWED_RECOVERY_COMMAND:
         raise ValueError("candidate_evidence_provenance_invalid")
+    recorded_host_available_kib = inventory_evidence.get("host_available_kib")
+    recorded_docker_vm_available_kib = inventory_evidence.get(
+        "docker_vm_available_kib"
+    )
+    recovery_passed_count = recovery_evidence.get("passed_count")
     if (
         inventory_evidence.get("task_project") != CANDIDATE_TASK_PROJECT
+        or inventory_evidence.get("minimum_host_kib") != HOST_MINIMUM_KIB
         or inventory_evidence.get("minimum_docker_vm_kib")
         != DOCKER_VM_MINIMUM_KIB
+        or not isinstance(recorded_host_available_kib, int)
+        or isinstance(recorded_host_available_kib, bool)
+        or recorded_host_available_kib < HOST_MINIMUM_KIB
+        or not isinstance(recorded_docker_vm_available_kib, int)
+        or isinstance(recorded_docker_vm_available_kib, bool)
+        or recorded_docker_vm_available_kib < DOCKER_VM_MINIMUM_KIB
+        or not isinstance(recovery_passed_count, int)
+        or isinstance(recovery_passed_count, bool)
+        or recovery_passed_count <= 0
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
     review_repository = review_evidence.get("repository")
@@ -1599,18 +1660,9 @@ def _validated_candidate_evidence(
         ("make", "doctor", "MODE=dev"),
         environment=doctor_environment,
     )
-    host_match = re.search(
-        r"PASSED CHECK: host project filesystem ([0-9]+) KiB available",
-        doctor_output,
+    host_available_kib, docker_vm_available_kib, doctor_semantic_sha256 = (
+        _doctor_semantic_result(doctor_output)
     )
-    vm_match = re.search(
-        r"PASSED CHECK: Docker VM filesystem ([0-9]+) KiB available",
-        doctor_output,
-    )
-    if host_match is None or vm_match is None:
-        raise ValueError("candidate_evidence_provenance_invalid")
-    host_available_kib = int(host_match.group(1))
-    docker_vm_available_kib = int(vm_match.group(1))
     after_inventory = capture_inventory()
     if any(
         CANDIDATE_TASK_PROJECT
@@ -1621,12 +1673,8 @@ def _validated_candidate_evidence(
     if (
         host_available_kib < HOST_MINIMUM_KIB
         or docker_vm_available_kib < DOCKER_VM_MINIMUM_KIB
-        or inventory_evidence.get("host_available_kib")
-        != host_available_kib
-        or inventory_evidence.get("docker_vm_available_kib")
-        != docker_vm_available_kib
-        or inventory_evidence.get("doctor_stdout_sha256")
-        != hashlib.sha256(doctor_output.encode()).hexdigest()
+        or inventory_evidence.get("doctor_semantic_sha256")
+        != doctor_semantic_sha256
         or inventory_evidence.get("before_inventory_sha256")
         != inventory_hashes(before_inventory)
         or inventory_evidence.get("after_inventory_sha256")
@@ -1683,10 +1731,18 @@ def _validated_candidate_evidence(
     }:
         raise ValueError("candidate_evidence_provenance_invalid")
 
-    recovery_output = run(recovery_command)
+    try:
+        recovery_result = subprocess.run(
+            recovery_command,
+            check=True,
+            text=True,
+            capture_output=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("candidate_evidence_provenance_invalid") from error
     if (
-        recovery_evidence.get("stdout_sha256")
-        != hashlib.sha256(recovery_output.encode()).hexdigest()
+        recovery_result.stderr != ""
+        or _recovery_passed_count(recovery_result.stdout) != recovery_passed_count
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
 

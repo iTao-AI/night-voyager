@@ -8,6 +8,7 @@ import json
 from collections.abc import Mapping
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -30,8 +31,23 @@ RECOVERY_COMMAND = [
     "tests/unit/dra/test_live_decision_controller.py",
 ]
 DOCTOR_OUTPUT = (
+    "PASSED CHECK: Docker daemon and Compose --wait are available\n"
     "PASSED CHECK: host project filesystem 44040192 KiB available\n"
     "PASSED CHECK: Docker VM filesystem 12582912 KiB available\n"
+    "PASSED CHECK: port 127.0.0.1:3000 is free\n"
+    "PASSED CHECK: port 127.0.0.1:8000 is free\n"
+    "PASSED CHECK: port 127.0.0.1:55432 is free\n"
+    "PASSED CHECK: contributor Python/uv/Node/npm toolchain is available\n"
+    "doctor: dev preflight passed\n"
+)
+DOCTOR_SEMANTIC_OUTPUT = (
+    "PASSED CHECK: Docker daemon and Compose --wait are available\n"
+    "PASSED CHECK: host project filesystem <available-kib> KiB available\n"
+    "PASSED CHECK: Docker VM filesystem <available-kib> KiB available\n"
+    "PASSED CHECK: port 127.0.0.1:3000 is free\n"
+    "PASSED CHECK: port 127.0.0.1:8000 is free\n"
+    "PASSED CHECK: port 127.0.0.1:55432 is free\n"
+    "PASSED CHECK: contributor Python/uv/Node/npm toolchain is available\n"
     "doctor: dev preflight passed\n"
 )
 INVENTORY_OUTPUTS: dict[tuple[str, ...], str] = {
@@ -123,7 +139,7 @@ def _args(tmp_path: Path) -> argparse.Namespace:
         recovery_evidence_file=_write(
             tmp_path / "recovery.json",
             {
-                "schema_version": "night-voyager.dra-live-recovery-evidence.v1",
+                "schema_version": "night-voyager.dra-live-recovery-evidence.v2",
                 "head_sha": HEAD,
                 "recovery_matrix_status": "passed",
             },
@@ -164,13 +180,16 @@ def _valid_args(tmp_path: Path) -> argparse.Namespace:
         docker_inventory_file=_write(
             tmp_path / "docker.json",
             {
-                "schema_version": "night-voyager.dra-live-docker-evidence.v2",
+                "schema_version": "night-voyager.dra-live-docker-evidence.v3",
                 "head_sha": HEAD,
                 "task_project": TASK_PROJECT,
+                "minimum_host_kib": 5_242_880,
                 "minimum_docker_vm_kib": 8_388_608,
                 "host_available_kib": 44_040_192,
                 "docker_vm_available_kib": 12_582_912,
-                "doctor_stdout_sha256": hashlib.sha256(DOCTOR_OUTPUT.encode()).hexdigest(),
+                "doctor_semantic_sha256": hashlib.sha256(
+                    DOCTOR_SEMANTIC_OUTPUT.encode()
+                ).hexdigest(),
                 "before_inventory_sha256": inventory_hashes,
                 "after_inventory_sha256": inventory_hashes,
                 "retained_resources": retained,
@@ -188,10 +207,10 @@ def _valid_args(tmp_path: Path) -> argparse.Namespace:
         recovery_evidence_file=_write(
             tmp_path / "recovery.json",
             {
-                "schema_version": "night-voyager.dra-live-recovery-evidence.v1",
+                "schema_version": "night-voyager.dra-live-recovery-evidence.v2",
                 "head_sha": HEAD,
                 "command": RECOVERY_COMMAND,
-                "stdout_sha256": hashlib.sha256(b"47 passed\n").hexdigest(),
+                "passed_count": 47,
             },
         ),
         authority_review_evidence_file=_write(
@@ -218,14 +237,23 @@ def _live_runner(
     reviewed_tree: str = "c" * 40,
     merge_tree: str = "c" * 40,
     doctor_output: str = DOCTOR_OUTPUT,
+    recovery_output: str = "47 passed in 1.23s\n",
+    recovery_stderr: str = "",
     inventory_outputs: Mapping[tuple[str, ...], str | tuple[str, str]] = INVENTORY_OUTPUTS,
+    environments: list[dict[str, str] | None] | None = None,
 ):
     inventory_calls: dict[tuple[str, ...], int] = {}
 
     def run(command: tuple[str, ...], **kwargs: object) -> SimpleNamespace:
-        del kwargs
         normalized = tuple(command)
         calls.append(normalized)
+        if environments is not None:
+            environment = kwargs.get("env")
+            environments.append(
+                cast(dict[str, str], environment)
+                if isinstance(environment, dict)
+                else None
+            )
         if normalized in inventory_outputs:
             configured = inventory_outputs[normalized]
             if isinstance(configured, tuple):
@@ -262,7 +290,7 @@ def _live_runner(
                 }
             )
         elif normalized == tuple(RECOVERY_COMMAND):
-            output = "47 passed\n"
+            output = recovery_output
         elif normalized[-1].endswith("/reviews"):
             output = "[]"
         elif "/reviews/" in normalized[-1]:
@@ -279,7 +307,8 @@ def _live_runner(
                     "head": {"sha": pull_head},
                 }
             )
-        return SimpleNamespace(stdout=output)
+        stderr = recovery_stderr if normalized == tuple(RECOVERY_COMMAND) else ""
+        return SimpleNamespace(stdout=output, stderr=stderr)
 
     return run
 
@@ -306,14 +335,68 @@ def test_candidate_evidence_accepts_independent_review_when_github_reviews_empty
     assert not any("/reviews" in item[-1] for item in calls)
 
 
-def test_candidate_evidence_rejects_legacy_raw_inventory_evidence(
+def test_candidate_evidence_accepts_above_threshold_doctor_capacity_drift(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     args = _valid_args(tmp_path)
+    live_output = DOCTOR_OUTPUT.replace("44040192", "46006528").replace(
+        "12582912", "18698240"
+    )
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, doctor_output=live_output),
+    )
+
+    assert all(_validated_candidate_evidence(args, HEAD))
+
+
+def test_candidate_evidence_accepts_recovery_elapsed_time_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _valid_args(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, recovery_output="47 passed in 9.87s\n"),
+    )
+
+    assert all(_validated_candidate_evidence(args, HEAD))
+
+
+def test_candidate_evidence_rejects_recovery_stderr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _valid_args(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, recovery_stderr="WARNING: degraded recovery proof\n"),
+    )
+
+    with pytest.raises(ValueError, match="candidate_evidence_provenance_invalid"):
+        _validated_candidate_evidence(args, HEAD)
+
+
+@pytest.mark.parametrize(
+    "legacy_schema",
+    (
+        "night-voyager.dra-live-docker-evidence.v1",
+        "night-voyager.dra-live-docker-evidence.v2",
+    ),
+)
+def test_candidate_evidence_rejects_legacy_docker_evidence(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    legacy_schema: str,
+) -> None:
+    args = _valid_args(tmp_path)
     docker = Path(args.docker_inventory_file)
     value = json.loads(docker.read_text(encoding="utf-8"))
-    value["schema_version"] = "night-voyager.dra-live-docker-evidence.v1"
+    value["schema_version"] = legacy_schema
     raw_hashes = {
         name: hashlib.sha256(output.encode()).hexdigest()
         for name, output in zip(
@@ -341,6 +424,27 @@ def test_candidate_evidence_rejects_legacy_raw_inventory_evidence(
 
     with pytest.raises(ValueError, match="candidate_docker_evidence_invalid"):
         _validated_candidate_evidence(args, HEAD)
+
+
+def test_candidate_evidence_rejects_legacy_recovery_evidence_before_subprocess(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _valid_args(tmp_path)
+    recovery = Path(args.recovery_evidence_file)
+    value = json.loads(recovery.read_text(encoding="utf-8"))
+    value["schema_version"] = "night-voyager.dra-live-recovery-evidence.v1"
+    recovery.write_text(json.dumps(value), encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls),
+    )
+
+    with pytest.raises(ValueError, match="candidate_recovery_evidence_invalid"):
+        _validated_candidate_evidence(args, HEAD)
+
+    assert calls == []
 
 
 def test_candidate_evidence_canonicalizes_inventory_presentation_drift(
@@ -428,6 +532,26 @@ def test_candidate_evidence_rejects_unapproved_recovery_before_any_subprocess(
     assert calls == []
 
 
+def test_candidate_evidence_removes_doctor_threshold_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _valid_args(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    environments: list[dict[str, str] | None] = []
+    monkeypatch.setenv("NIGHT_VOYAGER_DOCKER_MINIMUM_KB", "1")
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, environments=environments),
+    )
+
+    assert all(_validated_candidate_evidence(args, HEAD))
+    doctor_index = calls.index(("make", "doctor", "MODE=dev"))
+    doctor_environment = environments[doctor_index]
+    assert doctor_environment is not None
+    assert "NIGHT_VOYAGER_DOCKER_MINIMUM_KB" not in doctor_environment
+
+
 def test_candidate_evidence_rejects_review_of_stale_pr_head(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -504,7 +628,12 @@ def test_candidate_evidence_rejects_invalid_human_review_attestation(
 @pytest.mark.parametrize(
     ("mutation", "observed"),
     (
-        ("low-space", None),
+        ("recorded-host-low", None),
+        ("recorded-vm-low", None),
+        ("live-host-low", None),
+        ("live-vm-low", None),
+        ("doctor-semantic-hash", None),
+        ("docker-extra-field", None),
         ("wrong-project", None),
         (
             "residual-resource",
@@ -533,10 +662,18 @@ def test_candidate_evidence_rejects_invalid_docker_authority(
     doctor_output = DOCTOR_OUTPUT
     docker = Path(args.docker_inventory_file)
     docker_value = json.loads(docker.read_text(encoding="utf-8"))
-    if mutation == "low-space":
-        doctor_output = DOCTOR_OUTPUT.replace("12582912", "8388607")
+    if mutation == "recorded-host-low":
+        docker_value["host_available_kib"] = 5_242_879
+    elif mutation == "recorded-vm-low":
         docker_value["docker_vm_available_kib"] = 8_388_607
-        docker_value["doctor_stdout_sha256"] = hashlib.sha256(doctor_output.encode()).hexdigest()
+    elif mutation == "live-host-low":
+        doctor_output = DOCTOR_OUTPUT.replace("44040192", "5242879")
+    elif mutation == "live-vm-low":
+        doctor_output = DOCTOR_OUTPUT.replace("12582912", "8388607")
+    elif mutation == "doctor-semantic-hash":
+        docker_value["doctor_semantic_sha256"] = "f" * 64
+    elif mutation == "docker-extra-field":
+        docker_value["unexpected"] = "self-attested"
     elif mutation == "wrong-project":
         docker_value["task_project"] = "arbitrary-absent-project"
     elif observed is not None:
@@ -553,7 +690,99 @@ def test_candidate_evidence_rejects_invalid_docker_authority(
         ),
     )
 
+    expected_error = (
+        "candidate_docker_evidence_invalid"
+        if mutation == "docker-extra-field"
+        else "candidate_evidence_provenance_invalid"
+    )
+    with pytest.raises(ValueError, match=expected_error):
+        _validated_candidate_evidence(args, HEAD)
+
+
+@pytest.mark.parametrize(
+    "doctor_output",
+    (
+        DOCTOR_OUTPUT.replace("PASSED CHECK: Docker daemon and Compose --wait are available\n", ""),
+        DOCTOR_OUTPUT.replace(
+            "PASSED CHECK: contributor Python/uv/Node/npm toolchain is available",
+            "PASSED CHECK: contributor toolchain is available",
+        ),
+        DOCTOR_OUTPUT.replace(
+            "doctor: dev preflight passed\n",
+            "PASSED CHECK: unexpected doctor extension\ndoctor: dev preflight passed\n",
+        ),
+        DOCTOR_OUTPUT.replace(
+            "PASSED CHECK: host project filesystem 44040192 KiB available",
+            "PASSED CHECK: host project filesystem unknown KiB available",
+        ),
+    ),
+)
+def test_candidate_evidence_rejects_doctor_contract_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    doctor_output: str,
+) -> None:
+    args = _valid_args(tmp_path)
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, doctor_output=doctor_output),
+    )
+
     with pytest.raises(ValueError, match="candidate_evidence_provenance_invalid"):
+        _validated_candidate_evidence(args, HEAD)
+
+
+@pytest.mark.parametrize(
+    ("evidence_count", "recovery_output"),
+    (
+        (47, "48 passed in 1.23s\n"),
+        (47, "46 passed, 1 skipped in 1.23s\n"),
+        (47, "46 passed, 1 xfailed in 1.23s\n"),
+        (47, "46 passed, 1 warning in 1.23s\n"),
+        (47, "1 failed, 46 passed in 1.23s\n"),
+        (47, "47 passed\n"),
+        (47, "arbitrary output\n47 passed in 1.23s\n"),
+        (0, "47 passed in 1.23s\n"),
+    ),
+)
+def test_candidate_evidence_rejects_recovery_result_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    evidence_count: int,
+    recovery_output: str,
+) -> None:
+    args = _valid_args(tmp_path)
+    recovery = Path(args.recovery_evidence_file)
+    value = json.loads(recovery.read_text(encoding="utf-8"))
+    value["passed_count"] = evidence_count
+    recovery.write_text(json.dumps(value), encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls, recovery_output=recovery_output),
+    )
+
+    with pytest.raises(ValueError, match="candidate_evidence_provenance_invalid"):
+        _validated_candidate_evidence(args, HEAD)
+
+
+def test_candidate_evidence_rejects_recovery_extra_field(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _valid_args(tmp_path)
+    recovery = Path(args.recovery_evidence_file)
+    value = json.loads(recovery.read_text(encoding="utf-8"))
+    value["stdout_sha256"] = "f" * 64
+    recovery.write_text(json.dumps(value), encoding="utf-8")
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "scripts.verify_dra_live_closure.subprocess.run",
+        _live_runner(calls),
+    )
+
+    with pytest.raises(ValueError, match="candidate_recovery_evidence_invalid"):
         _validated_candidate_evidence(args, HEAD)
 
 

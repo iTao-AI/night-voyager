@@ -258,19 +258,29 @@ Feature-branch HEADs, missing/failed checks, stale attestations, dirty main,
 residual task resources, or local/origin/live main drift fail closed.
 
 The four files use closed schemas:
-`night-voyager.dra-live-docker-evidence.v2`,
+`night-voyager.dra-live-docker-evidence.v3`,
 `night-voyager.dra-live-hosted-checks-evidence.v1`,
-`night-voyager.dra-live-recovery-evidence.v1`, and
+`night-voyager.dra-live-recovery-evidence.v2`, and
 `night-voyager.dra-live-authority-review-evidence.v2`. Extra keys are rejected;
-the superseded Docker v1 raw-presentation shape and authority-review v1
-GitHub-review shape are not accepted.
-Docker evidence binds the canonical task project, default Docker VM threshold,
-observed host/VM free space, preflight stdout, all six before/after inventory
-hashes, and the exact retained image, volume, and build-cache identities. Hosted
-evidence binds repository and the three exact check run IDs. Recovery evidence
-binds the closed command and observed stdout hash.
+the superseded Docker v1/v2, recovery v1, and authority-review v1 shapes are not
+accepted.
+Docker evidence binds the canonical task project, default host and Docker VM
+thresholds, observed host/VM free space, a semantic preflight hash, all six
+before/after inventory hashes, and the exact retained image, volume, and
+build-cache identities. Recorded and freshly observed free-space values are each
+validated against their threshold; above-threshold numeric drift between the two
+observations is not treated as contract drift. The semantic preflight projection
+normalizes only those two availability numbers and retains every other expected
+`make doctor MODE=dev` pass marker. Missing, altered, reordered, or additional
+preflight output, threshold override leakage, or a below-threshold observation
+fails closed. Hosted evidence binds repository and the three exact check run IDs.
+Recovery evidence binds the closed command and its positive exact passed count.
+Freeze runs the allowlisted command fresh with `check=True`, parses the closed
+successful pytest summary, and ignores only elapsed-time presentation. A count
+change, non-empty stderr, or any failed, error, skipped, xfailed, xpassed,
+warning, or malformed summary fails closed.
 
-Docker evidence v2 hashes a closed semantic projection, not Docker CLI
+Docker evidence v3 hashes a closed semantic projection, not Docker CLI
 presentation bytes. Compose inventory is parsed as a JSON array; container,
 image, build-cache, network, and volume inventories are parsed as JSON records,
 with build cache collected by `docker buildx du --format json`. The projection
