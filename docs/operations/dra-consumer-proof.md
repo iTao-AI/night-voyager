@@ -258,16 +258,29 @@ Feature-branch HEADs, missing/failed checks, stale attestations, dirty main,
 residual task resources, or local/origin/live main drift fail closed.
 
 The four files use closed schemas:
-`night-voyager.dra-live-docker-evidence.v1`,
+`night-voyager.dra-live-docker-evidence.v2`,
 `night-voyager.dra-live-hosted-checks-evidence.v1`,
 `night-voyager.dra-live-recovery-evidence.v1`, and
 `night-voyager.dra-live-authority-review-evidence.v2`. Extra keys are rejected;
-the superseded v1 GitHub-review shape is not accepted.
+the superseded Docker v1 raw-presentation shape and authority-review v1
+GitHub-review shape are not accepted.
 Docker evidence binds the canonical task project, default Docker VM threshold,
 observed host/VM free space, preflight stdout, all six before/after inventory
 hashes, and the exact retained image, volume, and build-cache identities. Hosted
 evidence binds repository and the three exact check run IDs. Recovery evidence
 binds the closed command and observed stdout hash.
+
+Docker evidence v2 hashes a closed semantic projection, not Docker CLI
+presentation bytes. Compose inventory is parsed as a JSON array; container,
+image, build-cache, network, and volume inventories are parsed as JSON records,
+with build cache collected by `docker buildx du --format json`. The projection
+sorts records and object keys, normalizes unordered label, network, and parent
+sets, and converts cache sizes to bytes. Relative or presentation-only fields
+such as `CreatedSince`, `CreatedAt`, and `LastUsedAt` are excluded. Resource
+identity and state, task residue, retained images and volumes, and the canonical
+build-cache identity remain bound. Malformed JSON, missing or wrongly typed
+required fields, duplicate resource identities, and malformed set values fail
+closed.
 
 Authority-review evidence is a public-neutral human attestation with this exact
 closed shape:

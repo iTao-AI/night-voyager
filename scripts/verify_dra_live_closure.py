@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import uuid
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal, NoReturn, cast
 from urllib.parse import urlsplit
@@ -114,7 +115,7 @@ DOCKER_INVENTORY_COMMANDS = (
             "json",
         ),
     ),
-    ("build_cache", ("docker", "buildx", "du", "--verbose")),
+    ("build_cache", ("docker", "buildx", "du", "--format", "json")),
     ("networks", ("docker", "network", "ls", "--no-trunc", "--format", "json")),
     ("volumes", ("docker", "volume", "ls", "--format", "json")),
 )
@@ -1192,6 +1193,240 @@ def _read_candidate_evidence(
     return raw, parsed
 
 
+def _docker_inventory_invalid() -> NoReturn:
+    raise ValueError("candidate_evidence_provenance_invalid")
+
+
+def _docker_json_lines(raw: str) -> tuple[dict[str, object], ...]:
+    values: list[dict[str, object]] = []
+    for line in raw.splitlines():
+        if not line:
+            continue
+        try:
+            value: object = json.loads(line)
+        except json.JSONDecodeError:
+            _docker_inventory_invalid()
+        if not isinstance(value, dict):
+            _docker_inventory_invalid()
+        values.append(cast(dict[str, object], value))
+    return tuple(values)
+
+
+def _docker_string(
+    record: dict[str, object],
+    key: str,
+    *,
+    allow_empty: bool = False,
+) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or (not allow_empty and not value):
+        _docker_inventory_invalid()
+    return value
+
+
+def _docker_boolean_string(record: dict[str, object], key: str) -> bool:
+    value = _docker_string(record, key)
+    if value not in {"true", "false"}:
+        _docker_inventory_invalid()
+    return value == "true"
+
+
+def _docker_nonnegative_integer(value: object) -> int:
+    if isinstance(value, bool):
+        _docker_inventory_invalid()
+    if isinstance(value, int):
+        result = value
+    elif isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+        result = int(value)
+    else:
+        _docker_inventory_invalid()
+    if result < 0:
+        _docker_inventory_invalid()
+    return result
+
+
+def _docker_labels(value: object) -> dict[str, str]:
+    if not isinstance(value, str):
+        _docker_inventory_invalid()
+    labels: dict[str, str] = {}
+    if not value:
+        return labels
+    for item in value.split(","):
+        if "=" not in item:
+            _docker_inventory_invalid()
+        key, label_value = item.split("=", 1)
+        if not key or key in labels:
+            _docker_inventory_invalid()
+        labels[key] = label_value
+    return dict(sorted(labels.items()))
+
+
+def _docker_string_set(value: object, *, nullable: bool = False) -> list[str]:
+    if value is None and nullable:
+        return []
+    if isinstance(value, str):
+        items = [] if not value else value.split(",")
+    elif isinstance(value, list):
+        items = cast(list[object], value)
+    else:
+        _docker_inventory_invalid()
+    if not all(isinstance(item, str) and item for item in items):
+        _docker_inventory_invalid()
+    strings = cast(list[str], items)
+    if len(set(strings)) != len(strings):
+        _docker_inventory_invalid()
+    return sorted(strings)
+
+
+def _docker_size_bytes(record: dict[str, object]) -> int:
+    value = _docker_string(record, "Size")
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([kMGTPE]?B)", value)
+    if match is None:
+        _docker_inventory_invalid()
+    factors = {
+        "B": 1,
+        "kB": 1_000,
+        "MB": 1_000_000,
+        "GB": 1_000_000_000,
+        "TB": 1_000_000_000_000,
+        "PB": 1_000_000_000_000_000,
+        "EB": 1_000_000_000_000_000_000,
+    }
+    try:
+        size = Decimal(match.group(1)) * factors[match.group(2)]
+    except InvalidOperation:
+        _docker_inventory_invalid()
+    if size != size.to_integral_value():
+        _docker_inventory_invalid()
+    return int(size)
+
+
+def _canonical_docker_inventory(
+    name: str,
+    raw: str,
+) -> tuple[dict[str, object], ...]:
+    records: tuple[dict[str, object], ...]
+    if name == "compose":
+        try:
+            value: object = json.loads(raw)
+        except json.JSONDecodeError:
+            _docker_inventory_invalid()
+        if not isinstance(value, list):
+            _docker_inventory_invalid()
+        compose_items = cast(list[object], value)
+        if not all(isinstance(item, dict) for item in compose_items):
+            _docker_inventory_invalid()
+        records = tuple(cast(dict[str, object], item) for item in compose_items)
+    else:
+        records = _docker_json_lines(raw)
+
+    projected: list[dict[str, object]] = []
+    identities: set[str] = set()
+    for record in records:
+        projection: dict[str, object]
+        if name == "compose":
+            projection = {
+                "name": _docker_string(record, "Name"),
+                "status": _docker_string(record, "Status"),
+            }
+            identity = _docker_string(record, "Name")
+        elif name == "containers":
+            projection = {
+                "id": _docker_string(record, "ID"),
+                "image": _docker_string(record, "Image"),
+                "labels": _docker_labels(record.get("Labels")),
+                "names": _docker_string(record, "Names"),
+                "networks": _docker_string_set(record.get("Networks")),
+                "state": _docker_string(record, "State"),
+            }
+            identity = cast(str, projection["id"])
+        elif name == "images":
+            projection = {
+                "containers": _docker_nonnegative_integer(record.get("Containers")),
+                "digest": _docker_string(record, "Digest"),
+                "id": _docker_string(record, "ID"),
+                "repository": _docker_string(record, "Repository"),
+                "tag": _docker_string(record, "Tag"),
+            }
+            repository = cast(str, projection["repository"])
+            tag = cast(str, projection["tag"])
+            identity = (
+                cast(str, projection["id"])
+                if repository == "<none>" and tag == "<none>"
+                else f"{repository}:{tag}"
+            )
+        elif name == "build_cache":
+            mutable = record.get("Mutable")
+            reclaimable = record.get("Reclaimable")
+            shared = record.get("Shared")
+            if not all(isinstance(value, bool) for value in (mutable, reclaimable, shared)):
+                _docker_inventory_invalid()
+            projection = {
+                "id": _docker_string(record, "ID"),
+                "mutable": mutable,
+                "parents": _docker_string_set(
+                    record.get("Parents"),
+                    nullable=True,
+                ),
+                "reclaimable": reclaimable,
+                "shared": shared,
+                "size_bytes": _docker_size_bytes(record),
+                "type": _docker_string(record, "Type"),
+                "usage_count": _docker_nonnegative_integer(record.get("UsageCount")),
+            }
+            identity = cast(str, projection["id"])
+        elif name == "networks":
+            projection = {
+                "driver": _docker_string(record, "Driver"),
+                "id": _docker_string(record, "ID"),
+                "internal": _docker_boolean_string(record, "Internal"),
+                "ipv4": _docker_boolean_string(record, "IPv4"),
+                "ipv6": _docker_boolean_string(record, "IPv6"),
+                "labels": _docker_labels(record.get("Labels")),
+                "name": _docker_string(record, "Name"),
+                "scope": _docker_string(record, "Scope"),
+            }
+            identity = cast(str, projection["id"])
+        elif name == "volumes":
+            projection = {
+                "availability": _docker_string(record, "Availability"),
+                "driver": _docker_string(record, "Driver"),
+                "labels": _docker_labels(record.get("Labels")),
+                "name": _docker_string(record, "Name"),
+                "scope": _docker_string(record, "Scope"),
+                "status": _docker_string(record, "Status"),
+            }
+            identity = cast(str, projection["name"])
+        else:
+            _docker_inventory_invalid()
+        if identity in identities:
+            _docker_inventory_invalid()
+        identities.add(identity)
+        projected.append(projection)
+    return tuple(
+        sorted(
+            projected,
+            key=lambda item: json.dumps(
+                item,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ),
+        )
+    )
+
+
+def _canonical_docker_inventory_bytes(
+    inventory: tuple[dict[str, object], ...],
+) -> bytes:
+    return json.dumps(
+        inventory,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode()
+
+
 def _validated_candidate_evidence(
     args: argparse.Namespace,
     head: str,
@@ -1200,7 +1435,7 @@ def _validated_candidate_evidence(
         args.docker_inventory_file,
         kind="docker",
         head=head,
-        schema_version="night-voyager.dra-live-docker-evidence.v1",
+        schema_version="night-voyager.dra-live-docker-evidence.v2",
         exact_keys=frozenset(
             {
                 "schema_version",
@@ -1318,65 +1553,43 @@ def _validated_candidate_evidence(
         except (OSError, subprocess.CalledProcessError) as error:
             raise ValueError("candidate_evidence_provenance_invalid") from error
 
-    def capture_inventory() -> dict[str, str]:
+    def capture_inventory() -> dict[str, tuple[dict[str, object], ...]]:
         return {
-            name: run(command)
+            name: _canonical_docker_inventory(name, run(command))
             for name, command in DOCKER_INVENTORY_COMMANDS
         }
 
-    def inventory_hashes(observed: dict[str, str]) -> dict[str, str]:
+    def inventory_hashes(
+        observed: dict[str, tuple[dict[str, object], ...]],
+    ) -> dict[str, str]:
         return {
-            name: hashlib.sha256(value.encode()).hexdigest()
+            name: hashlib.sha256(_canonical_docker_inventory_bytes(value)).hexdigest()
             for name, value in observed.items()
         }
 
-    def json_lines(raw: str) -> tuple[dict[str, object], ...]:
-        values: list[dict[str, object]] = []
-        for line in raw.splitlines():
-            if not line:
-                continue
-            try:
-                value: object = json.loads(line)
-            except json.JSONDecodeError as error:
-                raise ValueError(
-                    "candidate_evidence_provenance_invalid"
-                ) from error
-            if not isinstance(value, dict):
-                raise ValueError("candidate_evidence_provenance_invalid")
-            values.append(cast(dict[str, object], value))
-        return tuple(values)
-
     def retained_resources(
-        observed: dict[str, str],
+        observed: dict[str, tuple[dict[str, object], ...]],
     ) -> dict[str, object]:
         images = tuple(
             sorted(
-                f"{item.get('Repository')}:{item.get('Tag')}"
-                for item in json_lines(observed["images"])
-                if isinstance(item.get("Repository"), str)
-                and isinstance(item.get("Tag"), str)
-                and item.get("Repository") != "<none>"
-                and item.get("Tag") != "<none>"
+                f"{item['repository']}:{item['tag']}"
+                for item in observed["images"]
+                if item["repository"] != "<none>" and item["tag"] != "<none>"
             )
         )
-        volumes = tuple(
-            sorted(
-                str(item["Name"])
-                for item in json_lines(observed["volumes"])
-                if isinstance(item.get("Name"), str)
-            )
-        )
+        volumes = tuple(sorted(cast(str, item["name"]) for item in observed["volumes"]))
         return {
             "images": list(images),
             "volumes": list(volumes),
             "build_cache_sha256": hashlib.sha256(
-                observed["build_cache"].encode()
+                _canonical_docker_inventory_bytes(observed["build_cache"])
             ).hexdigest(),
         }
 
     before_inventory = capture_inventory()
     if any(
-        CANDIDATE_TASK_PROJECT in value
+        CANDIDATE_TASK_PROJECT
+        in _canonical_docker_inventory_bytes(value).decode()
         for value in before_inventory.values()
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
@@ -1400,7 +1613,8 @@ def _validated_candidate_evidence(
     docker_vm_available_kib = int(vm_match.group(1))
     after_inventory = capture_inventory()
     if any(
-        CANDIDATE_TASK_PROJECT in value
+        CANDIDATE_TASK_PROJECT
+        in _canonical_docker_inventory_bytes(value).decode()
         for value in after_inventory.values()
     ):
         raise ValueError("candidate_evidence_provenance_invalid")
