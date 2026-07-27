@@ -24,6 +24,29 @@ if [ "$mode" = "inside-downgrade" ]; then
     exit 0
 fi
 
+if [ "$mode" = "inside-revision" ]; then
+    uv run alembic downgrade base
+    uv run alembic upgrade 0011
+    uv run alembic current | grep '0011'
+    uv run --no-editable python scripts/seed_demo.py
+    uv run alembic upgrade 0012
+    uv run alembic current | grep '0012'
+    uv run alembic downgrade 0011
+    NIGHT_VOYAGER_REVISION_MIGRATION_PHASE=safe-0011 PYTEST_ADDOPTS= \
+        uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_migration.py::test_safe_downgrade_restores_exact_0011_surface
+    uv run alembic upgrade 0012
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_migration.py \
+        tests/integration/planning/test_revision_authority.py
+    NIGHT_VOYAGER_REVISION_MIGRATION_PHASE=refusal PYTEST_ADDOPTS= \
+        uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_migration.py::test_refused_downgrade_preserves_exact_catalog_and_rows
+    uv run alembic current | grep '0012'
+    exit 0
+fi
+
 case "$suite" in
     repository|http|authority) ;;
     *)
@@ -93,6 +116,8 @@ run_project() {
 if [ "$suite" = "authority" ]; then
     run_project "${base_project}-authority" db-test \
         sh scripts/run_collaboration_db_tests.sh inside authority
+    run_project "${base_project}-revision" db-test \
+        sh scripts/run_collaboration_db_tests.sh inside-revision
     for scenario in empty unrelated table-history audit-history idempotency-history; do
         run_project "${base_project}-${scenario}" \
             --env "NIGHT_VOYAGER_COLLABORATION_DOWNGRADE_SCENARIO=$scenario" \

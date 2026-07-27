@@ -119,7 +119,10 @@ ROLLBACK_BOUNDARIES = (
     RollbackBoundary(
         name="confirm_revision",
         decision=VerificationDecision.CONFIRM,
-        pattern=(r"VALUES\(p_org,resolved_case,next_revision,1,next_student,next_family\);"),
+        pattern=(
+            r"VALUES\(p_org,resolved_case,next_revision,1,next_student,next_family,"
+            r"request_review\.id,current_run\.id\);"
+        ),
     ),
     RollbackBoundary(
         name="confirm_existing_fact_refs",
@@ -482,6 +485,16 @@ async def _ensure_runtime_fixture(fixture: RuntimeFixture) -> None:
                 )
                 await connection.execute(
                     text(
+                        "INSERT INTO app.source_pack_entries VALUES("
+                        ":org,:pack,1,'51000000-0000-0000-0000-000000000521',"
+                        "'revision.txt',repeat('5',64),current_date,'synthetic','synthetic',"
+                        "'https://example.invalid/revision',365,'synthetic_public',"
+                        "'synthetic_demo','[]'::jsonb,'[]'::jsonb) ON CONFLICT DO NOTHING"
+                    ),
+                    {"org": ORG_ID, "pack": PACK_ID},
+                )
+                await connection.execute(
+                    text(
                         "INSERT INTO app.planning_runs("
                         "organization_id,id,case_id,case_revision,source_pack_id,"
                         "source_pack_version,policy_version,evidence_projection_sha256,"
@@ -494,6 +507,30 @@ async def _ensure_runtime_fixture(fixture: RuntimeFixture) -> None:
                         "run": RUN_ID,
                         "case": fixture.case_id,
                         "pack": PACK_ID,
+                    },
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE app.planning_runs SET state='review_required',"
+                        "reason_code='revision_requested',output_sha256=repeat('7',64) "
+                        "WHERE organization_id=:org AND id=:run"
+                    ),
+                    {"org": ORG_ID, "run": RUN_ID},
+                )
+                await _set_context(connection, ADVISOR_ID, "advisor")
+                await connection.execute(
+                    text(
+                        "SELECT * FROM app.review_planning_run("
+                        ":org,:actor,:case,:run,2,'request_revision',"
+                        "'80000000-0000-0000-0000-000000000522','[]'::jsonb,"
+                        "'[]'::jsonb,'bounded revision request',NULL,'{}'::jsonb,"
+                        "current_date,repeat('8',64),repeat('9',64))"
+                    ),
+                    {
+                        "org": ORG_ID,
+                        "actor": ADVISOR_ID,
+                        "case": fixture.case_id,
+                        "run": RUN_ID,
                     },
                 )
     finally:
@@ -589,7 +626,7 @@ def _assert_pre_failure_authority(
     assert len(snapshot["memory_candidate_verifications"]) == 1
     assert len(snapshot["confirmed_facts"]) == 1
     assert len(snapshot["case_revision_confirmed_fact_refs"]) == 1
-    assert len(snapshot["audit_events"]) == 1
+    assert len(snapshot["audit_events"]) == (2 if fixture.planning else 1)
     assert len(snapshot["planning_runs"]) == (1 if fixture.planning else 0)
 
 

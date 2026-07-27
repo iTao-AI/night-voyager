@@ -9,23 +9,23 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
@@ -33,7 +33,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run alembic current | grep '0007'
     uv run --no-editable python scripts/seed_demo.py --without-skills
     uv run alembic upgrade head
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -59,18 +59,18 @@ if [ "${1:-}" = "inside" ]; then
         exit 1
     fi
     grep -q 'refusing downgrade: DRA strict candidate history exists' "$downgrade_output"
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     uv run --no-editable python scripts/seed_demo.py --without-collaboration
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0011'
+    uv run alembic current | grep '0012'
     exit 0
 fi
 
@@ -135,6 +135,53 @@ if [ "${1:-}" = "inside-skill-seed-replay" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-planning-revision" ]; then
+    suite=${2:-}
+    case "$suite" in
+        authority|worker|projection) ;;
+        *)
+            echo "unknown planning revision suite: ${suite:-<missing>}" >&2
+            exit 2
+            ;;
+    esac
+    uv run alembic upgrade head
+    uv run alembic current
+    uv run --no-editable python scripts/seed_demo.py
+    case "$suite" in
+        authority)
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+                tests/integration/planning/test_revision_migration.py \
+                tests/integration/planning/test_revision_authority.py \
+                tests/integration/collaboration/test_postgres_collaboration.py \
+                tests/integration/collaboration/test_collaboration_concurrency.py \
+                tests/integration/collaboration/test_collaboration_rollback.py \
+                tests/integration/decision/test_postgres_decision.py \
+                tests/integration/decision/test_http_decision.py \
+                tests/integration/tasks/test_planning_start_authority.py \
+                tests/integration/tasks/test_postgres_tasks.py \
+                tests/integration/tasks/test_worker_authority.py \
+                tests/integration/planning/test_revision_query_plan.py \
+                tests/security/test_rls_isolation.py
+            ;;
+        worker)
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+                tests/integration/tasks/test_planning_start_authority.py \
+                tests/integration/tasks/test_postgres_tasks.py \
+                tests/integration/tasks/test_worker.py \
+                tests/integration/tasks/test_worker_authority.py \
+                tests/integration/tasks/test_mixed_downgrade.py
+            ;;
+        projection)
+            PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+                tests/integration/connected_demo/test_postgres_read_models.py \
+                tests/integration/connected_demo/test_http_read_models.py \
+                tests/integration/planning/test_revision_query_plan.py
+            ;;
+    esac
+    uv run alembic current | grep '0012'
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -147,11 +194,11 @@ trap cleanup EXIT INT TERM
 
 run_lane() {
     ACTIVE_PROJECT_NAME=$1
-    mode=$2
+    shift
     export ACTIVE_PROJECT_NAME
     COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test config --quiet
     COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test run --rm --build db-test \
-        sh scripts/run_db_tests.sh "$mode"
+        sh scripts/run_db_tests.sh "$@"
     COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test down --volumes --remove-orphans --rmi local
     ACTIVE_PROJECT_NAME=
 }
@@ -168,6 +215,25 @@ fi
 
 if [ "${1:-}" = "dra-strict-migration" ]; then
     run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" inside-dra-strict-migration
+    exit 0
+fi
+
+if [ "${1:-}" = "planning-revision" ]; then
+    suite=${2:-}
+    case "$suite" in
+        authority|worker|projection)
+            run_lane "${BASE_PROJECT_NAME}-${suite}" inside-planning-revision "$suite"
+            ;;
+        all)
+            run_lane "${BASE_PROJECT_NAME}-authority" inside-planning-revision authority
+            run_lane "${BASE_PROJECT_NAME}-worker" inside-planning-revision worker
+            run_lane "${BASE_PROJECT_NAME}-projection" inside-planning-revision projection
+            ;;
+        *)
+            echo "unknown planning revision suite: ${suite:-<missing>}" >&2
+            exit 2
+            ;;
+    esac
     exit 0
 fi
 

@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+REVISION_MIGRATION = (
+    ROOT / "migrations/versions/0012_versioned_planning_revision.py"
+)
 MIGRATION = ROOT / "migrations/versions/0007_conversation_and_memory.py"
 TABLES = (
     "collaboration_threads",
@@ -224,6 +227,19 @@ def test_fact_and_revision_validation_rejects_sql_null_and_string_schema_version
     ) in verification
     assert "(p_value->>'elasticity_bps')::numeric NOT BETWEEN 0 AND 2500" in validation
     assert "(p_value->>'elasticity_bps')::integer" not in validation
+
+
+def test_revision_migration_owns_fact_confirmation_lineage_atomically() -> None:
+    assert REVISION_MIGRATION.is_file()
+    source = REVISION_MIGRATION.read_text(encoding="utf-8")
+    for fragment in (
+        "revision_requested_by_review_id",
+        "superseded_planning_run_id",
+        "student_case_revisions_one_planning_successor",
+    ):
+        assert fragment in source
+    assert "UPDATE app.planning_runs" in source
+    assert "SET is_current=false" in source
 
 
 def test_existing_candidate_projection_uses_terminal_stale_expired_precedence() -> None:

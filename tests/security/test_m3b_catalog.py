@@ -4,6 +4,10 @@ MIGRATION = (
     Path(__file__).resolve().parents[2]
     / "migrations/versions/0003_advisor_family_decision.py"
 ).read_text(encoding="utf-8")
+REVISION_MIGRATION = (
+    Path(__file__).resolve().parents[2]
+    / "migrations/versions/0012_versioned_planning_revision.py"
+)
 
 TABLES = (
     "student_case_participants",
@@ -65,3 +69,13 @@ def test_m3b_downgrade_restores_m3a_case_states_and_drops_only_m3b() -> None:
     assert "CHECK (state IN ('intake','planning','advisor_review'))" in MIGRATION
     assert "DROP TABLE app.organizations" not in MIGRATION
     assert "DROP TABLE app.planning_runs" not in MIGRATION
+
+
+def test_revision_review_authority_has_unique_request_and_fixed_lock_order() -> None:
+    assert REVISION_MIGRATION.is_file()
+    source = REVISION_MIGRATION.read_text(encoding="utf-8")
+    assert "advisor_reviews_one_request_revision_per_run" in source
+    review = source.split("_BASE_REVIEW =", 1)[1].split("_BASE_CONFIRM =", 1)[0]
+    assert review.rindex("FROM app.student_cases") < review.rindex(
+        "FROM app.planning_runs"
+    )
