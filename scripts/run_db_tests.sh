@@ -168,8 +168,7 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
                 tests/integration/tasks/test_planning_start_authority.py \
                 tests/integration/tasks/test_postgres_tasks.py \
                 tests/integration/tasks/test_worker.py \
-                tests/integration/tasks/test_worker_authority.py \
-                tests/integration/tasks/test_mixed_downgrade.py
+                tests/integration/tasks/test_worker_authority.py
             ;;
         projection)
             PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
@@ -221,12 +220,17 @@ fi
 if [ "${1:-}" = "planning-revision" ]; then
     suite=${2:-}
     case "$suite" in
-        authority|worker|projection)
+        authority|projection)
             run_lane "${BASE_PROJECT_NAME}-${suite}" inside-planning-revision "$suite"
+            ;;
+        worker)
+            run_lane "${BASE_PROJECT_NAME}-worker" inside-planning-revision worker
+            run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade
             ;;
         all)
             run_lane "${BASE_PROJECT_NAME}-authority" inside-planning-revision authority
             run_lane "${BASE_PROJECT_NAME}-worker" inside-planning-revision worker
+            run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade
             run_lane "${BASE_PROJECT_NAME}-projection" inside-planning-revision projection
             ;;
         *)

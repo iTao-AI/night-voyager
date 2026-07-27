@@ -257,6 +257,43 @@ def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_hist
     assert 'parser.add_argument("--without-collaboration", action="store_true")' in seed
 
 
+def test_planning_revision_worker_isolates_historical_mixed_downgrade() -> None:
+    runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    inside_start = runner.index('if [ "${1:-}" = "inside-planning-revision" ]')
+    inside_end = runner.index("\nBASE_PROJECT_NAME=", inside_start)
+    inside = runner[inside_start:inside_end]
+    worker_suite = inside[inside.index("        worker)") : inside.index("        projection)")]
+    assert "tests/integration/tasks/test_mixed_downgrade.py" not in worker_suite
+
+    outer_start = runner.index(
+        'if [ "${1:-}" = "planning-revision" ]', inside_end
+    )
+    outer_end = runner.index('\nif [ -n "${1:-}" ]', outer_start)
+    outer = runner[outer_start:outer_end]
+    worker = outer[outer.index("        worker)") : outer.index("        all)")]
+    worker_authority = (
+        'run_lane "${BASE_PROJECT_NAME}-worker" inside-planning-revision worker'
+    )
+    mixed_downgrade = (
+        'run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade'
+    )
+    assert worker.index(worker_authority) < worker.index(mixed_downgrade)
+
+    all_suites = outer[outer.index("        all)") :]
+    authority = (
+        'run_lane "${BASE_PROJECT_NAME}-authority" inside-planning-revision authority'
+    )
+    projection = (
+        'run_lane "${BASE_PROJECT_NAME}-projection" inside-planning-revision projection'
+    )
+    assert (
+        all_suites.index(authority)
+        < all_suites.index(worker_authority)
+        < all_suites.index(mixed_downgrade)
+        < all_suites.index(projection)
+    )
+
+
 def test_http_suite_crosses_the_real_identity_postgres_and_rls_boundary() -> None:
     http_test = (ROOT / "tests/integration/collaboration/test_http_collaboration.py").read_text(
         encoding="utf-8"

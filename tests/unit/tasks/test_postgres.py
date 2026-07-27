@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from sqlalchemy.exc import DBAPIError
 
 from night_voyager.tasks.errors import TaskConflictError
-from night_voyager.tasks.postgres import PostgresTaskRepository
+from night_voyager.tasks.postgres import (
+    PostgresTaskRepository,
+    PostgresWorkerTaskRepository,
+)
 
 
 class SqlStateOrigin(Exception):
@@ -42,3 +47,10 @@ def test_unknown_database_failure_is_not_disguised_as_idempotency_conflict() -> 
         )
 
     assert captured.value is unknown
+
+
+def test_worker_load_uses_only_the_task_owned_revision_predecessor() -> None:
+    load_source = inspect.getsource(PostgresWorkerTaskRepository.load)
+
+    assert "t.predecessor_planning_run_id AS supersedes_run_id" in load_source
+    assert "SELECT r.id FROM app.planning_runs" not in load_source

@@ -29,6 +29,7 @@ from night_voyager.planning.synthetic_postgres import (
 )
 from night_voyager.skills.models import SkillKey, SkillRuntimePin
 from night_voyager.skills.registry import SkillRuntimeRegistry
+from night_voyager.tasks.errors import TaskLeaseLostError
 from night_voyager.tasks.postgres import postgres_worker_repository_factory
 from night_voyager.tasks.worker import TaskWorker
 from tests.integration.dra.test_postgres_mixed_snapshot import approved_pack
@@ -247,6 +248,8 @@ async def test_worker_claim_loads_confirmed_revision_two_budget_and_exact_task_p
     verification_id = UUID("a9300000-0000-0000-0000-000000000407")
     fact_id = UUID("a9400000-0000-0000-0000-000000000407")
     task_id = UUID("a8000000-0000-0000-0000-000000000407")
+    predecessor_run_id = UUID("a7000000-0000-0000-0000-000000000407")
+    request_review_id = UUID("a8500000-0000-0000-0000-000000000407")
     budget = {
         "schema_version": 1,
         "currency": "CNY",
@@ -297,6 +300,34 @@ async def test_worker_claim_loads_confirmed_revision_two_budget_and_exact_task_p
                     "parent": PARENT,
                 },
             )
+            await connection.execute(
+                text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+                {"org": ORG, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.planning_runs("
+                    "organization_id,id,case_id,case_revision,source_pack_id,"
+                    "source_pack_version,policy_version,evidence_projection_sha256,"
+                    "state,is_current) VALUES("
+                    ":org,:run,:case,1,:pack,1,'m3a-policy-v1',repeat('a',64),"
+                    "'synthesizing',true)"
+                ),
+                {
+                    "org": ORG,
+                    "run": predecessor_run_id,
+                    "case": case_id,
+                    "pack": PACK,
+                },
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.planning_runs SET state='review_required',"
+                    "reason_code='revision_requested',output_sha256=repeat('b',64) "
+                    "WHERE organization_id=:org AND id=:run"
+                ),
+                {"org": ORG, "run": predecessor_run_id},
+            )
 
         async with api.begin() as connection:
             for name, value in (
@@ -308,6 +339,30 @@ async def test_worker_claim_loads_confirmed_revision_two_budget_and_exact_task_p
                     text("SELECT set_config(:name,:value,true)"),
                     {"name": name, "value": value},
                 )
+            requested = (
+                await connection.execute(
+                    text(
+                        "SELECT * FROM app.review_planning_run("
+                        ":org,:actor,:case,:run,1,'request_revision',:review,"
+                        "'[]'::jsonb,'[]'::jsonb,'bounded revision request',"
+                        "NULL,'{}'::jsonb,current_date,:key_hash,:request_hash)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "case": case_id,
+                        "run": predecessor_run_id,
+                        "review": request_review_id,
+                        "key_hash": hashlib.sha256(
+                            b"revision-two-review-key"
+                        ).hexdigest(),
+                        "request_hash": hashlib.sha256(
+                            b"revision-two-review-request"
+                        ).hexdigest(),
+                    },
+                )
+            ).mappings().one()
+            assert requested.case_state == "planning"
             await connection.execute(
                 text(
                     "SELECT * FROM app.create_collaboration_thread("
@@ -424,23 +479,37 @@ async def test_worker_claim_loads_confirmed_revision_two_budget_and_exact_task_p
         assert task_input.request.case_id == case_id
         assert task_input.request.case_revision == 2
         assert task_input.skill_pin == skill_pin()
+        assert task_input.supersedes_run_id == predecessor_run_id
         snapshot = await PersistedSyntheticSnapshotRepository(worker_sessions).load(
             task_input.request
         )
         assert snapshot.case.case_id == case_id
         assert snapshot.case.revision == 2
         assert snapshot.case.family.budget.model_dump(mode="json") == budget
+        await expire_lease(task_id)
+        restarted = TaskWorker(
+            factory,
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(worker_sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(worker_sessions)
+                ),
+            ),
+            registry(),
+            worker_id="worker-revision-two-reclaim",
+        )
+        assert await restarted.run_once() is True
         async with factory() as repository:
-            assert (
+            with pytest.raises(TaskLeaseLostError):
                 await repository.fail(
                     claim,
                     worker_id,
-                    "test_complete",
+                    "stale_worker",
                     retryable=False,
                     fallback_used=False,
                 )
-                == "failed"
-            )
 
         async with migrator.begin() as connection:
             await connection.execute(
@@ -453,24 +522,40 @@ async def test_worker_claim_loads_confirmed_revision_two_budget_and_exact_task_p
                         "SELECT c.state AS case_state,c.current_revision,t.state AS task_state,"
                         "t.case_revision,t.skill_definition_id,t.skill_version_id,"
                         "t.skill_activation_event_id,t.skill_activation_sequence,"
-                        "t.runtime_binding_sha256,e.skill_definition_id AS e_definition,"
+                        "t.runtime_binding_sha256,t.predecessor_planning_run_id,"
+                        "r.supersedes_run_id,e.skill_definition_id AS e_definition,"
                         "e.skill_version_id AS e_version,"
                         "e.skill_activation_event_id AS e_activation,"
                         "e.skill_activation_sequence AS e_sequence,"
-                        "e.runtime_binding_sha256 AS e_binding,e.status AS execution_status "
+                        "e.runtime_binding_sha256 AS e_binding,e.status AS execution_status,"
+                        "(SELECT count(*) FROM app.agent_executions execution_row "
+                        "WHERE execution_row.organization_id=t.organization_id "
+                        "AND execution_row.task_id=t.id) AS execution_count,"
+                        "(SELECT count(*) FROM app.planning_runs run_row "
+                        "WHERE run_row.organization_id=t.organization_id "
+                        "AND run_row.supersedes_run_id=t.predecessor_planning_run_id) "
+                        "AS successor_count "
                         "FROM app.student_cases c JOIN app.agent_tasks t "
                         "ON t.organization_id=c.organization_id AND t.case_id=c.id "
                         "JOIN app.agent_executions e ON e.organization_id=t.organization_id "
-                        "AND e.task_id=t.id WHERE c.organization_id=:org AND c.id=:case "
+                        "AND e.task_id=t.id AND e.status='succeeded' "
+                        "JOIN app.planning_runs r ON r.organization_id=t.organization_id "
+                        "AND r.id=t.result_planning_run_id "
+                        "WHERE c.organization_id=:org AND c.id=:case "
                         "AND t.id=:task"
                     ),
                     {"org": ORG, "case": case_id, "task": task_id},
                 )
             ).mappings().one()
         expected_pin = tuple(skill_pin().model_dump().values())
-        assert row.case_state == "planning"
+        assert row.case_state == "advisor_review"
         assert row.current_revision == row.case_revision == 2
-        assert row.task_state == row.execution_status == "failed"
+        assert row.task_state == "waiting_review"
+        assert row.execution_status == "succeeded"
+        assert row.predecessor_planning_run_id == predecessor_run_id
+        assert row.supersedes_run_id == predecessor_run_id
+        assert row.execution_count == 2
+        assert row.successor_count == 1
         assert tuple(
             row[name]
             for name in (
