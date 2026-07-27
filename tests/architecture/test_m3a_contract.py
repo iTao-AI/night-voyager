@@ -52,7 +52,14 @@ def test_m3a_migration_remains_0002_with_eleven_tables() -> None:
 
 def test_pure_planning_modules_do_not_import_framework_or_adapter_packages() -> None:
     forbidden = {"fastapi", "sqlalchemy", "asyncpg", "alembic"}
-    pure_modules = ("models.py", "policy.py", "transitions.py", "hashing.py", "ports.py")
+    pure_modules = (
+        "models.py",
+        "policy.py",
+        "revision.py",
+        "transitions.py",
+        "hashing.py",
+        "ports.py",
+    )
     for module in pure_modules:
         path = ROOT / "src/night_voyager/planning" / module
         tree = ast.parse(path.read_text(encoding="utf-8"))

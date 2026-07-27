@@ -141,6 +141,18 @@ def test_create_command_accepts_only_the_two_planning_operations() -> None:
         )
 
 
+def test_create_command_does_not_accept_revision_predecessor_authority() -> None:
+    assert "predecessor_planning_run_id" not in CreateTaskCommand.model_fields
+
+    with pytest.raises(ValidationError):
+        CreateTaskCommand.model_validate(
+            {
+                **create_command().model_dump(),
+                "predecessor_planning_run_id": UUID(int=901),
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_create_projects_only_public_fields_and_injects_task_id() -> None:
     repository = FakeRepository()
