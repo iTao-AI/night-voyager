@@ -40,6 +40,7 @@ CASE_TABLE_PREDICATES = (
     ("student_cases", "id"),
     ("student_case_revisions", "case_id"),
     ("planning_runs", "case_id"),
+    ("agent_tasks", "case_id"),
     ("collaboration_threads", "case_id"),
     ("message_events", "case_id"),
     ("memory_candidates", "case_id"),
@@ -533,6 +534,26 @@ async def _ensure_runtime_fixture(fixture: RuntimeFixture) -> None:
                         "run": RUN_ID,
                     },
                 )
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.agent_tasks("
+                        "organization_id,id,case_id,operation,case_revision,"
+                        "source_pack_id,source_pack_version,policy_version,"
+                        "request_sha256,created_by_actor_id,state,attempt_count,"
+                        "lease_generation,result_planning_run_id) VALUES("
+                        ":org,'80000000-0000-0000-0000-000000000522',:case,"
+                        "'generate_planning_run_v1',2,:pack,1,'m3a-policy-v1',"
+                        "repeat('a',64),:actor,'waiting_review',1,1,:run) "
+                        "ON CONFLICT (organization_id,id) DO NOTHING"
+                    ),
+                    {
+                        "org": ORG_ID,
+                        "case": fixture.case_id,
+                        "pack": PACK_ID,
+                        "actor": ADVISOR_ID,
+                        "run": RUN_ID,
+                    },
+                )
     finally:
         await api.dispose()
         await migrator.dispose()
@@ -628,6 +649,7 @@ def _assert_pre_failure_authority(
     assert len(snapshot["case_revision_confirmed_fact_refs"]) == 1
     assert len(snapshot["audit_events"]) == (2 if fixture.planning else 1)
     assert len(snapshot["planning_runs"]) == (1 if fixture.planning else 0)
+    assert len(snapshot["agent_tasks"]) == (1 if fixture.planning else 0)
 
 
 async def _invoke_injected_boundary(

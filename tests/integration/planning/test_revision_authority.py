@@ -11,10 +11,26 @@ from uuid import UUID
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncEngine,
+    async_sessionmaker,
+    create_async_engine,
+)
 
+from night_voyager.adapters.deterministic_planning import DeterministicPlanningAdapter
+from night_voyager.adapters.governed_mixed_planning import GovernedMixedPlanningAdapter
+from night_voyager.adapters.router import PlanningAdapterRouter
 from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
+from night_voyager.planning.synthetic_postgres import (
+    PersistedSyntheticSnapshotRepository,
+)
+from night_voyager.skills.models import SkillKey
+from night_voyager.skills.registry import SkillRuntimeRegistry
+from night_voyager.tasks.postgres import postgres_worker_repository_factory
+from night_voyager.tasks.worker import TaskWorker
 
 pytestmark = pytest.mark.database
 
@@ -120,6 +136,120 @@ async def seed_reviewable_case(
             ),
             {"org": ORG, "run": revision_fixture.run_id},
         )
+
+
+async def seed_reviewable_case_from_worker(
+    migrator: AsyncEngine,
+    api: AsyncEngine,
+    worker: AsyncEngine,
+    revision_fixture: RevisionFixture,
+) -> tuple[RevisionFixture, UUID]:
+    planning_input = validate_planning_fixture().planning_input
+    task_id = revision_fixture.identifier("8f000000")
+    registry = SkillRuntimeRegistry.load_packaged()
+    skill_manifest = registry.get(
+        SkillKey.STUDY_DESTINATION_COMPARE, "1.0.0"
+    ).model_dump_json(exclude_none=True)
+    async with migrator.begin() as connection:
+        await set_context(connection, ADVISOR, "advisor")
+        await connection.execute(
+            text(
+                "SELECT app.publish_case_revision("
+                ":org,:case,NULL,1,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+            ),
+            {
+                "org": ORG,
+                "case": revision_fixture.case_id,
+                "student": json.dumps(
+                    planning_input.case.student.model_dump(mode="json")
+                ),
+                "family": json.dumps(
+                    planning_input.case.family.model_dump(mode="json")
+                ),
+            },
+        )
+        await connection.execute(
+            text(
+                "SELECT app.seed_case_participants("
+                ":org,:case,:advisor,:student,:parent)"
+            ),
+            {
+                "org": ORG,
+                "case": revision_fixture.case_id,
+                "advisor": ADVISOR,
+                "student": STUDENT,
+                "parent": PARENT,
+            },
+        )
+        await connection.execute(
+            text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+            {"org": ORG, "case": revision_fixture.case_id},
+        )
+    async with api.begin() as connection:
+        await set_context(connection, ADVISOR, "advisor")
+        await connection.execute(
+            text(
+                "SELECT * FROM app.create_agent_task("
+                ":org,:actor,:case,:task,'generate_planning_run_v1',1,"
+                ":pack,1,'m3a-policy-v1',CAST(:manifest AS jsonb),"
+                ":request_hash,:key_hash)"
+            ),
+            {
+                "org": ORG,
+                "actor": ADVISOR,
+                "case": revision_fixture.case_id,
+                "task": task_id,
+                "pack": PACK,
+                "manifest": skill_manifest,
+                "request_hash": digest(
+                    f"worker-seed-request-{revision_fixture.suffix}"
+                ),
+                "key_hash": digest(f"worker-seed-key-{revision_fixture.suffix}"),
+            },
+        )
+    worker_sessions = async_sessionmaker(worker, expire_on_commit=False)
+    runner = TaskWorker(
+        postgres_worker_repository_factory(worker_sessions),
+        PlanningAdapterRouter(
+            synthetic=DeterministicPlanningAdapter(
+                PersistedSyntheticSnapshotRepository(worker_sessions)
+            ),
+            mixed=GovernedMixedPlanningAdapter(
+                PostgresMixedPlanningRepository(worker_sessions)
+            ),
+        ),
+        registry,
+        worker_id=f"revision-authority-{revision_fixture.suffix}",
+    )
+    assert await runner.run_once() is True
+    async with migrator.begin() as connection:
+        await set_context(connection, ADVISOR, "advisor")
+        row = (
+            await connection.execute(
+                text(
+                    "SELECT t.state,t.result_planning_run_id,r.state AS run_state,"
+                    "r.is_current FROM app.agent_tasks t JOIN app.planning_runs r "
+                    "ON r.organization_id=t.organization_id "
+                    "AND r.id=t.result_planning_run_id "
+                    "WHERE t.organization_id=:org AND t.id=:task"
+                ),
+                {"org": ORG, "task": task_id},
+            )
+        ).mappings().one()
+    assert dict(row) == {
+        "state": "waiting_review",
+        "result_planning_run_id": row["result_planning_run_id"],
+        "run_state": "review_required",
+        "is_current": True,
+    }
+    return (
+        RevisionFixture(
+            suffix=revision_fixture.suffix,
+            case_id=revision_fixture.case_id,
+            run_id=row["result_planning_run_id"],
+        ),
+        task_id,
+    )
 
 
 async def request_revision(
@@ -250,6 +380,45 @@ async def confirm_candidate(
     return dict(result.mappings().one())
 
 
+async def insert_blocking_task(
+    connection: AsyncConnection,
+    revision_fixture: RevisionFixture,
+    *,
+    state: str,
+    result_run_id: UUID | None = None,
+) -> UUID:
+    task_id = revision_fixture.identifier("8f000000")
+    leased = state in {"leased", "running"}
+    await set_context(connection, ADVISOR, "advisor")
+    await connection.execute(
+        text(
+            "INSERT INTO app.agent_tasks("
+            "organization_id,id,case_id,operation,case_revision,source_pack_id,"
+            "source_pack_version,policy_version,request_sha256,created_by_actor_id,"
+            "state,attempt_count,lease_owner,lease_generation,lease_expires_at,"
+            "result_planning_run_id) VALUES("
+            ":org,:task,:case,'generate_planning_run_v1',1,:pack,1,"
+            "'m3a-policy-v1',:request,:actor,:state,:attempt,:owner,:generation,"
+            "CASE WHEN :leased THEN clock_timestamp()+interval '5 minutes' END,:run)"
+        ),
+        {
+            "org": ORG,
+            "task": task_id,
+            "case": revision_fixture.case_id,
+            "pack": PACK,
+            "request": digest(f"blocking-task-{revision_fixture.suffix}-{state}"),
+            "actor": ADVISOR,
+            "state": state,
+            "attempt": 1 if leased or state == "waiting_review" else 0,
+            "owner": "blocking-worker" if leased else None,
+            "generation": 1 if leased else 0,
+            "leased": leased,
+            "run": result_run_id,
+        },
+    )
+    return task_id
+
+
 @pytest.mark.asyncio
 async def test_request_revision_then_confirmation_creates_exact_atomic_lineage() -> None:
     target = fixture(1201)
@@ -330,6 +499,196 @@ async def test_request_revision_then_confirmation_creates_exact_atomic_lineage()
         }
         assert current is False
         assert refs == 1
+    finally:
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_reviewed_waiting_task_allows_exact_revision_lineage_without_task_mutation() -> None:
+    target = fixture(1210)
+    review_id = target.identifier("8a000000")
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    try:
+        target, task_id = await seed_reviewable_case_from_worker(
+            migrator, api, worker, target
+        )
+        async with api.begin() as connection:
+            await request_revision(
+                connection,
+                target,
+                review_id=review_id,
+                key_hash=digest("reviewed-waiting-review-key"),
+                request_hash=digest("reviewed-waiting-review-request"),
+            )
+            candidate_id = await prepare_preferred_countries_candidate(
+                connection, target
+            )
+            confirmation = await confirm_candidate(
+                connection,
+                target,
+                candidate_id,
+                key_label="reviewed-waiting",
+            )
+        assert confirmation["result_revision"] == 2
+        async with migrator.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT t.state,t.result_planning_run_id,r.is_current,"
+                        "revision_row.revision_requested_by_review_id,"
+                        "revision_row.superseded_planning_run_id "
+                        "FROM app.agent_tasks t JOIN app.planning_runs r "
+                        "ON r.organization_id=t.organization_id "
+                        "AND r.id=t.result_planning_run_id "
+                        "JOIN app.student_case_revisions revision_row "
+                        "ON revision_row.organization_id=t.organization_id "
+                        "AND revision_row.case_id=t.case_id "
+                        "AND revision_row.revision=2 "
+                        "WHERE t.organization_id=:org AND t.id=:task"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+            ).mappings().one()
+        assert dict(row) == {
+            "state": "waiting_review",
+            "result_planning_run_id": target.run_id,
+            "is_current": False,
+            "revision_requested_by_review_id": review_id,
+            "superseded_planning_run_id": target.run_id,
+        }
+    finally:
+        await worker.dispose()
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.parametrize("state", ("queued", "leased", "running"))
+@pytest.mark.asyncio
+async def test_incomplete_task_states_still_block_reviewed_revision_publication(
+    state: str,
+) -> None:
+    target = fixture({"queued": 1211, "leased": 1212, "running": 1213}[state])
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        await seed_reviewable_case(migrator, target)
+        async with api.begin() as connection:
+            await request_revision(
+                connection,
+                target,
+                review_id=target.identifier("8a000000"),
+                key_hash=digest(f"{state}-review-key"),
+                request_hash=digest(f"{state}-review-request"),
+            )
+        async with migrator.begin() as connection:
+            await insert_blocking_task(connection, target, state=state)
+        async with api.begin() as connection:
+            candidate_id = await prepare_preferred_countries_candidate(
+                connection, target
+            )
+            with pytest.raises(
+                DBAPIError, match="active task blocks revision publication"
+            ):
+                await confirm_candidate(
+                    connection, target, candidate_id, key_label=f"{state}-blocked"
+                )
+    finally:
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_waiting_review_without_exact_request_authority_still_blocks() -> None:
+    target = fixture(1214)
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        await seed_reviewable_case(migrator, target)
+        async with api.begin() as connection:
+            await request_revision(
+                connection,
+                target,
+                review_id=target.identifier("8a000000"),
+                key_hash=digest("waiting-no-review-reject-key"),
+                request_hash=digest("waiting-no-review-reject-request"),
+                action="reject",
+            )
+        async with migrator.begin() as connection:
+            await insert_blocking_task(
+                connection,
+                target,
+                state="waiting_review",
+                result_run_id=target.run_id,
+            )
+        async with api.begin() as connection:
+            candidate_id = await prepare_preferred_countries_candidate(
+                connection, target
+            )
+            with pytest.raises(
+                DBAPIError, match="active task blocks revision publication"
+            ):
+                await confirm_candidate(
+                    connection, target, candidate_id, key_label="waiting-no-review"
+                )
+    finally:
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_waiting_review_for_another_run_still_blocks_exact_review() -> None:
+    target = fixture(1215)
+    other_run = target.identifier("7b000000")
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        await seed_reviewable_case(migrator, target)
+        async with api.begin() as connection:
+            await request_revision(
+                connection,
+                target,
+                review_id=target.identifier("8a000000"),
+                key_hash=digest("other-run-review-key"),
+                request_hash=digest("other-run-review-request"),
+            )
+        async with migrator.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
+            await connection.execute(
+                text(
+                    "INSERT INTO app.planning_runs("
+                    "organization_id,id,case_id,case_revision,source_pack_id,"
+                    "source_pack_version,policy_version,evidence_projection_sha256,"
+                    "state,reason_code,output_sha256,is_current) VALUES("
+                    ":org,:run,:case,1,:pack,1,'m3a-policy-v1',repeat('c',64),"
+                    "'review_required','historical_run',repeat('d',64),false)"
+                ),
+                {
+                    "org": ORG,
+                    "run": other_run,
+                    "case": target.case_id,
+                    "pack": PACK,
+                },
+            )
+            await insert_blocking_task(
+                connection,
+                target,
+                state="waiting_review",
+                result_run_id=other_run,
+            )
+        async with api.begin() as connection:
+            candidate_id = await prepare_preferred_countries_candidate(
+                connection, target
+            )
+            with pytest.raises(
+                DBAPIError, match="active task blocks revision publication"
+            ):
+                await confirm_candidate(
+                    connection, target, candidate_id, key_label="waiting-other-run"
+                )
     finally:
         await api.dispose()
         await migrator.dispose()

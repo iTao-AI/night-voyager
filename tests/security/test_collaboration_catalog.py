@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -191,6 +192,30 @@ def test_confirmation_validates_and_materializes_the_complete_strict_revision() 
         "current_revision.family_preferences->'budget'",
     ):
         assert fragment in verification
+
+
+def test_revision_confirmation_freezes_the_exact_reviewed_waiting_task_exemption() -> None:
+    verification = runpy.run_path(str(REVISION_MIGRATION))["CONFIRM_SQL"]
+    assert isinstance(verification, str)
+
+    assert verification.index(
+        "SELECT * INTO request_review FROM app.advisor_reviews"
+    ) < verification.index("SELECT 1 FROM app.agent_tasks task")
+    for fragment in (
+        "review_row.organization_id=p_org",
+        "review_row.case_id=resolved_case",
+        "review_row.case_revision=p_expected_revision",
+        "review_row.planning_run_id=current_run.id",
+        "review_row.action='request_revision'",
+        "task.state IN ('queued','leased','running','waiting_review')",
+        "task.state='waiting_review'",
+        "task.case_revision=p_expected_revision",
+        "task.result_planning_run_id=current_run.id",
+        "request_review.id IS NOT NULL",
+        "active task blocks revision publication",
+    ):
+        assert fragment in verification
+    assert "UPDATE app.agent_tasks" not in verification
 
 
 def test_mutations_and_reads_fail_closed_on_null_or_changed_canonical_inputs() -> None:
