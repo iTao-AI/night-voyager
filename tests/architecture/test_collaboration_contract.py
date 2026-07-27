@@ -213,7 +213,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
     full_seed = runner.index(
         "uv run --no-editable python scripts/seed_demo.py\n", final_upgrade
     )
-    refusal = runner.rindex("uv run alembic downgrade 0007")
+    refusal = runner.index("uv run alembic downgrade 0011", full_seed)
     assert (
         upgrade_0008
         < skill_empty_downgrade
@@ -230,7 +230,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         < full_seed
         < refusal
     )
-    assert "refusing downgrade: DRA strict candidate history exists" in runner
+    assert "refusing downgrade: planning revision lineage exists" in runner
 
 
 def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_history() -> None:
