@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -21,6 +22,7 @@ from night_voyager.dra.live_models import (
     DraLiveFailurePhase,
     DraLiveRunIntentV1,
     DraLiveScenarioV1,
+    DraLiveScenarioV2,
     DraSelectedEvidenceV1,
 )
 from night_voyager.dra.models import DRA_FIXTURE_SHA256, DRA_LIVE_COMMIT
@@ -227,3 +229,48 @@ def test_evaluation_models_are_closed_and_derive_status() -> None:
         AssertionResultV1.model_validate(
             assertions[0].model_dump() | {"assertion_id": "unknown_assertion"}
         )
+
+
+def test_live_scenario_v2_reconciles_strict_profile_and_canonical_artifact() -> None:
+    scenario_path = Path("fixtures/dra/live-closure-scenario-v2.json")
+    scenario = DraLiveScenarioV2.model_validate_json(scenario_path.read_bytes())
+    assert scenario.schema_version == "night-voyager.dra-live-closure-scenario.v2"
+    assert scenario.producer.profile_id == "generic-strict-citation"
+    assert scenario.request_identity.profile_id == "generic-strict-citation"
+    assert scenario.status.profile_id == "generic-strict-citation"
+    assert scenario.profile_manifest.profile_id == "generic-strict-citation"
+    assert scenario.profile_manifest.profile_version == "1"
+    assert scenario.producer.proof_schema == "dra.strict-citation-profile.v1"
+    source_url = scenario.evidence[0].source_url
+    assert source_url is not None
+    assert source_url in scenario.canonical_artifact.content
+
+
+@pytest.mark.parametrize(
+    ("path", "value", "code"),
+    [
+        (("status", "profile_id"), "generic", "dra_strict_profile_identity_invalid"),
+        (
+            ("profile_manifest", "profile_version"),
+            "2",
+            "dra_strict_profile_identity_invalid",
+        ),
+        (
+            ("local_proof_schema",),
+            "dra.downstream-consumer.v1",
+            "dra_strict_proof_schema_invalid",
+        ),
+    ],
+)
+def test_live_scenario_v2_rejects_profile_or_proof_mismatch(
+    path: tuple[str, ...], value: str, code: str
+) -> None:
+    payload = json.loads(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_text(encoding="utf-8")
+    )
+    target = payload
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    with pytest.raises(ValidationError, match=code):
+        DraLiveScenarioV2.model_validate(payload)

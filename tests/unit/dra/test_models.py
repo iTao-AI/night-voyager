@@ -6,7 +6,15 @@ import pytest
 from pydantic import ValidationError
 
 from night_voyager.dra.fixtures import build_fixture_candidate_import, load_dra_fixture
-from night_voyager.dra.models import DraCanonicalArtifactInputV1, DraRunProjectionV1
+from night_voyager.dra.models import (
+    DRA_LIVE_COMMIT,
+    DraCanonicalArtifactInputV1,
+    DraObservedProfileManifestV1,
+    DraProducerPinV2,
+    DraRunProjectionV1,
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
+)
 
 
 def test_fixture_exposes_only_strict_canonical_projection() -> None:
@@ -95,3 +103,65 @@ def test_candidate_requires_exactly_one_promotable_public_evidence() -> None:
     payload = candidate.model_copy(update={"evidence": (*candidate.evidence, second)})
     with pytest.raises(ValidationError, match="dra_promotable_evidence_cardinality"):
         type(candidate).model_validate(payload.model_dump(exclude_computed_fields=True))
+
+
+def test_strict_producer_pin_is_exact_commit_identity() -> None:
+    pin = DraProducerPinV2()
+    assert pin.model_dump(mode="json") == {
+        "schema": "night-voyager.dra-producer-pin.v2",
+        "repository": "https://github.com/iTao-AI/decision-research-agent",
+        "ref_kind": "commit",
+        "ref": "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "commit": "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "consumer_contract_schema": "dra.downstream-consumer.v1",
+        "consumer_fixture_sha256": (
+            "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
+        ),
+        "profile_id": "generic-strict-citation",
+        "profile_version": "1",
+        "proof_schema": "dra.strict-citation-profile.v1",
+    }
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("ref_kind", "release"),
+        ("ref", "v0.1.6"),
+        ("commit", DRA_LIVE_COMMIT),
+        ("profile_id", "generic"),
+        ("profile_version", "2"),
+        ("proof_schema", "dra.downstream-consumer.v1"),
+    ],
+)
+def test_strict_producer_pin_rejects_mixed_identity(
+    field: str, value: str
+) -> None:
+    with pytest.raises(ValidationError):
+        DraProducerPinV2.model_validate(
+            DraProducerPinV2().model_dump() | {field: value}
+        )
+
+
+def test_request_identity_v2_reconciles_requested_and_observed_profile() -> None:
+    identity = DraStrictConsumerIdentityV2(
+        schema_version="night-voyager.dra-strict-consumer-identity.v2",
+        producer=DraProducerPinV2(),
+        request=DraRunRequestIdentityV2(
+            schema_version="night-voyager.dra-run-request-identity.v2",
+            profile_id="generic-strict-citation",
+            request_sha256="a" * 64,
+        ),
+        observed_profile=DraObservedProfileManifestV1(
+            schema_version="night-voyager.dra-observed-profile-manifest.v1",
+            profile_id="generic-strict-citation",
+            profile_version="1",
+        ),
+    )
+    assert identity.request.profile_id == identity.producer.profile_id
+    assert identity.observed_profile.profile_version == identity.producer.profile_version
+
+    payload = identity.model_dump(mode="json")
+    payload["observed_profile"]["profile_version"] = "2"
+    with pytest.raises(ValidationError):
+        DraStrictConsumerIdentityV2.model_validate(payload)

@@ -27,7 +27,11 @@ from night_voyager.dra.models import (
     DRA_LIVE_TAG_OBJECT,
     BoundedId,
     BoundedText,
+    DraCanonicalArtifactInputV1,
+    DraObservedProfileManifestV1,
     DraProducerPinV1,
+    DraProducerPinV2,
+    DraRunRequestIdentityV2,
     FrozenModel,
     Sha256,
     SourceAttestationV1,
@@ -228,6 +232,130 @@ class DraLiveScenarioV1(FrozenModel):
             if evidence.evidence_id in identifiers:
                 raise ValueError("dra_evidence_ids_not_unique")
             identifiers.add(evidence.evidence_id)
+        if self.expected_non_claims != (
+            "provider_quality",
+            "source_truth",
+            "production_readiness",
+            "admissions_outcome",
+        ):
+            raise ValueError("dra_expected_non_claims_invalid")
+        return self
+
+
+class DraLiveStatusEnvelopeV2(FrozenModel):
+    run_id: BoundedId
+    thread_id: BoundedId
+    segment_id: BoundedId
+    profile_id: Literal["generic-strict-citation"]
+    state_version: Annotated[int, Field(gt=0)]
+    execution_status: Literal["completed"]
+    review_status: Literal["not_required"]
+    delivery_status: Literal["ready"]
+    failure_cause: None = None
+
+
+class DraLiveScenarioV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-closure-scenario.v2"]
+    scenario_id: Literal["dra-strict-citation-live-closure-v2"]
+    producer: DraProducerPinV2
+    request_identity: DraRunRequestIdentityV2
+    profile_manifest: DraObservedProfileManifestV1
+    local_proof_schema: str
+    max_attempts: Literal[0]
+    status: DraLiveStatusEnvelopeV2
+    result: DraLiveResultIdentityV1
+    canonical_artifact: DraCanonicalArtifactInputV1
+    evidence: tuple[DraLiveEvidenceEnvelopeV1, ...] = Field(
+        min_length=1, max_length=100
+    )
+    expected_non_claims: tuple[
+        Literal[
+            "provider_quality",
+            "source_truth",
+            "production_readiness",
+            "admissions_outcome",
+        ],
+        ...,
+    ]
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_mismatched_raw_identity(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        payload = cast(dict[str, object], value)
+        producer = payload.get("producer")
+        status = payload.get("status")
+        profile_manifest = payload.get("profile_manifest")
+        if (
+            not isinstance(producer, dict)
+            or not isinstance(status, dict)
+            or not isinstance(profile_manifest, dict)
+        ):
+            return payload
+        producer_payload = cast(dict[str, object], producer)
+        status_payload = cast(dict[str, object], status)
+        manifest_payload = cast(dict[str, object], profile_manifest)
+        if (
+            status_payload.get("profile_id") != producer_payload.get("profile_id")
+            or manifest_payload.get("profile_id")
+            != producer_payload.get("profile_id")
+            or manifest_payload.get("profile_version")
+            != producer_payload.get("profile_version")
+        ):
+            raise ValueError("dra_strict_profile_identity_invalid")
+        if payload.get("local_proof_schema") != producer_payload.get("proof_schema"):
+            raise ValueError("dra_strict_proof_schema_invalid")
+        return payload
+
+    @model_validator(mode="after")
+    def exact_strict_contract(self) -> Self:
+        if (
+            self.status.profile_id != self.producer.profile_id
+            or self.request_identity.profile_id != self.producer.profile_id
+            or self.profile_manifest.profile_id != self.producer.profile_id
+            or self.profile_manifest.profile_version != self.producer.profile_version
+        ):
+            raise ValueError("dra_strict_profile_identity_invalid")
+        if self.local_proof_schema != self.producer.proof_schema:
+            raise ValueError("dra_strict_proof_schema_invalid")
+        if self.status.run_id != self.result.run_id:
+            raise ValueError("dra_run_identity_mismatch")
+        artifact = self.canonical_artifact
+        result_artifact = self.result.artifact
+        if (
+            artifact.artifact_id != result_artifact.artifact_id
+            or artifact.kind != result_artifact.kind
+            or artifact.media_type != result_artifact.media_type
+            or artifact.byte_length != result_artifact.byte_length
+            or artifact.content_hash != result_artifact.sha256
+        ):
+            raise ValueError("dra_artifact_identity_mismatch")
+        cited: list[DraLiveEvidenceEnvelopeV1] = []
+        identifiers: set[str] = set()
+        for evidence in self.evidence:
+            if (
+                evidence.run_id != self.status.run_id
+                or evidence.segment_id != self.status.segment_id
+            ):
+                raise ValueError("dra_evidence_ownership_invalid")
+            if evidence.evidence_id in identifiers:
+                raise ValueError("dra_evidence_ids_not_unique")
+            identifiers.add(evidence.evidence_id)
+            if evidence.citation_status == "cited":
+                cited.append(evidence)
+        if len(cited) != 1:
+            raise ValueError("dra_cited_evidence_cardinality_invalid")
+        selected = cited[0]
+        source_url = selected.source_url
+        if source_url is None:
+            raise ValueError("dra_cited_evidence_cardinality_invalid")
+        validate_raw_public_https_url(source_url)
+        if (
+            selected.source_identity != source_url
+            or source_url not in artifact.content
+        ):
+            raise ValueError("dra_cited_source_not_in_canonical_artifact")
         if self.expected_non_claims != (
             "provider_quality",
             "source_truth",

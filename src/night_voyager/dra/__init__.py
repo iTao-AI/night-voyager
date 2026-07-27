@@ -1,1 +1,1 @@
-"""Night Voyager-owned Decision Research Agent consumer contracts."""
+"""Night Voyager-owned versioned Decision Research Agent consumer contracts."""

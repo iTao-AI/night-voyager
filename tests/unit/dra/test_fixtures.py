@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from night_voyager.dra.fixtures import (
     DRA_FIXTURE,
@@ -15,6 +16,7 @@ from night_voyager.dra.fixtures import (
     load_dra_fixture,
     load_live_closure_scenario,
 )
+from night_voyager.dra.live_models import DraLiveScenarioV2
 
 
 def test_copied_fixture_and_manifest_pin_exact_releases() -> None:
@@ -65,3 +67,18 @@ def test_live_scenario_is_fixed_path_and_keeps_fixture_immutable() -> None:
 def test_live_scenario_loader_has_no_arbitrary_path_argument() -> None:
     with pytest.raises(TypeError):
         load_live_closure_scenario(Path("/tmp/untrusted.json"))  # type: ignore[call-arg]
+
+
+def test_strict_live_scenario_fixture_is_closed_and_keeps_v1_fixture_immutable() -> None:
+    v1_before = DRA_LIVE_SCENARIO.read_bytes()
+    strict_path = Path("fixtures/dra/live-closure-scenario-v2.json")
+    scenario = DraLiveScenarioV2.model_validate_json(strict_path.read_bytes())
+    assert scenario.producer.ref_kind == "commit"
+    assert scenario.producer.profile_id == "generic-strict-citation"
+    assert scenario.profile_manifest.profile_version == "1"
+    assert DRA_LIVE_SCENARIO.read_bytes() == v1_before
+
+    payload = json.loads(strict_path.read_text(encoding="utf-8"))
+    payload["credential"] = "forbidden"
+    with pytest.raises(ValidationError):
+        DraLiveScenarioV2.model_validate(payload)
