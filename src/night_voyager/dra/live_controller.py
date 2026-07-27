@@ -11,26 +11,33 @@ from typing import cast
 
 from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.errors import DraAuthorizationError, DraConflictError
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV4
 from night_voyager.dra.live_models import (
     DraArtifactIdentityV1,
     DraCandidateReadinessReceiptV2,
     DraCaptureIntentV2,
+    DraCaptureIntentV3,
     DraCaptureReceiptV1,
+    DraCaptureReceiptV2,
     DraControllerStopReceiptV1,
     DraDecisionInputV1,
     DraDecisionReceiptV1,
     DraInspectionRequiredReceiptV1,
+    DraInspectionRequiredReceiptV2,
     DraLiveFailurePhase,
     DraLiveRunEnvelopeV1,
     DraLiveScenarioV2,
     DraMutationAmbiguousReceiptV1,
     DraPollRecoveryReceiptV1,
+    DraPollRecoveryReceiptV2,
     DraPreflightReceiptV2,
+    DraPreflightReceiptV3,
     DraPromotionInputV1,
     DraPromotionReceiptV1,
     DraProviderAttemptEvidenceV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
+    DraReconciliationRequiredReceiptV2,
     DraReviewInputV1,
     DraReviewReceiptV1,
     DraStageStateV1,
@@ -85,10 +92,15 @@ from night_voyager.identity.models import ActorContext, ActorRole
 
 CaptureResult = (
     DraInspectionRequiredReceiptV1
+    | DraInspectionRequiredReceiptV2
     | DraReconciliationRequiredReceiptV1
+    | DraReconciliationRequiredReceiptV2
     | DraPollRecoveryReceiptV1
+    | DraPollRecoveryReceiptV2
     | DraControllerStopReceiptV1
 )
+CaptureIntent = DraCaptureIntentV2 | DraCaptureIntentV3
+PreflightReceipt = DraPreflightReceiptV2 | DraPreflightReceiptV3
 
 
 class _SystemClock:
@@ -103,30 +115,30 @@ class _AsyncioSleeper:
 
 @dataclass(frozen=True, slots=True)
 class CaptureLiveCommand:
-    intent: DraCaptureIntentV2
-    preflight: DraPreflightReceiptV2
+    intent: CaptureIntent
+    preflight: PreflightReceipt
     query_path: Path
 
 
 @dataclass(frozen=True, slots=True)
 class ReconcileCreateCommand:
-    intent: DraCaptureIntentV2
-    preflight: DraPreflightReceiptV2
-    prior: DraReconciliationRequiredReceiptV1
+    intent: CaptureIntent
+    preflight: PreflightReceipt
+    prior: DraReconciliationRequiredReceiptV1 | DraReconciliationRequiredReceiptV2
     query_path: Path
     exact_replay_authorized: bool
 
 
 @dataclass(frozen=True, slots=True)
 class ResumePollCommand:
-    intent: DraCaptureIntentV2
-    prior: DraPollRecoveryReceiptV1
+    intent: CaptureIntent
+    prior: DraPollRecoveryReceiptV1 | DraPollRecoveryReceiptV2
 
 
 @dataclass(frozen=True, slots=True)
 class SelectAndImportCommand:
-    intent: DraCaptureIntentV2
-    inspection: DraInspectionRequiredReceiptV1
+    intent: CaptureIntent
+    inspection: DraInspectionRequiredReceiptV1 | DraInspectionRequiredReceiptV2
     declared_raw_url: str
     context: ActorContext
 
@@ -573,33 +585,72 @@ class DraLiveCaptureController:
         self._strict_scenario = strict_scenario
         self._observed_profile: DraObservedProfileManifestV1 | None = None
 
-    async def _load_strict_profile(
-        self,
-    ) -> DraObservedProfileManifestV1:
+    def _strict_identity(self, intent: CaptureIntent) -> DraStrictConsumerIdentityV2 | None:
+        if isinstance(intent, DraCaptureIntentV3):
+            return intent.capture.consumer_identity
         scenario = self._strict_scenario
         if scenario is None:
-            raise ValueError("dra_strict_scenario_required")
-        observed = await self._transport.get_profile(
-            scenario.producer.profile_id
+            return None
+        return DraStrictConsumerIdentityV2(
+            schema_version="night-voyager.dra-strict-consumer-identity.v2",
+            producer=scenario.producer,
+            request=DraRunRequestIdentityV2(
+                schema_version="night-voyager.dra-run-request-identity.v2",
+                profile_id=scenario.producer.profile_id,
+                request_sha256=intent.capture.request.effective_sha256,
+            ),
+            observed_profile=scenario.profile_manifest,
         )
-        if observed != scenario.profile_manifest:
+
+    async def _load_strict_profile(self, intent: CaptureIntent) -> DraObservedProfileManifestV1:
+        identity = self._strict_identity(intent)
+        if identity is None:
+            raise ValueError("dra_strict_identity_required")
+        observed = await self._transport.get_profile(identity.producer.profile_id)
+        if observed != identity.observed_profile:
             raise ValueError("dra_strict_profile_identity_invalid")
         self._observed_profile = observed
         return observed
 
-    def _strict_request_identity(
-        self, intent: DraCaptureIntentV2
-    ) -> DraRunRequestIdentityV2:
-        scenario = self._strict_scenario
-        if scenario is None:
-            raise ValueError("dra_strict_scenario_required")
-        return DraRunRequestIdentityV2(
-            schema_version="night-voyager.dra-run-request-identity.v2",
-            profile_id=scenario.producer.profile_id,
-            request_sha256=intent.capture.request.effective_sha256,
-        )
+    def _strict_request_identity(self, intent: CaptureIntent) -> DraRunRequestIdentityV2:
+        identity = self._strict_identity(intent)
+        if identity is None:
+            raise ValueError("dra_strict_identity_required")
+        return identity.request
 
-    def preflight(self, intent: DraCaptureIntentV2) -> DraPreflightReceiptV2:
+    def preflight(self, intent: CaptureIntent) -> PreflightReceipt:
+        if isinstance(intent, DraCaptureIntentV3):
+            capture = intent.capture
+            readiness = self._store.read_receipt(
+                "readiness.json",
+                DraLiveCandidateReadinessV4,
+            )
+            readiness_identity = self._store.write_receipt(
+                "readiness.json",
+                readiness,
+            )
+            if (
+                readiness_identity.sha256 != capture.candidate_readiness_sha256
+                or readiness.consumer_identity != capture.consumer_identity
+                or readiness.evidence_bundle != capture.readiness_evidence
+            ):
+                raise ValueError("candidate_readiness_identity_invalid")
+            intent_receipt = self._store.write_receipt("intent.json", intent)
+            receipt = DraPreflightReceiptV3(
+                intent_sha256=intent.intent_sha256,
+                attempt_id=intent.attempt_id,
+                intent_receipt=intent_receipt,
+                candidate_readiness_receipt=readiness_identity,
+                effective_request_sha256=capture.request.effective_sha256,
+                scenario_id=capture.scenario_id,
+                consumer_identity=capture.consumer_identity,
+                readiness_evidence=capture.readiness_evidence,
+                advisor_actor_identity_sha256=(capture.advisor_actor_identity_sha256),
+                tenant_identity_sha256=capture.tenant_identity_sha256,
+                receipt_root_id=capture.receipt_root_id,
+            )
+            self._store.write_receipt("preflight.json", receipt)
+            return receipt
         capture = intent.capture
         readiness = self._store.read_receipt(
             "readiness.json",
@@ -633,9 +684,33 @@ class DraLiveCaptureController:
 
     def _validate_preflight(
         self,
-        intent: DraCaptureIntentV2,
-        preflight: DraPreflightReceiptV2,
+        intent: CaptureIntent,
+        preflight: PreflightReceipt,
     ) -> DraReceiptIdentityV1:
+        if isinstance(intent, DraCaptureIntentV3):
+            if not isinstance(preflight, DraPreflightReceiptV3):
+                raise ValueError("preflight_identity_invalid")
+            stored_intent = self._store.read_receipt("intent.json", DraCaptureIntentV3)
+            stored_preflight = self._store.read_receipt("preflight.json", DraPreflightReceiptV3)
+            readiness = self._store.read_receipt("readiness.json", DraLiveCandidateReadinessV4)
+            readiness_identity = self._store.write_receipt("readiness.json", readiness)
+            if (
+                stored_intent != intent
+                or stored_preflight != preflight
+                or preflight.intent_sha256 != intent.intent_sha256
+                or preflight.attempt_id != intent.attempt_id
+                or preflight.candidate_readiness_receipt != readiness_identity
+                or readiness_identity.sha256 != intent.capture.candidate_readiness_sha256
+                or readiness.consumer_identity != intent.capture.consumer_identity
+                or readiness.evidence_bundle != intent.capture.readiness_evidence
+                or preflight.consumer_identity != intent.capture.consumer_identity
+                or preflight.readiness_evidence != intent.capture.readiness_evidence
+                or preflight.effective_request_sha256 != intent.capture.request.effective_sha256
+            ):
+                raise ValueError("preflight_identity_invalid")
+            return self._store.write_receipt("preflight.json", preflight)
+        if not isinstance(preflight, DraPreflightReceiptV2):
+            raise ValueError("preflight_identity_invalid")
         stored_intent = self._store.read_receipt("intent.json", DraCaptureIntentV2)
         stored_preflight = self._store.read_receipt(
             "preflight.json",
@@ -708,7 +783,7 @@ class DraLiveCaptureController:
 
     def _stop(
         self,
-        intent: DraCaptureIntentV2,
+        intent: CaptureIntent,
         *,
         phase: DraLiveFailurePhase,
         public_code: str,
@@ -747,23 +822,37 @@ class DraLiveCaptureController:
         try:
             await self._transport.health()
             profile_id = "generic"
-            if self._strict_scenario is not None:
-                await self._load_strict_profile()
-                profile_id = self._strict_scenario.producer.profile_id
+            strict_identity = self._strict_identity(command.intent)
+            if strict_identity is not None:
+                await self._load_strict_profile(command.intent)
+                profile_id = strict_identity.producer.profile_id
             acceptance = await self._transport.create_run(
                 {"profile_id": profile_id, "query": query},
                 create_key,
             )
         except DraAmbiguousOutcome:
-            receipt = DraReconciliationRequiredReceiptV1(
-                schema_version=("night-voyager.dra-live-reconciliation-required.v1"),
-                intent_sha256=command.intent.intent_sha256,
-                attempt_id=command.intent.attempt_id,
-                intent_receipt=command.preflight.intent_receipt,
-                create_key=create_key,
-                provider_attempt_consumed=True,
-                permitted_next_command="reconcile-create",
-            )
+            if isinstance(command.intent, DraCaptureIntentV3):
+                receipt: DraReconciliationRequiredReceiptV1 | DraReconciliationRequiredReceiptV2 = (
+                    DraReconciliationRequiredReceiptV2(
+                        intent_sha256=command.intent.intent_sha256,
+                        attempt_id=command.intent.attempt_id,
+                        intent_receipt=command.preflight.intent_receipt,
+                        consumer_identity=command.intent.capture.consumer_identity,
+                        readiness_evidence=command.intent.capture.readiness_evidence,
+                        create_key=create_key,
+                        provider_attempt_consumed=True,
+                    )
+                )
+            else:
+                receipt = DraReconciliationRequiredReceiptV1(
+                    schema_version=("night-voyager.dra-live-reconciliation-required.v1"),
+                    intent_sha256=command.intent.intent_sha256,
+                    attempt_id=command.intent.attempt_id,
+                    intent_receipt=command.preflight.intent_receipt,
+                    create_key=create_key,
+                    provider_attempt_consumed=True,
+                    permitted_next_command="reconcile-create",
+                )
             self._store.write_receipt("reconciliation-required.json", receipt)
             return receipt
         except DraTransportConflict:
@@ -797,7 +886,11 @@ class DraLiveCaptureController:
         try:
             stored_prior = self._store.read_receipt(
                 "reconciliation-required.json",
-                DraReconciliationRequiredReceiptV1,
+                (
+                    DraReconciliationRequiredReceiptV2
+                    if isinstance(command.intent, DraCaptureIntentV3)
+                    else DraReconciliationRequiredReceiptV1
+                ),
             )
         except LiveStorageError as error:
             raise ValueError("reconciliation_identity_invalid") from error
@@ -807,6 +900,17 @@ class DraLiveCaptureController:
             or command.prior.attempt_id != command.intent.attempt_id
             or command.prior.create_key != expected_key
             or command.prior.intent_receipt != command.preflight.intent_receipt
+            or (
+                isinstance(command.intent, DraCaptureIntentV3)
+                and (
+                    not isinstance(
+                        command.prior,
+                        DraReconciliationRequiredReceiptV2,
+                    )
+                    or command.prior.consumer_identity != command.intent.capture.consumer_identity
+                    or command.prior.readiness_evidence != command.intent.capture.readiness_evidence
+                )
+            )
         ):
             raise ValueError("reconciliation_identity_invalid")
         preflight_identity = self._validate_preflight(command.intent, command.preflight)
@@ -820,9 +924,10 @@ class DraLiveCaptureController:
         try:
             await self._transport.health()
             profile_id = "generic"
-            if self._strict_scenario is not None:
-                await self._load_strict_profile()
-                profile_id = self._strict_scenario.producer.profile_id
+            strict_identity = self._strict_identity(command.intent)
+            if strict_identity is not None:
+                await self._load_strict_profile(command.intent)
+                profile_id = strict_identity.producer.profile_id
             acceptance = await self._transport.create_run(
                 {"profile_id": profile_id, "query": query},
                 expected_key,
@@ -844,7 +949,7 @@ class DraLiveCaptureController:
 
     async def _poll_to_inspection(
         self,
-        intent: DraCaptureIntentV2,
+        intent: CaptureIntent,
         preflight_identity: DraReceiptIdentityV1,
         acceptance: DraRunAcceptanceV1,
     ) -> CaptureResult:
@@ -852,7 +957,8 @@ class DraLiveCaptureController:
         deadline = self._clock.monotonic() + intent.capture.deadline_seconds
         while True:
             try:
-                if self._strict_scenario is None:
+                strict_identity = self._strict_identity(intent)
+                if strict_identity is None:
                     run: (
                         DraLiveRunEnvelopeV1
                         | DraStrictLiveRunEnvelopeV2
@@ -884,7 +990,7 @@ class DraLiveCaptureController:
                 )
             try:
                 result = await self._transport.get_result(acceptance.run_id)
-                if self._strict_scenario is None:
+                if strict_identity is None:
                     if not isinstance(run, DraLiveRunEnvelopeV1):
                         raise DraLiveContractError(
                             "terminal_profile_invalid"
@@ -896,15 +1002,12 @@ class DraLiveCaptureController:
                 else:
                     if not isinstance(run, DraStrictLiveRunEnvelopeV2):
                         raise DraLiveContractError("terminal_profile_invalid")
-                    observed = (
-                        self._observed_profile
-                        or await self._load_strict_profile()
-                    )
+                    observed = self._observed_profile or await self._load_strict_profile(intent)
                     projection = project_strict_terminal_result(
                         acceptance,
                         run,
                         result,
-                        self._strict_scenario.producer,
+                        strict_identity.producer,
                         self._strict_request_identity(intent),
                         observed,
                     )
@@ -927,46 +1030,98 @@ class DraLiveCaptureController:
                     public_code="terminal_projection_invalid",
                     provider_attempt_consumed=True,
                 )
-            receipt = DraInspectionRequiredReceiptV1(
+            if isinstance(intent, DraCaptureIntentV3):
+                receipt: DraInspectionRequiredReceiptV1 | DraInspectionRequiredReceiptV2 = (
+                    DraInspectionRequiredReceiptV2(
+                        intent_sha256=intent.intent_sha256,
+                        attempt_id=intent.attempt_id,
+                        preflight_receipt=preflight_identity,
+                        consumer_identity=intent.capture.consumer_identity,
+                        readiness_evidence=intent.capture.readiness_evidence,
+                        case_id=intent.capture.case_id,
+                        expected_case_revision=intent.capture.expected_case_revision,
+                        advisor_actor_identity_sha256=(
+                            intent.capture.advisor_actor_identity_sha256
+                        ),
+                        tenant_identity_sha256=(intent.capture.tenant_identity_sha256),
+                        thread_id=acceptance.thread_id,
+                        run_id=acceptance.run_id,
+                        segment_id=acceptance.segment_id,
+                        state_version=projection.state_version,
+                        acceptance_idempotent_replay=(acceptance.idempotent_replay),
+                        artifact=artifact_identity,
+                        evidence=run.evidence,
+                        provider_attempt_consumed=True,
+                    )
+                )
+            else:
+                receipt = DraInspectionRequiredReceiptV1(
+                    intent_sha256=intent.intent_sha256,
+                    attempt_id=intent.attempt_id,
+                    preflight_receipt=preflight_identity,
+                    producer=intent.capture.producer,
+                    case_id=intent.capture.case_id,
+                    expected_case_revision=(intent.capture.expected_case_revision),
+                    advisor_actor_identity_sha256=(intent.capture.advisor_actor_identity_sha256),
+                    tenant_identity_sha256=(intent.capture.tenant_identity_sha256),
+                    thread_id=acceptance.thread_id,
+                    run_id=acceptance.run_id,
+                    segment_id=acceptance.segment_id,
+                    state_version=projection.state_version,
+                    acceptance_idempotent_replay=(acceptance.idempotent_replay),
+                    artifact=artifact_identity,
+                    evidence=run.evidence,
+                    provider_attempt_consumed=True,
+                )
+            self._store.write_receipt("inspection-required.json", receipt)
+            return receipt
+        if isinstance(intent, DraCaptureIntentV3):
+            recovery_receipt: DraPollRecoveryReceiptV1 | DraPollRecoveryReceiptV2 = (
+                DraPollRecoveryReceiptV2(
+                    intent_sha256=intent.intent_sha256,
+                    attempt_id=intent.attempt_id,
+                    preflight_receipt=preflight_identity,
+                    consumer_identity=intent.capture.consumer_identity,
+                    readiness_evidence=intent.capture.readiness_evidence,
+                    thread_id=acceptance.thread_id,
+                    run_id=acceptance.run_id,
+                    segment_id=acceptance.segment_id,
+                    last_state_version=last_state_version,
+                    provider_attempt_consumed=True,
+                )
+            )
+        else:
+            recovery_receipt = DraPollRecoveryReceiptV1(
                 intent_sha256=intent.intent_sha256,
                 attempt_id=intent.attempt_id,
                 preflight_receipt=preflight_identity,
-                producer=intent.capture.producer,
-                case_id=intent.capture.case_id,
-                expected_case_revision=intent.capture.expected_case_revision,
-                advisor_actor_identity_sha256=(intent.capture.advisor_actor_identity_sha256),
-                tenant_identity_sha256=intent.capture.tenant_identity_sha256,
                 thread_id=acceptance.thread_id,
                 run_id=acceptance.run_id,
                 segment_id=acceptance.segment_id,
-                state_version=projection.state_version,
-                acceptance_idempotent_replay=acceptance.idempotent_replay,
-                artifact=artifact_identity,
-                evidence=run.evidence,
+                last_state_version=last_state_version,
                 provider_attempt_consumed=True,
             )
-            self._store.write_receipt("inspection-required.json", receipt)
-            return receipt
-        receipt = DraPollRecoveryReceiptV1(
-            intent_sha256=intent.intent_sha256,
-            attempt_id=intent.attempt_id,
-            preflight_receipt=preflight_identity,
-            thread_id=acceptance.thread_id,
-            run_id=acceptance.run_id,
-            segment_id=acceptance.segment_id,
-            last_state_version=last_state_version,
-            provider_attempt_consumed=True,
-        )
-        self._store.write_receipt("poll-recovery.json", receipt)
-        return receipt
+        self._store.write_receipt("poll-recovery.json", recovery_receipt)
+        return recovery_receipt
 
     async def resume_poll(self, command: ResumePollCommand) -> CaptureResult:
         prior = command.prior
         try:
-            stored_prior = self._store.read_receipt("poll-recovery.json", DraPollRecoveryReceiptV1)
+            stored_prior = self._store.read_receipt(
+                "poll-recovery.json",
+                (
+                    DraPollRecoveryReceiptV2
+                    if isinstance(command.intent, DraCaptureIntentV3)
+                    else DraPollRecoveryReceiptV1
+                ),
+            )
             stored_preflight = self._store.read_receipt(
                 "preflight.json",
-                DraPreflightReceiptV2,
+                (
+                    DraPreflightReceiptV3
+                    if isinstance(command.intent, DraCaptureIntentV3)
+                    else DraPreflightReceiptV2
+                ),
             )
             preflight_identity = self._validate_preflight(command.intent, stored_preflight)
         except (LiveStorageError, ValueError) as error:
@@ -976,6 +1131,14 @@ class DraLiveCaptureController:
             or prior.intent_sha256 != command.intent.intent_sha256
             or prior.attempt_id != command.intent.attempt_id
             or prior.preflight_receipt != preflight_identity
+            or (
+                isinstance(command.intent, DraCaptureIntentV3)
+                and (
+                    not isinstance(prior, DraPollRecoveryReceiptV2)
+                    or prior.consumer_identity != command.intent.capture.consumer_identity
+                    or prior.readiness_evidence != command.intent.capture.readiness_evidence
+                )
+            )
         ):
             raise ValueError("poll_recovery_identity_invalid")
         acceptance = DraRunAcceptanceV1(
@@ -992,19 +1155,31 @@ class DraLiveCaptureController:
 
     async def select_and_import(
         self, command: SelectAndImportCommand
-    ) -> DraCaptureReceiptV1 | DraControllerStopReceiptV1:
+    ) -> DraCaptureReceiptV1 | DraCaptureReceiptV2 | DraControllerStopReceiptV1:
         intent = command.intent
         inspection = command.inspection
         capture = intent.capture
         try:
             stored = self._store.read_receipt(
                 "inspection-required.json",
-                DraInspectionRequiredReceiptV1,
+                (
+                    DraInspectionRequiredReceiptV2
+                    if isinstance(intent, DraCaptureIntentV3)
+                    else DraInspectionRequiredReceiptV1
+                ),
             )
             if (
                 stored != inspection
                 or inspection.intent_sha256 != intent.intent_sha256
                 or inspection.attempt_id != intent.attempt_id
+                or (
+                    isinstance(intent, DraCaptureIntentV3)
+                    and (
+                        not isinstance(inspection, DraInspectionRequiredReceiptV2)
+                        or inspection.consumer_identity != intent.capture.consumer_identity
+                        or inspection.readiness_evidence != intent.capture.readiness_evidence
+                    )
+                )
             ):
                 raise ValueError("inspection_identity_invalid")
             context = command.context
@@ -1042,24 +1217,13 @@ class DraLiveCaptureController:
                     for row in inspection.evidence
                 ),
             )
-            if self._strict_scenario is None:
-                selected = select_cited_evidence(
-                    projection, command.declared_raw_url
-                )
+            strict_identity = self._strict_identity(intent)
+            if strict_identity is None:
+                selected = select_cited_evidence(projection, command.declared_raw_url)
             else:
                 strict_projection = DraStrictTerminalProjectionV2(
                     **projection.model_dump(exclude_computed_fields=True),
-                    consumer_identity=DraStrictConsumerIdentityV2(
-                        schema_version=(
-                            "night-voyager.dra-strict-consumer-identity.v2"
-                        ),
-                        producer=self._strict_scenario.producer,
-                        request=self._strict_request_identity(intent),
-                        observed_profile=(
-                            self._observed_profile
-                            or self._strict_scenario.profile_manifest
-                        ),
-                    ),
+                    consumer_identity=strict_identity,
                 )
                 selected = select_strict_cited_evidence(
                     strict_projection, command.declared_raw_url
@@ -1108,16 +1272,20 @@ class DraLiveCaptureController:
             ),
         )
         candidate_import: DraCandidateImportV1 | DraCandidateImportV2
-        if self._strict_scenario is None:
+        strict_identity = self._strict_identity(intent)
+        if strict_identity is None:
+            if isinstance(intent, DraCaptureIntentV3):
+                raise AssertionError("strict intent identity unavailable")
+            legacy_capture = intent.capture
             candidate_import = DraCandidateImportV1(
                 schema_version="night-voyager.dra-candidate-import.v1",
-                organization_id=capture.organization_id,
-                case_id=capture.case_id,
-                expected_case_revision=capture.expected_case_revision,
-                producer=capture.producer.pin,
+                organization_id=legacy_capture.organization_id,
+                case_id=legacy_capture.case_id,
+                expected_case_revision=(legacy_capture.expected_case_revision),
+                producer=legacy_capture.producer.pin,
                 request_identity=DraRunRequestIdentityV1(
                     profile_id="generic",
-                    request_sha256=capture.request.effective_sha256,
+                    request_sha256=(legacy_capture.request.effective_sha256),
                 ),
                 acceptance=acceptance,
                 run=run_projection,
@@ -1130,17 +1298,7 @@ class DraLiveCaptureController:
                 organization_id=capture.organization_id,
                 case_id=capture.case_id,
                 expected_case_revision=capture.expected_case_revision,
-                consumer_identity=DraStrictConsumerIdentityV2(
-                    schema_version=(
-                        "night-voyager.dra-strict-consumer-identity.v2"
-                    ),
-                    producer=self._strict_scenario.producer,
-                    request=self._strict_request_identity(intent),
-                    observed_profile=(
-                        self._observed_profile
-                        or self._strict_scenario.profile_manifest
-                    ),
-                ),
+                consumer_identity=strict_identity,
                 acceptance=acceptance,
                 run=run_projection,
                 artifact=projection.artifact,
@@ -1196,32 +1354,53 @@ class DraLiveCaptureController:
                 provider_attempt_consumed=True,
             )
         cleanup_status = "removed" if cleanup.status == "removed" else "absent"
-        receipt = DraCaptureReceiptV1(
-            schema_version="night-voyager.dra-live-capture-receipt.v1",
-            intent_sha256=intent.intent_sha256,
-            attempt_id=intent.attempt_id,
-            producer=capture.producer,
-            run_id=inspection.run_id,
-            segment_id=inspection.segment_id,
-            artifact=inspection.artifact,
-            selected_evidence=selected,
-            stage_states=(DraStageStateV1(stage="capture-live", status="completed"),),
-            provider_attempt_consumed=True,
-            provider_attempt_evidence=DraProviderAttemptEvidenceV1(
-                create_keys=(
-                    derive_stage_key(
-                        intent.intent_sha256,
-                        "create",
-                        intent.attempt_id,
-                    ),
+        provider_attempt_evidence = DraProviderAttemptEvidenceV1(
+            create_keys=(
+                derive_stage_key(
+                    intent.intent_sha256,
+                    "create",
+                    intent.attempt_id,
                 ),
-                observed_run_ids=(inspection.run_id,),
-                accepted_run_id=inspection.run_id,
             ),
-            candidate_id=view.candidate_id,
-            candidate_authority="untrusted_candidate",
-            candidate_import_key=import_key,
-            cleanup_status=cleanup_status,
+            observed_run_ids=(inspection.run_id,),
+            accepted_run_id=inspection.run_id,
         )
+        if isinstance(intent, DraCaptureIntentV3):
+            receipt: DraCaptureReceiptV1 | DraCaptureReceiptV2 = DraCaptureReceiptV2(
+                intent_sha256=intent.intent_sha256,
+                attempt_id=intent.attempt_id,
+                consumer_identity=intent.capture.consumer_identity,
+                readiness_evidence=intent.capture.readiness_evidence,
+                run_id=inspection.run_id,
+                segment_id=inspection.segment_id,
+                artifact=inspection.artifact,
+                selected_evidence=selected,
+                stage_states=(DraStageStateV1(stage="capture-live", status="completed"),),
+                provider_attempt_consumed=True,
+                provider_attempt_evidence=provider_attempt_evidence,
+                candidate_id=view.candidate_id,
+                candidate_authority="untrusted_candidate",
+                candidate_import_key=import_key,
+                cleanup_status=cleanup_status,
+            )
+        else:
+            legacy_capture = intent.capture
+            receipt = DraCaptureReceiptV1(
+                schema_version=("night-voyager.dra-live-capture-receipt.v1"),
+                intent_sha256=intent.intent_sha256,
+                attempt_id=intent.attempt_id,
+                producer=legacy_capture.producer,
+                run_id=inspection.run_id,
+                segment_id=inspection.segment_id,
+                artifact=inspection.artifact,
+                selected_evidence=selected,
+                stage_states=(DraStageStateV1(stage="capture-live", status="completed"),),
+                provider_attempt_consumed=True,
+                provider_attempt_evidence=provider_attempt_evidence,
+                candidate_id=view.candidate_id,
+                candidate_authority="untrusted_candidate",
+                candidate_import_key=import_key,
+                cleanup_status=cleanup_status,
+            )
         self._store.write_receipt("capture.json", receipt)
         return receipt

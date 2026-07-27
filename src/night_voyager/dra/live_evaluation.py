@@ -20,6 +20,7 @@ from night_voyager.dra.live_models import (
     DraLiveScenarioV1,
     DraPromotionReceiptV1,
     DraReviewReceiptV1,
+    DraStrictReadinessEvidenceV1,
     PublicCode,
 )
 from night_voyager.dra.live_storage import canonical_receipt_bytes
@@ -309,6 +310,14 @@ class DraLiveCandidateReadinessV3(FrozenModel):
             observed_profile=self.observed_profile,
         )
         return self
+
+
+class DraLiveCandidateReadinessV4(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-candidate-readiness.v4"]
+    status: Literal["INCOMPLETE_PENDING_LIVE_ACCEPTANCE"]
+    consumer_identity: DraStrictConsumerIdentityV2
+    evidence_bundle: DraStrictReadinessEvidenceV1
+    authorization: Literal["PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"]
 
 
 class DraDurableCandidateIdentityV2(FrozenModel):

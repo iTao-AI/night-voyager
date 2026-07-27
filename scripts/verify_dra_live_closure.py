@@ -45,7 +45,7 @@ from night_voyager.dra.live_controller import (
     SelectAndImportCommand,
 )
 from night_voyager.dra.live_evaluation import (
-    DraLiveCandidateReadinessV3,
+    DraLiveCandidateReadinessV4,
     DraLiveEvaluationReportV1,
     DraLiveOutcomeExpectedV1,
     evaluate_full_closure,
@@ -59,22 +59,27 @@ from night_voyager.dra.live_http import (
     NightVoyagerAuthorityGateway,
 )
 from night_voyager.dra.live_models import (
-    DraCandidateReadinessReceiptV2,
-    DraCaptureInputV2,
+    DraCaptureInputV3,
     DraCaptureIntentV2,
+    DraCaptureIntentV3,
     DraCaptureReceiptV1,
+    DraCaptureReceiptV2,
     DraControllerStopReceiptV1,
     DraDecisionInputV1,
     DraDecisionReceiptV1,
     DraInspectionRequiredReceiptV1,
+    DraInspectionRequiredReceiptV2,
     DraPollRecoveryReceiptV1,
-    DraPreflightReceiptV2,
+    DraPollRecoveryReceiptV2,
+    DraPreflightReceiptV3,
     DraPromotionInputV1,
     DraPromotionReceiptV1,
     DraReceiptIdentityV1,
     DraReconciliationRequiredReceiptV1,
+    DraReconciliationRequiredReceiptV2,
     DraReviewInputV1,
     DraReviewReceiptV1,
+    DraStrictReadinessEvidenceV1,
     compose_effective_query_v2,
     derive_identity_hash,
 )
@@ -88,7 +93,9 @@ from night_voyager.dra.live_storage import (
 )
 from night_voyager.dra.models import (
     DraCandidateImportV1,
+    DraCandidateImportV2,
     DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
 )
 from night_voyager.dra.ports import DraCandidateViewV1
 from night_voyager.identity.models import ActorContext, ActorRole
@@ -277,12 +284,23 @@ def open_receipt_root(
     return _open_root(path, create=create)
 
 
-def _read_intent(store: LiveReceiptStore) -> DraCaptureIntentV2:
-    return store.read_receipt("intent.json", DraCaptureIntentV2)
+def _read_intent(
+    store: LiveReceiptStore,
+) -> DraCaptureIntentV2 | DraCaptureIntentV3:
+    try:
+        return store.read_receipt("intent.json", DraCaptureIntentV3)
+    except LiveStorageError:
+        return store.read_receipt("intent.json", DraCaptureIntentV2)
 
 
-def _preflight_receipt(store: LiveReceiptStore) -> DraPreflightReceiptV2:
-    return store.read_receipt("preflight.json", DraPreflightReceiptV2)
+def _strict_intent(store: LiveReceiptStore) -> DraCaptureIntentV3:
+    return store.read_receipt("intent.json", DraCaptureIntentV3)
+
+
+def _strict_preflight_receipt(
+    store: LiveReceiptStore,
+) -> DraPreflightReceiptV3:
+    return store.read_receipt("preflight.json", DraPreflightReceiptV3)
 
 
 def _ensure_no_orphaned_artifact(store: LiveReceiptStore) -> None:
@@ -306,6 +324,15 @@ class _CaptureOnlyGateway:
         self,
         context: ActorContext,
         candidate_import: DraCandidateImportV1,
+        idempotency_key: str,
+    ) -> DraCandidateViewV1:
+        del context, candidate_import, idempotency_key
+        raise AssertionError("candidate import requires select-and-import")
+
+    async def import_strict_candidate(
+        self,
+        context: ActorContext,
+        candidate_import: DraCandidateImportV2,
         idempotency_key: str,
     ) -> DraCandidateViewV1:
         del context, candidate_import, idempotency_key
@@ -375,8 +402,22 @@ class _NightVoyagerCandidateGateway:
         except (httpx2.HTTPError, ValueError) as error:
             raise ValueError("candidate_import_failed") from error
 
+    async def import_strict_candidate(
+        self,
+        context: ActorContext,
+        candidate_import: DraCandidateImportV2,
+        idempotency_key: str,
+    ) -> DraCandidateViewV1:
+        return await self.import_candidate(
+            context,
+            cast(DraCandidateImportV1, candidate_import),
+            idempotency_key,
+        )
 
-def _actor_from_environment(intent: DraCaptureIntentV2) -> ActorContext:
+
+def _actor_from_environment(
+    intent: DraCaptureIntentV2 | DraCaptureIntentV3,
+) -> ActorContext:
     try:
         organization_id = UUID(
             os.environ["NIGHT_VOYAGER_LIVE_ORGANIZATION_ID"]
@@ -396,7 +437,7 @@ def _actor_from_environment(intent: DraCaptureIntentV2) -> ActorContext:
 
 
 def _live_transport(
-    intent: DraCaptureIntentV2,
+    intent: DraCaptureIntentV2 | DraCaptureIntentV3,
 ) -> Httpx2DraTransport:
     try:
         base_url = os.environ["DRA_BASE_URL"]
@@ -443,7 +484,7 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
         with _open_root(Path(args.receipt_root)) as store:
             readiness = store.read_receipt(
                 "readiness.json",
-                DraCandidateReadinessReceiptV2,
+                DraLiveCandidateReadinessV4,
             )
             readiness_identity = store.write_receipt(
                 "readiness.json",
@@ -456,18 +497,29 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
             ),
             as_json=args.json,
         )
-    if readiness.request != request:
+    if readiness.consumer_identity.request.request_sha256 != request.effective_sha256:
         _emit(
             _result_payload(
                 "terminal_failure", "candidate_readiness_invalid", "stop"
             ),
             as_json=args.json,
         )
-    scenario = load_live_closure_scenario()
-    intent = DraCaptureIntentV2.freeze(
-        DraCaptureInputV2(
+    scenario = load_strict_live_closure_scenario()
+    if (
+        readiness.consumer_identity.producer != scenario.producer
+        or readiness.consumer_identity.observed_profile != scenario.profile_manifest
+    ):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                "candidate_readiness_invalid",
+                "stop",
+            ),
+            as_json=args.json,
+        )
+    intent = DraCaptureIntentV3.freeze(
+        DraCaptureInputV3(
             scenario_id=scenario.scenario_id,
-            producer=scenario.producer,
             organization_id=UUID(args.organization_id),
             case_id=UUID(args.case_id),
             expected_case_revision=args.expected_case_revision,
@@ -478,6 +530,8 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
                 "tenant", args.organization_id
             ),
             request=request,
+            consumer_identity=readiness.consumer_identity,
+            readiness_evidence=readiness.evidence_bundle,
             candidate_readiness_sha256=readiness_identity.sha256,
             deadline_seconds=args.deadline_seconds,
             poll_seconds=args.poll_seconds,
@@ -503,9 +557,9 @@ def freeze_intent(args: argparse.Namespace) -> NoReturn:
 def preflight_live(args: argparse.Namespace) -> NoReturn:
     try:
         with _open_root(Path(args.receipt_root)) as store:
-            intent = _read_intent(store)
+            intent = _strict_intent(store)
             controller = DraLiveCaptureController(
-                ScenarioDraLiveTransport(load_live_closure_scenario()),
+                ScenarioDraLiveTransport(load_strict_live_closure_scenario()),
                 _CaptureOnlyGateway(),
                 store,
             )
@@ -537,10 +591,11 @@ def _render_capture_result(
     as_json: bool,
     provider_create_calls: int | None = None,
 ) -> NoReturn:
-    if isinstance(result, DraInspectionRequiredReceiptV1):
-        receipt = _command_receipt(
-            store, "inspection-required.json", result
-        )
+    if isinstance(
+        result,
+        (DraInspectionRequiredReceiptV1, DraInspectionRequiredReceiptV2),
+    ):
+        receipt = _command_receipt(store, "inspection-required.json", result)
         _emit(
             _result_payload(
                 "safe_pause",
@@ -553,10 +608,14 @@ def _render_capture_result(
             ),
             as_json=as_json,
         )
-    if isinstance(result, DraReconciliationRequiredReceiptV1):
-        receipt = _command_receipt(
-            store, "reconciliation-required.json", result
-        )
+    if isinstance(
+        result,
+        (
+            DraReconciliationRequiredReceiptV1,
+            DraReconciliationRequiredReceiptV2,
+        ),
+    ):
+        receipt = _command_receipt(store, "reconciliation-required.json", result)
         _emit(
             _result_payload(
                 "recoverable_incomplete",
@@ -567,7 +626,7 @@ def _render_capture_result(
             ),
             as_json=as_json,
         )
-    if isinstance(result, DraPollRecoveryReceiptV1):
+    if isinstance(result, (DraPollRecoveryReceiptV1, DraPollRecoveryReceiptV2)):
         receipt = _command_receipt(store, "poll-recovery.json", result)
         _emit(
             _result_payload(
@@ -612,9 +671,9 @@ def capture_live(args: argparse.Namespace) -> NoReturn:
         )
     try:
         with _open_root(Path(args.receipt_root)) as store:
-            intent = _read_intent(store)
+            intent = _strict_intent(store)
             transport = _live_transport(intent)
-            preflight = _preflight_receipt(store)
+            preflight = _strict_preflight_receipt(store)
             _ensure_no_orphaned_artifact(store)
             _actor_from_environment(intent)
             controller = DraLiveCaptureController(
@@ -642,13 +701,13 @@ def capture_live(args: argparse.Namespace) -> NoReturn:
 def select_and_import(args: argparse.Namespace) -> NoReturn:
     try:
         with _open_root(Path(args.receipt_root)) as store:
-            intent = _read_intent(store)
+            intent = _strict_intent(store)
             inspection = store.read_receipt(
                 "inspection-required.json",
-                DraInspectionRequiredReceiptV1,
+                DraInspectionRequiredReceiptV2,
             )
             controller = DraLiveCaptureController(
-                ScenarioDraLiveTransport(load_live_closure_scenario()),
+                ScenarioDraLiveTransport(load_strict_live_closure_scenario()),
                 _NightVoyagerCandidateGateway(dict(os.environ)),
                 store,
             )
@@ -697,7 +756,7 @@ def reconcile_create(args: argparse.Namespace) -> NoReturn:
         )
     try:
         with _open_root(Path(args.receipt_root)) as store:
-            intent = _read_intent(store)
+            intent = _strict_intent(store)
             transport = _live_transport(intent)
             _actor_from_environment(intent)
             controller = DraLiveCaptureController(
@@ -707,10 +766,10 @@ def reconcile_create(args: argparse.Namespace) -> NoReturn:
                 controller.reconcile_create(
                     ReconcileCreateCommand(
                         intent=intent,
-                        preflight=_preflight_receipt(store),
+                        preflight=_strict_preflight_receipt(store),
                         prior=store.read_receipt(
                             "reconciliation-required.json",
-                            DraReconciliationRequiredReceiptV1,
+                            DraReconciliationRequiredReceiptV2,
                         ),
                         query_path=Path(args.query_file),
                         exact_replay_authorized=True,
@@ -732,7 +791,7 @@ def reconcile_create(args: argparse.Namespace) -> NoReturn:
 def resume_poll(args: argparse.Namespace) -> NoReturn:
     try:
         with _open_root(Path(args.receipt_root)) as store:
-            intent = _read_intent(store)
+            intent = _strict_intent(store)
             transport = _live_transport(intent)
             _actor_from_environment(intent)
             controller = DraLiveCaptureController(
@@ -743,7 +802,8 @@ def resume_poll(args: argparse.Namespace) -> NoReturn:
                     ResumePollCommand(
                         intent=intent,
                         prior=store.read_receipt(
-                            "poll-recovery.json", DraPollRecoveryReceiptV1
+                            "poll-recovery.json",
+                            DraPollRecoveryReceiptV2,
                         ),
                     )
                 )
@@ -783,16 +843,25 @@ def inspect_recovery(args: argparse.Namespace) -> NoReturn:
                 next_command = "capture-live"
                 stage = "preflight"
             provider_attempt_consumed = False
+            strict = isinstance(intent, DraCaptureIntentV3)
             receipt_types = (
-                ("capture.json", DraCaptureReceiptV1),
+                (
+                    "capture.json",
+                    DraCaptureReceiptV2 if strict else DraCaptureReceiptV1,
+                ),
                 (
                     "inspection-required.json",
-                    DraInspectionRequiredReceiptV1,
+                    DraInspectionRequiredReceiptV2 if strict else DraInspectionRequiredReceiptV1,
                 ),
-                ("poll-recovery.json", DraPollRecoveryReceiptV1),
+                (
+                    "poll-recovery.json",
+                    DraPollRecoveryReceiptV2 if strict else DraPollRecoveryReceiptV1,
+                ),
                 (
                     "reconciliation-required.json",
-                    DraReconciliationRequiredReceiptV1,
+                    DraReconciliationRequiredReceiptV2
+                    if strict
+                    else DraReconciliationRequiredReceiptV1,
                 ),
                 ("failure.json", DraControllerStopReceiptV1),
             )
@@ -884,42 +953,43 @@ def _rehearsal_capture(root: Path, *, as_json: bool) -> NoReturn:
     query_path = root.parent / f"{root.name}.query.txt"
     query_path.write_bytes(REHEARSAL_QUERY)
     query_path.chmod(0o600)
-    scenario = load_live_closure_scenario()
+    scenario = load_strict_live_closure_scenario()
     _, request = compose_effective_query_v2(
         REHEARSAL_QUERY,
         logical_name=query_path.name,
     )
-    readiness = DraCandidateReadinessReceiptV2(
-        merged_main_sha="0" * 40,
-        request=request,
-        spec_sha256="1" * 64,
-        plan_sha256="2" * 64,
-        scenario_sha256="3" * 64,
-        intent_schema_sha256="4" * 64,
-        receipt_schema_sha256="5" * 64,
-        cli_sha256="6" * 64,
-        producer=scenario.producer,
-        required_hosted_checks=("compose", "frontend", "python"),
-        recovery_matrix_status="passed",
-        docker_preflight_status="passed",
-        docker_inventory_sha256="7" * 64,
-        hosted_checks_evidence_sha256="8" * 64,
-        recovery_matrix_evidence_sha256="9" * 64,
-        authority_review_evidence_sha256="a" * 64,
-        cleanup_state="clean",
-        authorization_placeholder=(
-            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    readiness = DraLiveCandidateReadinessV4(
+        schema_version=("night-voyager.dra-live-candidate-readiness.v4"),
+        status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        consumer_identity=DraStrictConsumerIdentityV2(
+            schema_version=("night-voyager.dra-strict-consumer-identity.v2"),
+            producer=scenario.producer,
+            request=DraRunRequestIdentityV2(
+                schema_version=("night-voyager.dra-run-request-identity.v2"),
+                profile_id=scenario.producer.profile_id,
+                request_sha256=request.effective_sha256,
+            ),
+            observed_profile=scenario.profile_manifest,
         ),
+        evidence_bundle=DraStrictReadinessEvidenceV1(
+            schema_version=("night-voyager.dra-strict-readiness-evidence.v1"),
+            merged_main_sha="0" * 40,
+            required_hosted_checks=("compose", "frontend", "python"),
+            docker_inventory_sha256="7" * 64,
+            hosted_checks_evidence_sha256="8" * 64,
+            recovery_matrix_evidence_sha256="9" * 64,
+            authority_review_evidence_sha256="a" * 64,
+        ),
+        authorization=("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"),
     )
     with _open_root(root) as store:
         readiness_identity = store.write_receipt(
             "readiness.json",
             readiness,
         )
-    intent = DraCaptureIntentV2.freeze(
-        DraCaptureInputV2(
+    intent = DraCaptureIntentV3.freeze(
+        DraCaptureInputV3(
             scenario_id=scenario.scenario_id,
-            producer=scenario.producer,
             organization_id=REHEARSAL_ORGANIZATION,
             case_id=REHEARSAL_CASE,
             expected_case_revision=1,
@@ -930,6 +1000,8 @@ def _rehearsal_capture(root: Path, *, as_json: bool) -> NoReturn:
                 "tenant", str(REHEARSAL_ORGANIZATION)
             ),
             request=request,
+            consumer_identity=readiness.consumer_identity,
+            readiness_evidence=readiness.evidence_bundle,
             candidate_readiness_sha256=readiness_identity.sha256,
             receipt_root_id=root.name,
             one_attempt_authorized=True,
@@ -963,18 +1035,14 @@ def _rehearsal_capture(root: Path, *, as_json: bool) -> NoReturn:
         query_path.unlink(missing_ok=True)
 
 
-def _rehearsal_resume(
-    root: Path, declared_raw_url: str, *, as_json: bool
-) -> NoReturn:
-    transport = ScenarioDraLiveTransport(load_live_closure_scenario())
+def _rehearsal_resume(root: Path, declared_raw_url: str, *, as_json: bool) -> NoReturn:
+    scenario = load_strict_live_closure_scenario()
+    transport = ScenarioDraLiveTransport(scenario)
     with _open_root(root) as store:
         intent = _read_intent(store)
-        inspection = store.read_receipt(
-            "inspection-required.json", DraInspectionRequiredReceiptV1
-        )
-        controller = DraLiveCaptureController(
-            transport, ScenarioCandidateGateway(), store
-        )
+        inspection = store.read_receipt("inspection-required.json", DraInspectionRequiredReceiptV2)
+        gateway = ScenarioCandidateGateway()
+        controller = DraLiveCaptureController(transport, gateway, store)
         result = asyncio.run(
             controller.select_and_import(
                 SelectAndImportCommand(
@@ -990,7 +1058,7 @@ def _rehearsal_resume(
                 )
             )
         )
-        if not isinstance(result, DraCaptureReceiptV1):
+        if not isinstance(result, DraCaptureReceiptV2):
             _render_capture_result(
                 result,
                 store,
@@ -1008,6 +1076,9 @@ def _rehearsal_resume(
                 candidate_authority=result.candidate_authority,
                 artifact_present=store.artifact_path() is not None,
                 provider_create_calls=transport.create_calls,
+                candidate_import_schema_version=(
+                    gateway.last_import.schema_version if gateway.last_import is not None else None
+                ),
             ),
             as_json=as_json,
         )
@@ -1856,9 +1927,7 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
     if supplied_readiness:
         try:
             readiness_bytes = Path(supplied_readiness).read_bytes()
-            readiness = DraLiveCandidateReadinessV3.model_validate_json(
-                readiness_bytes
-            )
+            readiness = DraLiveCandidateReadinessV4.model_validate_json(readiness_bytes)
         except (OSError, ValueError):
             _emit(
                 _result_payload(
@@ -1958,20 +2027,28 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
             logical_name=query_path.name,
         )
         strict_scenario = load_strict_live_closure_scenario()
-        receipt = DraLiveCandidateReadinessV3(
-            schema_version=(
-                "night-voyager.dra-live-candidate-readiness.v3"
-            ),
+        receipt = DraLiveCandidateReadinessV4(
+            schema_version=("night-voyager.dra-live-candidate-readiness.v4"),
             status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
-            producer=strict_scenario.producer,
-            request_identity=DraRunRequestIdentityV2(
-                schema_version=(
-                    "night-voyager.dra-run-request-identity.v2"
+            consumer_identity=DraStrictConsumerIdentityV2(
+                schema_version=("night-voyager.dra-strict-consumer-identity.v2"),
+                producer=strict_scenario.producer,
+                request=DraRunRequestIdentityV2(
+                    schema_version=("night-voyager.dra-run-request-identity.v2"),
+                    profile_id="generic-strict-citation",
+                    request_sha256=request.effective_sha256,
                 ),
-                profile_id="generic-strict-citation",
-                request_sha256=request.effective_sha256,
+                observed_profile=strict_scenario.profile_manifest,
             ),
-            observed_profile=strict_scenario.profile_manifest,
+            evidence_bundle=DraStrictReadinessEvidenceV1(
+                schema_version=("night-voyager.dra-strict-readiness-evidence.v1"),
+                merged_main_sha=head,
+                required_hosted_checks=required_hosted_checks,
+                docker_inventory_sha256=hashlib.sha256(inventory).hexdigest(),
+                hosted_checks_evidence_sha256=hashlib.sha256(hosted).hexdigest(),
+                recovery_matrix_evidence_sha256=hashlib.sha256(recovery).hexdigest(),
+                authority_review_evidence_sha256=hashlib.sha256(review).hexdigest(),
+            ),
             authorization=authorization_placeholder,
         )
         with _open_root(Path(args.receipt_root), create=True) as store:

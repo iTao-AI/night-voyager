@@ -14,6 +14,7 @@ from night_voyager.dra.live_controller import (
     ResumePollCommand,
     SelectAndImportCommand,
 )
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV4
 from night_voyager.dra.live_fakes import (
     ScenarioCandidateGateway,
     ScenarioDraLiveTransport,
@@ -23,17 +24,26 @@ from night_voyager.dra.live_models import (
     DRA_LIVE_CITATION_CLAUSE_V2,
     DraCandidateReadinessReceiptV2,
     DraCaptureInputV2,
+    DraCaptureInputV3,
     DraCaptureIntentV2,
+    DraCaptureIntentV3,
     DraCaptureReceiptV1,
+    DraCaptureReceiptV2,
     DraControllerStopReceiptV1,
     DraInspectionRequiredReceiptV1,
+    DraInspectionRequiredReceiptV2,
     DraLiveScenarioV2,
     DraPollRecoveryReceiptV1,
     DraReconciliationRequiredReceiptV1,
+    DraStrictReadinessEvidenceV1,
     compose_effective_query_v2,
     derive_identity_hash,
 )
 from night_voyager.dra.live_storage import LiveReceiptStore
+from night_voyager.dra.models import (
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
+)
 from night_voyager.identity.models import ActorContext, ActorRole
 
 ORGANIZATION_ID = UUID("10000000-0000-0000-0000-000000000001")
@@ -119,6 +129,60 @@ def frozen_intent(store: LiveReceiptStore) -> DraCaptureIntentV2:
             one_attempt_authorized=True,
         ),
         attempt_id_factory=lambda: "attempt-0000000000000001",
+    )
+
+
+def strict_frozen_intent(store: LiveReceiptStore) -> DraCaptureIntentV3:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    _, request = compose_effective_query_v2(QUERY, logical_name="query.txt")
+    consumer_identity = DraStrictConsumerIdentityV2(
+        schema_version=("night-voyager.dra-strict-consumer-identity.v2"),
+        producer=scenario.producer,
+        request=DraRunRequestIdentityV2(
+            schema_version=("night-voyager.dra-run-request-identity.v2"),
+            profile_id=scenario.producer.profile_id,
+            request_sha256=request.effective_sha256,
+        ),
+        observed_profile=scenario.profile_manifest,
+    )
+    evidence_bundle = DraStrictReadinessEvidenceV1(
+        schema_version=("night-voyager.dra-strict-readiness-evidence.v1"),
+        merged_main_sha="a" * 40,
+        required_hosted_checks=("compose", "frontend", "python"),
+        docker_inventory_sha256="7" * 64,
+        hosted_checks_evidence_sha256="8" * 64,
+        recovery_matrix_evidence_sha256="9" * 64,
+        authority_review_evidence_sha256="a" * 64,
+    )
+    readiness = DraLiveCandidateReadinessV4(
+        schema_version=("night-voyager.dra-live-candidate-readiness.v4"),
+        status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        consumer_identity=consumer_identity,
+        evidence_bundle=evidence_bundle,
+        authorization=("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"),
+    )
+    readiness_identity = store.write_receipt(
+        "readiness.json",
+        readiness,
+    )
+    return DraCaptureIntentV3.freeze(
+        DraCaptureInputV3(
+            scenario_id=scenario.scenario_id,
+            organization_id=ORGANIZATION_ID,
+            case_id=CASE_ID,
+            expected_case_revision=1,
+            advisor_actor_identity_sha256=derive_identity_hash("actor", str(ACTOR_ID)),
+            tenant_identity_sha256=derive_identity_hash("tenant", str(ORGANIZATION_ID)),
+            request=request,
+            consumer_identity=consumer_identity,
+            readiness_evidence=evidence_bundle,
+            candidate_readiness_sha256=readiness_identity.sha256,
+            receipt_root_id="dra-live-capture-root",
+            one_attempt_authorized=True,
+        ),
+        attempt_id_factory=lambda: "attempt-strict-00000001",
     )
 
 
@@ -209,13 +273,8 @@ async def test_strict_capture_transports_v2_identity_and_effective_query(
     transport = ScenarioDraLiveTransport(scenario)
     gateway = ScenarioCandidateGateway()
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
-        controller = DraLiveCaptureController(
-            transport,
-            gateway,
-            store,
-            strict_scenario=scenario,
-        )
-        intent = frozen_intent(store)
+        controller = DraLiveCaptureController(transport, gateway, store)
+        intent = strict_frozen_intent(store)
         inspection = await controller.capture(
             CaptureLiveCommand(
                 intent=intent,
@@ -223,17 +282,20 @@ async def test_strict_capture_transports_v2_identity_and_effective_query(
                 query_path=query_file(tmp_path),
             )
         )
-        assert isinstance(inspection, DraInspectionRequiredReceiptV1)
-        effective = (
-            QUERY + b"\n\n" + DRA_LIVE_CITATION_CLAUSE_V2
-        ).decode("utf-8")
+        assert isinstance(inspection, DraInspectionRequiredReceiptV2)
+        effective = (QUERY + b"\n\n" + DRA_LIVE_CITATION_CLAUSE_V2).decode("utf-8")
         assert transport.requests == [
             {
                 "profile_id": "generic-strict-citation",
                 "query": effective,
             }
         ]
-        final = await controller.select_and_import(
+        restarted = DraLiveCaptureController(
+            ScenarioDraLiveTransport(scenario),
+            gateway,
+            store,
+        )
+        final = await restarted.select_and_import(
             SelectAndImportCommand(
                 intent=intent,
                 inspection=inspection,
@@ -241,7 +303,7 @@ async def test_strict_capture_transports_v2_identity_and_effective_query(
                 context=context(),
             )
         )
-    assert isinstance(final, DraCaptureReceiptV1)
+    assert isinstance(final, DraCaptureReceiptV2)
     assert gateway.last_import is not None
     assert gateway.last_import.schema_version == (
         "night-voyager.dra-candidate-import.v2"
@@ -255,6 +317,57 @@ async def test_strict_capture_transports_v2_identity_and_effective_query(
         gateway.last_import.consumer_identity.observed_profile
         == scenario.profile_manifest
     )
+
+
+@pytest.mark.asyncio
+async def test_strict_restart_rejects_forged_observed_profile(
+    tmp_path: Path,
+) -> None:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    gateway = ScenarioCandidateGateway()
+    root = private_root(tmp_path)
+    with LiveReceiptStore.open(root) as store:
+        controller = DraLiveCaptureController(ScenarioDraLiveTransport(scenario), gateway, store)
+        intent = strict_frozen_intent(store)
+        inspection = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+        assert isinstance(inspection, DraInspectionRequiredReceiptV2)
+        forged = inspection.model_copy(
+            update={
+                "consumer_identity": inspection.consumer_identity.model_copy(
+                    update={
+                        "observed_profile": (
+                            inspection.consumer_identity.observed_profile.model_copy(
+                                update={"profile_version": "2"}
+                            )
+                        )
+                    }
+                )
+            }
+        )
+        (root / "inspection-required.json").write_text(
+            forged.model_dump_json(),
+            encoding="utf-8",
+        )
+        restarted = DraLiveCaptureController(ScenarioDraLiveTransport(scenario), gateway, store)
+        stopped = await restarted.select_and_import(
+            SelectAndImportCommand(
+                intent=intent,
+                inspection=forged,
+                declared_raw_url=SOURCE_URL,
+                context=context(),
+            )
+        )
+    assert isinstance(stopped, DraControllerStopReceiptV1)
+    assert stopped.public_code == "source_selection_invalid"
+    assert gateway.import_calls == 0
 
 
 @pytest.mark.asyncio

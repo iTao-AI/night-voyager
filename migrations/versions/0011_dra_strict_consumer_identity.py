@@ -96,8 +96,8 @@ BEGIN
     OR p_contract_schema<>'dra.downstream-consumer.v1'
     OR p_fixture_sha256<>'cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157'
     OR p_profile_id<>'generic-strict-citation'
-    OR p_profile_version<>'1'
-    OR p_proof_schema<>'dra.strict-citation-profile.v1'
+    OR p_profile_version IS DISTINCT FROM '1'
+    OR p_proof_schema IS DISTINCT FROM 'dra.strict-citation-profile.v1'
     OR p_artifact_id<>'research-report.md'
     OR p_artifact_kind<>'research_report_markdown'
     OR p_artifact_media_type<>'text/markdown'
@@ -131,8 +131,15 @@ BEGIN
         evidence_item->>'retrieved_at','timestamp with time zone'
       )
       OR evidence_item->>'retrieved_at' !~ '(Z|[+-][0-9]{2}:[0-9]{2})$'
-      OR evidence_item->>'citation_status'<>'cited'
-      OR evidence_item->>'verification_status' NOT IN ('verified','unverified')
+      OR jsonb_typeof(evidence_item->'citation_status') IS DISTINCT FROM 'string'
+      OR evidence_item->>'citation_status' IS DISTINCT FROM 'cited'
+      OR jsonb_typeof(evidence_item->'verification_status')
+        IS DISTINCT FROM 'string'
+      OR (
+        evidence_item->>'verification_status' IS DISTINCT FROM 'verified'
+        AND evidence_item->>'verification_status'
+          IS DISTINCT FROM 'unverified'
+      )
     THEN
       RAISE EXCEPTION USING ERRCODE='NV011',
         MESSAGE='candidate evidence contract mismatch';
@@ -271,7 +278,9 @@ CLOSED_IDENTITY_CONSTRAINT_SQL = (
     "AND fixture_sha256="
     "'cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157' "
     "AND profile_id='generic-strict-citation' "
+    "AND profile_version IS NOT NULL "
     "AND profile_version='1' "
+    "AND proof_schema IS NOT NULL "
     "AND proof_schema='dra.strict-citation-profile.v1'"
     "))"
 )

@@ -111,11 +111,37 @@ DRA_VERIFICATION_IDENTITY = (
     "integer, text, text, text, integer, text, jsonb, uuid, integer, text, "
     "text, uuid, uuid, uuid, jsonb, text, text",
 )
+DRA_LIVE_OUTCOME_IDENTITY = (
+    "project_dra_live_outcome",
+    "uuid, uuid, uuid",
+)
+DRA_TASK_AUTHORITY_IDENTITY = (
+    "project_agent_task_live_authority",
+    "uuid, uuid, uuid",
+)
+DRA_TASK_RECOVERY_IDENTITY = (
+    "project_agent_task_by_idempotency",
+    "uuid, uuid, text",
+)
+DRA_REVIEW_RECOVERY_IDENTITY = (
+    "project_advisor_review_by_idempotency",
+    "uuid, uuid, uuid, uuid, text",
+)
+DRA_RECOVERY_PROJECTION_IDENTITIES = {
+    DRA_LIVE_OUTCOME_IDENTITY,
+    DRA_TASK_AUTHORITY_IDENTITY,
+    DRA_TASK_RECOVERY_IDENTITY,
+    DRA_REVIEW_RECOVERY_IDENTITY,
+}
 DRA_DATABASE_FUNCTION_IDENTITIES = {
     DRA_LEGACY_IMPORT_IDENTITY,
     DRA_STRICT_IMPORT_IDENTITY,
     DRA_VERIFICATION_IDENTITY,
-}
+} | DRA_RECOVERY_PROJECTION_IDENTITIES
+DRA_0010_DATABASE_FUNCTION_IDENTITIES = {
+    DRA_LEGACY_IMPORT_IDENTITY,
+    DRA_VERIFICATION_IDENTITY,
+} | DRA_RECOVERY_PROJECTION_IDENTITIES
 DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES = {
     DRA_LEGACY_IMPORT_IDENTITY,
     DRA_VERIFICATION_IDENTITY,
@@ -1252,6 +1278,10 @@ async def verify_database_catalog(database_url: str) -> None:
                            'fail_agent_task','finalize_agent_task_result')
                            OR p.proname IN
                           ('import_dra_research_candidate','verify_and_promote_dra_candidate',
+                           'project_dra_live_outcome',
+                           'project_agent_task_live_authority',
+                           'project_agent_task_by_idempotency',
+                           'project_advisor_review_by_idempotency',
                            'load_governed_mixed_planning_snapshot')
                            OR p.proname IN
                           ('create_collaboration_thread','append_collaboration_message',
@@ -1306,10 +1336,10 @@ async def verify_database_catalog(database_url: str) -> None:
             )
             if alembic_revision == "0011":
                 expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
-            elif alembic_revision in {"0009", "0010"}:
-                expected_dra_function_identities = (
-                    DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES
-                )
+            elif alembic_revision == "0010":
+                expected_dra_function_identities = DRA_0010_DATABASE_FUNCTION_IDENTITIES
+            elif alembic_revision == "0009":
+                expected_dra_function_identities = DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES
             else:
                 raise SystemExit("DRA function catalog requires migration 0009 or later")
             non_dra_app_functions = {
@@ -1344,6 +1374,10 @@ async def verify_database_catalog(database_url: str) -> None:
                     "cancel_agent_task",
                     "import_dra_research_candidate",
                     "verify_and_promote_dra_candidate",
+                    "project_dra_live_outcome",
+                    "project_agent_task_live_authority",
+                    "project_agent_task_by_idempotency",
+                    "project_advisor_review_by_idempotency",
                 }
                 | COLLABORATION_API_FUNCTIONS
                 | SKILL_API_FUNCTIONS

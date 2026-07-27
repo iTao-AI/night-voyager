@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
 from night_voyager.dra.live_models import DraLiveScenarioV2
 from night_voyager.planning.fixtures import validate_planning_fixture
+from scripts.verify_release import verify_database_catalog
 
 pytestmark = pytest.mark.database
 
@@ -80,6 +81,15 @@ async def ensure_strict_case() -> None:
                 ),
                 {"org": str(ORG)},
             )
+            exists = await connection.scalar(
+                text(
+                    "SELECT EXISTS(SELECT 1 FROM app.student_cases "
+                    "WHERE organization_id=:org AND id=:case)"
+                ),
+                {"org": ORG, "case": CASE},
+            )
+            if exists:
+                return
             await connection.execute(
                 text(
                     "SELECT app.publish_case_revision(:org,:case,NULL,1,"
@@ -292,6 +302,12 @@ async def test_0011_safe_downgrade_restores_0010_then_reupgrades() -> None:
     assert upgraded["version"] == "0011"
     upgraded_columns = cast(list[tuple[str, ...]], upgraded["columns"])
     assert {row[0] for row in upgraded_columns} >= STRICT_COLUMNS
+    constraint_definitions = {
+        row[0]: row[1] for row in cast(list[tuple[str, str]], upgraded["constraints"])
+    }
+    closed_identity = constraint_definitions["dra_research_candidates_producer_identity_check"]
+    assert "profile_version IS NOT NULL" in closed_identity
+    assert "proof_schema IS NOT NULL" in closed_identity
     assert upgraded["guards"] == (True, "O")
     authority = await import_authority_snapshot()
     assert [row[0] for row in authority] == sorted(
@@ -302,6 +318,190 @@ async def test_0011_safe_downgrade_restores_0010_then_reupgrades() -> None:
     run_alembic("downgrade", "0010")
     assert await catalog_snapshot() == before_0010
     run_alembic("upgrade", "0011")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mutation", "candidate_suffix"),
+    (
+        ("profile_version_sql_null", 112),
+        ("proof_schema_sql_null", 113),
+        ("citation_status_json_null", 114),
+        ("verification_status_json_null", 115),
+    ),
+)
+async def test_0011_strict_import_rejects_null_identity_and_status_without_writes(
+    mutation: str,
+    candidate_suffix: int,
+) -> None:
+    await ensure_strict_case()
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    candidate_id = UUID(f"90000000-0000-0000-0000-{candidate_suffix:012d}")
+    evidence = [
+        {
+            key: value
+            for key, value in row.model_dump(mode="json").items()
+            if key not in {"run_id", "segment_id"}
+        }
+        for row in scenario.evidence
+    ]
+    parameters: dict[str, object] = {
+        "org": ORG,
+        "actor": ADVISOR,
+        "case": CASE,
+        "candidate": candidate_id,
+        "repository": scenario.producer.repository,
+        "ref_kind": scenario.producer.ref_kind,
+        "ref": scenario.producer.ref,
+        "release": None,
+        "commit": scenario.producer.commit,
+        "schema": scenario.producer.consumer_contract_schema,
+        "fixture": scenario.producer.consumer_fixture_sha256,
+        "profile": scenario.producer.profile_id,
+        "profile_version": scenario.profile_manifest.profile_version,
+        "proof_schema": scenario.producer.proof_schema,
+        "identity_hash": scenario.request_identity.request_sha256,
+        "run_id": scenario.status.run_id,
+        "artifact_bytes": scenario.canonical_artifact.byte_length,
+        "artifact_sha": scenario.canonical_artifact.content_hash,
+        "evidence": json.dumps(evidence),
+        "request_hash": hashlib.sha256(f"strict-null-request-{mutation}".encode()).hexdigest(),
+        "key_hash": hashlib.sha256(f"strict-null-key-{mutation}".encode()).hexdigest(),
+    }
+    if mutation == "profile_version_sql_null":
+        parameters["profile_version"] = None
+    elif mutation == "proof_schema_sql_null":
+        parameters["proof_schema"] = None
+    elif mutation == "citation_status_json_null":
+        evidence[0]["citation_status"] = None
+        parameters["evidence"] = json.dumps(evidence)
+    else:
+        evidence[0]["verification_status"] = None
+        parameters["evidence"] = json.dumps(evidence)
+    sql = text(
+        "SELECT * FROM app.import_dra_research_candidate("
+        ":org,:actor,:case,:candidate,1,:repository,:ref_kind,:ref,"
+        ":release,:commit,:schema,:fixture,:profile,:profile_version,"
+        ":proof_schema,:identity_hash,:run_id,'research-report.md',"
+        "'research_report_markdown','text/markdown',:artifact_bytes,"
+        ":artifact_sha,CAST(:evidence AS jsonb),:request_hash,:key_hash)"
+    )
+
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                await set_context(connection)
+                with pytest.raises(DBAPIError) as captured:
+                    await connection.execute(sql, parameters)
+                assert getattr(captured.value.orig, "sqlstate", None) == "NV011"
+            finally:
+                await transaction.rollback()
+        async with engine.begin() as connection:
+            await set_context(connection)
+            count = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM app.dra_research_candidates "
+                    "WHERE organization_id=:org AND id=:candidate"
+                ),
+                {"org": ORG, "candidate": candidate_id},
+            )
+            assert count == 0
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "outcome_worker_grant",
+        "task_authority_security_invoker",
+        "task_recovery_search_path",
+        "review_recovery_extra_signature",
+    ),
+)
+async def test_release_catalog_rejects_dra_recovery_projection_drift(
+    mutation: str,
+) -> None:
+    database_url = os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+    signatures = {
+        "outcome_worker_grant": ("app.project_dra_live_outcome(uuid,uuid,uuid)"),
+        "task_authority_security_invoker": (
+            "app.project_agent_task_live_authority(uuid,uuid,uuid)"
+        ),
+        "task_recovery_search_path": ("app.project_agent_task_by_idempotency(uuid,uuid,text)"),
+    }
+    engine = create_async_engine(database_url)
+    try:
+        async with engine.begin() as connection:
+            if mutation == "outcome_worker_grant":
+                await connection.execute(
+                    text(
+                        f"GRANT EXECUTE ON FUNCTION {signatures[mutation]} TO night_voyager_worker"
+                    )
+                )
+            elif mutation == "task_authority_security_invoker":
+                await connection.execute(
+                    text(f"ALTER FUNCTION {signatures[mutation]} SECURITY INVOKER")
+                )
+            elif mutation == "task_recovery_search_path":
+                await connection.execute(
+                    text(f"ALTER FUNCTION {signatures[mutation]} SET search_path TO public")
+                )
+            else:
+                await connection.execute(
+                    text(
+                        "CREATE FUNCTION "
+                        "app.project_advisor_review_by_idempotency() "
+                        "RETURNS integer LANGUAGE sql SECURITY DEFINER "
+                        "SET search_path = pg_catalog, pg_temp "
+                        "AS 'SELECT 1'"
+                    )
+                )
+                await connection.execute(
+                    text(
+                        "REVOKE ALL ON FUNCTION "
+                        "app.project_advisor_review_by_idempotency() "
+                        "FROM PUBLIC"
+                    )
+                )
+        with pytest.raises(
+            SystemExit,
+            match=(
+                "app functions violate narrow SECURITY DEFINER contract"
+                "|DRA function grants violate API/worker separation"
+            ),
+        ):
+            await verify_database_catalog(database_url)
+    finally:
+        async with engine.begin() as connection:
+            if mutation == "outcome_worker_grant":
+                await connection.execute(
+                    text(
+                        f"REVOKE EXECUTE ON FUNCTION "
+                        f"{signatures[mutation]} FROM night_voyager_worker"
+                    )
+                )
+            elif mutation == "task_authority_security_invoker":
+                await connection.execute(
+                    text(f"ALTER FUNCTION {signatures[mutation]} SECURITY DEFINER")
+                )
+            elif mutation == "task_recovery_search_path":
+                await connection.execute(
+                    text(
+                        f"ALTER FUNCTION {signatures[mutation]} "
+                        "SET search_path TO pg_catalog, pg_temp"
+                    )
+                )
+            else:
+                await connection.execute(
+                    text("DROP FUNCTION IF EXISTS app.project_advisor_review_by_idempotency()")
+                )
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

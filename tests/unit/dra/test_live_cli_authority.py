@@ -23,7 +23,7 @@ from night_voyager.dra.fixtures import (
     build_v0_1_6_scenario_candidate_import,
     load_live_closure_scenario,
 )
-from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV3
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV4
 from night_voyager.dra.live_http import (
     EphemeralHttpAuthority,
     NightVoyagerAuthorityGateway,
@@ -214,7 +214,7 @@ def test_strict_freeze_rejects_legacy_readiness_before_provider_construction(
     assert provider_create_calls == 0
 
 
-def test_freeze_candidate_writes_canonical_v3_strict_readiness(
+def test_freeze_candidate_writes_canonical_v4_strict_readiness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -290,26 +290,22 @@ def test_freeze_candidate_writes_canonical_v3_strict_readiness(
     result = json.loads(capsys.readouterr().out)
     assert result["problem_code"] == "candidate_readiness_frozen"
     readiness_bytes = (receipts / "readiness.json").read_bytes()
-    readiness = DraLiveCandidateReadinessV3.model_validate_json(
-        readiness_bytes
-    )
-    assert readiness.schema_version == (
-        "night-voyager.dra-live-candidate-readiness.v3"
-    )
+    readiness = DraLiveCandidateReadinessV4.model_validate_json(readiness_bytes)
+    assert readiness.schema_version == ("night-voyager.dra-live-candidate-readiness.v4")
     assert readiness.status == "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
-    assert readiness.producer.ref_kind == "commit"
-    assert readiness.producer.profile_id == "generic-strict-citation"
-    assert readiness.request_identity.schema_version == (
+    assert readiness.consumer_identity.producer.ref_kind == "commit"
+    assert readiness.consumer_identity.producer.profile_id == "generic-strict-citation"
+    assert readiness.consumer_identity.request.schema_version == (
         "night-voyager.dra-run-request-identity.v2"
     )
-    assert readiness.request_identity.profile_id == "generic-strict-citation"
-    assert readiness.request_identity.request_sha256 == hashlib.sha256(
-        effective_bytes
-    ).hexdigest()
-    assert readiness.observed_profile.profile_version == "1"
-    assert readiness.authorization == (
-        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    assert readiness.consumer_identity.request.profile_id == "generic-strict-citation"
+    assert (
+        readiness.consumer_identity.request.request_sha256
+        == hashlib.sha256(effective_bytes).hexdigest()
     )
+    assert readiness.consumer_identity.observed_profile.profile_version == "1"
+    assert readiness.evidence_bundle.merged_main_sha == head
+    assert readiness.authorization == ("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION")
     canonical_round_trip = json.dumps(
         readiness.model_dump(mode="json"),
         sort_keys=True,

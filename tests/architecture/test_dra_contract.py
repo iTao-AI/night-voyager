@@ -136,6 +136,13 @@ def test_release_verifier_binds_overloaded_dra_functions_by_exact_identity() -> 
             "date, integer, text, text, text, integer, text, jsonb, uuid, integer, "
             "text, text, uuid, uuid, uuid, jsonb, text, text",
         ),
+        ("project_dra_live_outcome", "uuid, uuid, uuid"),
+        ("project_agent_task_live_authority", "uuid, uuid, uuid"),
+        ("project_agent_task_by_idempotency", "uuid, uuid, text"),
+        (
+            "project_advisor_review_by_idempotency",
+            "uuid, uuid, uuid, uuid, text",
+        ),
     }
     assert verifier_globals["DRA_DATABASE_FUNCTION_IDENTITIES"] == expected
     assert verifier_globals["DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES"] == {

@@ -7,18 +7,26 @@ import subprocess
 import sys
 from pathlib import Path
 
-from night_voyager.dra.fixtures import load_live_closure_scenario
+from night_voyager.dra.fixtures import (
+    load_live_closure_scenario,
+    load_strict_live_closure_scenario,
+)
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV4
 from night_voyager.dra.live_models import (
     DraCandidateReadinessReceiptV1,
-    DraCandidateReadinessReceiptV2,
-    DraCaptureIntentV2,
-    DraPollRecoveryReceiptV1,
-    DraPreflightReceiptV2,
-    DraReconciliationRequiredReceiptV1,
+    DraCaptureIntentV3,
+    DraPollRecoveryReceiptV2,
+    DraPreflightReceiptV3,
+    DraReconciliationRequiredReceiptV2,
+    DraStrictReadinessEvidenceV1,
     compose_effective_query_v2,
     derive_stage_key,
 )
 from night_voyager.dra.live_storage import LiveReceiptStore
+from night_voyager.dra.models import (
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
+)
 
 ROOT = Path(__file__).parents[3]
 SOURCE_URL = "https://example.com/contract-source-1"
@@ -28,28 +36,30 @@ def write_candidate_readiness(root: Path, query: bytes) -> None:
     root.mkdir(mode=0o700)
     root.chmod(0o700)
     _, request = compose_effective_query_v2(query, logical_name="query.txt")
-    scenario = load_live_closure_scenario()
-    readiness = DraCandidateReadinessReceiptV2(
-        merged_main_sha="a" * 40,
-        request=request,
-        spec_sha256="1" * 64,
-        plan_sha256="2" * 64,
-        scenario_sha256="3" * 64,
-        intent_schema_sha256="4" * 64,
-        receipt_schema_sha256="5" * 64,
-        cli_sha256="6" * 64,
-        producer=scenario.producer,
-        required_hosted_checks=("compose", "frontend", "python"),
-        recovery_matrix_status="passed",
-        docker_preflight_status="passed",
-        docker_inventory_sha256="7" * 64,
-        hosted_checks_evidence_sha256="8" * 64,
-        recovery_matrix_evidence_sha256="9" * 64,
-        authority_review_evidence_sha256="a" * 64,
-        cleanup_state="clean",
-        authorization_placeholder=(
-            "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    scenario = load_strict_live_closure_scenario()
+    readiness = DraLiveCandidateReadinessV4(
+        schema_version="night-voyager.dra-live-candidate-readiness.v4",
+        status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        consumer_identity=DraStrictConsumerIdentityV2(
+            schema_version=("night-voyager.dra-strict-consumer-identity.v2"),
+            producer=scenario.producer,
+            request=DraRunRequestIdentityV2(
+                schema_version=("night-voyager.dra-run-request-identity.v2"),
+                profile_id=scenario.producer.profile_id,
+                request_sha256=request.effective_sha256,
+            ),
+            observed_profile=scenario.profile_manifest,
         ),
+        evidence_bundle=DraStrictReadinessEvidenceV1(
+            schema_version=("night-voyager.dra-strict-readiness-evidence.v1"),
+            merged_main_sha="a" * 40,
+            required_hosted_checks=("compose", "frontend", "python"),
+            docker_inventory_sha256="7" * 64,
+            hosted_checks_evidence_sha256="8" * 64,
+            recovery_matrix_evidence_sha256="9" * 64,
+            authority_review_evidence_sha256="a" * 64,
+        ),
+        authorization=("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"),
     )
     with LiveReceiptStore.open(root) as store:
         store.write_receipt("readiness.json", readiness)
@@ -127,6 +137,9 @@ def test_fake_capture_resumes_from_copied_bundle_in_fresh_process(
     resume_payload = json.loads(resumed.stdout)
     assert resume_payload["exit_class"] == "success"
     assert resume_payload["candidate_authority"] == "untrusted_candidate"
+    assert resume_payload["candidate_import_schema_version"] == (
+        "night-voyager.dra-candidate-import.v2"
+    )
     assert resume_payload["provider_create_calls"] == 0
     assert resume_payload["artifact_present"] is False
 
@@ -207,22 +220,16 @@ def test_recovery_cli_derives_provider_consumption_from_durable_receipts(
     assert json.loads(inspected.stdout)["provider_attempt_consumed"] is False
 
     with LiveReceiptStore.open(root) as store:
-        intent = store.read_receipt("intent.json", DraCaptureIntentV2)
-        preflight_receipt = store.read_receipt(
-            "preflight.json", DraPreflightReceiptV2
-        )
-        reconciliation = DraReconciliationRequiredReceiptV1(
-            schema_version=(
-                "night-voyager.dra-live-reconciliation-required.v1"
-            ),
+        intent = store.read_receipt("intent.json", DraCaptureIntentV3)
+        preflight_receipt = store.read_receipt("preflight.json", DraPreflightReceiptV3)
+        reconciliation = DraReconciliationRequiredReceiptV2(
             intent_sha256=intent.intent_sha256,
             attempt_id=intent.attempt_id,
             intent_receipt=preflight_receipt.intent_receipt,
-            create_key=derive_stage_key(
-                intent.intent_sha256, "create", intent.attempt_id
-            ),
+            consumer_identity=intent.capture.consumer_identity,
+            readiness_evidence=intent.capture.readiness_evidence,
+            create_key=derive_stage_key(intent.intent_sha256, "create", intent.attempt_id),
             provider_attempt_consumed=True,
-            permitted_next_command="reconcile-create",
         )
         store.write_receipt("reconciliation-required.json", reconciliation)
     inspected = run_command(
@@ -238,10 +245,12 @@ def test_recovery_cli_derives_provider_consumption_from_durable_receipts(
         )
         store.write_receipt(
             "poll-recovery.json",
-            DraPollRecoveryReceiptV1(
+            DraPollRecoveryReceiptV2(
                 intent_sha256=intent.intent_sha256,
                 attempt_id=intent.attempt_id,
                 preflight_receipt=preflight_identity,
+                consumer_identity=intent.capture.consumer_identity,
+                readiness_evidence=intent.capture.readiness_evidence,
                 thread_id="thread-1",
                 run_id="run-1",
                 segment_id="segment-1",
@@ -334,6 +343,45 @@ def test_freeze_intent_rejects_query_that_differs_from_readiness(
         "--one-attempt-ack",
         "separately-authorized-one-attempt",
     )
+    assert result.returncode != 0
+    assert json.loads(result.stdout)["problem_code"] == (
+        "candidate_readiness_invalid"
+    )
+
+
+def test_freeze_intent_rejects_missing_observed_profile(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "readiness"
+    query = tmp_path / "query.txt"
+    query.write_text("bounded synthetic query", encoding="utf-8")
+    write_candidate_readiness(root, query.read_bytes())
+    readiness_path = root / "readiness.json"
+    readiness = json.loads(readiness_path.read_text(encoding="utf-8"))
+    del readiness["consumer_identity"]["observed_profile"]
+    readiness_path.write_text(
+        json.dumps(readiness, sort_keys=True, separators=(",", ":")),
+        encoding="utf-8",
+    )
+
+    result = run_command(
+        "freeze-intent",
+        "--receipt-root",
+        str(root),
+        "--query-file",
+        str(query),
+        "--organization-id",
+        "10000000-0000-0000-0000-000000000001",
+        "--case-id",
+        "40000000-0000-0000-0000-000000000003",
+        "--expected-case-revision",
+        "1",
+        "--advisor-actor-id",
+        "20000000-0000-0000-0000-000000000001",
+        "--one-attempt-ack",
+        "separately-authorized-one-attempt",
+    )
+
     assert result.returncode != 0
     assert json.loads(result.stdout)["problem_code"] == (
         "candidate_readiness_invalid"
