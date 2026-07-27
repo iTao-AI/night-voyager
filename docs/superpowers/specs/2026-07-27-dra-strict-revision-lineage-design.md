@@ -2,7 +2,19 @@
 
 ## Status
 
-**Design status:** Approved; implementation has not started.
+**Design status:** Approved; PR 1 implemented provider-free; PR 2 and PR 3 approved but not implemented.
+
+### Current runtime correction after PR 1
+
+Night Voyager now implements the provider-free strict-consumer prerequisite:
+migration head `0011`, the exact post-release commit pin,
+`generic-strict-citation@1`, `dra.strict-citation-profile.v1`, closed v1/v2
+candidate import on the existing endpoint, durable strict identity, V3
+readiness, and strict outcome evaluation. No provider, candidate freeze, third
+live attempt, release, or deployment was performed. The two prior 25/83
+`uncited` attempts remain failed pre-import history and strict live acceptance
+remains incomplete. Planning revision PR 2 and journey PR 3 remain approved but
+not implemented.
 
 This design defines two ordered capabilities after the `v0.1.3` release:
 

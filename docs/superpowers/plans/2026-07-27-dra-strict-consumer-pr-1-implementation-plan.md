@@ -6,7 +6,7 @@
 
 **Tech Stack:** Python 3.12, Pydantic 2, SQLAlchemy 2, PostgreSQL 18, Alembic, pytest, FastAPI, existing Night Voyager DRA fake transport and verification scripts.
 
-**Plan status:** Approved; implementation has not started.
+**Plan status:** Implementation complete locally; awaiting Career authority review.
 
 ## Implementation authority correction
 
@@ -22,6 +22,21 @@ so the approved legacy and strict overloads are checked by exact argument
 identity instead. Task 5 must apply the same overload-safe identity rule to
 `scripts/verify_release.py`. This correction does not change either overload
 or expand the production contract.
+
+A third bounded current/historical phrase review found one active unit
+regression that still treated the historical
+`Live provider proof was not run` sentence as current runbook authority. Task 5
+now includes that exact test so current-surface non-claim regressions distinguish
+the historical sentence from the two-attempt safe-stop boundary. Historical
+release artifacts, verification guides, specs, plans, and their tests remain
+unchanged.
+
+A final current-head versus historical-`0010` scan found four active tests whose
+current repository assertions stopped at migration `0010`, the old downgrade
+refusal wording, or the provider-free PR A/B/C boundary. Task 5 now includes
+those exact tests so current-head assertions require `0011` and the strict
+consumer prerequisite while preserving the intentional historical `0007`,
+`0009`, and `0010` lanes and ownership records.
 
 ## Global Constraints
 
@@ -108,7 +123,7 @@ separately verify the default Compose inventory. Preserve
 - Produces: `DRA_STRICT_PRODUCER`, used by Tasks 2-4.
 - Preserves: `DraProducerPinV1`, `DraRunRequestIdentityV1`, `DraLiveScenarioV1` as historical-read contracts.
 
-- [ ] **Step 1: Add failing producer-pin model tests**
+- [x] **Step 1: Add failing producer-pin model tests**
 
 Add tests that require the closed tuple and reject release overloading:
 
@@ -145,7 +160,7 @@ def test_strict_producer_pin_rejects_mixed_identity(field: str, value: str) -> N
         DraProducerPinV2.model_validate(DraProducerPinV2().model_dump() | {field: value})
 ```
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run:
 
@@ -161,7 +176,7 @@ constants and models do not exist. If the new imports cannot collect, add only
 the minimal empty module/export surface needed for collection, rerun, and
 record the assertion RED; an import or collection error is not RED evidence.
 
-- [ ] **Step 3: Implement the closed v2 identity models**
+- [x] **Step 3: Implement the closed v2 identity models**
 
 Add exact constants and models:
 
@@ -224,7 +239,7 @@ match and the observed manifest version to equal the pinned version. The proof
 schema remains a consumer-owned exact-commit pin; do not model it as a DRA
 request, manifest, status, or result field.
 
-- [ ] **Step 4: Add and validate the provider-free v2 scenario**
+- [x] **Step 4: Add and validate the provider-free v2 scenario**
 
 Create `fixtures/dra/live-closure-scenario-v2.json` with:
 
@@ -253,7 +268,7 @@ if (
 Reject a local proof-schema mismatch against `DraProducerPinV2` separately.
 The fixture must not imply that DRA returned `proof_schema`.
 
-- [ ] **Step 5: Run focused GREEN**
+- [x] **Step 5: Run focused GREEN**
 
 Run:
 
@@ -266,7 +281,7 @@ uv run pytest -q \
 
 Expected: all selected tests pass and the historical v1 fixture digest remains unchanged.
 
-- [ ] **Step 6: Commit the contract slice**
+- [x] **Step 6: Commit the contract slice**
 
 ```bash
 git add \
@@ -309,7 +324,7 @@ git commit -m "feat: freeze DRA strict consumer identity"
   `DraStrictConsumerIdentityV2`, alongside the explicit legacy v1 command
   branch.
 
-- [ ] **Step 1: Freeze migration and catalog failures**
+- [x] **Step 1: Freeze migration and catalog failures**
 
 Add RED tests that require:
 
@@ -369,7 +384,7 @@ The outer mode uses one disposable task project, starts from migration `0010`,
 and tears down its exact volume and local images. An unknown mode exits `2`
 before Docker mutation; it must never fall through to the full database suite.
 
-- [ ] **Step 2: Run the migration RED lane**
+- [x] **Step 2: Run the migration RED lane**
 
 Run:
 
@@ -385,7 +400,7 @@ Expected: successful collection followed by failures for missing migration
 `0011`, columns, constraints, and repository arguments. Zero selected tests,
 collection errors, and Docker/environment failures are not valid RED evidence.
 
-- [ ] **Step 3: Implement migration `0011`**
+- [x] **Step 3: Implement migration `0011`**
 
 The migration must run its ledger evolution in one Alembic transaction. It must
 take an `ACCESS EXCLUSIVE` lock on `app.dra_research_candidates`, temporarily
@@ -461,7 +476,7 @@ Before and after every refusal case, capture and exact-compare:
 Run a separate empty-history safe downgrade/re-upgrade round trip. A refusal
 case cannot substitute for safe downgrade proof.
 
-- [ ] **Step 4: Update the PostgreSQL adapter**
+- [x] **Step 4: Update the PostgreSQL adapter**
 
 Keep the current legacy command and adapter branch explicit. Add a separate
 closed strict command/adapter branch carrying `DraStrictConsumerIdentityV2`.
@@ -480,7 +495,7 @@ Only the strict branch may extend the import parameter map with:
 The adapter must not duck-type commands, infer a strict tuple from a v1
 command, or accept mixed identity.
 
-- [ ] **Step 5: Run database GREEN**
+- [x] **Step 5: Run database GREEN**
 
 Run:
 
@@ -495,7 +510,7 @@ make db-check
 
 Expected: full migration graph, RLS, grants, downgrade, and strict import tests pass.
 
-- [ ] **Step 6: Commit the database slice**
+- [x] **Step 6: Commit the database slice**
 
 ```bash
 git add \
@@ -549,7 +564,7 @@ git commit -m "feat: persist DRA strict consumer identity"
   discriminated v1/v2 request contract; no endpoint is added.
 - Preserves: v1 fake/fixture tests as historical compatibility only.
 
-- [ ] **Step 1: Add request and projection RED tests**
+- [x] **Step 1: Add request and projection RED tests**
 
 Require the fake transport to observe:
 
@@ -581,7 +596,7 @@ Add RED coverage for:
 - actual v2 transport through `NightVoyagerAuthorityGateway`, the live port,
   controller, and fake.
 
-- [ ] **Step 2: Run focused RED**
+- [x] **Step 2: Run focused RED**
 
 Run:
 
@@ -595,7 +610,7 @@ uv run pytest -q \
 
 Expected: failures because the controller still sends `generic` and builds v1 import models.
 
-- [ ] **Step 3: Implement strict create and terminal projection**
+- [x] **Step 3: Implement strict create and terminal projection**
 
 Extend `DraLiveTransportPort`, the read-only HTTP adapter, and the fake with a
 bounded allowlisted read of:
@@ -630,7 +645,7 @@ Build `DraCandidateImportV2` only after:
 - same run and segment;
 - exact request and producer identity.
 
-- [ ] **Step 4: Preserve zero-cited safe stop**
+- [x] **Step 4: Preserve zero-cited safe stop**
 
 The provider-free zero-cited fake must emit the existing bounded
 `source_selection_invalid` failure and prove:
@@ -643,7 +658,7 @@ assert planning_repository.calls == []
 
 It must not fall back to `generic`, select an uncited row, or invent a URL.
 
-- [ ] **Step 5: Run controller and rehearsal GREEN**
+- [x] **Step 5: Run controller and rehearsal GREEN**
 
 Run:
 
@@ -658,7 +673,7 @@ uv run pytest -q \
 
 Expected: strict success and zero-cited stop are both deterministic and provider-free.
 
-- [ ] **Step 6: Commit the controller slice**
+- [x] **Step 6: Commit the controller slice**
 
 ```bash
 git add \
@@ -708,7 +723,7 @@ git commit -m "feat: project DRA strict live candidates"
 - Produces: provider-free CLI and evaluation coverage.
 - Explicitly does not execute `freeze-candidate` against real retained evidence.
 
-- [ ] **Step 1: Add readiness and evaluation RED tests**
+- [x] **Step 1: Add readiness and evaluation RED tests**
 
 Require a strict readiness model equivalent to:
 
@@ -729,7 +744,7 @@ Reject:
 - database outcome whose profile version, proof schema, or request hash differs
   from the readiness tuple.
 
-- [ ] **Step 2: Run focused RED**
+- [x] **Step 2: Run focused RED**
 
 Run:
 
@@ -747,7 +762,7 @@ uv run pytest -q \
 
 Expected: failures because current readiness and evaluation schemas bind the generic producer.
 
-- [ ] **Step 3: Implement closed strict readiness**
+- [x] **Step 3: Implement closed strict readiness**
 
 Version only schemas whose canonical bytes contain producer or request identity.
 The new readiness must include:
@@ -779,7 +794,7 @@ The evaluation report binds:
 Add field-by-field counterfactuals for candidate, readiness, outcome, and
 evaluation profile version, proof schema, and request hash.
 
-- [ ] **Step 4: Close CLI command boundaries**
+- [x] **Step 4: Close CLI command boundaries**
 
 Update provider-free CLI modes to accept only:
 
@@ -797,7 +812,7 @@ assert provider_create_calls == []
 
 Do not add or execute a new live command.
 
-- [ ] **Step 5: Run the full DRA lane**
+- [x] **Step 5: Run the full DRA lane**
 
 Run:
 
@@ -808,7 +823,7 @@ make dra-check
 Expected: all historical generic, current provider-free closure, strict success,
 zero-cited stop, evaluation, readiness, and recovery tests pass.
 
-- [ ] **Step 6: Commit the readiness slice**
+- [x] **Step 6: Commit the readiness slice**
 
 ```bash
 git add \
@@ -846,6 +861,11 @@ git commit -m "test: bind DRA strict readiness authority"
 - Modify: `docs/superpowers/plans/2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md`
 - Modify: `tests/architecture/test_documentation_governance.py`
 - Modify: `tests/architecture/test_dra_contract.py`
+- Modify: `tests/architecture/test_collaboration_contract.py`
+- Modify: `tests/architecture/test_m4a_contract.py`
+- Modify: `tests/architecture/test_m5_contract.py`
+- Modify: `tests/unit/dra/test_proof_controller.py`
+- Modify: `tests/unit/test_release_surface.py`
 - Modify: `scripts/verify_release.py`
 
 **Interfaces:**
@@ -853,7 +873,7 @@ git commit -m "test: bind DRA strict readiness authority"
 - Produces: truthful current documentation and final PR 1 evidence.
 - Preserves: published release documents and the no-third-attempt boundary.
 
-- [ ] **Step 1: Add documentation-governance RED assertions**
+- [x] **Step 1: Add documentation-governance RED assertions**
 
 Require current docs to say all of:
 
@@ -867,8 +887,10 @@ strict live acceptance remains incomplete
 ```
 
 Require docs not to say the strict profile is included in DRA `v0.1.6`.
+Current runbook assertions must reject the stale sentence
+`Live provider proof was not run` while leaving historical surfaces unchanged.
 
-- [ ] **Step 2: Run documentation RED**
+- [x] **Step 2: Run documentation RED**
 
 Run:
 
@@ -880,7 +902,7 @@ uv run pytest -q \
 
 Expected: stale current-status and missing strict-identity assertions fail.
 
-- [ ] **Step 3: Update current public documentation**
+- [x] **Step 3: Update current public documentation**
 
 Synchronize ADR, operations, reference, design, root discovery, and plan/spec
 status. Preserve historical checklist text as historical where necessary; add a
@@ -897,7 +919,7 @@ the result in the PR `Documentation impact`. The operations documentation must
 also expose the focused `dra-strict-migration` database mode and its exact
 scope.
 
-- [ ] **Step 4: Run all local gates**
+- [x] **Step 4: Run all local gates**
 
 The focused commands above are diagnostic evidence. This block is the
 authoritative final non-Compose evidence for PR 1:
@@ -916,7 +938,7 @@ git diff --check "$(git merge-base HEAD origin/main)"..HEAD
 
 Expected: all commands exit zero.
 
-- [ ] **Step 5: Run one normal task-scoped Compose proof**
+- [x] **Step 5: Run one normal task-scoped Compose proof**
 
 Preflight host and Docker VM space, then run:
 
@@ -940,7 +962,7 @@ Expected:
 Record the global pre/post inventories defined in the execution protocol and
 confirm the exact task project plus default Compose inventories are empty.
 
-- [ ] **Step 6: Verify immutable boundaries**
+- [x] **Step 6: Verify immutable boundaries**
 
 Confirm:
 
@@ -951,7 +973,7 @@ Confirm:
 - no dependency or lockfile change;
 - no provider, credential, live readiness, tag, release, or deploy action.
 
-- [ ] **Step 7: Commit documentation and verification**
+- [x] **Step 7: Commit documentation and verification**
 
 ```bash
 git add \
@@ -963,8 +985,13 @@ git add \
   docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md \
   docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md \
   docs/superpowers/plans/2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md \
+  tests/architecture/test_collaboration_contract.py \
   tests/architecture/test_documentation_governance.py \
   tests/architecture/test_dra_contract.py \
+  tests/architecture/test_m4a_contract.py \
+  tests/architecture/test_m5_contract.py \
+  tests/unit/dra/test_proof_controller.py \
+  tests/unit/test_release_surface.py \
   scripts/verify_release.py
 git commit -m "docs: publish DRA strict consumer prerequisite"
 ```

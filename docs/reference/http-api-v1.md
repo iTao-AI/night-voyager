@@ -121,11 +121,27 @@ require the existing opaque session, exact configured `Origin`, session-bound
 | `GET /api/v1/cases/{case_id}/dra-candidates/{candidate_id}` | bounded candidate and terminal-decision status |
 | `POST /api/v1/cases/{case_id}/dra-candidates/{candidate_id}/verification-decisions` | `201` atomic approve/reject decision |
 
-The import body contains the strict pinned producer projection and canonical
-artifact input, but the response and persisted candidate exclude artifact
-content. Tenant, Case, actor, role, authority, promoted identities, baseline
-pins, credentials, and local paths are server-owned or fixed internally and
-cannot be supplied by the caller.
+The existing import endpoint accepts one closed, discriminated request body:
+
+- `schema_version="night-voyager.dra-candidate-import.v1"` is the legacy branch
+  and contains `expected_case_revision`, `producer`, `request_identity`,
+  `acceptance`, `run`, `artifact`, and `evidence`.
+- `schema_version="night-voyager.dra-candidate-import.v2"` is the strict branch
+  and replaces the separate producer/request fields with one
+  `consumer_identity`. That identity binds the exact post-release producer
+  commit, `generic-strict-citation@1`, the producer-observed profile, and
+  `dra.strict-citation-profile.v1`.
+
+Both branches use the same route and return contract; no endpoint was added.
+The discriminator selects exactly one branch. Mixed v1/v2 fields, unknown
+versions, missing identity fields, and extra fields fail validation. The
+application converts only the exact v2 request to the strict port command; it
+does not duck-type or infer strict identity from the v1 producer.
+
+The import body contains canonical artifact input, but the response and
+persisted candidate exclude artifact content. Tenant, Case, actor, role,
+authority, promoted identities, baseline pins, credentials, and local paths
+are server-owned or fixed internally and cannot be supplied by the caller.
 The imported projection must contain exactly one promotable public Evidence.
 One approve or reject decision makes the candidate terminal; subsequent review
 requires a newly imported candidate.

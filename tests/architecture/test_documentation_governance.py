@@ -94,7 +94,7 @@ PLAN_STATUS_BINDINGS = (
     (
         "DRA v0.1.6 governed live closure",
         "PR A/B/C and effective-query v2 implemented provider-free; "
-        "first live attempt safely stopped pre-import; acceptance incomplete",
+        "two live attempts safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
         "**Implementation status:** PR A, PR B, and PR C are implemented "
         "provider-free; governed live acceptance remains pending.",
@@ -102,7 +102,7 @@ PLAN_STATUS_BINDINGS = (
     (
         "DRA v0.1.6 governed live closure",
         "PR A/B/C and effective-query v2 implemented provider-free; "
-        "first live attempt safely stopped pre-import; acceptance incomplete",
+        "two live attempts safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-b-implementation-plan.md",
         "**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are\n"
         "implemented provider-free. One bounded live attempt projected 25 Evidence rows, all\n"
@@ -112,12 +112,19 @@ PLAN_STATUS_BINDINGS = (
     (
         "DRA v0.1.6 governed live closure",
         "PR A/B/C and effective-query v2 implemented provider-free; "
-        "first live attempt safely stopped pre-import; acceptance incomplete",
+        "two live attempts safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md",
         "**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are\n"
         "implemented provider-free. One bounded live attempt projected 25 Evidence rows, all\n"
         "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
         "remains pending.",
+    ),
+    (
+        "DRA strict consumer and versioned planning revision",
+        "PR 1 implemented provider-free; PR 2/3 approved but not implemented; "
+        "strict live acceptance incomplete",
+        "2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md",
+        "**Plan status:** Implementation complete locally; awaiting Career authority review.",
     ),
     (
         "High-End Portfolio Entry v1",
@@ -134,7 +141,7 @@ def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
     adr = (
         ROOT / "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md"
     ).read_text()
-    combined = "\n".join((runbook, reference, adr))
+    combined = " ".join("\n".join((runbook, reference, adr)).split())
     for required in (
         "freeze-intent",
         "preflight-live",
@@ -156,9 +163,11 @@ def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
         "URL-only",
         "UNTRUSTED_CANDIDATE",
         "no remote cancellation",
-        "PR A, PR B, and PR C are implemented provider-free",
+        "PR A, PR B, PR C, and the strict-consumer prerequisite are implemented "
+        "provider-free",
         "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
         "25",
+        "83",
         "uncited",
         "before candidate import",
         "night-voyager.dra-live-effective-query.v2",
@@ -173,6 +182,65 @@ def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
         assert required in combined
     assert "distinct acknowledgement" in combined
     assert "governed-live success claim" in combined
+
+
+def test_dra_strict_prerequisite_current_docs_are_truthful() -> None:
+    current_docs = {
+        relative: (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "README.md",
+            "README_CN.md",
+            "DESIGN.md",
+            "docs/README.md",
+            "docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md",
+            "docs/operations/dra-consumer-proof.md",
+            "docs/operations/database-roles.md",
+            "docs/reference/dra-governed-evidence.md",
+            "docs/reference/http-api-v1.md",
+            "docs/superpowers/README.md",
+            "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md",
+            "docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md",
+            "docs/superpowers/plans/2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md",
+        )
+    }
+    combined = "\n".join(current_docs.values())
+    for required in (
+        "DRA strict profile is pinned to exact post-release commit",
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "generic-strict-citation@1",
+        "dra.strict-citation-profile.v1",
+        "two bounded live attempts stopped before candidate import",
+        "no third provider attempt is authorized",
+        "strict live acceptance remains incomplete",
+        "dra-strict-migration",
+    ):
+        assert required in combined
+    current_runtime_docs = "\n".join(
+        source
+        for relative, source in current_docs.items()
+        if "/superpowers/" not in relative
+    )
+    assert "strict profile is included in DRA `v0.1.6`" not in current_runtime_docs
+
+    strict_spec = current_docs[
+        "docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md"
+    ]
+    strict_plan = current_docs[
+        "docs/superpowers/plans/2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md"
+    ]
+    plans_index = current_docs["docs/superpowers/README.md"]
+    assert (
+        "**Design status:** Approved; PR 1 implemented provider-free; "
+        "PR 2 and PR 3 approved but not implemented."
+    ) in strict_spec
+    assert (
+        "**Plan status:** Implementation complete locally; awaiting Career authority review."
+    ) in strict_plan
+    assert (
+        "| DRA strict consumer and versioned planning revision | "
+        "PR 1 implemented provider-free; PR 2/3 approved but not implemented; "
+        "strict live acceptance incomplete |"
+    ) in plans_index
 MERGED_FACT_TO_PLAN_BANNERS = {
     "2026-07-22-explicit-planning-start-authority.md": (
         "**Implementation status:** Complete, merged as PR #57, and released in v0.1.3."
@@ -386,10 +454,10 @@ def test_implemented_document_statuses_do_not_regress() -> None:
         "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
             "**Implementation status:** PR A, PR B, PR C, and the "
             "effective-query v2 repair are\n"
-            "implemented provider-free. One bounded live attempt "
-            "projected 25 Evidence rows, all\n"
-            "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
-            "remains pending.",
+            "implemented provider-free. Two bounded live attempts projected 25 and 83 "
+            "Evidence rows,\n"
+            "all `uncited`, and stopped safely before candidate import; governed live\n"
+            "acceptance remains pending.",
             "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
         ),
     }
@@ -520,11 +588,11 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
 def test_root_readmes_bind_current_development_migration_head() -> None:
     current_graph = (
         "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
-        "0009 -> 0010`"
+        "0009 -> 0010 -> 0011`"
     )
     stale_graph = (
         "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
-        "0009`"
+        "0009 -> 0010`"
     )
     for relative in ("README.md", "README_CN.md"):
         source = (ROOT / relative).read_text(encoding="utf-8")

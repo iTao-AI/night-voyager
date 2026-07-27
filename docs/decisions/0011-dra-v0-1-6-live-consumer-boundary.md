@@ -2,10 +2,34 @@
 
 ## Status
 
-Accepted. PR A, PR B, and PR C are implemented provider-free. One bounded live
-attempt projected 25 Evidence rows, all `uncited`, and stopped safely before
-candidate import with no Night Voyager business mutation. Governed live acceptance
-remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
+Accepted. PR A, PR B, PR C, and the post-release strict-consumer prerequisite are
+implemented provider-free. Two bounded live attempts projected 25 and 83
+same-run Evidence rows, all `uncited`, and stopped safely before candidate
+import with no Night Voyager business mutation. Strict live acceptance remains
+incomplete and the capability remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
+
+## Current runtime correction
+
+The numbered `0010` decision below records the historical DRA v0.1.6 boundary.
+Current migration `0011` preserves that release-referenced legacy branch and
+adds a separate commit-referenced strict branch. The DRA strict profile is pinned
+to exact post-release commit
+`01ba21f2996769e68cbc88f4bb0596740df27f6b`, profile
+`generic-strict-citation@1`, proof schema
+`dra.strict-citation-profile.v1`, and the unchanged copied downstream contract.
+It is not a DRA v0.1.6 release capability.
+
+The existing candidate endpoint accepts only a discriminated v1 legacy or v2
+strict request. The application converts the v2 shape to the strict PostgreSQL
+overload; mixed and extra-field shapes fail closed. Both exact import overloads
+and the verification function remain API-only, while the worker and `PUBLIC`
+have `EXECUTE=false`. Forced RLS and the no-direct-DML boundary are unchanged.
+Downgrade to `0010` refuses before mutation when strict commit-referenced history
+exists; an empty or legacy-only database can downgrade safely.
+
+The two bounded live attempts stopped before candidate import. No third provider
+attempt is authorized, so provider-free readiness and evaluation evidence do
+not establish strict live acceptance.
 
 ## Context
 
@@ -103,15 +127,16 @@ code to create product authority.
 
 - `make dra-check` can prove the exact v0.1.6 producer, projection, raw URL,
   reconciliation, fake transport, and evaluation contracts offline.
-- `make db-check` proves `0009 -> 0010`, historical row readability, exact live-only
-  new imports, API-only outcome projection, RLS/grant parity, and downgrade refusal
-  when live history exists.
+- `make db-check` proves the ordinary fresh graph through `0011`; the focused
+  `scripts/run_db_tests.sh dra-strict-migration` lane proves exact legacy/strict
+  overload identity, historical row readability, RLS/grant parity, strict-history
+  downgrade refusal, and safe empty-history downgrade/re-upgrade.
 - The deterministic Compose governed-flow proof imports the v0.1.6 scenario
   candidate, but still uses checked-in synthetic bytes and no provider.
-- PR A, PR B, and PR C supply the provider-free implementation and deterministic
-  recovery proof. The first bounded attempt is retained only as safe-stop evidence;
-  a new v2 candidate freeze, separately authorized live acceptance, and successful
-  terminal evaluation remain outstanding.
+- PR A, PR B, PR C, and strict-consumer PR 1 supply provider-free implementation
+  and deterministic recovery proof. Both bounded attempts remain safe-stop
+  evidence; no third provider attempt, operational strict candidate freeze, or
+  successful terminal acceptance was performed.
 
 ## Non-claims
 

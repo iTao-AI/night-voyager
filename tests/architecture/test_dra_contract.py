@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 import pytest
@@ -97,6 +98,8 @@ def test_dra_live_foundation_is_release_verified_without_live_execution() -> Non
     fixture_verifier = (ROOT / "scripts/verify_dra_consumer.py").read_text()
     for required in (
         "migrations/versions/0010_dra_v0_1_6_live_consumer.py",
+        "migrations/versions/0011_dra_strict_consumer_identity.py",
+        "fixtures/dra/live-closure-scenario-v2.json",
         "src/night_voyager/dra/live_projection.py",
         "src/night_voyager/dra/live_evaluation.py",
         "src/night_voyager/dra/live_outcome.py",
@@ -110,6 +113,45 @@ def test_dra_live_foundation_is_release_verified_without_live_execution() -> Non
     assert "verify_dra_consumer.py fixture --json" in (
         ROOT / "Makefile"
     ).read_text()
+
+
+def test_release_verifier_binds_overloaded_dra_functions_by_exact_identity() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text()
+    verifier_globals = runpy.run_path(str(ROOT / "scripts/verify_release.py"))
+    expected = {
+        (
+            "import_dra_research_candidate",
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "text, text, text, text, integer, text, jsonb, text, text",
+        ),
+        (
+            "import_dra_research_candidate",
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "text, text, text, text, text, text, text, text, text, integer, text, "
+            "jsonb, text, text",
+        ),
+        (
+            "verify_and_promote_dra_candidate",
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "date, integer, text, text, text, integer, text, jsonb, uuid, integer, "
+            "text, text, uuid, uuid, uuid, jsonb, text, text",
+        ),
+    }
+    assert verifier_globals["DRA_DATABASE_FUNCTION_IDENTITIES"] == expected
+    assert verifier_globals["DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES"] == {
+        verify_release_identity
+        for verify_release_identity in expected
+        if verify_release_identity[0] == "verify_and_promote_dra_candidate"
+        or verify_release_identity[1]
+        == (
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "text, text, text, text, integer, text, jsonb, text, text"
+        )
+    }
+    assert verifier_globals["DRA_API_FUNCTION_IDENTITIES"] == expected
+    assert verifier_globals["DRA_WORKER_FUNCTION_IDENTITIES"] == set()
+    assert "oidvectortypes(p.proargtypes) AS identity_arguments" in verifier
+    assert '{row["proname"] for row in app_functions}' not in verifier
 
 
 def test_dra_candidate_freeze_is_executable_and_live_lane_stays_optional() -> None:
@@ -148,7 +190,8 @@ def test_governed_mixed_planning_public_contract_is_closed() -> None:
         in docs_index
     )
     assert "make compose-proof" in operations
-    assert "Live provider proof was not run" in operations
+    assert "two bounded live attempts stopped before candidate import" in operations
+    assert "No third provider attempt is authorized" in operations
 
 
 def test_strict_import_command_is_closed_and_separate_from_legacy() -> None:

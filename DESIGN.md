@@ -68,6 +68,11 @@ The first screen contains exactly one current lifecycle stage, one required huma
 
 The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
+The DRA strict-consumer prerequisite is provider-free backend authority only. It
+adds migration `0011` and a closed v1/v2 import boundary for the existing
+candidate endpoint, but no browser route, visual state, task operation, or
+automatic promotion. Strict live acceptance remains incomplete.
+
 Presentation locale is a separate, dependency-free layer shared by `/`, `/demo`, and `/demo/collaboration`. SSR, missing, invalid, and storage-failure states resolve to exact `zh-CN`; exact `en` is selected explicitly and persisted only at `night-voyager:presentation-locale:v1`. Locale changes update copy and `html[lang]` while preserving mounted children, the journey envelope, requests, idempotency, EventSource URL/count, task state, and navigation.
 
 PR A and PR B are released in `v0.1.2`: PR A adds the governed-collaboration backend

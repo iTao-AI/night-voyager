@@ -6,9 +6,10 @@ The required DRA lane is deterministic and offline:
 make dra-check
 ```
 
-It validates the copied v1 fixture, strict v0.1.6 live models and transport,
-candidate projection, checked-in synthetic source snapshot, fake client,
-deterministic evaluation, exact producer/baseline pins, the provider-free Stage 1
+It validates the copied v1 fixture, the checked-in strict v2 exact-commit
+scenario, live models and transport, candidate projection, checked-in synthetic
+source snapshot, fake client, deterministic evaluation, exact producer/baseline
+pins, the provider-free Stage 1
 capture rehearsal, application contracts, and architecture boundary. The rehearsal
 crosses an inspection pause, copies the recovery bundle, resumes in a fresh process,
 imports one `UNTRUSTED_CANDIDATE`, and proves that no second provider run occurs. It
@@ -17,7 +18,7 @@ requires no DRA service, network access, API key, or provider credential.
 ## Dedicated database proof
 
 Migration and HTTP integration tests use `DRA_PROOF_CASE_ID`, separate from the
-M3A and connected-demo Cases. Migrations `0005` and `0010` are seed-free. When an operator
+M3A and connected-demo Cases. Migrations `0005`, `0010`, and `0011` are seed-free. When an operator
 needs the explicit idempotent test/development seed against a migrated database:
 
 ```bash
@@ -30,6 +31,18 @@ exactly one external Evidence plus the synthetic baseline. Its isolated `0010`
 lane also proves the closed v0.1.6 producer tuple, historical-row readability,
 API-only outcome projection, downgrade refusal with live history, and clean
 re-upgrade.
+
+For the exact strict migration boundary, run:
+
+```bash
+scripts/run_db_tests.sh dra-strict-migration
+```
+
+The focused `dra-strict-migration` mode proves current head `0011`, both exact
+legacy and strict import overload identities, API-only execution, worker and
+`PUBLIC` denial, forced RLS, legacy-row compatibility, strict-history downgrade
+refusal, and safe empty-history downgrade/re-upgrade. It uses a disposable
+task-owned Compose project and performs no provider or credential access.
 
 The complete deterministic closure is also part of the isolated Compose proof:
 
@@ -50,14 +63,18 @@ service.
 
 ## Separately authorized live proof
 
-PR A, PR B, and PR C are implemented provider-free. One separately authorized live
-attempt accepted one producer run and projected 25 same-run Evidence rows, but all
-25 were `uncited`; it therefore stopped safely before candidate import with no
-Night Voyager business mutation. The capability remains
-`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. This is bounded safe-stop evidence, not a
-governed-live success claim; the current contract still makes no governed-live success claim.
-The earlier status sentence `Live provider proof was not run` is historical and is
-superseded by this bounded safe-stop result.
+PR A, PR B, PR C, and the strict-consumer prerequisite are implemented
+provider-free. Two separately authorized bounded live attempts accepted producer
+runs and projected respectively 25 and 83 same-run Evidence rows, all `uncited`.
+These two bounded live attempts stopped before candidate import with no Night
+Voyager business mutation. No third provider attempt is authorized. The DRA
+strict profile is pinned to exact post-release commit
+`01ba21f2996769e68cbc88f4bb0596740df27f6b`, profile
+`generic-strict-citation@1`, and proof schema
+`dra.strict-citation-profile.v1`; this provider-free prerequisite is not a DRA
+v0.1.6 release capability. Strict live acceptance remains incomplete and the
+capability remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`. This is bounded
+safe-stop evidence, not a governed-live success claim.
 The live command is not a required CI gate and is excluded from `make check`,
 `make proof`, and Compose. Run it only after separate approval for one provider
 attempt and its cost/deadline.
@@ -95,8 +112,9 @@ uv run python scripts/verify_dra_live_closure.py preflight-live \
 `freeze-intent` refuses a legacy v1 readiness receipt, a different base query, a
 reserved-marker injection, CR/LF, empty input, or a base whose composed effective
 query exceeds the closed byte limit. `preflight-live` reads no environment values
-and performs no provider access. Its receipt binds the v2 readiness predecessor,
-intent, exact effective request hash, v0.1.6 producer, scenario/schema identities,
+and performs no provider access. Its receipt binds the V3 strict readiness
+predecessor, intent, exact effective request hash, exact post-release commit
+producer, v2 scenario/schema identities,
 filesystem readiness, frozen monotonic deadline/poll interval,
 `UNTRUSTED_CANDIDATE` freeze, and one-shot budget.
 
@@ -163,7 +181,7 @@ acknowledgement; no global acknowledgement authorizes a later stage.
 | 4 | `promote` | capture receipt plus re-supplied snapshot | fresh assigned advisor session and `acknowledge-promote` | atomic existing promotion authority | `promotion_recorded` | exact-key authority reconciliation |
 | 5 | `review` | promotion receipt | fresh assigned advisor session and `acknowledge-review` | existing task/worker/SSE and AdvisorReview | `review_recorded` | exact-key authority reconciliation |
 | 6 | `decide` | review receipt | fresh parent session and `acknowledge-decide` | existing family decision authority | `decision_recorded` | exact-key authority reconciliation |
-| 7 | `evaluate` | decision receipt | fresh assigned advisor session and `acknowledge-evaluate` | read-only migration `0010` projection | `closure_passed` or bounded failure | re-run evaluation only |
+| 7 | `evaluate` | decision receipt | fresh assigned advisor session and `acknowledge-evaluate` | read-only migration `0011` projection | `closure_passed` or bounded failure | re-run evaluation only |
 | 8 | `cleanup` | exact receipt root | cleanup acknowledgement | task-owned filesystem cleanup only | cleanup receipt | inspect residue, then exact cleanup |
 
 Stage 2 never fetches a source. The operator supplies a task-owned mode-`0700`
@@ -215,7 +233,7 @@ preview binds only the stage and canonical input SHA-256; the final JSON result
 is written separately to standard output.
 
 The evaluator rejects an expected outcome that is not exactly derivable from the
-four typed durable stage receipts. Migration `0010` separately proves the exact
+four typed durable stage receipts. Migration `0011` separately proves the exact
 execution, terminal event/SSE cursor, five-field Skill pin, AdvisorReview,
 DecisionReceipt, and TimelinePlan identities.
 
@@ -234,7 +252,7 @@ uv run python scripts/verify_dra_live_closure.py rehearse-full --json
 ```
 
 `rehearse-full` uses the deterministic fixture through real PostgreSQL, FastAPI,
-worker, SSE, review, decision, and the migration `0010` outcome inspector. It
+worker, SSE, review, decision, and the migration `0011` outcome inspector. It
 does not consume the live provider budget. Stage 2, Stage 3, Stage 4, and final
 evaluation each run in a separate subprocess, reopen the durable receipt store,
 and re-inject only the role-specific ephemeral authority. The rehearsal also
@@ -341,7 +359,7 @@ requires zero GitHub approvals, including a PR whose GitHub reviews list is
 empty, therefore remains compatible with an explicit independent human review;
 GitHub review state is neither required nor treated as human-review authority.
 
-The v2 readiness receipt binds the exact merged main, base/effective query and
+The V3 strict readiness receipt binds the exact merged main, base/effective query and
 code-owned citation-clause identities, spec and PR C plan hashes, producer pin,
 scenario, intent/receipt/CLI schema identities, required hosted
 checks, recovery-matrix result, Docker preflight/inventory, cleanup state, and

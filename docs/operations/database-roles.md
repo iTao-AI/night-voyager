@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -121,6 +121,35 @@ readability, function owner/signature/ACL, API/worker parity, and clean
 re-upgrade. Downgrade refuses before mutation when v0.1.6 history exists; with
 no incompatible live history it removes only the additive function and
 restores the previous import boundary.
+
+Migration `0011` preserves the exact legacy release-referenced import signature
+and adds a distinct strict commit-referenced
+`app.import_dra_research_candidate(...)` overload. Catalog and privilege checks
+bind each function by `oidvectortypes(p.proargtypes)`, never by `proname`
+cardinality. The API has `EXECUTE=true` for both exact import signatures and the
+exact `app.verify_and_promote_dra_candidate(...)` signature; the worker and
+`PUBLIC` have `EXECUTE=false` for all three. Runtime roles retain no direct
+candidate-ledger DML and both ledgers retain forced RLS.
+
+The strict branch stores the exact post-release producer commit,
+`generic-strict-citation@1`, `dra.strict-citation-profile.v1`, request identity,
+and observed profile manifest. It cannot be inferred from a legacy row or mixed
+with the v1 identity. Downgrade to `0010` takes an exclusive ledger lock and
+refuses before mutation when any commit-referenced strict history exists.
+Empty-history and legacy-only databases may downgrade safely and re-upgrade
+without changing historical rows.
+
+Run the focused strict migration mode with:
+
+```bash
+scripts/run_db_tests.sh dra-strict-migration
+```
+
+The `dra-strict-migration` mode uses one disposable task-owned Compose project,
+upgrades from the historical `0009` seed through current head `0011`, and runs
+only the existing live-migration compatibility test, strict migration
+upgrade/downgrade tests, and DRA RLS isolation checks. It is not a provider,
+credential, candidate-freeze, or release command.
 
 Use `make fact-to-plan-db-check` for the isolated `0009 -> 0008 -> 0009` parity lane.
 It proves the exact `0008` task function definition, owner, signature, ACL, runtime

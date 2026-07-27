@@ -94,6 +94,34 @@ SKILL_WORKER_FUNCTIONS = {
     "load_agent_task_skill_pin",
     "load_persisted_synthetic_planning_snapshot",
 }
+DRA_LEGACY_IMPORT_IDENTITY = (
+    "import_dra_research_candidate",
+    "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+    "text, text, text, text, integer, text, jsonb, text, text",
+)
+DRA_STRICT_IMPORT_IDENTITY = (
+    "import_dra_research_candidate",
+    "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+    "text, text, text, text, text, text, text, text, text, integer, text, "
+    "jsonb, text, text",
+)
+DRA_VERIFICATION_IDENTITY = (
+    "verify_and_promote_dra_candidate",
+    "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, date, "
+    "integer, text, text, text, integer, text, jsonb, uuid, integer, text, "
+    "text, uuid, uuid, uuid, jsonb, text, text",
+)
+DRA_DATABASE_FUNCTION_IDENTITIES = {
+    DRA_LEGACY_IMPORT_IDENTITY,
+    DRA_STRICT_IMPORT_IDENTITY,
+    DRA_VERIFICATION_IDENTITY,
+}
+DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES = {
+    DRA_LEGACY_IMPORT_IDENTITY,
+    DRA_VERIFICATION_IDENTITY,
+}
+DRA_API_FUNCTION_IDENTITIES = DRA_DATABASE_FUNCTION_IDENTITIES
+DRA_WORKER_FUNCTION_IDENTITIES: set[tuple[str, str]] = set()
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -245,7 +273,9 @@ RELEASE_HOW_TO_TOKENS = (
 )
 DRA_SURFACE = (
     "migrations/versions/0010_dra_v0_1_6_live_consumer.py",
+    "migrations/versions/0011_dra_strict_consumer_identity.py",
     "fixtures/dra/live-closure-scenario-v1.json",
+    "fixtures/dra/live-closure-scenario-v2.json",
     "src/night_voyager/dra/live_models.py",
     "src/night_voyager/dra/live_projection.py",
     "src/night_voyager/dra/live_evaluation.py",
@@ -512,6 +542,8 @@ def verify_dra_surface() -> None:
     operations = (ROOT / "docs/operations/dra-consumer-proof.md").read_text(
         encoding="utf-8"
     )
+    normalized_reference = " ".join(reference.split())
+    normalized_operations = " ".join(operations.split())
     if (
         "dra-check:" not in makefile
         or "dra-consumer-proof:" not in makefile
@@ -522,20 +554,26 @@ def verify_dra_surface() -> None:
         or "tests/contracts/test_dra_transport.py" not in makefile
         or "tests/unit/dra" not in makefile
         or "scripts/run_dra_lane.sh rehearse" not in makefile
-        or "generate_governed_mixed_planning_run_v1" not in reference
+        or "generate_governed_mixed_planning_run_v1" not in normalized_reference
         or "australia_program_fit -> program_fit -> externally_verified"
-        not in reference
-        or "exact copies of the synthetic baseline" not in reference
-        or "Live provider proof was not run" not in operations
-        or "PR A, PR B, and PR C are implemented provider-free"
-        not in operations
-        or "INCOMPLETE_PENDING_LIVE_ACCEPTANCE" not in operations
-        or "operator_action_required" not in operations
-        or "select-and-import" not in operations
-        or "same run" not in operations
-        or "no governed-live success claim" not in operations
-        or "make compose-proof" not in operations
-        or "freeze-candidate" not in operations
+        not in normalized_reference
+        or "exact copies of the synthetic baseline" not in normalized_reference
+        or "two bounded live attempts stopped before candidate import"
+        not in normalized_operations
+        or "No third provider attempt is authorized" not in normalized_operations
+        or "Strict live acceptance remains incomplete" not in normalized_operations
+        or "generic-strict-citation@1" not in normalized_operations
+        or "dra.strict-citation-profile.v1" not in normalized_operations
+        or "PR A, PR B, PR C, and the strict-consumer prerequisite are "
+        "implemented provider-free"
+        not in normalized_operations
+        or "INCOMPLETE_PENDING_LIVE_ACCEPTANCE" not in normalized_operations
+        or "operator_action_required" not in normalized_operations
+        or "select-and-import" not in normalized_operations
+        or "same run" not in normalized_operations
+        or "not a governed-live success claim" not in normalized_operations
+        or "make compose-proof" not in normalized_operations
+        or "freeze-candidate" not in normalized_operations
     ):
         raise SystemExit("governed DRA command or status contract drift")
     print("proof DRA surface: offline governed mixed decision closure confirmed")
@@ -908,8 +946,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0010"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0010")
+    if heads != {"0011"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0011")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -917,14 +955,17 @@ def verify_alembic_contract() -> None:
         "tests/integration/tasks/test_planning_start_migration.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"': 2,
         "inside-dra-live-migration": 3,
-        "tests/integration/dra/test_dra_live_migration.py": 2,
+        "tests/integration/dra/test_dra_live_migration.py": 3,
         'run_lane "${BASE_PROJECT_NAME}-dra-live-migration"': 2,
+        "inside-dra-strict-migration": 2,
+        "tests/integration/dra/test_dra_strict_migration.py": 1,
+        'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 1,
     }
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0010 with planning-start and "
-        "DRA live parity lanes confirmed"
+        "proof migrations: exact Alembic head 0011 with planning-start, "
+        "DRA live, and focused DRA strict parity lanes confirmed"
     )
 
 
@@ -1248,8 +1289,6 @@ async def verify_database_catalog(database_url: str) -> None:
                 "heartbeat_agent_task",
                 "fail_agent_task",
                 "finalize_agent_task_result",
-                "import_dra_research_candidate",
-                "verify_and_promote_dra_candidate",
                 "load_governed_mixed_planning_snapshot",
                 "seed_demo_collaboration",
                 "seed_demo_skill_registry",
@@ -1259,11 +1298,39 @@ async def verify_database_catalog(database_url: str) -> None:
                 | SKILL_API_FUNCTIONS
                 | SKILL_WORKER_FUNCTIONS
             )
-            if {row["proname"] for row in app_functions} != expected_app_functions or any(
-                not row["prosecdef"]
-                or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
-                or row["public_execute"]
+            app_function_identities = {
+                (row["proname"], row["identity_arguments"]) for row in app_functions
+            }
+            alembic_revision = await connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            if alembic_revision == "0011":
+                expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
+            elif alembic_revision in {"0009", "0010"}:
+                expected_dra_function_identities = (
+                    DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES
+                )
+            else:
+                raise SystemExit("DRA function catalog requires migration 0009 or later")
+            non_dra_app_functions = {
+                row["proname"]
                 for row in app_functions
+                if (row["proname"], row["identity_arguments"])
+                not in DRA_DATABASE_FUNCTION_IDENTITIES
+            }
+            if (
+                non_dra_app_functions != expected_app_functions
+                or not expected_dra_function_identities.issubset(
+                    app_function_identities
+                )
+                or len(app_function_identities)
+                != len(expected_app_functions) + len(expected_dra_function_identities)
+                or any(
+                    not row["prosecdef"]
+                    or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
+                    or row["public_execute"]
+                    for row in app_functions
+                )
             ):
                 raise SystemExit("app functions violate narrow SECURITY DEFINER contract")
             api_functions = (
@@ -1304,6 +1371,21 @@ async def verify_database_catalog(database_url: str) -> None:
                 "uuid, uuid, integer, uuid, integer, text"
             ):
                 raise SystemExit("mixed snapshot authority signature drift")
+            dra_function_grants = {
+                (row["proname"], row["identity_arguments"]): (
+                    row["api_execute"],
+                    row["worker_execute"],
+                )
+                for row in app_functions
+                if (row["proname"], row["identity_arguments"])
+                in DRA_DATABASE_FUNCTION_IDENTITIES
+            }
+            if set(dra_function_grants) != expected_dra_function_identities or any(
+                api_execute != (identity in DRA_API_FUNCTION_IDENTITIES)
+                or worker_execute != (identity in DRA_WORKER_FUNCTION_IDENTITIES)
+                for identity, (api_execute, worker_execute) in dra_function_grants.items()
+            ):
+                raise SystemExit("DRA function grants violate API/worker separation")
             create_signature = next(
                 row["identity_arguments"]
                 for row in app_functions
