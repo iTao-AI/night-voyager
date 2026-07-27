@@ -1,15 +1,167 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
+import json
 import os
 import subprocess
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 pytestmark = pytest.mark.database
+ORG = "10000000-0000-0000-0000-000000000001"
+ADVISOR = "20000000-0000-0000-0000-000000000001"
+STUDENT = "20000000-0000-0000-0000-000000000002"
+PARENT = "20000000-0000-0000-0000-000000000003"
+PENDING_SIGNATURE = (
+    "app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)"
+)
+
+
+def resource(prefix: str, suffix: int) -> str:
+    return f"{prefix}-0000-0000-0000-{suffix:012d}"
+
+
+async def _seed_candidate_case(
+    connection: AsyncConnection,
+    suffix: int,
+    *,
+    fact_key: str = "family.budget",
+    expired: bool = False,
+    stale: bool = False,
+    verified: bool = False,
+) -> str:
+    case_id = resource("4f000000", suffix)
+    thread_id = resource("5f000000", suffix)
+    message_id = resource("6f000000", suffix)
+    candidate_id = resource("7f000000", suffix)
+    await connection.execute(
+        text(
+            "SELECT set_config('night_voyager.organization_id',:org,true)"
+        ),
+        {"org": ORG},
+    )
+    source = (
+        await connection.execute(
+            text(
+                "SELECT student_preferences,family_preferences "
+                "FROM app.student_case_revisions WHERE organization_id=:org "
+                "ORDER BY created_at LIMIT 1"
+            ),
+            {"org": ORG},
+        )
+    ).mappings().one()
+    await connection.execute(
+        text(
+            "SELECT app.publish_case_revision("
+            ":org,:case,NULL,1,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+        ),
+        {
+            "org": ORG,
+            "case": case_id,
+            "student": json.dumps(source["student_preferences"]),
+            "family": json.dumps(source["family_preferences"]),
+        },
+    )
+    await connection.execute(
+        text(
+            "SELECT app.seed_case_participants("
+            ":org,:case,:advisor,:student,:parent)"
+        ),
+        {
+            "org": ORG,
+            "case": case_id,
+            "advisor": ADVISOR,
+            "student": STUDENT,
+            "parent": PARENT,
+        },
+    )
+    await connection.execute(
+        text(
+            "INSERT INTO app.collaboration_threads("
+            "organization_id,id,case_id,created_by_actor_id,created_by_role) "
+            "VALUES(:org,:thread,:case,:advisor,'advisor')"
+        ),
+        {
+            "org": ORG,
+            "thread": thread_id,
+            "case": case_id,
+            "advisor": ADVISOR,
+        },
+    )
+    await connection.execute(
+        text(
+            "INSERT INTO app.message_events("
+            "organization_id,id,thread_id,case_id,sequence_no,actor_id,"
+            "actor_role,body,content_sha256,request_sha256) VALUES("
+            ":org,:message,:thread,:case,1,:parent,'parent',"
+            "'Synthetic bounded revision proposal.',repeat('a',64),repeat('b',64))"
+        ),
+        {
+            "org": ORG,
+            "message": message_id,
+            "thread": thread_id,
+            "case": case_id,
+            "parent": PARENT,
+        },
+    )
+    created = datetime.now(UTC) - (timedelta(days=8) if expired else timedelta())
+    await connection.execute(
+        text(
+            "INSERT INTO app.memory_candidates("
+            "organization_id,id,case_id,case_revision,message_event_id,"
+            "subject_actor_id,subject_role,proposing_actor_id,proposing_role,"
+            "fact_key,proposed_value,value_sha256,request_sha256,created_at,expires_at"
+            ") VALUES(:org,:candidate,:case,1,:message,:parent,'parent',"
+            ":parent,'parent',:fact_key,'{}'::jsonb,repeat('c',64),"
+            "repeat('d',64),:created,:expires)"
+        ),
+        {
+            "org": ORG,
+            "candidate": candidate_id,
+            "case": case_id,
+            "message": message_id,
+            "parent": PARENT,
+            "fact_key": fact_key,
+            "created": created,
+            "expires": created + timedelta(days=7),
+        },
+    )
+    if verified:
+        await connection.execute(
+            text(
+                "INSERT INTO app.memory_candidate_verifications("
+                "organization_id,id,candidate_id,case_id,advisor_actor_id,"
+                "advisor_role,decision,reason,request_sha256) VALUES("
+                ":org,:verification,:candidate,:case,:advisor,'advisor',"
+                "'reject','Synthetic rejection.',repeat('e',64))"
+            ),
+            {
+                "org": ORG,
+                "verification": resource("8f000000", suffix),
+                "candidate": candidate_id,
+                "case": case_id,
+                "advisor": ADVISOR,
+            },
+        )
+    if stale:
+        await connection.execute(
+            text(
+                "SELECT app.publish_case_revision("
+                ":org,:case,1,2,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+            ),
+            {
+                "org": ORG,
+                "case": case_id,
+                "student": json.dumps(source["student_preferences"]),
+                "family": json.dumps(source["family_preferences"]),
+            },
+        )
+    return case_id
 
 
 async def _downgrade_snapshot(connection: AsyncConnection) -> dict[str, Any]:
@@ -69,7 +221,8 @@ async def _downgrade_snapshot(connection: AsyncConnection) -> dict[str, Any]:
                     "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
                     "WHERE n.nspname='app' AND p.proname IN "
                     "('review_planning_run','verify_memory_candidate','create_agent_task',"
-                    "'finalize_agent_task_result','persist_planning_result') "
+                    "'finalize_agent_task_result','persist_planning_result',"
+                    "'read_connected_journey_fact_pending') "
                     "ORDER BY p.proname,oidvectortypes(p.proargtypes)"
                 )
             )
@@ -235,6 +388,157 @@ async def test_revision_authority_function_acl_and_search_paths_are_closed() -> 
 
 
 @pytest.mark.asyncio
+async def test_participant_safe_pending_fact_projection_is_exact_and_role_equal() -> None:
+    migration = create_async_engine(
+        os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+    )
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    try:
+        async with migration.begin() as connection:
+            pending = await _seed_candidate_case(connection, 1511)
+            verified = await _seed_candidate_case(
+                connection, 1512, verified=True
+            )
+            expired = await _seed_candidate_case(
+                connection, 1513, expired=True
+            )
+            stale = await _seed_candidate_case(connection, 1514, stale=True)
+            unrelated = await _seed_candidate_case(
+                connection, 1515, fact_key="family.risk_tolerance"
+            )
+        async with api.begin() as connection:
+            for actor, role in (
+                (ADVISOR, "advisor"),
+                (STUDENT, "student"),
+                (PARENT, "parent"),
+            ):
+                for name, value in (
+                    ("night_voyager.organization_id", ORG),
+                    ("night_voyager.actor_id", actor),
+                    ("night_voyager.role", role),
+                ):
+                    await connection.execute(
+                        text("SELECT set_config(:name,:value,true)"),
+                        {"name": name, "value": value},
+                    )
+                observed = await connection.scalar(
+                    text(
+                        "SELECT app.read_connected_journey_fact_pending("
+                        ":org,:actor,:role,:case)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": actor,
+                        "role": role,
+                        "case": pending,
+                    },
+                )
+                assert observed is True
+            for case_id in (verified, expired, stale, unrelated):
+                observed = await connection.scalar(
+                    text(
+                        "SELECT app.read_connected_journey_fact_pending("
+                        ":org,:actor,'parent',:case)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": PARENT,
+                        "case": case_id,
+                    },
+                )
+                assert observed is False
+            for name, value in (
+                ("night_voyager.organization_id", ORG),
+                ("night_voyager.actor_id", resource("2f000000", 1511)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            with pytest.raises(DBAPIError, match="collaboration resource unavailable"):
+                await connection.scalar(
+                    text(
+                        "SELECT app.read_connected_journey_fact_pending("
+                        ":org,:actor,'advisor',:case)"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": resource("2f000000", 1511),
+                        "case": pending,
+                    },
+                )
+        async with api.begin() as connection:
+            other_org = resource("1f000000", 1511)
+            for name, value in (
+                ("night_voyager.organization_id", other_org),
+                ("night_voyager.actor_id", ADVISOR),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            with pytest.raises(DBAPIError, match="collaboration resource unavailable"):
+                await connection.scalar(
+                    text(
+                        "SELECT app.read_connected_journey_fact_pending("
+                        ":org,:actor,'advisor',:case)"
+                    ),
+                    {
+                        "org": other_org,
+                        "actor": ADVISOR,
+                        "case": pending,
+                    },
+                )
+        for table in ("memory_candidates", "memory_candidate_verifications"):
+            async with api.connect() as connection:
+                with pytest.raises(DBAPIError, match="permission denied"):
+                    await connection.scalar(
+                        text(f"SELECT count(*) FROM app.{table}")  # noqa: S608
+                    )
+        async with worker.connect() as connection:
+            allowed = await connection.scalar(
+                text(
+                    "SELECT has_function_privilege("
+                    "current_user,:signature,'EXECUTE')"
+                ),
+                {"signature": PENDING_SIGNATURE},
+            )
+            assert allowed is False
+    finally:
+        await worker.dispose()
+        await api.dispose()
+        await migration.dispose()
+
+
+@pytest.mark.asyncio
+async def test_pending_fact_projection_exact_identity_and_acl_are_closed() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT oidvectortypes(p.proargtypes),p.prosecdef,p.proconfig,"
+                        "has_function_privilege('night_voyager_api',p.oid,'EXECUTE'),"
+                        "has_function_privilege('night_voyager_worker',p.oid,'EXECUTE'),"
+                        "has_function_privilege('public',p.oid,'EXECUTE') "
+                        "FROM pg_proc p WHERE p.oid=to_regprocedure(:signature)"
+                    ),
+                    {"signature": PENDING_SIGNATURE},
+                )
+            ).one()
+    finally:
+        await engine.dispose()
+    assert row[0] == "uuid, uuid, text, uuid"
+    assert row[1] is True
+    assert row[2] == ["search_path=pg_catalog, pg_temp"]
+    assert tuple(bool(value) for value in row[3:]) == (True, False, False)
+
+
+@pytest.mark.asyncio
 async def test_safe_downgrade_restores_exact_0011_surface() -> None:
     if os.environ.get("NIGHT_VOYAGER_REVISION_MIGRATION_PHASE") != "safe-0011":
         pytest.skip("isolated safe-downgrade phase only")
@@ -267,10 +571,17 @@ async def test_safe_downgrade_restores_exact_0011_surface() -> None:
                     )
                 )
             ).one()
+            pending_function = await connection.scalar(
+                text(
+                    "SELECT to_regprocedure("
+                    "'app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)')"
+                )
+            )
     finally:
         await engine.dispose()
     assert version == "0011"
     assert columns == set()
+    assert pending_function is None
     assert tuple(bool(value) for value in persist_acl) == (True, False, False)
 
 

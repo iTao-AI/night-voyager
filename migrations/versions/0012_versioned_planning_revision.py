@@ -18,6 +18,9 @@ CONFIRM_SIGNATURE = "app.verify_memory_candidate(uuid,uuid,uuid,integer,text,tex
 CREATE_TASK_SIGNATURE = "app.create_agent_task(uuid,uuid,uuid,uuid,text,integer,uuid,integer,text,jsonb,text,text)"
 FINALIZE_SIGNATURE = "app.finalize_agent_task_result(uuid,uuid,text,bigint,uuid,text,text,text,text,jsonb,uuid)"
 PERSIST_SIGNATURE = "app.persist_planning_result(uuid,uuid,uuid,integer,uuid,integer,text,text,text,text,text,uuid,jsonb)"
+JOURNEY_PENDING_SIGNATURE = (
+    "app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)"
+)
 
 
 def _legacy_constant(module_name: str, name: str) -> str:
@@ -228,6 +231,60 @@ ON app.advisor_reviews(
 );
 """
 
+JOURNEY_PENDING_SQL = r"""
+CREATE FUNCTION app.read_connected_journey_fact_pending(
+  p_org uuid,
+  p_actor uuid,
+  p_role text,
+  p_case uuid
+) RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  selected_case app.student_cases%ROWTYPE;
+  pending boolean;
+BEGIN
+  IF p_org IS NULL OR p_actor IS NULL OR p_role IS NULL OR p_case IS NULL
+     OR p_role NOT IN ('advisor','student','parent') THEN
+    RAISE EXCEPTION USING ERRCODE='NV006',
+      MESSAGE='invalid connected journey fact projection';
+  END IF;
+  PERFORM app.assert_collaboration_context(p_org,p_actor,p_role);
+  SELECT * INTO selected_case
+    FROM app.student_cases selected_case_row
+   WHERE selected_case_row.organization_id=p_org
+     AND selected_case_row.id=p_case;
+  IF NOT FOUND OR NOT EXISTS (
+    SELECT 1
+      FROM app.student_case_participants participant
+     WHERE participant.organization_id=p_org
+       AND participant.case_id=p_case
+       AND participant.actor_id=p_actor
+       AND participant.role=p_role
+  ) THEN
+    RAISE EXCEPTION USING ERRCODE='NV007',
+      MESSAGE='collaboration resource unavailable';
+  END IF;
+  SELECT EXISTS(
+    SELECT 1
+      FROM app.memory_candidates candidate
+     WHERE candidate.organization_id=p_org
+       AND candidate.case_id=p_case
+       AND candidate.case_revision=selected_case.current_revision
+       AND candidate.fact_key IN ('student.preferred_countries','family.budget')
+       AND candidate.expires_at>clock_timestamp()
+       AND NOT EXISTS(
+         SELECT 1
+           FROM app.memory_candidate_verifications verification
+          WHERE verification.organization_id=candidate.organization_id
+            AND verification.candidate_id=candidate.id
+       )
+  ) INTO pending;
+  RETURN pending;
+END; $$;
+"""
+
 PRIVILEGE_SQL = f"""
 REVOKE ALL ON FUNCTION {REVIEW_SIGNATURE} FROM PUBLIC;
 REVOKE ALL ON FUNCTION {REVIEW_SIGNATURE} FROM night_voyager_worker;
@@ -244,6 +301,9 @@ GRANT EXECUTE ON FUNCTION {FINALIZE_SIGNATURE} TO night_voyager_worker;
 REVOKE ALL ON FUNCTION {PERSIST_SIGNATURE} FROM PUBLIC;
 REVOKE ALL ON FUNCTION {PERSIST_SIGNATURE} FROM night_voyager_api;
 REVOKE ALL ON FUNCTION {PERSIST_SIGNATURE} FROM night_voyager_worker;
+REVOKE ALL ON FUNCTION {JOURNEY_PENDING_SIGNATURE} FROM PUBLIC;
+REVOKE ALL ON FUNCTION {JOURNEY_PENDING_SIGNATURE} FROM night_voyager_worker;
+GRANT EXECUTE ON FUNCTION {JOURNEY_PENDING_SIGNATURE} TO night_voyager_api;
 """
 
 
@@ -278,6 +338,7 @@ def upgrade() -> None:
         CREATE_TASK_SQL,
         PERSIST_SQL,
         FINALIZE_SQL,
+        JOURNEY_PENDING_SQL,
     ):
         op.execute(function_sql)
     _execute_sql(PRIVILEGE_SQL)
@@ -310,6 +371,7 @@ def downgrade() -> None:
     if history:
         raise RuntimeError("refusing downgrade: planning revision lineage exists")
 
+    op.execute(f"DROP FUNCTION {JOURNEY_PENDING_SIGNATURE}")
     for function_sql in (
         _as_replace(_BASE_REVIEW),
         _as_replace(_BASE_CONFIRM),

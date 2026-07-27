@@ -218,6 +218,39 @@ def test_revision_confirmation_freezes_the_exact_reviewed_waiting_task_exemption
     assert "UPDATE app.agent_tasks" not in verification
 
 
+def test_revision_migration_adds_only_the_participant_safe_pending_fact_projection() -> None:
+    source = REVISION_MIGRATION.read_text(encoding="utf-8")
+    migration = runpy.run_path(str(REVISION_MIGRATION))
+    privileges = migration["PRIVILEGE_SQL"]
+    assert isinstance(privileges, str)
+    signature = (
+        "app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)"
+    )
+    for fragment in (
+        "CREATE FUNCTION app.read_connected_journey_fact_pending(",
+        "RETURNS boolean",
+        "SECURITY DEFINER SET search_path = pg_catalog, pg_temp",
+        "PERFORM app.assert_collaboration_context(p_org,p_actor,p_role)",
+        "candidate.case_revision=selected_case.current_revision",
+        "candidate.fact_key IN "
+        "('student.preferred_countries','family.budget')",
+        "candidate.expires_at>clock_timestamp()",
+        "NOT EXISTS(",
+        "FROM app.memory_candidate_verifications verification",
+    ):
+        assert fragment in source
+    for fragment in (
+        f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC",
+        f"REVOKE ALL ON FUNCTION {signature} FROM night_voyager_worker",
+        f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_api",
+    ):
+        assert fragment in privileges
+    assert 'op.execute(f"DROP FUNCTION {JOURNEY_PENDING_SIGNATURE}")' in source
+    assert f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_worker" not in source
+    assert "GRANT SELECT ON app.memory_candidates" not in source
+    assert "GRANT SELECT ON app.memory_candidate_verifications" not in source
+
+
 def test_mutations_and_reads_fail_closed_on_null_or_changed_canonical_inputs() -> None:
     source = migration_source()
     assert "selected.request_sha256 IS DISTINCT FROM p_request_sha256" in source
