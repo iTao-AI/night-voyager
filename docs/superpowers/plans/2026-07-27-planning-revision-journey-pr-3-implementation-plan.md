@@ -6,7 +6,7 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Playwright, Python 3.12, FastAPI, PostgreSQL 18, Docker Compose, existing Night Voyager BFF and proof scripts.
 
-**Plan status:** Proposed; implementation has not started.
+**Plan status:** Approved; implementation has not started.
 
 ## Global Constraints
 

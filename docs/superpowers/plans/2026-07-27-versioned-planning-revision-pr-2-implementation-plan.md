@@ -6,7 +6,7 @@
 
 **Tech Stack:** Python 3.12, Pydantic 2, SQLAlchemy 2, PostgreSQL 18, Alembic, FastAPI, pytest, existing durable AgentTask worker and connected-demo read models.
 
-**Plan status:** Proposed; implementation has not started.
+**Plan status:** Approved; implementation has not started.
 
 ## Global Constraints
 
