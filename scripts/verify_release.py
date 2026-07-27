@@ -148,6 +148,10 @@ DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES = {
 }
 DRA_API_FUNCTION_IDENTITIES = DRA_DATABASE_FUNCTION_IDENTITIES
 DRA_WORKER_FUNCTION_IDENTITIES: set[tuple[str, str]] = set()
+PLANNING_REVISION_PENDING_IDENTITY = (
+    "read_connected_journey_fact_pending",
+    "uuid, uuid, text, uuid",
+)
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -371,6 +375,17 @@ SKILL_SURFACE = (
     "docs/decisions/0009-versioned-skill-runtime-pinning.md",
     "docs/reference/versioned-skills-and-runtime-pins.md",
     "docs/operations/skill-governance.md",
+)
+PLANNING_REVISION_SURFACE = (
+    "migrations/versions/0012_versioned_planning_revision.py",
+    "docs/decisions/0012-versioned-planning-revision-authority.md",
+    "docs/operations/database-roles.md",
+    "docs/operations/worker-and-sse.md",
+    "docs/reference/agent-tasks-and-events.md",
+    "docs/reference/collaboration-and-confirmed-facts.md",
+    "docs/reference/http-api-v1.md",
+    "docs/design/projection-matrix.md",
+    "docs/design/state-and-interaction-matrix.md",
 )
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
@@ -845,6 +860,44 @@ def verify_skill_surface() -> None:
     print("proof Skill surface: six governed definitions and packaged runtime pins confirmed")
 
 
+def verify_planning_revision_surface() -> None:
+    if any(not (ROOT / relative).is_file() for relative in PLANNING_REVISION_SURFACE):
+        raise SystemExit("planning revision authority surface is incomplete")
+    migration, adr, database_roles, worker, tasks, collaboration, http, projection, state = (
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in PLANNING_REVISION_SURFACE
+    )
+    combined = " ".join(
+        "\n".join(
+            (adr, database_roles, worker, tasks, collaboration, http, projection, state)
+        ).split()
+    )
+    required = (
+        "request_revision review -> fact revision -> frozen task predecessor",
+        "worker never infers predecessor from current PlanningRun",
+        "one predecessor -> at most one successor",
+        "old run retained but non-authoritative",
+        "comparison is deterministic and country-keyed",
+        "V1 read routes remain default",
+        "contract_version=2",
+        "journey-status is participant-safe recovery authority",
+        "PR 3 browser journey remains unimplemented",
+        "read_connected_journey_fact_pending",
+    )
+    if (
+        any(token not in combined for token in required)
+        or 'revision = "0012"' not in migration
+        or 'down_revision = "0011"' not in migration
+        or "refusing downgrade: planning revision lineage exists" not in migration
+        or any(
+            f"planning-revision {mode}" not in database_roles
+            for mode in ("authority", "worker", "projection", "all")
+        )
+    ):
+        raise SystemExit("planning revision authority documentation drift")
+    print("proof planning revision surface: durable lineage and role-safe projection confirmed")
+
+
 def verify_release_surface() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     if pyproject["project"]["description"] != DESCRIPTION:
@@ -972,8 +1025,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0011"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0011")
+    if heads != {"0012"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0012")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -983,15 +1036,21 @@ def verify_alembic_contract() -> None:
         "inside-dra-live-migration": 3,
         "tests/integration/dra/test_dra_live_migration.py": 3,
         'run_lane "${BASE_PROJECT_NAME}-dra-live-migration"': 2,
-        "inside-dra-strict-migration": 2,
-        "tests/integration/dra/test_dra_strict_migration.py": 1,
-        'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 1,
+        "inside-dra-strict-migration": 3,
+        "tests/integration/dra/test_dra_strict_migration.py": 2,
+        'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 2,
+        "inside-planning-revision": 6,
+        "tests/integration/planning/test_revision_migration.py": 1,
+        "tests/integration/planning/test_revision_authority.py": 1,
+        "tests/integration/connected_demo/test_postgres_read_models.py": 1,
+        "tests/integration/connected_demo/test_http_read_models.py": 1,
+        'run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade': 3,
     }
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0011 with planning-start, "
-        "DRA live, and focused DRA strict parity lanes confirmed"
+        "proof migrations: exact Alembic head 0012 with planning-start, "
+        "DRA live, strict parity, and planning-revision lanes confirmed"
     )
 
 
@@ -1288,6 +1347,7 @@ async def verify_database_catalog(database_url: str) -> None:
                            'propose_memory_candidate','verify_memory_candidate',
                            'read_collaboration_thread','read_collaboration_messages',
                            'read_memory_candidates','read_confirmed_facts',
+                           'read_connected_journey_fact_pending',
                            'seed_demo_collaboration')
                            OR p.proname IN
                           ('create_skill_change_candidate','record_skill_candidate_evaluation',
@@ -1334,7 +1394,12 @@ async def verify_database_catalog(database_url: str) -> None:
             alembic_revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            if alembic_revision == "0011":
+            if alembic_revision == "0012":
+                expected_app_functions.add(
+                    PLANNING_REVISION_PENDING_IDENTITY[0]
+                )
+                expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
+            elif alembic_revision == "0011":
                 expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
             elif alembic_revision == "0010":
                 expected_dra_function_identities = DRA_0010_DATABASE_FUNCTION_IDENTITIES
@@ -1382,6 +1447,9 @@ async def verify_database_catalog(database_url: str) -> None:
                 | COLLABORATION_API_FUNCTIONS
                 | SKILL_API_FUNCTIONS
             )
+            if alembic_revision == "0012":
+                api_functions.remove("persist_planning_result")
+                api_functions.add(PLANNING_REVISION_PENDING_IDENTITY[0])
             worker_functions = {
                 "claim_agent_task",
                 "start_agent_task",
@@ -1455,6 +1523,26 @@ async def verify_database_catalog(database_url: str) -> None:
                 "seed_demo_collaboration": ("uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, text"),
             }:
                 raise SystemExit("collaboration authority signature drift")
+            planning_revision_function = {
+                (row["proname"], row["identity_arguments"]): (
+                    row["api_execute"],
+                    row["worker_execute"],
+                )
+                for row in app_functions
+                if row["proname"] == PLANNING_REVISION_PENDING_IDENTITY[0]
+            }
+            expected_planning_revision_function = (
+                {PLANNING_REVISION_PENDING_IDENTITY: (True, False)}
+                if alembic_revision == "0012"
+                else {}
+            )
+            if (
+                planning_revision_function
+                != expected_planning_revision_function
+            ):
+                raise SystemExit(
+                    "planning revision projection violates API/worker separation"
+                )
             skill_signatures = {
                 row["proname"]: row["identity_arguments"]
                 for row in app_functions
@@ -1734,6 +1822,7 @@ def main() -> None:
     verify_dra_surface()
     verify_collaboration_surface()
     verify_skill_surface()
+    verify_planning_revision_surface()
     verify_release_surface()
     verify_config()
     verify_wheel()

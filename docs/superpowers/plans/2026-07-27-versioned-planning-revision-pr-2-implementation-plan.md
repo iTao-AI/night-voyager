@@ -6,7 +6,7 @@
 
 **Tech Stack:** Python 3.12, Pydantic 2, SQLAlchemy 2, PostgreSQL 18, Alembic, FastAPI, pytest, existing durable AgentTask worker and connected-demo read models.
 
-**Plan status:** Approved; implementation has not started.
+**Plan status:** Implementation complete locally; awaiting Career authority review.
 
 ## Global Constraints
 
@@ -21,9 +21,60 @@
 - Old runs and reviews remain immutable audit history but lose current business authority.
 - Comparison is deterministic, country-keyed, closed, and role safe.
 - Required CI remains offline and provider-free.
-- Do not modify dependencies, lockfiles, Dockerfiles, Compose, DRA producer code, or published release artifacts.
+- Do not modify dependencies, lockfiles, Compose, DRA producer code, or
+  published release artifacts. Amendment 11 is the sole approved Dockerfile
+  exception.
 - Every task uses RED before implementation, targeted GREEN after implementation, and a semantic local commit.
 - If implementation needs a file outside the exact task lists or changes an approved contract, stop for authority review instead of silently expanding scope.
+
+## Implementation authority amendments
+
+Fresh implementation evidence exposed three exact-file-list omissions after the
+plan was approved. These corrections preserve the approved product contract and
+do not rewrite the original task history:
+
+1. Task 3 database-lane isolation additionally owns
+   `scripts/run_db_tests.sh` and
+   `tests/architecture/test_collaboration_contract.py`.
+   `planning-revision worker` runs the ordinary worker authority before the
+   existing `inside-mixed-downgrade` proof in a separate task-owned database;
+   `planning-revision all` preserves that same serial isolation.
+2. Migration `0012` narrowly exempts an exact `waiting_review` predecessor task
+   from the inherited active-task guard only when it produced the exact current
+   run and an exact same-revision `request_revision` review exists. The task
+   remains immutable history. Every queued, leased, running, unrelated, or
+   unreviewed task still blocks.
+3. Task 4 adds the API-only
+   `app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)` boolean
+   projection. It derives current revision and participant authority inside
+   PostgreSQL, exposes no candidate data or internal identity, grants no direct
+   candidate-table access, and is consumed by both advisor ledger V2 and
+   participant-safe journey status.
+4. Amendment 11 additionally owns `web/Dockerfile`,
+   `web/Dockerfile.e2e`, and
+   `tests/architecture/test_compose_contract.py`. The three Docker
+   `npm ci` installs keep checked-in lockfile authority and cache mounts while
+   adding bounded idempotent registry-read retries. This exception adds no
+   dependency, lockfile, Compose, registry mirror, `.npmrc`, or persistent
+   proxy configuration.
+5. The local Compose transport gate is deferred, not waived. Two normal local
+   Compose attempts stopped during external npm registry transport. Amendment
+   11's one command-local proxy prebuild passed all three `npm ci` installs,
+   then stopped when Playwright `install --with-deps chromium` received a
+   Debian `502 Bad Gateway`. Local Compose is not GREEN. Publication and merge
+   therefore require exact-HEAD hosted `compose` SUCCESS together with the
+   required `python` and `frontend` checks.
+6. At exact `79197f8`, local `make check` completed every non-Docker phase
+   successfully, then stopped before database-lane creation when Docker Hub
+   registry transport timed out during the pinned PostgreSQL image check. The
+   fresh `make db-check`, full `make check`, and independent `make proof`
+   evidence recorded before `c76955e` remains applicable because the later
+   changes do not touch database, migration, worker, API, proof-verifier, or
+   frontend-runtime files. This is reused local evidence, not an exact-final-
+   HEAD claim. Hosted exact-HEAD `python` and `compose` must complete it.
+
+The corresponding focused migration, catalog, rollback, concurrency, worker,
+projection, and downgrade regressions are part of the implementation evidence.
 
 ## Execution Preflight and Commit Protocol
 
@@ -1035,50 +1086,63 @@ result in the PR `Documentation impact`. The operations documentation must also
 expose `planning-revision authority|worker|projection|all`, with the exact
 purpose of each focused mode.
 
-- [ ] **Step 4: Run complete backend gates**
+- [ ] **Step 4: Finalize local non-Docker gates and bind reused evidence**
 
-The task-level suites above are focused diagnostics. This block is the
-authoritative final non-Compose evidence for PR 2:
+Run only the final checks that do not trigger Docker or external transport:
 
 ```bash
 uv lock --check
 uv run ruff check .
 uv run pyright
-make db-check
-make collaboration-db-check SUITE=authority
-make check
-make proof
-uv run python scripts/verify_release.py --tree-mode development
+uv run pytest -q \
+  tests/architecture/test_documentation_governance.py \
+  tests/unit/test_release_surface.py
 git diff --check "$(git merge-base HEAD origin/main)"..HEAD
 ```
 
-Expected: all commands exit zero.
+Expected: all listed commands exit zero. Record separately:
 
-- [ ] **Step 5: Run one normal task-scoped Compose proof**
+- exact `79197f8` local `make check` completed all non-Docker phases GREEN and
+  stopped before any database lane at a Docker Hub TLS handshake timeout;
+- fresh pre-`c76955e` `make db-check`, full `make check`, and independent
+  `make proof` were GREEN, and no later commit changes their database,
+  migration, worker, API, proof-verifier, or frontend-runtime inputs;
+- the previously GREEN development release verifier is reused because its
+  isolated wheel installation may access package transport; its script has not
+  changed since that GREEN run;
+- exact final HEAD does not have a terminal local full-check, proof, or Compose
+  GREEN claim;
+- exact-final-HEAD hosted `python` and `compose` SUCCESS are required to
+  complete the deferred Docker-backed evidence. Hosted `frontend` remains a
+  required publication and merge check as well.
 
-After the formal host and Docker VM 8 GiB preflight:
+- [ ] **Step 5: Record the deferred Compose transport gate**
 
-```bash
-COMPOSE_PROJECT_NAME="night-voyager-revision-pr-2-$$" make compose-proof
-COMPOSE_PROJECT_NAME="night-voyager-revision-pr-2-$$" \
-  docker compose --profile browser-proof \
-  down --volumes --remove-orphans --rmi local
-COMPOSE_PROJECT_NAME="night-voyager-revision-pr-2-$$" docker compose ps --all
-docker compose ps --all
-```
+After the formal host and Docker VM 8 GiB preflight, record the bounded local
+transport evidence:
 
-Expected: backend revision regressions do not break existing connected,
-collaboration, DRA, restart, SSE, or browser proofs; the exact task project and
-default Compose inventories are empty after teardown. Record the global
-pre/post inventories defined in the execution protocol and preserve
-`night-voyager_postgres-data` plus shared images/cache.
+- two normal local Compose attempts stopped during external npm registry
+  transport;
+- the Amendment 11 command-local proxy prebuild passed all three locked npm
+  installs, then stopped at Debian transport inside Playwright's official
+  browser dependency installation;
+- exact task and default Compose inventories are empty after teardown, while
+  `night-voyager_postgres-data`, shared images, and shared cache remain
+  preserved.
+
+Do not retry or change APT, Debian sources, Playwright, proxy, Docker, daemon,
+registry, or host configuration. Exact-final-HEAD hosted `compose` SUCCESS is
+the replacement publication and merge gate; required hosted `python` and
+`frontend` must also succeed. A hosted Compose failure is a real failure to
+investigate at that phase, not authorization to skip the gate.
 
 - [ ] **Step 6: Verify boundaries and commit**
 
 Confirm:
 
 - migration `0011` and older migrations unchanged;
-- dependencies, lockfiles, Dockerfiles, and Compose unchanged;
+- only the approved Amendment 11 Docker npm reliability exception changes
+  Dockerfiles; dependencies, lockfiles, and Compose remain unchanged;
 - no frontend runtime change;
 - no provider, credential, tag, release, or deploy action.
 
@@ -1113,8 +1177,13 @@ Stop for authority review with:
 - migration, grants, RLS, downgrade, concurrency, rollback, and lost-ack evidence;
 - predecessor/current/successor database rows;
 - comparison canonical bytes;
-- full gates with selected/passed/failed counts and Docker inventory; elapsed
-  time is diagnostic only;
+- local non-Docker gates with selected/passed/failed counts, explicitly reused
+  pre-`c76955e` database/proof evidence, and the non-terminal local Docker
+  transport attempts;
+- exact-final-HEAD hosted `python`, `frontend`, and `compose` SUCCESS as
+  mandatory publication and merge gates; local full `make check`, independent
+  proof, and Compose must not be reported as exact-final-HEAD GREEN;
+- final Docker inventory; elapsed time is diagnostic only;
 - explicit confirmation that frontend journey, provider, release, and deploy were not started.
 
 Do not push or create a pull request until separate publication authorization.

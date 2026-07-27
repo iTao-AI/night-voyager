@@ -91,22 +91,52 @@ events for a closing state have been delivered. See
 [AgentTask and event reference](agent-tasks-and-events.md) for exact states and
 bounds.
 
-## M5 connected demo read endpoints
+## Connected demo read endpoints
 
-M5 adds exactly two read-only projections for the connected synthetic demo.
-Both require the existing opaque session, return `schema_version=1`, use
+M5 introduced two read-only projections for the connected synthetic demo.
+Planning revision PR 2 keeps both existing routes and adds one participant-safe
+journey-status projection. All require the existing opaque session, use
 `Cache-Control: no-store`, and preserve non-enumerating authorization failures.
 
 | Method and path | Assigned actor | Result |
 | --- | --- | --- |
-| `GET /api/v1/cases/{case_id}/advisor-ledger` | advisor | phase-discriminated task, PlanningRun, route, evidence, review, and recovery projection |
-| `GET /api/v1/cases/{case_id}/current-decision-brief` | advisor/student/parent | family-safe Brief plus server-derived decision requirements and, after decision, receipt/timeline |
+| `GET /api/v1/cases/{case_id}/advisor-ledger` | advisor | V1 by default; exact `contract_version=2` returns revision-aware V2 ledger and deterministic comparison |
+| `GET /api/v1/cases/{case_id}/current-decision-brief` | advisor/student/parent | V1 by default; exact `contract_version=2` adds server-derived revision context |
+| `GET /api/v1/cases/{case_id}/journey-status` | advisor/student/parent | exact `night-voyager.connected-journey-status.v1` durable phase and verified active role |
 
 The Ledger exposes canonical demo task inputs before task creation and persisted
 pins afterward; mismatches fail closed. Decision requirements are projected from
 the pinned run, Australia cost evidence, current Case revision, and M3B policy.
 These endpoints add no write authority, persistence, migration, or client-owned
 tenant, role, policy, route, task, run, Brief, receipt, or timeline selector.
+
+V1 read routes remain default. For the two existing routes, exactly one
+`contract_version=2` query value selects V2. Empty, repeated, missing-value, or
+unknown negotiation values fail validation. The caller cannot submit a
+predecessor, output hash, comparison, renewed authorization, or durable phase.
+
+`AdvisorLedgerV2` selects tasks only from the current Case revision. A successor
+in `review_required|blocked` carries the deterministic country-keyed comparison
+between the exact retained predecessor and current run; blocked successors omit
+review inputs. `CurrentDecisionBriefV2` marks renewed authorization only when the
+current Case revision, current successor, current Brief, and exact approving
+advisor review form one durable chain.
+
+The journey-status is participant-safe recovery authority, not browser storage.
+Assigned advisor, student, and parent see the same durable phase and only their
+own verified `active_role`. The exact response keys are `schema`, `case_id`,
+`current_revision`, `phase`, and `active_role`. It exposes no task, run, review,
+route, Evidence, comparison, candidate, hash, value, or authority identity.
+Unassigned and cross-tenant callers keep the existing role-safe unavailable
+response.
+
+The revision phase union is:
+`task_ready|active_task|review_required|revision_requested|revision_fact_pending|`
+`replan_required|revision_task_active|revision_review_required|revision_blocked|`
+`family_review|plan_ready|terminal_task_failure`. PostgreSQL derives it from the
+current Case revision, request review, narrow pending-fact boolean, current task
+and run, Brief, and decision. Browser timestamps or recovery metadata are never
+phase authority. PR 3 browser journey remains unimplemented.
 
 ## Governed DRA candidate endpoints
 

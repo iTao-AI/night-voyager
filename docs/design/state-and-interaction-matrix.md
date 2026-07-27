@@ -10,6 +10,12 @@ state, requests, idempotency, journey storage, EventSource, and navigation uncha
 | `task-ready` | current Case and canonical inputs; no task/run | create task | approve or derive pins |
 | `active-task` | latest non-terminal task and SSE progress | follow stream | create another task |
 | `review-required` | completed task, current run/routes/Evidence | advisor review | fabricate review inputs |
+| `revision_requested` | exact request review over the current predecessor | collect one bounded changed-fact proposal | infer a new Case revision |
+| `revision_fact_pending` | exact current-revision planning fact awaits advisor verification | confirm or reject through existing authority | expose candidate data through journey status |
+| `replan_required` | predecessor is retained but non-current; no successor task | create the explicit revision task | infer predecessor in the worker |
+| `revision_task_active` | current-revision task owns the frozen predecessor | follow durable task progress | submit predecessor or comparison |
+| `revision_review_required` | exact successor and deterministic old/new comparison | perform renewed advisor review | reuse the predecessor review |
+| `revision_blocked` | successor is blocked and comparison remains visible to advisor | remediate Evidence/facts | fabricate review inputs or success |
 | `family-review` | current family-safe Brief identity | real advisor-to-parent rotation | decide as advisor |
 | `plan-ready` | completion status or parent receipt/timeline | continue as family/read result | create a task |
 | `terminal-task-failure` | public failure and recovery guidance | explicit retry/remediation | synthesize success |
@@ -46,3 +52,10 @@ while `/demo/collaboration` stays `not_created` because it creates no planning t
 After a successful handoff, `/demo` re-reads the continued Case and adopts task
 identity only from its advisor ledger. The destination keeps one active EventSource
 and the existing monotonic cursor/recovery precedence.
+
+Planning revision PR 2 adds backend phase authority only. Assigned
+advisor/student/parent reload `/journey-status` and receive the same durable
+phase with only `active_role` differing. The journey-status is participant-safe
+recovery authority, not browser storage. PR 3 browser journey remains
+unimplemented, so these backend phases do not authorize a new frontend
+transition or client-side phase computation.

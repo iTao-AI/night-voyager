@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -138,6 +138,45 @@ with the v1 identity. Downgrade to `0010` takes an exclusive ledger lock and
 refuses before mutation when any commit-referenced strict history exists.
 Empty-history and legacy-only databases may downgrade safely and re-upgrade
 without changing historical rows.
+
+Migration `0012` adds versioned planning lineage without adding a runtime role
+or direct table grant. Exact `request_revision` review authority is copied into
+the next Case revision together with the now-non-current predecessor
+PlanningRun; the next task copies that immutable predecessor and the worker
+consumes only the task-owned identity. Partial unique indexes and replacement
+function bodies enforce one predecessor -> at most one successor. The old run
+and predecessor task remain immutable history but are non-authoritative.
+
+The API alone may execute
+`app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)`. This narrow
+`SECURITY DEFINER` projection uses fixed
+`search_path = pg_catalog, pg_temp`, verifies the exact Case participant, loads
+the current revision internally, and returns one boolean. `PUBLIC` and the
+worker cannot execute it. Neither runtime role receives direct access to
+`memory_candidates` or `memory_candidate_verifications`.
+
+A safe `0012 -> 0011` downgrade requires no planning-revision lineage. It drops
+the narrow projection and restores the exact `0011` function signatures and
+grants. When lineage exists, downgrade refuses before any schema or authority
+mutation and preserves rows, functions, and ACLs.
+
+Use the focused planning-revision modes:
+
+```bash
+scripts/run_db_tests.sh planning-revision authority
+scripts/run_db_tests.sh planning-revision worker
+scripts/run_db_tests.sh planning-revision projection
+scripts/run_db_tests.sh planning-revision all
+```
+
+`authority` proves atomic revision publication, grants/RLS, concurrency,
+rollback, query bounds, and downgrade parity. `worker` proves task-owned
+predecessor loading, successor uniqueness, reclaim, and lost-ack behavior, then
+runs the historical mixed-downgrade proof in a separate disposable database.
+`projection` proves complete old/new hashes, V1/V2 negotiation, and
+participant-safe phases. `all` runs those authorities and the isolated
+mixed-downgrade lane serially. Every outer command owns and tears down its
+Compose projects and volumes.
 
 Run the focused strict migration mode with:
 
