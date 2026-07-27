@@ -16,6 +16,13 @@ transport surfaces required to carry the already approved v2 strict identity.
 The corrected lists below close that implementation gap. They do not add an
 endpoint, business workflow, provider attempt, or product claim.
 
+A second bounded catalog review found one stale test that assumed a function
+name identifies exactly one PostgreSQL function. Task 2 now includes that test
+so the approved legacy and strict overloads are checked by exact argument
+identity instead. Task 5 must apply the same overload-safe identity rule to
+`scripts/verify_release.py`. This correction does not change either overload
+or expand the production contract.
+
 ## Global Constraints
 
 - Exact repository: `https://github.com/iTao-AI/decision-research-agent`.
@@ -282,6 +289,7 @@ git commit -m "feat: freeze DRA strict consumer identity"
 - Modify: `tests/integration/dra/test_dra_live_migration.py`
 - Create: `tests/integration/dra/test_dra_strict_migration.py`
 - Modify: `tests/integration/dra/test_live_outcome_projection.py`
+- Modify: `tests/integration/dra/test_postgres_mixed_snapshot.py`
 - Modify: `tests/security/test_dra_catalog.py`
 - Modify: `tests/security/test_rls_isolation.py`
 - Modify: `tests/architecture/test_dra_contract.py`
@@ -406,6 +414,14 @@ must then:
 10. remove the strict overload and restore the exact `0010` legacy import,
     outcome-function, and constraint shape on safe downgrade.
 
+Privilege and catalog assertions for overloaded functions must bind
+`oidvectortypes(p.proargtypes)`, or an equivalent exact argument identity,
+rather than assume `proname` cardinality. The worker authority assertion must
+cover the exact legacy and strict
+`app.import_dra_research_candidate(...)` signatures with `EXECUTE=false`, plus
+the exact `app.verify_and_promote_dra_candidate(...)` signature, while
+preserving the existing API/worker authority boundary.
+
 Tests must assert `tgenabled='O'` and `relforcerowsecurity=true` after success
 and after any injected migration failure. The failure lane must prove the
 schema, rows, trigger, RLS, function bodies, grants, and Alembic version all
@@ -489,6 +505,7 @@ git add \
   tests/integration/dra/test_dra_live_migration.py \
   tests/integration/dra/test_dra_strict_migration.py \
   tests/integration/dra/test_live_outcome_projection.py \
+  tests/integration/dra/test_postgres_mixed_snapshot.py \
   tests/security/test_dra_catalog.py \
   tests/security/test_rls_isolation.py \
   tests/architecture/test_dra_contract.py \
@@ -868,6 +885,8 @@ Expected: stale current-status and missing strict-identity assertions fail.
 Synchronize ADR, operations, reference, design, root discovery, and plan/spec
 status. Preserve historical checklist text as historical where necessary; add a
 clearly labelled current-runtime correction rather than rewriting the past.
+Update `scripts/verify_release.py` to identify both import overloads by exact
+argument identity without collapsing rows by `proname`.
 Document the existing candidate endpoint's closed v1/v2 request contract,
 migration `0011` as the current head, strict overload grants/RLS, and safe
 downgrade boundary.
