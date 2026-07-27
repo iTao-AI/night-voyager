@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+import night_voyager.dra.ports as dra_ports
+from night_voyager.dra.models import (
+    DraObservedProfileManifestV1,
+    DraProducerPinV2,
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
+)
 
 ROOT = Path(__file__).parents[2]
 
@@ -86,6 +98,8 @@ def test_dra_live_foundation_is_release_verified_without_live_execution() -> Non
     fixture_verifier = (ROOT / "scripts/verify_dra_consumer.py").read_text()
     for required in (
         "migrations/versions/0010_dra_v0_1_6_live_consumer.py",
+        "migrations/versions/0011_dra_strict_consumer_identity.py",
+        "fixtures/dra/live-closure-scenario-v2.json",
         "src/night_voyager/dra/live_projection.py",
         "src/night_voyager/dra/live_evaluation.py",
         "src/night_voyager/dra/live_outcome.py",
@@ -99,6 +113,52 @@ def test_dra_live_foundation_is_release_verified_without_live_execution() -> Non
     assert "verify_dra_consumer.py fixture --json" in (
         ROOT / "Makefile"
     ).read_text()
+
+
+def test_release_verifier_binds_overloaded_dra_functions_by_exact_identity() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text()
+    verifier_globals = runpy.run_path(str(ROOT / "scripts/verify_release.py"))
+    expected = {
+        (
+            "import_dra_research_candidate",
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "text, text, text, text, integer, text, jsonb, text, text",
+        ),
+        (
+            "import_dra_research_candidate",
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "text, text, text, text, text, text, text, text, text, integer, text, "
+            "jsonb, text, text",
+        ),
+        (
+            "verify_and_promote_dra_candidate",
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "date, integer, text, text, text, integer, text, jsonb, uuid, integer, "
+            "text, text, uuid, uuid, uuid, jsonb, text, text",
+        ),
+        ("project_dra_live_outcome", "uuid, uuid, uuid"),
+        ("project_agent_task_live_authority", "uuid, uuid, uuid"),
+        ("project_agent_task_by_idempotency", "uuid, uuid, text"),
+        (
+            "project_advisor_review_by_idempotency",
+            "uuid, uuid, uuid, uuid, text",
+        ),
+    }
+    assert verifier_globals["DRA_DATABASE_FUNCTION_IDENTITIES"] == expected
+    assert verifier_globals["DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES"] == {
+        verify_release_identity
+        for verify_release_identity in expected
+        if verify_release_identity[0] == "verify_and_promote_dra_candidate"
+        or verify_release_identity[1]
+        == (
+            "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+            "text, text, text, text, integer, text, jsonb, text, text"
+        )
+    }
+    assert verifier_globals["DRA_API_FUNCTION_IDENTITIES"] == expected
+    assert verifier_globals["DRA_WORKER_FUNCTION_IDENTITIES"] == set()
+    assert "oidvectortypes(p.proargtypes) AS identity_arguments" in verifier
+    assert '{row["proname"] for row in app_functions}' not in verifier
 
 
 def test_dra_candidate_freeze_is_executable_and_live_lane_stays_optional() -> None:
@@ -137,4 +197,59 @@ def test_governed_mixed_planning_public_contract_is_closed() -> None:
         in docs_index
     )
     assert "make compose-proof" in operations
-    assert "Live provider proof was not run" in operations
+    assert "two bounded live attempts stopped before candidate import" in operations
+    assert "No third provider attempt is authorized" in operations
+
+
+def test_strict_import_command_is_closed_and_separate_from_legacy() -> None:
+    strict_type = getattr(dra_ports, "ImportStrictDraCandidateCommand", None)
+    assert strict_type is not None
+    identity = DraStrictConsumerIdentityV2(
+        schema_version="night-voyager.dra-strict-consumer-identity.v2",
+        producer=DraProducerPinV2(),
+        request=DraRunRequestIdentityV2(
+            schema_version="night-voyager.dra-run-request-identity.v2",
+            profile_id="generic-strict-citation",
+            request_sha256="a" * 64,
+        ),
+        observed_profile=DraObservedProfileManifestV1(
+            schema_version="night-voyager.dra-observed-profile-manifest.v1",
+            profile_id="generic-strict-citation",
+            profile_version="1",
+        ),
+    )
+    payload = {
+        "organization_id": "10000000-0000-0000-0000-000000000001",
+        "case_id": "40000000-0000-0000-0000-000000000003",
+        "expected_case_revision": 1,
+        "consumer_identity": identity,
+        "run_id": "run-strict",
+        "artifact_id": "research-report.md",
+        "artifact_kind": "research_report_markdown",
+        "artifact_media_type": "text/markdown",
+        "artifact_byte_length": 81,
+        "artifact_sha256": "b" * 64,
+        "evidence": [
+            {
+                "evidence_id": "evidence-strict",
+                "source_url": "https://example.com/strict-source",
+                "source_identity": "https://example.com/strict-source",
+                "retrieved_at": "2026-07-27T00:00:00Z",
+                "citation_status": "cited",
+                "verification_status": "unverified",
+            }
+        ],
+        "import_request_sha256": "c" * 64,
+    }
+    command = strict_type.model_validate(payload)
+    assert command.consumer_identity == identity
+    with pytest.raises(ValidationError):
+        strict_type.model_validate(payload | {"producer": identity.producer})
+    with pytest.raises(ValidationError):
+        strict_type.model_validate(payload | {"unknown": True})
+
+    legacy_fields = dra_ports.ImportDraCandidateCommand.model_fields
+    assert "consumer_identity" not in legacy_fields
+    producer_annotation = legacy_fields["producer"].annotation
+    assert producer_annotation is not None
+    assert getattr(producer_annotation, "__name__", None) == "DraProducerPinV1"

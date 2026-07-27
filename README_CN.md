@@ -14,10 +14,10 @@ Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family
 
 ## 工程证据
 
-- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；current development graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010`，已发布的 v0.1.3 identity 仍固定在 migration `0009`。
+- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；current development graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011`，已发布的 v0.1.3 identity 仍固定在 migration `0009`。
 - **Durable task 与 SSE：** `AgentTask` 可跨 worker/API restart 保持，使用 bounded lease 与 generation fencing，并恢复授权 event stream。
 - **Human gates：** deterministic evidence policy、advisor review 与显式 family confirmation 相互分离；模型或 adapter 输出不能自行获得 promotion authority。
-- **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。
+- **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。当前 provider-free prerequisite 将 strict new work 固定到 exact post-release commit `01ba21f2996769e68cbc88f4bb0596740df27f6b` 与 `generic-strict-citation@1`；它不属于 DRA v0.1.6 release。
 - **Governed collaboration authority：** v0.1.2 release 将共享 `MessageEvent` communication、typed `MemoryCandidate` proposal、assigned-advisor verification 与 atomic versioned `ConfirmedFact` publication 分离。
 - **Versioned Skill runtime：** v0.1.2 release 治理 exact six-key catalog、deterministic evaluation、owner activation/rollback、five-field task/execution pin，以及 start 前的 packaged-registry validation。
 - **Explicit fact-to-plan authority：** v0.1.3 migration `0009` 把 first deterministic task creation 固定为 atomic `intake -> planning` authority，并在同一 transaction 写入 pinned task、dispatch、first event 与 idempotency result；legacy runtime transition authority 继续被撤回。
@@ -50,7 +50,7 @@ make down
 - v0.1.3 是 local synthetic portfolio release，包含 Governed Collaboration Core v1、explicit fact-to-plan authority、Chinese-first bilingual presentation、High-End Portfolio Entry、deterministic offline governed DRA capability 与既有 advisor-to-family workflow；不代表 production deployment 或 production tenancy。
 - 仓库不包含真实学生记录，也不宣称录取结果、真实用户、SLA、可用性或业务收益。
 - worker 与 SSE 仅提供 deterministic local proof，不代表 distributed high availability。
-- Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。Deterministic offline DRA candidate import、atomic promotion 与 governed mixed PlanningRun generation 已在本地实现；live provider proof 未运行，仍需单独授权。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
+- Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。Deterministic offline DRA candidate import、atomic promotion 与 governed mixed PlanningRun generation 已在本地实现。两次分别授权的 bounded live attempt 返回了 25 与 83 条 same-run Evidence，全部为 `uncited`，并都在 candidate import 前停止。第三次 provider attempt 未获授权；strict live acceptance 仍不完整。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
 - Governed collaboration PR A、versioned Skill governance PR B 与 browser walkthrough/inspector PR C 已在 v0.1.2 作为 local synthetic capability 发布。`/demo/collaboration` 本身不创建 `AgentTask`；只有 same-Case handoff 后在 `/demo` 执行显式 action，才会启动既有 governed planning path。
 - v0.1.3 包含已合并 PR #57–#62。它不新增 live provider、production deployment、distributed HA、SLA、真实学生数据、真实学校覆盖、顾问团队采用或录取结果。
 

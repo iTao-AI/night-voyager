@@ -12,6 +12,7 @@ from pydantic import (
     AwareDatetime,
     BaseModel,
     ConfigDict,
+    Field,
     PositiveInt,
     StringConstraints,
     computed_field,
@@ -26,6 +27,11 @@ DRA_LIVE_COMMIT = "7d43324b469cb5e445c2e8be83af3be4d841cf1c"
 DRA_LIVE_TAG_OBJECT = "9e0b0b443c435cf636dfce932c3c77d91d0a43e4"
 DRA_CONTRACT_SCHEMA = "dra.downstream-consumer.v1"
 DRA_FIXTURE_SHA256 = "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
+DRA_STRICT_REPOSITORY = "https://github.com/iTao-AI/decision-research-agent"
+DRA_STRICT_COMMIT = "01ba21f2996769e68cbc88f4bb0596740df27f6b"
+DRA_STRICT_PROFILE_ID = "generic-strict-citation"
+DRA_STRICT_PROFILE_VERSION = "1"
+DRA_STRICT_PROOF_SCHEMA = "dra.strict-citation-profile.v1"
 MAX_ARTIFACT_BYTES = 1024 * 1024
 
 Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
@@ -105,9 +111,76 @@ DRA_LIVE_PRODUCER = DraProducerPinV1(
 )
 
 
+class DraProducerPinV2(FrozenModel):
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        serialize_by_alias=True,
+        validate_by_name=True,
+    )
+
+    schema_: Literal["night-voyager.dra-producer-pin.v2"] = Field(
+        default="night-voyager.dra-producer-pin.v2",
+        alias="schema",
+    )
+    repository: Literal[
+        "https://github.com/iTao-AI/decision-research-agent"
+    ] = DRA_STRICT_REPOSITORY
+    ref_kind: Literal["commit"] = "commit"
+    ref: Literal[
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b"
+    ] = DRA_STRICT_COMMIT
+    commit: Literal[
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b"
+    ] = DRA_STRICT_COMMIT
+    consumer_contract_schema: Literal["dra.downstream-consumer.v1"] = (
+        DRA_CONTRACT_SCHEMA
+    )
+    consumer_fixture_sha256: Literal[
+        "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157"
+    ] = DRA_FIXTURE_SHA256
+    profile_id: Literal["generic-strict-citation"] = DRA_STRICT_PROFILE_ID
+    profile_version: Literal["1"] = DRA_STRICT_PROFILE_VERSION
+    proof_schema: Literal["dra.strict-citation-profile.v1"] = (
+        DRA_STRICT_PROOF_SCHEMA
+    )
+
+
+DRA_STRICT_PRODUCER = DraProducerPinV2()
+
+
 class DraRunRequestIdentityV1(FrozenModel):
     profile_id: Literal["generic"] = "generic"
     request_sha256: Sha256
+
+
+class DraRunRequestIdentityV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-run-request-identity.v2"]
+    profile_id: Literal["generic-strict-citation"]
+    request_sha256: Sha256
+
+
+class DraObservedProfileManifestV1(FrozenModel):
+    schema_version: Literal["night-voyager.dra-observed-profile-manifest.v1"]
+    profile_id: Literal["generic-strict-citation"]
+    profile_version: Literal["1"]
+
+
+class DraStrictConsumerIdentityV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-strict-consumer-identity.v2"]
+    producer: DraProducerPinV2
+    request: DraRunRequestIdentityV2
+    observed_profile: DraObservedProfileManifestV1
+
+    @model_validator(mode="after")
+    def exact_strict_profile(self) -> Self:
+        if (
+            self.request.profile_id != self.producer.profile_id
+            or self.observed_profile.profile_id != self.producer.profile_id
+            or self.observed_profile.profile_version != self.producer.profile_version
+        ):
+            raise ValueError("dra_strict_profile_identity_invalid")
+        return self
 
 
 class DraRunAcceptanceV1(FrozenModel):
@@ -246,6 +319,34 @@ class DraCandidateImportV1(FrozenModel):
             raise ValueError("dra_run_identity_mismatch")
         if sum(item.is_promotable for item in self.evidence) != 1:
             raise ValueError("dra_promotable_evidence_cardinality")
+        return self
+
+
+class DraCandidateImportV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-candidate-import.v2"]
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    consumer_identity: DraStrictConsumerIdentityV2
+    acceptance: DraRunAcceptanceV1
+    run: DraRunProjectionV1
+    artifact: DraCanonicalArtifactInputV1
+    evidence: tuple[DraEvidenceProjectionV1, ...]
+
+    @model_validator(mode="after")
+    def exact_strict_candidate(self) -> Self:
+        identifiers = [item.evidence_id for item in self.evidence]
+        if not identifiers or len(identifiers) != len(set(identifiers)):
+            raise ValueError("dra_evidence_ids_not_unique")
+        if self.acceptance.run_id != self.run.run_id:
+            raise ValueError("dra_run_identity_mismatch")
+        if sum(item.is_promotable for item in self.evidence) != 1:
+            raise ValueError("dra_promotable_evidence_cardinality")
+        source_url = next(
+            item.source_url for item in self.evidence if item.is_promotable
+        )
+        if source_url is None or source_url not in self.artifact.content:
+            raise ValueError("dra_cited_source_not_in_canonical_artifact")
         return self
 
 

@@ -11,6 +11,7 @@ from night_voyager.dra.fixtures import (
     build_v0_1_6_scenario_candidate_import,
     load_live_closure_scenario,
 )
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV3
 from night_voyager.dra.live_models import DraReceiptIdentityV1
 from night_voyager.dra.live_storage import (
     LiveReceiptStore,
@@ -73,6 +74,29 @@ def test_receipt_write_is_atomic_private_and_create_once(tmp_path: Path) -> None
         with pytest.raises(LiveStorageConflict, match="receipt_conflict"):
             store.write_receipt("intent.json", receipt("b" * 64))
     assert not list(root.glob(".tmp-*"))
+
+
+def test_strict_readiness_storage_rejects_legacy_schema(tmp_path: Path) -> None:
+    root = private_root(tmp_path)
+    (root / "readiness.json").write_text(
+        json.dumps(
+            {
+                "schema_version": (
+                    "night-voyager.dra-live-candidate-readiness.v2"
+                )
+            }
+        ),
+        encoding="utf-8",
+    )
+    (root / "readiness.json").chmod(0o600)
+
+    with (
+        LiveReceiptStore.open(root) as store,
+        pytest.raises(LiveStorageInvalid, match="receipt_invalid"),
+    ):
+        store.read_receipt(
+            "readiness.json", DraLiveCandidateReadinessV3
+        )
 
 
 @pytest.mark.parametrize(

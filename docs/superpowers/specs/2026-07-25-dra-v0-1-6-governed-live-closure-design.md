@@ -4,10 +4,21 @@
 ## Status
 
 **Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are
-implemented provider-free. One bounded live attempt projected 25 Evidence rows, all
-`uncited`, and stopped safely before candidate import; governed live acceptance
-remains pending. Capability status remains
+implemented provider-free. Two bounded live attempts projected 25 and 83 Evidence rows,
+all `uncited`, and stopped safely before candidate import; governed live
+acceptance remains pending. Capability status remains
 `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
+
+### Current runtime correction after the strict-consumer prerequisite
+
+The v0.1.6 identity and first bounded attempt below remain historical facts. A
+second separately authorized attempt returned 83 same-run Evidence rows, all
+`uncited`, and also stopped before candidate import. Night Voyager now implements
+the provider-free strict-consumer prerequisite at exact post-release DRA commit
+`01ba21f2996769e68cbc88f4bb0596740df27f6b`, using
+`generic-strict-citation@1` and `dra.strict-citation-profile.v1`. This is not a
+DRA v0.1.6 release capability. No third provider attempt is authorized, and
+strict live acceptance remains incomplete.
 
 This document defines the bounded Night Voyager consumer increment after the
 `v0.1.3` local synthetic portfolio release. PR A implements only the offline

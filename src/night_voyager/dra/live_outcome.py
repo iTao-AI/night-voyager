@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 from uuid import UUID
 
-from night_voyager.dra.live_evaluation import DraLiveOutcomeProjectionV1
+from night_voyager.dra.live_evaluation import DraLiveOutcomeProjectionV2
 from night_voyager.dra.live_models import derive_identity_hash
 from night_voyager.dra.models import FrozenModel, Sha256
 from night_voyager.identity.models import ActorContext, ActorRole
@@ -33,4 +33,4 @@ class LiveOutcomeInspector(Protocol):
         self,
         context: ActorContext,
         intent: DraLiveOutcomeIntentV1,
-    ) -> DraLiveOutcomeProjectionV1: ...
+    ) -> DraLiveOutcomeProjectionV2: ...

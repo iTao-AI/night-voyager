@@ -4,8 +4,10 @@ Candidate import, atomic human verification/promotion, and governed mixed
 PlanningRun generation are implemented as a deterministic provider-free proof.
 AdvisorReview, family decision, and final evaluation are included. The existing
 `generate_planning_run_v1` path remains all-synthetic, and `/demo` is unchanged.
-Live provider proof was not run; capability status remains
-`INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
+Two separately authorized bounded live attempts returned 25 and 83 same-run
+Evidence rows, all `uncited`, and both stopped before candidate import. No third
+provider attempt is authorized; strict live acceptance remains incomplete and
+capability status remains `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.
 
 ## Pinned consumer contract
 
@@ -18,13 +20,21 @@ Live provider proof was not run; capability status remains
 | New live-import DRA release | `v0.1.6` |
 | New live-import DRA commit | `7d43324b469cb5e445c2e8be83af3be4d841cf1c` |
 | New live-import DRA tag object | `9e0b0b443c435cf636dfce932c3c77d91d0a43e4` |
+| Strict post-release DRA ref kind | `commit` |
+| Strict post-release DRA commit/ref | `01ba21f2996769e68cbc88f4bb0596740df27f6b` |
+| Strict profile | `generic-strict-citation@1` |
+| Strict proof schema | `dra.strict-citation-profile.v1` |
 | Baseline source pack | `50000000-0000-0000-0000-000000000001`, version `1` |
 | Canonical manifest SHA-256 | `84350ea5705d9681d3e6550e1bd06e3340a9fcf0e7e7bbed4478ed3403405f28` |
 | Raw manifest SHA-256 | `5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25` |
 
 The historical copied fixture remains byte-identical and readable under its
-v0.1.3 producer identity. New imports use the strict v0.1.6 live DTO and accept
-only the exact v0.1.6 producer tuple, bounded request/run identities, canonical
+v0.1.3 producer identity. Migration `0010` historically admitted the exact
+v0.1.6 producer tuple. Current migration `0011` preserves that legacy branch and
+requires new strict work to use the separate exact-commit tuple above. The strict
+profile is not included in DRA v0.1.6.
+
+The closed v1/v2 import DTOs accept bounded request/run identities, canonical
 `research-report.md`, and ordered six-field Evidence projections. Artifact
 content exists only at the import boundary; persistence retains its byte length
 and SHA-256, never Markdown. Exactly one ordered Evidence item must be
@@ -58,6 +68,19 @@ is migrator-owned and tenant-scoped; the API receives only `EXECUTE`.
 authority, and forced RLS remains enabled. Downgrade removes only the additive
 v0.1.6 boundary after refusing incompatible live history.
 
+Migration `0011` adds a strict overload without replacing the legacy
+`app.import_dra_research_candidate(...)` signature. Exact function identity is
+the pair of function name and `oidvectortypes(p.proargtypes)`. Both import
+signatures and the exact verification signature are API-only;
+`night_voyager_worker` and `PUBLIC` cannot execute them. The worker receives no
+new table authority and forced RLS remains enabled.
+
+Strict rows store repository, commit ref, contract, fixture, profile version,
+proof schema, request identity, and observed profile as one closed identity.
+Legacy rows cannot be inferred as strict and mixed identities fail closed.
+Downgrade to `0010` refuses before mutation when strict history exists; an empty
+or legacy-only database can downgrade safely.
+
 ## Provider-free live foundation
 
 The PR A live boundary is deliberately narrower than a provider workflow:
@@ -74,8 +97,8 @@ The PR A live boundary is deliberately narrower than a provider workflow:
 - Required CI uses deterministic scenario data and a fake transport. It does
   not contact a provider or promote a candidate.
 
-PR A, PR B, and PR C are implemented provider-free. They supply no
-governed-live success claim.
+PR A, PR B, PR C, and the strict-consumer prerequisite are implemented
+provider-free. They supply no governed-live success claim.
 
 ## Stage 1 live-capture boundary
 
@@ -113,7 +136,7 @@ POST boundary. Fresh-process task and AdvisorReview recovery are exact
 actor/idempotency-key reads over existing product records; they are not
 process-local caches or generic read APIs.
 
-The outcome inspector executes only migration `0010` function
+The outcome inspector executes only the current migration `0011` form of
 `app.project_dra_live_outcome(...)`. It has no table `SELECT`, generic SQL, DML,
 privileged role, or cross-tenant path. `decision_recorded` is not completion;
 only the complete evaluator may produce `closure_passed`.
@@ -175,6 +198,6 @@ request/result fields match; partial or conflicting authority fails closed.
 
 Final trajectory evaluation accepts only the typed `capture`, `promotion`,
 `review`, and `decision` receipts. Caller-supplied assertion identifiers are not
-authority. The closed migration `0010` projection correlates the promoted mapping
+authority. The current migration `0011` projection correlates the promoted mapping
 with the exact task execution, terminal event/SSE cursor, five-field Skill pin,
 AdvisorReview/brief, family decision, DecisionReceipt, and TimelinePlan.

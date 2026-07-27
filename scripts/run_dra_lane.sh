@@ -8,6 +8,8 @@ fi
 
 if [ "${1:-}" = "rehearse" ]; then
   shift
+  uv run python -c \
+    'from night_voyager.dra.fixtures import load_strict_live_closure_scenario; load_strict_live_closure_scenario()'
   temp=$(mktemp -d)
   trap 'rm -rf -- "$temp"' EXIT HUP INT TERM
   set +e

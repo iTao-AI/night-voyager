@@ -5,6 +5,7 @@ import tomllib
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 import pytest
 
@@ -13,6 +14,20 @@ from night_voyager.adapters.dra_readonly import (
     DraOutputLimitExceeded,
     Httpx2DraTransport,
 )
+from night_voyager.dra.fixtures import load_strict_live_closure_scenario
+from night_voyager.dra.live_http import (
+    EphemeralHttpAuthority,
+    NightVoyagerAuthorityGateway,
+)
+from night_voyager.dra.models import (
+    DraCandidateImportV2,
+    DraEvidenceProjectionV1,
+    DraObservedProfileManifestV1,
+    DraRunAcceptanceV1,
+    DraRunProjectionV1,
+    DraStrictConsumerIdentityV2,
+)
+from night_voyager.identity.models import ActorContext, ActorRole
 
 ROOT = Path(__file__).parents[2]
 
@@ -91,6 +106,37 @@ class CapturingFactory:
     def __call__(self, **kwargs: Any) -> FakeClient:
         self.kwargs = kwargs
         return self.client
+
+
+class AuthorityResponse:
+    status_code = 201
+
+    def json(self) -> object:
+        return {
+            "schema_version": 1,
+            "candidate_id": "90000000-0000-0000-0000-000000000001",
+            "verification": None,
+            "replayed": False,
+        }
+
+    def raise_for_status(self) -> None:
+        return None
+
+
+class AuthorityClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def post(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        json: object,
+    ) -> AuthorityResponse:
+        assert isinstance(json, dict)
+        self.calls.append((url, {"headers": headers, "json": json}))
+        return AuthorityResponse()
 
 
 @pytest.mark.asyncio
@@ -213,6 +259,134 @@ async def test_transport_exposes_bounded_allowlisted_run_and_result_projections(
         "GET",
         "/api/runs/run-1/result",
     )
+
+
+@pytest.mark.asyncio
+async def test_transport_reads_only_exact_strict_profile_manifest() -> None:
+    factory = CapturingFactory(
+        {
+            "profile": {
+                "profile_id": "generic-strict-citation",
+                "version": "1",
+                "private_additive_field": "discarded",
+            }
+        }
+    )
+    transport = Httpx2DraTransport(
+        DraClientConfig(
+            base_url="http://127.0.0.1:8000",
+            poll_seconds=1,
+            deadline_seconds=30,
+        ),
+        environ={},
+        client_factory=factory,
+    )
+    observed = await transport.get_profile("generic-strict-citation")
+    assert observed == DraObservedProfileManifestV1(
+        schema_version="night-voyager.dra-observed-profile-manifest.v1",
+        profile_id="generic-strict-citation",
+        profile_version="1",
+    )
+    assert factory.client.calls[0][:2] == (
+        "GET",
+        "/api/profiles/generic-strict-citation",
+    )
+    with pytest.raises(ValueError, match="dra_profile_id_invalid"):
+        await transport.get_profile("generic")
+
+    wrong_version = Httpx2DraTransport(
+        DraClientConfig(
+            base_url="http://127.0.0.1:8000",
+            poll_seconds=1,
+            deadline_seconds=30,
+        ),
+        environ={},
+        client_factory=CapturingFactory(
+            {
+                "profile": {
+                    "profile_id": "generic-strict-citation",
+                    "version": "2",
+                }
+            }
+        ),
+    )
+    with pytest.raises(ValueError):
+        await wrong_version.get_profile("generic-strict-citation")
+
+
+@pytest.mark.asyncio
+async def test_night_voyager_gateway_transports_actual_v2_candidate() -> None:
+    scenario = load_strict_live_closure_scenario()
+    evidence = scenario.evidence[0]
+    candidate = DraCandidateImportV2(
+        schema_version="night-voyager.dra-candidate-import.v2",
+        organization_id=UUID(
+            "10000000-0000-0000-0000-000000000001"
+        ),
+        case_id=UUID("40000000-0000-0000-0000-000000000003"),
+        expected_case_revision=1,
+        consumer_identity=DraStrictConsumerIdentityV2(
+            schema_version=(
+                "night-voyager.dra-strict-consumer-identity.v2"
+            ),
+            producer=scenario.producer,
+            request=scenario.request_identity,
+            observed_profile=scenario.profile_manifest,
+        ),
+        acceptance=DraRunAcceptanceV1(
+            thread_id=scenario.status.thread_id,
+            run_id=scenario.status.run_id,
+            segment_id=scenario.status.segment_id,
+            idempotent_replay=False,
+        ),
+        run=DraRunProjectionV1(
+            run_id=scenario.status.run_id,
+            state_version=scenario.status.state_version,
+            execution_status="completed",
+            review_status="not_required",
+            delivery_status="ready",
+        ),
+        artifact=scenario.canonical_artifact,
+        evidence=(
+            DraEvidenceProjectionV1(
+                evidence_id=evidence.evidence_id,
+                source_url=evidence.source_url,
+                source_identity=evidence.source_identity,
+                retrieved_at=evidence.retrieved_at,
+                citation_status="cited",
+                verification_status=evidence.verification_status,
+            ),
+        ),
+    )
+    client = AuthorityClient()
+    gateway = NightVoyagerAuthorityGateway(
+        client,
+        EphemeralHttpAuthority(
+            origin="http://127.0.0.1:3000",
+            session_value="synthetic-session",
+            csrf_value="synthetic-csrf",
+        ),
+    )
+    context = ActorContext(
+        organization_id=candidate.organization_id,
+        actor_id=UUID("20000000-0000-0000-0000-000000000001"),
+        role=ActorRole.ADVISOR,
+        session_id=UUID("30000000-0000-0000-0000-000000000001"),
+    )
+    result = await gateway.import_strict_candidate(
+        context, candidate, "strict-gateway-key-0001"
+    )
+    assert result.candidate_id == UUID(
+        "90000000-0000-0000-0000-000000000001"
+    )
+    assert client.calls[0][0] == (
+        f"/api/v1/cases/{candidate.case_id}/dra-candidates"
+    )
+    sent = client.calls[0][1]["json"]
+    assert isinstance(sent, dict)
+    assert sent["schema_version"] == "night-voyager.dra-candidate-import.v2"
+    assert "organization_id" not in sent
+    assert "case_id" not in sent
 
 
 @pytest.mark.asyncio

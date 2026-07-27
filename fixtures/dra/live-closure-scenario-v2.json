@@ -1,0 +1,76 @@
+{
+  "schema_version": "night-voyager.dra-live-closure-scenario.v2",
+  "scenario_id": "dra-strict-citation-live-closure-v2",
+  "producer": {
+    "schema": "night-voyager.dra-producer-pin.v2",
+    "repository": "https://github.com/iTao-AI/decision-research-agent",
+    "ref_kind": "commit",
+    "ref": "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+    "commit": "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+    "consumer_contract_schema": "dra.downstream-consumer.v1",
+    "consumer_fixture_sha256": "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157",
+    "profile_id": "generic-strict-citation",
+    "profile_version": "1",
+    "proof_schema": "dra.strict-citation-profile.v1"
+  },
+  "request_identity": {
+    "schema_version": "night-voyager.dra-run-request-identity.v2",
+    "profile_id": "generic-strict-citation",
+    "request_sha256": "2a49a63679f4b70eb8ed40e3a606ba24266ce5ac7cb195f715b8baac88fb4670"
+  },
+  "profile_manifest": {
+    "schema_version": "night-voyager.dra-observed-profile-manifest.v1",
+    "profile_id": "generic-strict-citation",
+    "profile_version": "1"
+  },
+  "local_proof_schema": "dra.strict-citation-profile.v1",
+  "max_attempts": 0,
+  "status": {
+    "run_id": "run_strict_000000000000000000000000000001",
+    "thread_id": "thread_strict_0000000000000000000000000001",
+    "segment_id": "segment_strict_000000000000000000000000001",
+    "profile_id": "generic-strict-citation",
+    "state_version": 1,
+    "execution_status": "completed",
+    "review_status": "not_required",
+    "delivery_status": "ready",
+    "failure_cause": null
+  },
+  "result": {
+    "run_id": "run_strict_000000000000000000000000000001",
+    "execution_status": "completed",
+    "delivery_status": "ready",
+    "artifact": {
+      "artifact_id": "research-report.md",
+      "kind": "research_report_markdown",
+      "media_type": "text/markdown",
+      "byte_length": 81,
+      "sha256": "42905fde1d8c142983ec2539bdd4030ff0d7e85293ba6c9ab457891721f35967"
+    }
+  },
+  "canonical_artifact": {
+    "artifact_id": "research-report.md",
+    "kind": "research_report_markdown",
+    "media_type": "text/markdown",
+    "content": "# Synthetic Strict Research Report\n\nSource: https://example.com/contract-source-1",
+    "content_hash": "42905fde1d8c142983ec2539bdd4030ff0d7e85293ba6c9ab457891721f35967"
+  },
+  "evidence": [
+    {
+      "evidence_id": "ev_run_strict_000000000000000000000000000001_0001",
+      "run_id": "run_strict_000000000000000000000000000001",
+      "segment_id": "segment_strict_000000000000000000000000001",
+      "source_url": "https://example.com/contract-source-1",
+      "source_identity": "https://example.com/contract-source-1",
+      "retrieved_at": "2026-07-27T00:00:00Z",
+      "citation_status": "cited",
+      "verification_status": "unverified"
+    }
+  ],
+  "expected_non_claims": [
+    "provider_quality",
+    "source_truth",
+    "production_readiness",
+    "admissions_outcome"
+  ]
+}

@@ -178,10 +178,19 @@ def test_historical_fixture_and_live_scenario_are_distinct_explicit_paths() -> N
 def test_public_docs_close_governed_mixed_planning_without_live_claim() -> None:
     reference = (ROOT / "docs/reference/dra-governed-evidence.md").read_text()
     runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
+    normalized_runbook = " ".join(runbook.split())
     assert "atomic human verification/promotion" in reference
     assert "governed mixed\nPlanningRun generation are implemented" in reference
     assert "separately-authorized-one-attempt" in runbook
-    assert "Live provider proof was not run" in runbook
+    for required in (
+        "two bounded live attempts stopped before candidate import",
+        "No third provider attempt is authorized",
+        "Strict live acceptance remains incomplete",
+        "not a governed-live success claim",
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+    ):
+        assert required in normalized_runbook
+    assert "Live provider proof was not run" not in runbook
 
 
 def test_main_normalizes_unexpected_live_errors_without_private_output(

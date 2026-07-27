@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Iterable, Sequence
 from typing import Annotated, Literal, Self, cast
@@ -19,9 +20,19 @@ from night_voyager.dra.live_models import (
     DraLiveScenarioV1,
     DraPromotionReceiptV1,
     DraReviewReceiptV1,
+    DraStrictReadinessEvidenceV1,
     PublicCode,
 )
-from night_voyager.dra.models import BoundedId, FrozenModel, Sha256
+from night_voyager.dra.live_storage import canonical_receipt_bytes
+from night_voyager.dra.models import (
+    BoundedId,
+    DraObservedProfileManifestV1,
+    DraProducerPinV2,
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
+    FrozenModel,
+    Sha256,
+)
 
 TrajectoryAssertionId = Literal[
     "producer_pin_exact",
@@ -238,6 +249,113 @@ class DraLiveOutcomeProjectionV1(FrozenModel):
     observed_identity_hashes: tuple[Sha256, ...]
 
 
+class DraLiveCandidateReadinessV3(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-live-candidate-readiness.v3"
+    ]
+    status: Literal["INCOMPLETE_PENDING_LIVE_ACCEPTANCE"]
+    producer: DraProducerPinV2
+    request_identity: DraRunRequestIdentityV2
+    observed_profile: DraObservedProfileManifestV1
+    authorization: Literal[
+        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    ]
+
+    @model_validator(mode="before")
+    @classmethod
+    def require_complete_canonical_identity(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            return value
+        payload = cast(dict[str, object], value)
+        exact_nested_keys = {
+            "producer": {
+                "schema",
+                "repository",
+                "ref_kind",
+                "ref",
+                "commit",
+                "consumer_contract_schema",
+                "consumer_fixture_sha256",
+                "profile_id",
+                "profile_version",
+                "proof_schema",
+            },
+            "request_identity": {
+                "schema_version",
+                "profile_id",
+                "request_sha256",
+            },
+            "observed_profile": {
+                "schema_version",
+                "profile_id",
+                "profile_version",
+            },
+        }
+        for name, exact_keys in exact_nested_keys.items():
+            nested = payload.get(name)
+            if isinstance(nested, dict):
+                nested_payload = cast(dict[str, object], nested)
+                if set(nested_payload) != exact_keys:
+                    raise ValueError(
+                        "dra_strict_readiness_identity_invalid"
+                    )
+        return cast(object, payload)
+
+    @model_validator(mode="after")
+    def exact_strict_identity(self) -> Self:
+        DraStrictConsumerIdentityV2(
+            schema_version="night-voyager.dra-strict-consumer-identity.v2",
+            producer=self.producer,
+            request=self.request_identity,
+            observed_profile=self.observed_profile,
+        )
+        return self
+
+
+class DraLiveCandidateReadinessV4(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-candidate-readiness.v4"]
+    status: Literal["INCOMPLETE_PENDING_LIVE_ACCEPTANCE"]
+    consumer_identity: DraStrictConsumerIdentityV2
+    evidence_bundle: DraStrictReadinessEvidenceV1
+    authorization: Literal["PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"]
+
+
+class DraDurableCandidateIdentityV2(FrozenModel):
+    schema_version: Literal[
+        "night-voyager.dra-durable-candidate-identity.v2"
+    ]
+    candidate_id: BoundedId
+    producer: DraProducerPinV2
+    request_identity: DraRunRequestIdentityV2
+    observed_profile: DraObservedProfileManifestV1
+
+    @model_validator(mode="after")
+    def exact_strict_identity(self) -> Self:
+        DraStrictConsumerIdentityV2(
+            schema_version="night-voyager.dra-strict-consumer-identity.v2",
+            producer=self.producer,
+            request=self.request_identity,
+            observed_profile=self.observed_profile,
+        )
+        return self
+
+
+class DraLiveOutcomeProjectionV2(DraLiveOutcomeProjectionV1):
+    schema_version: Literal[
+        "night-voyager.dra-live-outcome-projection.v2"
+    ]
+    durable_candidate: DraDurableCandidateIdentityV2 | None
+
+    @model_validator(mode="after")
+    def database_candidate_identity_is_coherent(self) -> Self:
+        if self.durable_candidate is not None and (
+            self.candidate_id != self.durable_candidate.candidate_id
+            or self.candidate_count != 1
+        ):
+            raise ValueError("dra_strict_candidate_identity_invalid")
+        return self
+
+
 class AssertionResultV1(FrozenModel):
     assertion_id: AssertionId
     status: EvaluationStatus
@@ -313,6 +431,90 @@ class DraLiveEvaluationReportV1(FrozenModel):
             if all(item.status == "passed" for item in self.assertions)
             else "failed"
         )
+
+
+class DraLiveEvaluationReportV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-live-evaluation.v2"]
+    scenario_id: Literal["dra-strict-citation-live-closure-v2"]
+    candidate_id: BoundedId
+    durable_candidate_identity_sha256: Sha256
+    readiness_sha256: Sha256
+    request_identity_sha256: Sha256
+    outcome_projection_sha256: Sha256
+    status: Literal["passed"]
+    expected_non_claims: tuple[
+        Literal[
+            "provider_quality",
+            "source_truth",
+            "production_readiness",
+            "admissions_outcome",
+        ],
+        ...,
+    ]
+
+    @model_validator(mode="after")
+    def exact_non_claims(self) -> Self:
+        if self.expected_non_claims != (
+            "provider_quality",
+            "source_truth",
+            "production_readiness",
+            "admissions_outcome",
+        ):
+            raise ValueError("dra_expected_non_claims_invalid")
+        return self
+
+
+def _canonical_model_bytes(model: FrozenModel) -> bytes:
+    return canonical_receipt_bytes(model)
+
+
+def _canonical_model_sha256(model: FrozenModel) -> str:
+    return hashlib.sha256(_canonical_model_bytes(model)).hexdigest()
+
+
+def evaluate_strict_candidate(
+    readiness: DraLiveCandidateReadinessV3,
+    projection: DraLiveOutcomeProjectionV2,
+) -> DraLiveEvaluationReportV2:
+    durable = projection.durable_candidate
+    if durable is None:
+        raise ValueError("dra_strict_candidate_identity_missing")
+    expected_identity = (
+        readiness.producer,
+        readiness.request_identity,
+        readiness.observed_profile,
+    )
+    observed_identity = (
+        durable.producer,
+        durable.request_identity,
+        durable.observed_profile,
+    )
+    if (
+        projection.candidate_count != 1
+        or projection.candidate_id != durable.candidate_id
+        or observed_identity != expected_identity
+    ):
+        raise ValueError("dra_strict_candidate_identity_mismatch")
+    return DraLiveEvaluationReportV2(
+        schema_version="night-voyager.dra-live-evaluation.v2",
+        scenario_id="dra-strict-citation-live-closure-v2",
+        candidate_id=durable.candidate_id,
+        durable_candidate_identity_sha256=_canonical_model_sha256(
+            durable
+        ),
+        readiness_sha256=_canonical_model_sha256(readiness),
+        request_identity_sha256=_canonical_model_sha256(
+            readiness.request_identity
+        ),
+        outcome_projection_sha256=_canonical_model_sha256(projection),
+        status="passed",
+        expected_non_claims=(
+            "provider_quality",
+            "source_truth",
+            "production_readiness",
+            "admissions_outcome",
+        ),
+    )
 
 
 def _result(
@@ -628,7 +830,9 @@ def _reject_content_keys(value: object) -> None:
             _reject_content_keys(child)
 
 
-def canonical_report_bytes(report: DraLiveEvaluationReportV1) -> bytes:
+def canonical_report_bytes(
+    report: DraLiveEvaluationReportV1 | DraLiveEvaluationReportV2,
+) -> bytes:
     payload = report.model_dump(mode="json")
     _reject_content_keys(payload)
     return json.dumps(

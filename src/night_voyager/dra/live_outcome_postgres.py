@@ -7,8 +7,16 @@ from typing import cast
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from night_voyager.dra.live_evaluation import DraLiveOutcomeProjectionV1
+from night_voyager.dra.live_evaluation import (
+    DraDurableCandidateIdentityV2,
+    DraLiveOutcomeProjectionV2,
+)
 from night_voyager.dra.live_outcome import DraLiveOutcomeIntentV1
+from night_voyager.dra.models import (
+    DraObservedProfileManifestV1,
+    DraProducerPinV2,
+    DraRunRequestIdentityV2,
+)
 from night_voyager.identity.models import ActorContext
 from night_voyager.identity.repository import IdentityRepository
 
@@ -23,8 +31,57 @@ def _identity_hash(value: object) -> str:
     ).hexdigest()
 
 
+def _strict_candidate_identity(
+    row: Mapping[str, object],
+) -> DraDurableCandidateIdentityV2 | None:
+    ref_kind = row.get("producer_ref_kind")
+    profile_id = row.get("profile_id")
+    if ref_kind == "release" and profile_id == "generic":
+        return None
+    if ref_kind != "commit" or profile_id != "generic-strict-citation":
+        raise ValueError("dra_strict_candidate_identity_invalid")
+    producer = DraProducerPinV2.model_validate(
+        {
+            "repository": row.get("producer_repository"),
+            "ref_kind": ref_kind,
+            "ref": row.get("producer_ref"),
+            "commit": row.get("producer_commit"),
+            "consumer_contract_schema": row.get("contract_schema"),
+            "consumer_fixture_sha256": row.get("fixture_sha256"),
+            "profile_id": profile_id,
+            "profile_version": row.get("profile_version"),
+            "proof_schema": row.get("proof_schema"),
+        }
+    )
+    request_identity = DraRunRequestIdentityV2.model_validate(
+        {
+            "schema_version": (
+                "night-voyager.dra-run-request-identity.v2"
+            ),
+            "profile_id": profile_id,
+            "request_sha256": row.get("request_identity_sha256"),
+        }
+    )
+    observed_profile = DraObservedProfileManifestV1.model_validate(
+        {
+            "schema_version": (
+                "night-voyager.dra-observed-profile-manifest.v1"
+            ),
+            "profile_id": profile_id,
+            "profile_version": row.get("profile_version"),
+        }
+    )
+    return DraDurableCandidateIdentityV2(
+        schema_version="night-voyager.dra-durable-candidate-identity.v2",
+        candidate_id=str(row["candidate_id"]),
+        producer=producer,
+        request_identity=request_identity,
+        observed_profile=observed_profile,
+    )
+
+
 class PostgresLiveOutcomeInspector:
-    """Read-only adapter for migration 0010's closed RLS-preserving function."""
+    """Read-only adapter for migration 0011's closed RLS-preserving function."""
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -33,7 +90,7 @@ class PostgresLiveOutcomeInspector:
         self,
         context: ActorContext,
         intent: DraLiveOutcomeIntentV1,
-    ) -> DraLiveOutcomeProjectionV1:
+    ) -> DraLiveOutcomeProjectionV2:
         intent.validate_context(context)
         await IdentityRepository(self._session).set_actor_context(context)
         result = await self._session.execute(
@@ -46,7 +103,11 @@ class PostgresLiveOutcomeInspector:
         )
         raw = result.mappings().one_or_none()
         if raw is None:
-            return DraLiveOutcomeProjectionV1(
+            return DraLiveOutcomeProjectionV2(
+                schema_version=(
+                    "night-voyager.dra-live-outcome-projection.v2"
+                ),
+                durable_candidate=None,
                 candidate_id=None,
                 candidate_count=0,
                 verification_count=0,
@@ -90,6 +151,7 @@ class PostgresLiveOutcomeInspector:
                 observed_identity_hashes=(),
             )
         row = cast(Mapping[str, object], raw)
+        durable_candidate = _strict_candidate_identity(row)
         identity_fields = (
             "candidate_id",
             "promoted_source_pack_id",
@@ -117,7 +179,9 @@ class PostgresLiveOutcomeInspector:
         required_identity_present = all(
             row[name] is not None for name in identity_fields
         )
-        return DraLiveOutcomeProjectionV1(
+        return DraLiveOutcomeProjectionV2(
+            schema_version="night-voyager.dra-live-outcome-projection.v2",
+            durable_candidate=durable_candidate,
             candidate_id=str(row["candidate_id"]),
             candidate_count=1,
             verification_count=verification_count,

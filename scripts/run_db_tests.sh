@@ -9,23 +9,23 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
@@ -33,7 +33,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run alembic current | grep '0007'
     uv run --no-editable python scripts/seed_demo.py --without-skills
     uv run alembic upgrade head
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -55,22 +55,22 @@ if [ "${1:-}" = "inside" ]; then
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_http_decision.py
     if uv run alembic downgrade 0007 >"$downgrade_output" 2>&1; then
-        echo "expected Skill authority downgrade refusal" >&2
+        echo "expected DRA strict authority downgrade refusal" >&2
         exit 1
     fi
-    grep -q 'refusing downgrade: DRA v0.1.6 candidate history exists' "$downgrade_output"
-    uv run alembic current | grep '0010'
+    grep -q 'refusing downgrade: DRA strict candidate history exists' "$downgrade_output"
+    uv run alembic current | grep '0011'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     uv run --no-editable python scripts/seed_demo.py --without-collaboration
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0010'
+    uv run alembic current | grep '0011'
     exit 0
 fi
 
@@ -94,6 +94,19 @@ if [ "${1:-}" = "inside-dra-live-migration" ]; then
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/dra/test_dra_live_migration.py
     uv run alembic current | grep '0010'
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-dra-strict-migration" ]; then
+    uv run alembic downgrade base
+    uv run alembic upgrade 0009
+    uv run alembic current | grep '0009'
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/dra/test_dra_live_migration.py \
+        tests/integration/dra/test_dra_strict_migration.py \
+        tests/security/test_rls_isolation.py
+    uv run alembic current | grep '0011'
     exit 0
 fi
 
@@ -151,6 +164,16 @@ fi
 if [ "${1:-}" = "dra-live-migration" ]; then
     run_lane "${BASE_PROJECT_NAME}-dra-live-migration" inside-dra-live-migration
     exit 0
+fi
+
+if [ "${1:-}" = "dra-strict-migration" ]; then
+    run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" inside-dra-strict-migration
+    exit 0
+fi
+
+if [ -n "${1:-}" ]; then
+    echo "unknown database test mode: $1" >&2
+    exit 2
 fi
 
 run_lane "${BASE_PROJECT_NAME}-planning-start-migration" inside-planning-start-migration

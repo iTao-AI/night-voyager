@@ -17,6 +17,7 @@ from night_voyager.dra.ports import (
     DraCandidateViewV1,
     DraVerificationViewV1,
     ImportDraCandidateCommand,
+    ImportStrictDraCandidateCommand,
     PromotionIdentities,
     VerifyDraCandidateCommand,
 )
@@ -34,31 +35,63 @@ class PostgresDraCandidateRepository:
     async def import_candidate(
         self,
         context: ActorContext,
-        command: ImportDraCandidateCommand,
+        command: ImportDraCandidateCommand | ImportStrictDraCandidateCommand,
         candidate_id: UUID,
         idempotency_key: str,
     ) -> DraCandidateViewV1:
+        if type(command) is ImportDraCandidateCommand:
+            legacy_command = command
+            sql = (
+                "SELECT * FROM app.import_dra_research_candidate("
+                ":org,:actor,:case,:candidate,:revision,:release,:commit,:schema,:fixture,"
+                ":profile,:identity_hash,:run_id,:artifact_id,:artifact_kind,:media_type,"
+                ":artifact_bytes,:artifact_sha,CAST(:evidence AS jsonb),"
+                ":request_hash,:key_hash)"
+            )
+            identity_parameters = {
+                "release": legacy_command.producer.release,
+                "commit": legacy_command.producer.commit,
+                "schema": legacy_command.producer.contract_schema,
+                "fixture": legacy_command.producer.fixture_sha256,
+                "profile": legacy_command.request_identity.profile_id,
+                "identity_hash": legacy_command.request_identity.request_sha256,
+            }
+        elif type(command) is ImportStrictDraCandidateCommand:
+            strict_command = command
+            sql = (
+                "SELECT * FROM app.import_dra_research_candidate("
+                ":org,:actor,:case,:candidate,:revision,:producer_repository,"
+                ":producer_ref_kind,:producer_ref,:release,:commit,:schema,:fixture,"
+                ":profile,:profile_version,:proof_schema,:identity_hash,:run_id,"
+                ":artifact_id,:artifact_kind,:media_type,:artifact_bytes,:artifact_sha,"
+                "CAST(:evidence AS jsonb),:request_hash,:key_hash)"
+            )
+            identity = strict_command.consumer_identity
+            identity_parameters = {
+                "producer_repository": identity.producer.repository,
+                "producer_ref_kind": identity.producer.ref_kind,
+                "producer_ref": identity.producer.ref,
+                "release": None,
+                "commit": identity.producer.commit,
+                "schema": identity.producer.consumer_contract_schema,
+                "fixture": identity.producer.consumer_fixture_sha256,
+                "profile": identity.request.profile_id,
+                "profile_version": identity.observed_profile.profile_version,
+                "proof_schema": identity.producer.proof_schema,
+                "identity_hash": identity.request.request_sha256,
+            }
+        else:
+            raise TypeError("unsupported DRA candidate import command")
         try:
             result = await self._session.execute(
-                text(
-                    "SELECT * FROM app.import_dra_research_candidate("
-                    ":org,:actor,:case,:candidate,:revision,:release,:commit,:schema,:fixture,"
-                    ":profile,:identity_hash,:run_id,:artifact_id,:artifact_kind,:media_type,"
-                    ":artifact_bytes,:artifact_sha,CAST(:evidence AS jsonb),"
-                    ":request_hash,:key_hash)"
-                ),
-                {
+                text(sql),
+                identity_parameters
+                | {
                     "org": context.organization_id,
                     "actor": context.actor_id,
                     "case": command.case_id,
                     "candidate": candidate_id,
                     "revision": command.expected_case_revision,
-                    "release": command.producer.release,
-                    "commit": command.producer.commit,
-                    "schema": command.producer.contract_schema,
-                    "fixture": command.producer.fixture_sha256,
-                    "profile": command.request_identity.profile_id,
-                    "identity_hash": command.request_identity.request_sha256,
                     "run_id": command.run_id,
                     "artifact_id": command.artifact_id,
                     "artifact_kind": command.artifact_kind,
