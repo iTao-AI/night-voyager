@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import date
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
@@ -140,6 +142,105 @@ async def test_task_ready_projection_uses_canonical_server_inputs_under_api_role
         }
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize(
+    ("task_state", "revision"),
+    (("failed", 1), ("timed_out", 1), ("cancelled", 2)),
+)
+def test_journey_phase_projects_terminal_tasks_as_failure(
+    task_state: str, revision: int
+) -> None:
+    class JourneyPhaseProbe(PostgresConnectedDemoRepository):
+        @classmethod
+        def project(cls, row: Mapping[str, Any]) -> DemoPhaseV2:
+            return cls._journey_phase(row)
+
+    row = {
+        "state": "planning",
+        "current_revision": revision,
+        "brief_id": None,
+        "decision_id": None,
+        "revision_requested": False,
+        "revision_fact_pending": False,
+        "run_state": None,
+        "supersedes_run_id": None,
+        "task_state": task_state,
+    }
+    assert (
+        JourneyPhaseProbe.project(row)
+        is DemoPhaseV2.TERMINAL_TASK_FAILURE
+    )
+
+
+@pytest.mark.asyncio
+async def test_terminal_task_phase_and_role_are_durable_across_repository_reload() -> None:
+    case_id = uuid4()
+    task_id = uuid4()
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text(
+                    "SELECT app.publish_case_revision("
+                    ":org,:case,NULL,1,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "student": PLANNING_FIXTURE.case.student.model_dump_json(),
+                    "family": PLANNING_FIXTURE.case.family.model_dump_json(),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_case_participants("
+                    ":org,:case,:advisor,:student,:parent)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                    "student": STUDENT,
+                    "parent": PARENT,
+                },
+            )
+            await connection.execute(
+                text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.agent_tasks("
+                    "organization_id,id,case_id,operation,case_revision,"
+                    "source_pack_id,source_pack_version,policy_version,"
+                    "request_sha256,created_by_actor_id,state,terminal_code) VALUES("
+                    ":org,:task,:case,'generate_planning_run_v1',1,"
+                    "'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',"
+                    "repeat('a',64),:advisor,'failed','synthetic_failure')"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "task": task_id,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                },
+            )
+        phases: list[tuple[DemoPhaseV2, str]] = []
+        for role in (ActorRole.ADVISOR, ActorRole.STUDENT, ActorRole.PARENT):
+            async with api.begin() as connection:
+                status = await journey_status_for_role(connection, case_id, role)
+                assert status is not None
+                phases.append((status.phase, status.active_role))
+        assert phases == [
+            (DemoPhaseV2.TERMINAL_TASK_FAILURE, "advisor"),
+            (DemoPhaseV2.TERMINAL_TASK_FAILURE, "advisor"),
+            (DemoPhaseV2.TERMINAL_TASK_FAILURE, "advisor"),
+        ]
+    finally:
+        await api.dispose()
+        await migrator.dispose()
 
 
 @pytest.mark.asyncio
@@ -539,7 +640,7 @@ async def test_revision_two_ledger_projects_exact_predecessor_comparison(
                 status.active_role
                 for status in pending_statuses
                 if status is not None
-            } == {"advisor", "student", "parent"}
+            } == {"advisor"}
             assert all(
                 status.model_dump(by_alias=True).keys()
                 == {
@@ -601,7 +702,7 @@ async def test_revision_two_ledger_projects_exact_predecessor_comparison(
             }
             assert {
                 status.active_role for status in statuses if status is not None
-            } == {"advisor", "student", "parent"}
+            } == {"advisor"}
         async with api_sessions() as session, session.begin():
             for name, value in (
                 ("night_voyager.organization_id", str(DEMO_ORG)),

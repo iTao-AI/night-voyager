@@ -171,6 +171,75 @@ async def seed_pending_revision_case() -> UUID:
     return case_id
 
 
+async def seed_terminal_task_case() -> UUID:
+    case_id = uuid4()
+    task_id = uuid4()
+    engine = create_async_engine(
+        os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+    )
+    try:
+        async with engine.begin() as connection:
+            source = (
+                await connection.execute(
+                    text(
+                        "SELECT student_preferences,family_preferences "
+                        "FROM app.student_case_revisions "
+                        "WHERE organization_id=:org ORDER BY created_at LIMIT 1"
+                    ),
+                    {"org": DEMO_ORG},
+                )
+            ).mappings().one()
+            await connection.execute(
+                text(
+                    "SELECT app.publish_case_revision("
+                    ":org,:case,NULL,1,CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "student": json.dumps(source["student_preferences"]),
+                    "family": json.dumps(source["family_preferences"]),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_case_participants("
+                    ":org,:case,:advisor,:student,:parent)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                    "student": STUDENT,
+                    "parent": PARENT,
+                },
+            )
+            await connection.execute(
+                text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.agent_tasks("
+                    "organization_id,id,case_id,operation,case_revision,"
+                    "source_pack_id,source_pack_version,policy_version,"
+                    "request_sha256,created_by_actor_id,state,terminal_code) VALUES("
+                    ":org,:task,:case,'generate_planning_run_v1',1,"
+                    "'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',"
+                    "repeat('a',64),:advisor,'timed_out','deadline_exceeded')"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "task": task_id,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                },
+            )
+    finally:
+        await engine.dispose()
+    return case_id
+
+
 def test_connected_demo_read_routes_are_registered() -> None:
     app = create_app()
     paths = app.openapi()["paths"]
@@ -284,17 +353,16 @@ async def test_task_ready_http_projection_is_real_and_no_store() -> None:
 
 
 @pytest.mark.parametrize(
-    ("choice", "active_role"),
+    "choice",
     (
-        (DemoActorChoice.ADVISOR, "advisor"),
-        (DemoActorChoice.STUDENT, "student"),
-        (DemoActorChoice.PARENT, "parent"),
+        DemoActorChoice.ADVISOR,
+        DemoActorChoice.STUDENT,
+        DemoActorChoice.PARENT,
     ),
 )
 @pytest.mark.asyncio
 async def test_journey_status_is_exact_and_participant_safe(
     choice: DemoActorChoice,
-    active_role: str,
 ) -> None:
     url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
     engine = create_async_engine(url)
@@ -329,7 +397,7 @@ async def test_journey_status_is_exact_and_participant_safe(
             "case_id": str(CONNECTED_DEMO_CASE_ID),
             "current_revision": 1,
             "phase": "task_ready",
-            "active_role": active_role,
+            "active_role": "advisor",
         }
     finally:
         await engine.dispose()
@@ -360,10 +428,10 @@ async def test_pending_revision_http_phase_is_role_equal_and_identifier_free() -
     }
     try:
         app = create_app(settings=settings, session_factory=sessions)
-        for choice, role in (
-            (DemoActorChoice.ADVISOR, "advisor"),
-            (DemoActorChoice.STUDENT, "student"),
-            (DemoActorChoice.PARENT, "parent"),
+        for choice in (
+            DemoActorChoice.ADVISOR,
+            DemoActorChoice.STUDENT,
+            DemoActorChoice.PARENT,
         ):
             async with sessions() as session, session.begin():
                 issued = await IdentityService(
@@ -390,9 +458,53 @@ async def test_pending_revision_http_phase_is_role_equal_and_identifier_free() -
                 "case_id": str(case_id),
                 "current_revision": 1,
                 "phase": "revision_fact_pending",
-                "active_role": role,
+                "active_role": "advisor",
             }
             assert hidden.status_code == 404
             assert hidden.json()["code"] == "resource_unavailable"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_terminal_task_http_phase_is_role_equal_after_reload() -> None:
+    case_id = await seed_terminal_task_case()
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": ["http://127.0.0.1:3000"],
+            "secret_key": "test-session-secret",
+        }
+    )
+    try:
+        app = create_app(settings=settings, session_factory=sessions)
+        for choice in (
+            DemoActorChoice.ADVISOR,
+            DemoActorChoice.STUDENT,
+            DemoActorChoice.PARENT,
+        ):
+            async with sessions() as session, session.begin():
+                issued = await IdentityService(
+                    IdentityRepository(session), settings.secret_key
+                ).mint(choice)
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://127.0.0.1:3000",
+            ) as client:
+                client.cookies.set(
+                    "night_voyager_session", issued.raw_session_token
+                )
+                response = await client.get(
+                    f"/api/v1/cases/{case_id}/journey-status"
+                )
+            assert response.status_code == 200
+            assert response.json()["phase"] == "terminal_task_failure"
+            assert response.json()["active_role"] == "advisor"
     finally:
         await engine.dispose()

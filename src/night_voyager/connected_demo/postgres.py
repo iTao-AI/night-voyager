@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import text
@@ -445,7 +445,7 @@ class PostgresConnectedDemoRepository:
             case_id=case_id,
             current_revision=row["current_revision"],
             phase=phase,
-            active_role=context.role.value,
+            active_role=self._journey_active_role(phase),
         )
 
     async def current_decision_brief(
@@ -739,6 +739,8 @@ class PostgresConnectedDemoRepository:
                 if row["supersedes_run_id"] is not None
                 else DemoPhaseV2.REVIEW_REQUIRED
             )
+        if row["task_state"] in {"blocked", "timed_out", "failed", "cancelled"}:
+            return DemoPhaseV2.TERMINAL_TASK_FAILURE
         if row["task_state"] is not None:
             return (
                 DemoPhaseV2.REVISION_TASK_ACTIVE
@@ -748,6 +750,16 @@ class PostgresConnectedDemoRepository:
         if revision > 1:
             return DemoPhaseV2.REPLAN_REQUIRED
         return DemoPhaseV2.TASK_READY
+
+    @staticmethod
+    def _journey_active_role(
+        phase: DemoPhaseV2,
+    ) -> Literal["advisor", "student", "parent"]:
+        if phase is DemoPhaseV2.REVISION_REQUESTED:
+            return "student"
+        if phase in {DemoPhaseV2.FAMILY_REVIEW, DemoPhaseV2.PLAN_READY}:
+            return "parent"
+        return "advisor"
 
     async def _authoritative_brief_id(
         self, context: ActorContext, case_id: UUID, case_state: str, revision: int
