@@ -12,9 +12,11 @@ import httpx2
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from night_voyager.dra.live_models import DraLiveRunEnvelopeV1
+from night_voyager.dra.live_projection import DraStrictLiveRunEnvelopeV2
 from night_voyager.dra.models import (
     DraCanonicalResultProjectionV1,
     DraHealthProjectionV1,
+    DraObservedProfileManifestV1,
     DraRunAcceptanceV1,
 )
 from night_voyager.dra.reconciliation import (
@@ -158,7 +160,31 @@ class Httpx2DraTransport:
             }
         )
 
-    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1:
+    async def get_profile(
+        self, profile_id: str
+    ) -> DraObservedProfileManifestV1:
+        if profile_id != "generic-strict-citation":
+            raise ValueError("dra_profile_id_invalid")
+        payload = await self._request_json(
+            "GET", "/api/profiles/generic-strict-citation"
+        )
+        raw_profile = payload.get("profile")
+        if not isinstance(raw_profile, Mapping):
+            raise DraTransportError()
+        profile = cast(Mapping[str, object], raw_profile)
+        return DraObservedProfileManifestV1.model_validate(
+            {
+                "schema_version": (
+                    "night-voyager.dra-observed-profile-manifest.v1"
+                ),
+                "profile_id": profile.get("profile_id"),
+                "profile_version": profile.get("version"),
+            }
+        )
+
+    async def _get_run_projection(
+        self, run_id: str
+    ) -> dict[str, object]:
         payload = await self._request_json("GET", f"/api/runs/{run_id}")
         raw_segments = payload.get("segments")
         if not isinstance(raw_segments, list):
@@ -197,24 +223,33 @@ class Httpx2DraTransport:
             else row
             for row in evidence
         ]
+        return {
+            field: payload.get(field)
+            for field in (
+                "run_id",
+                "thread_id",
+                "profile_id",
+                "state_version",
+                "execution_status",
+                "review_status",
+                "delivery_status",
+                "failure_cause",
+            )
+        } | {
+            "segment_id": segment.get("segment_id"),
+            "evidence": selected_evidence,
+        }
+
+    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1:
         return DraLiveRunEnvelopeV1.model_validate(
-            {
-                field: payload.get(field)
-                for field in (
-                    "run_id",
-                    "thread_id",
-                    "profile_id",
-                    "state_version",
-                    "execution_status",
-                    "review_status",
-                    "delivery_status",
-                    "failure_cause",
-                )
-            }
-            | {
-                "segment_id": segment.get("segment_id"),
-                "evidence": selected_evidence,
-            }
+            await self._get_run_projection(run_id)
+        )
+
+    async def get_strict_run(
+        self, run_id: str
+    ) -> DraStrictLiveRunEnvelopeV2:
+        return DraStrictLiveRunEnvelopeV2.model_validate(
+            await self._get_run_projection(run_id)
         )
 
     async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1:

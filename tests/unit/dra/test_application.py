@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from uuid import UUID, uuid5
 
 import pytest
 from pydantic import ValidationError
 
+import night_voyager.dra.models as dra_models
 from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.application import DraCandidateService
 from night_voyager.dra.errors import DraAuthorizationError
 from night_voyager.dra.fixtures import build_fixture_candidate_import
+from night_voyager.dra.live_models import DraLiveScenarioV2
 from night_voyager.dra.models import SourceAttestationV1
 from night_voyager.dra.ports import (
     DraCandidateViewV1,
     DraVerificationViewV1,
     ImportDraCandidateCommand,
+    ImportStrictDraCandidateCommand,
     PromotionIdentities,
     VerifyDraCandidateCommand,
 )
@@ -71,13 +75,15 @@ def verify_command(**changes: object) -> VerifyDraCandidateCommand:
 
 class RecordingDraRepository:
     def __init__(self) -> None:
-        self.imported: ImportDraCandidateCommand | None = None
+        self.imported: (
+            ImportDraCandidateCommand | ImportStrictDraCandidateCommand | None
+        ) = None
         self.identities: PromotionIdentities | None = None
 
     async def import_candidate(
         self,
         context: ActorContext,
-        command: ImportDraCandidateCommand,
+        command: ImportDraCandidateCommand | ImportStrictDraCandidateCommand,
         candidate_id: UUID,
         idempotency_key: str,
     ) -> DraCandidateViewV1:
@@ -128,6 +134,58 @@ async def test_import_discards_markdown_before_persistence_and_hashes_exact_requ
     assert repository.imported.import_request_sha256 == canonical_request_sha256(
         candidate_import.model_dump(mode="json", exclude_computed_fields=True)
     )
+
+
+@pytest.mark.asyncio
+async def test_import_v2_converts_only_to_closed_strict_port_command() -> None:
+    candidate_type = getattr(dra_models, "DraCandidateImportV2", None)
+    assert candidate_type is not None
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    evidence = scenario.evidence[0]
+    candidate_import = candidate_type(
+        schema_version="night-voyager.dra-candidate-import.v2",
+        organization_id=ORG,
+        case_id=CASE,
+        expected_case_revision=1,
+        consumer_identity={
+            "schema_version": "night-voyager.dra-strict-consumer-identity.v2",
+            "producer": scenario.producer,
+            "request": scenario.request_identity,
+            "observed_profile": scenario.profile_manifest,
+        },
+        acceptance={
+            "thread_id": scenario.status.thread_id,
+            "run_id": scenario.status.run_id,
+            "segment_id": scenario.status.segment_id,
+            "idempotent_replay": False,
+        },
+        run={
+            "run_id": scenario.status.run_id,
+            "state_version": scenario.status.state_version,
+            "execution_status": "completed",
+            "review_status": "not_required",
+            "delivery_status": "ready",
+        },
+        artifact=scenario.canonical_artifact,
+        evidence=(
+            {
+                "evidence_id": evidence.evidence_id,
+                "source_url": evidence.source_url,
+                "source_identity": evidence.source_identity,
+                "retrieved_at": evidence.retrieved_at,
+                "citation_status": evidence.citation_status,
+                "verification_status": evidence.verification_status,
+            },
+        ),
+    )
+    repository = RecordingDraRepository()
+    await DraCandidateService(
+        repository, id_factory=lambda: CANDIDATE
+    ).import_candidate(context(), candidate_import, "strict-import-key-0001")
+    assert isinstance(repository.imported, ImportStrictDraCandidateCommand)
+    assert repository.imported.consumer_identity == candidate_import.consumer_identity
 
 
 @pytest.mark.asyncio

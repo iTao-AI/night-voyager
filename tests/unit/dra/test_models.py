@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+import night_voyager.dra.models as dra_models
 from night_voyager.dra.fixtures import build_fixture_candidate_import, load_dra_fixture
+from night_voyager.dra.live_models import DraLiveScenarioV2
 from night_voyager.dra.models import (
     DRA_LIVE_COMMIT,
     DraCanonicalArtifactInputV1,
@@ -165,3 +168,54 @@ def test_request_identity_v2_reconciles_requested_and_observed_profile() -> None
     payload["observed_profile"]["profile_version"] = "2"
     with pytest.raises(ValidationError):
         DraStrictConsumerIdentityV2.model_validate(payload)
+
+
+def test_candidate_import_v2_is_closed_and_binds_strict_identity() -> None:
+    candidate_type = getattr(dra_models, "DraCandidateImportV2", None)
+    assert candidate_type is not None
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    evidence = scenario.evidence[0]
+    payload = {
+        "schema_version": "night-voyager.dra-candidate-import.v2",
+        "organization_id": "10000000-0000-0000-0000-000000000001",
+        "case_id": "40000000-0000-0000-0000-000000000003",
+        "expected_case_revision": 1,
+        "consumer_identity": {
+            "schema_version": "night-voyager.dra-strict-consumer-identity.v2",
+            "producer": scenario.producer,
+            "request": scenario.request_identity,
+            "observed_profile": scenario.profile_manifest,
+        },
+        "acceptance": {
+            "thread_id": scenario.status.thread_id,
+            "run_id": scenario.status.run_id,
+            "segment_id": scenario.status.segment_id,
+            "idempotent_replay": False,
+        },
+        "run": {
+            "run_id": scenario.status.run_id,
+            "state_version": scenario.status.state_version,
+            "execution_status": "completed",
+            "review_status": "not_required",
+            "delivery_status": "ready",
+        },
+        "artifact": scenario.canonical_artifact,
+        "evidence": [
+            {
+                "evidence_id": evidence.evidence_id,
+                "source_url": evidence.source_url,
+                "source_identity": evidence.source_identity,
+                "retrieved_at": evidence.retrieved_at,
+                "citation_status": evidence.citation_status,
+                "verification_status": evidence.verification_status,
+            }
+        ],
+    }
+    candidate = candidate_type.model_validate(payload)
+    assert candidate.consumer_identity.producer == scenario.producer
+    with pytest.raises(ValidationError):
+        candidate_type.model_validate(payload | {"producer": scenario.producer})
+    with pytest.raises(ValidationError):
+        candidate_type.model_validate(payload | {"unknown": True})

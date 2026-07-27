@@ -14,6 +14,7 @@ from night_voyager.config import Settings
 from night_voyager.dra.fixtures import (
     build_fixture_candidate_import,
     build_v0_1_6_scenario_candidate_import,
+    load_strict_live_closure_scenario,
 )
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
@@ -78,6 +79,51 @@ def import_payload() -> dict[str, object]:
     payload.pop("organization_id")
     payload.pop("case_id")
     return payload
+
+
+def strict_import_payload() -> dict[str, object]:
+    scenario = load_strict_live_closure_scenario()
+    evidence = scenario.evidence[0]
+    return {
+        "schema_version": "night-voyager.dra-candidate-import.v2",
+        "expected_case_revision": 1,
+        "consumer_identity": {
+            "schema_version": (
+                "night-voyager.dra-strict-consumer-identity.v2"
+            ),
+            "producer": scenario.producer.model_dump(mode="json"),
+            "request": scenario.request_identity.model_dump(mode="json"),
+            "observed_profile": scenario.profile_manifest.model_dump(
+                mode="json"
+            ),
+        },
+        "acceptance": {
+            "thread_id": scenario.status.thread_id,
+            "run_id": scenario.status.run_id,
+            "segment_id": scenario.status.segment_id,
+            "idempotent_replay": False,
+        },
+        "run": {
+            "run_id": scenario.status.run_id,
+            "state_version": scenario.status.state_version,
+            "execution_status": "completed",
+            "review_status": "not_required",
+            "delivery_status": "ready",
+        },
+        "artifact": scenario.canonical_artifact.model_dump(
+            mode="json", exclude_computed_fields=True
+        ),
+        "evidence": [
+            {
+                "evidence_id": evidence.evidence_id,
+                "source_url": evidence.source_url,
+                "source_identity": evidence.source_identity,
+                "retrieved_at": evidence.retrieved_at.isoformat(),
+                "citation_status": evidence.citation_status,
+                "verification_status": evidence.verification_status,
+            }
+        ],
+    }
 
 
 def request_headers(session: IssuedSession, key: str) -> dict[str, str]:
@@ -158,6 +204,63 @@ async def test_dra_http_is_strict_bounded_and_advisor_only() -> None:
             hidden = await client.get(f"/api/v1/cases/{CASE}/dra-candidates/{candidate_id}")
             assert hidden.status_code == 404
             assert "synthetic research report" not in hidden.text.lower()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_dra_http_v2_strict_success_and_closed_version_discriminator() -> None:
+    await ensure_case()
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": [ORIGIN],
+            "secret_key": "test-session-secret",
+        }
+    )
+    try:
+        advisor = await mint(sessions, DemoActorChoice.ADVISOR)
+        app = create_app(settings=settings, session_factory=sessions)
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url=ORIGIN
+        ) as client:
+            client.cookies.set(
+                "night_voyager_session", advisor.raw_session_token
+            )
+            payload = strict_import_payload()
+            imported = await client.post(
+                f"/api/v1/cases/{CASE}/dra-candidates",
+                headers=request_headers(advisor, "dra-http-strict-0001"),
+                json=payload,
+            )
+            assert imported.status_code == 201, imported.text
+            assert imported.json()["verification"] is None
+            for invalid in (
+                payload | {
+                    "schema_version": (
+                        "night-voyager.dra-candidate-import.v3"
+                    )
+                },
+                payload | {
+                    "producer": build_v0_1_6_scenario_candidate_import()
+                    .producer.model_dump(mode="json")
+                },
+                payload | {"unknown": True},
+            ):
+                rejected = await client.post(
+                    f"/api/v1/cases/{CASE}/dra-candidates",
+                    headers=request_headers(
+                        advisor, f"strict-invalid-{len(invalid)}"
+                    ),
+                    json=invalid,
+                )
+                assert rejected.status_code == 422
     finally:
         await engine.dispose()
 

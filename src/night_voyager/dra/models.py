@@ -322,6 +322,34 @@ class DraCandidateImportV1(FrozenModel):
         return self
 
 
+class DraCandidateImportV2(FrozenModel):
+    schema_version: Literal["night-voyager.dra-candidate-import.v2"]
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    consumer_identity: DraStrictConsumerIdentityV2
+    acceptance: DraRunAcceptanceV1
+    run: DraRunProjectionV1
+    artifact: DraCanonicalArtifactInputV1
+    evidence: tuple[DraEvidenceProjectionV1, ...]
+
+    @model_validator(mode="after")
+    def exact_strict_candidate(self) -> Self:
+        identifiers = [item.evidence_id for item in self.evidence]
+        if not identifiers or len(identifiers) != len(set(identifiers)):
+            raise ValueError("dra_evidence_ids_not_unique")
+        if self.acceptance.run_id != self.run.run_id:
+            raise ValueError("dra_run_identity_mismatch")
+        if sum(item.is_promotable for item in self.evidence) != 1:
+            raise ValueError("dra_promotable_evidence_cardinality")
+        source_url = next(
+            item.source_url for item in self.evidence if item.is_promotable
+        )
+        if source_url is None or source_url not in self.artifact.content:
+            raise ValueError("dra_cited_source_not_in_canonical_artifact")
+        return self
+
+
 class DraResearchCandidateV1(FrozenModel):
     schema_version: Literal["night-voyager.dra-candidate.v1"]
     candidate_id: UUID

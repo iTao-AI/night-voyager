@@ -27,6 +27,7 @@ from night_voyager.dra.live_models import (
     DraCaptureReceiptV1,
     DraControllerStopReceiptV1,
     DraInspectionRequiredReceiptV1,
+    DraLiveScenarioV2,
     DraPollRecoveryReceiptV1,
     DraReconciliationRequiredReceiptV1,
     compose_effective_query_v2,
@@ -196,6 +197,64 @@ async def test_capture_pauses_for_inspection_then_imports_without_second_run(
         assert gateway.import_calls == 1
         assert gateway.last_view is not None
         assert gateway.last_view.verification is None
+
+
+@pytest.mark.asyncio
+async def test_strict_capture_transports_v2_identity_and_effective_query(
+    tmp_path: Path,
+) -> None:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    transport = ScenarioDraLiveTransport(scenario)
+    gateway = ScenarioCandidateGateway()
+    with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        controller = DraLiveCaptureController(
+            transport,
+            gateway,
+            store,
+            strict_scenario=scenario,
+        )
+        intent = frozen_intent(store)
+        inspection = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+        assert isinstance(inspection, DraInspectionRequiredReceiptV1)
+        effective = (
+            QUERY + b"\n\n" + DRA_LIVE_CITATION_CLAUSE_V2
+        ).decode("utf-8")
+        assert transport.requests == [
+            {
+                "profile_id": "generic-strict-citation",
+                "query": effective,
+            }
+        ]
+        final = await controller.select_and_import(
+            SelectAndImportCommand(
+                intent=intent,
+                inspection=inspection,
+                declared_raw_url=SOURCE_URL,
+                context=context(),
+            )
+        )
+    assert isinstance(final, DraCaptureReceiptV1)
+    assert gateway.last_import is not None
+    assert gateway.last_import.schema_version == (
+        "night-voyager.dra-candidate-import.v2"
+    )
+    assert gateway.last_import.consumer_identity.producer == scenario.producer
+    assert (
+        gateway.last_import.consumer_identity.request.request_sha256
+        == intent.capture.request.effective_sha256
+    )
+    assert (
+        gateway.last_import.consumer_identity.observed_profile
+        == scenario.profile_manifest
+    )
 
 
 @pytest.mark.asyncio
@@ -599,3 +658,52 @@ async def test_zero_cited_evidence_stops_before_candidate_import(
     assert isinstance(stopped, DraControllerStopReceiptV1)
     assert stopped.public_code == "source_selection_invalid"
     assert gateway.import_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_strict_zero_cited_evidence_stops_without_authority_writes(
+    tmp_path: Path,
+) -> None:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    transport = ScenarioDraLiveTransport(scenario)
+    assert transport.run.profile_id == "generic-strict-citation"
+    transport.run = transport.run.model_copy(
+        update={
+            "evidence": (
+                transport.run.evidence[0].model_copy(
+                    update={"citation_status": "uncited"}
+                ),
+            )
+        }
+    )
+    gateway = ScenarioCandidateGateway()
+    with LiveReceiptStore.open(private_root(tmp_path)) as store:
+        controller = DraLiveCaptureController(
+            transport,
+            gateway,
+            store,
+            strict_scenario=scenario,
+        )
+        intent = frozen_intent(store)
+        inspection = await controller.capture(
+            CaptureLiveCommand(
+                intent=intent,
+                preflight=controller.preflight(intent),
+                query_path=query_file(tmp_path),
+            )
+        )
+        assert isinstance(inspection, DraInspectionRequiredReceiptV1)
+        stopped = await controller.select_and_import(
+            SelectAndImportCommand(
+                intent=intent,
+                inspection=inspection,
+                declared_raw_url=SOURCE_URL,
+                context=context(),
+            )
+        )
+    assert isinstance(stopped, DraControllerStopReceiptV1)
+    assert stopped.public_code == "source_selection_invalid"
+    assert gateway.import_calls == 0
+    assert gateway.last_import is None

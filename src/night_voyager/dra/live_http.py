@@ -12,7 +12,7 @@ from night_voyager.dra.live_models import (
     DraPlanningTaskProjectionV1,
     DraReviewAuthorityV1,
 )
-from night_voyager.dra.models import DraCandidateImportV1
+from night_voyager.dra.models import DraCandidateImportV1, DraCandidateImportV2
 from night_voyager.dra.ports import (
     DraCandidateViewV1,
     DraVerificationViewV1,
@@ -153,6 +153,28 @@ class NightVoyagerAuthorityGateway:
         )
         response.raise_for_status()
         return DraCandidateViewV1.model_validate(self._projection_payload(response))
+
+    async def import_strict_candidate(
+        self,
+        context: ActorContext,
+        candidate_import: DraCandidateImportV2,
+        idempotency_key: str,
+    ) -> DraCandidateViewV1:
+        del context
+        payload = candidate_import.model_dump(
+            mode="json", exclude_computed_fields=True
+        )
+        payload.pop("organization_id")
+        payload.pop("case_id")
+        response = await self._client.post(
+            f"/api/v1/cases/{candidate_import.case_id}/dra-candidates",
+            headers=self._headers(idempotency_key),
+            json=payload,
+        )
+        response.raise_for_status()
+        return DraCandidateViewV1.model_validate(
+            self._projection_payload(response)
+        )
 
     async def get_candidate(
         self,

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import cast
 
-from night_voyager.dra.live_models import DraLiveScenarioV1
+from night_voyager.dra.live_models import DraLiveScenarioV1, DraLiveScenarioV2
 from night_voyager.dra.models import (
     DRA_FIXTURE_SHA256,
     DRA_LIVE_PRODUCER,
@@ -25,6 +25,7 @@ DRA_ROOT = Path("fixtures/dra")
 DRA_FIXTURE = DRA_ROOT / "downstream-consumer-contract-v1.json"
 DRA_MANIFEST = DRA_ROOT / "manifest.json"
 DRA_LIVE_SCENARIO = DRA_ROOT / "live-closure-scenario-v1.json"
+DRA_STRICT_LIVE_SCENARIO = DRA_ROOT / "live-closure-scenario-v2.json"
 
 
 def _as_object(value: object, code: str) -> dict[str, object]:
@@ -183,6 +184,12 @@ def build_fixture_candidate_import() -> DraCandidateImportV1:
 
 def load_live_closure_scenario() -> DraLiveScenarioV1:
     return DraLiveScenarioV1.model_validate_json(DRA_LIVE_SCENARIO.read_bytes())
+
+
+def load_strict_live_closure_scenario() -> DraLiveScenarioV2:
+    return DraLiveScenarioV2.model_validate_json(
+        DRA_STRICT_LIVE_SCENARIO.read_bytes()
+    )
 
 
 def build_v0_1_6_scenario_candidate_import() -> DraCandidateImportV1:

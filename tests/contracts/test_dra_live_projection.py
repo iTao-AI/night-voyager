@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
+from pathlib import Path
 from typing import cast
 
 import pytest
 from pydantic import ValidationError
 
+import night_voyager.dra.live_projection as live_projection
 from night_voyager.dra.fixtures import (
     build_fixture_candidate_import,
     load_live_closure_scenario,
@@ -14,14 +17,19 @@ from night_voyager.dra.live_fakes import ScenarioDraLiveTransport
 from night_voyager.dra.live_models import (
     DraLiveEvidenceEnvelopeV1,
     DraLiveRunEnvelopeV1,
+    DraLiveScenarioV2,
 )
 from night_voyager.dra.live_projection import (
     DraLiveContractError,
+    DraStrictLiveRunEnvelopeV2,
     project_terminal_result,
     select_cited_evidence,
 )
 from night_voyager.dra.models import (
+    DraCanonicalArtifactInputV1,
     DraCanonicalResultProjectionV1,
+    DraObservedProfileManifestV1,
+    DraProducerPinV2,
     DraRunAcceptanceV1,
 )
 from night_voyager.interfaces.http.dra import DraVerificationDecisionRequest
@@ -86,6 +94,7 @@ def project(
 def test_scenario_fake_and_strict_projection_have_exact_field_parity() -> None:
     scenario = load_live_closure_scenario()
     fake = ScenarioDraLiveTransport(scenario)
+    assert isinstance(fake.run, DraLiveRunEnvelopeV1)
     assert fake.run.model_dump(
         mode="json", exclude_computed_fields=True
     ) == run_payload()
@@ -106,6 +115,145 @@ def test_scenario_fake_and_strict_projection_have_exact_field_parity() -> None:
         }
     ]
     assert projection.evidence[0].verification_status == "unverified"
+
+
+def test_strict_terminal_projection_binds_profile_manifest_and_local_pin() -> None:
+    project_strict = getattr(
+        live_projection, "project_strict_terminal_result", None
+    )
+    assert project_strict is not None
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    fake = ScenarioDraLiveTransport(scenario)
+    assert isinstance(fake.run, DraStrictLiveRunEnvelopeV2)
+    strict = project_strict(
+        DraRunAcceptanceV1(
+            thread_id=scenario.status.thread_id,
+            run_id=scenario.status.run_id,
+            segment_id=scenario.status.segment_id,
+            idempotent_replay=False,
+        ),
+        fake.run,
+        fake.result,
+        scenario.producer,
+        scenario.request_identity,
+        scenario.profile_manifest,
+    )
+    assert strict.consumer_identity.producer == scenario.producer
+    assert strict.consumer_identity.request == scenario.request_identity
+    assert strict.consumer_identity.observed_profile == scenario.profile_manifest
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        "returned_profile",
+        "manifest_version",
+        "proof_schema",
+        "status_run",
+        "result_run",
+    ),
+)
+def test_strict_terminal_projection_rejects_identity_counterfactuals(
+    failure: str,
+) -> None:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    fake = ScenarioDraLiveTransport(scenario)
+    assert isinstance(fake.run, DraStrictLiveRunEnvelopeV2)
+    run = fake.run
+    result = fake.result
+    producer = scenario.producer
+    observed = scenario.profile_manifest
+    if failure == "returned_profile":
+        run = run.model_copy(update={"profile_id": "generic"})
+    elif failure == "manifest_version":
+        observed = DraObservedProfileManifestV1.model_construct(
+            schema_version=(
+                "night-voyager.dra-observed-profile-manifest.v1"
+            ),
+            profile_id="generic-strict-citation",
+            profile_version="2",
+        )
+    elif failure == "proof_schema":
+        producer_payload = scenario.producer.model_dump(by_alias=False)
+        producer_payload["proof_schema"] = "wrong-proof-schema"
+        producer = DraProducerPinV2.model_construct(**producer_payload)
+    elif failure == "status_run":
+        run = run.model_copy(update={"run_id": "wrong-run"})
+    else:
+        result = result.model_copy(update={"run_id": "wrong-run"})
+    with pytest.raises(DraLiveContractError):
+        live_projection.project_strict_terminal_result(
+            DraRunAcceptanceV1(
+                thread_id=scenario.status.thread_id,
+                run_id=scenario.status.run_id,
+                segment_id=scenario.status.segment_id,
+                idempotent_replay=False,
+            ),
+            run,
+            result,
+            producer,
+            scenario.request_identity,
+            observed,
+        )
+
+
+@pytest.mark.parametrize("failure", ("missing_url", "zero_cited"))
+def test_strict_selection_requires_one_cited_url_in_canonical_artifact(
+    failure: str,
+) -> None:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    fake = ScenarioDraLiveTransport(scenario)
+    assert isinstance(fake.run, DraStrictLiveRunEnvelopeV2)
+    projection = live_projection.project_strict_terminal_result(
+        DraRunAcceptanceV1(
+            thread_id=scenario.status.thread_id,
+            run_id=scenario.status.run_id,
+            segment_id=scenario.status.segment_id,
+            idempotent_replay=False,
+        ),
+        fake.run,
+        fake.result,
+        scenario.producer,
+        scenario.request_identity,
+        scenario.profile_manifest,
+    )
+    if failure == "missing_url":
+        content = "# Synthetic Strict Research Report\n\nSource omitted."
+        projection = projection.model_copy(
+            update={
+                "artifact": DraCanonicalArtifactInputV1(
+                    artifact_id="research-report.md",
+                    kind="research_report_markdown",
+                    media_type="text/markdown",
+                    content=content,
+                    content_hash=hashlib.sha256(
+                        content.encode()
+                    ).hexdigest(),
+                )
+            }
+        )
+    else:
+        projection = projection.model_copy(
+            update={
+                "evidence": (
+                    projection.evidence[0].model_copy(
+                        update={"citation_status": "uncited"}
+                    ),
+                )
+            }
+        )
+    with pytest.raises(
+        DraLiveContractError, match="source_selection_invalid"
+    ):
+        live_projection.select_strict_cited_evidence(
+            projection, "https://example.com/contract-source-1"
+        )
 
 
 @pytest.mark.parametrize(

@@ -14,10 +14,13 @@ from night_voyager.dra.live_models import (
     DraReceiptIdentityV1,
     DraReviewAuthorityV1,
 )
+from night_voyager.dra.live_projection import DraStrictLiveRunEnvelopeV2
 from night_voyager.dra.models import (
     DraCandidateImportV1,
+    DraCandidateImportV2,
     DraCanonicalResultProjectionV1,
     DraHealthProjectionV1,
+    DraObservedProfileManifestV1,
     DraRunAcceptanceV1,
 )
 from night_voyager.dra.ports import (
@@ -39,7 +42,15 @@ class DraLiveTransportPort(Protocol):
         idempotency_key: str,
     ) -> DraRunAcceptanceV1: ...
 
+    async def get_profile(
+        self, profile_id: str
+    ) -> DraObservedProfileManifestV1: ...
+
     async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1: ...
+
+    async def get_strict_run(
+        self, run_id: str
+    ) -> DraStrictLiveRunEnvelopeV2: ...
 
     async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1: ...
 
@@ -49,6 +60,15 @@ class DraCandidateGatewayPort(Protocol):
         self,
         context: ActorContext,
         candidate_import: DraCandidateImportV1,
+        idempotency_key: str,
+    ) -> DraCandidateViewV1: ...
+
+
+class DraStrictCandidateGatewayPort(Protocol):
+    async def import_strict_candidate(
+        self,
+        context: ActorContext,
+        candidate_import: DraCandidateImportV2,
         idempotency_key: str,
     ) -> DraCandidateViewV1: ...
 

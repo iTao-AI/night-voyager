@@ -21,6 +21,8 @@ from night_voyager.dra.live_models import (
     DraDecisionReceiptV1,
     DraInspectionRequiredReceiptV1,
     DraLiveFailurePhase,
+    DraLiveRunEnvelopeV1,
+    DraLiveScenarioV2,
     DraMutationAmbiguousReceiptV1,
     DraPollRecoveryReceiptV1,
     DraPreflightReceiptV2,
@@ -43,13 +45,18 @@ from night_voyager.dra.live_ports import (
     DraLiveSleepPort,
     DraLiveTransportPort,
     DraPromotionGatewayPort,
+    DraStrictCandidateGatewayPort,
 )
 from night_voyager.dra.live_projection import (
     DraLiveConsumerEvidenceV1,
     DraLiveContractError,
+    DraStrictLiveRunEnvelopeV2,
+    DraStrictTerminalProjectionV2,
     DraTerminalProjectionV1,
+    project_strict_terminal_result,
     project_terminal_result,
     select_cited_evidence,
+    select_strict_cited_evidence,
 )
 from night_voyager.dra.live_storage import (
     LiveReceiptStore,
@@ -58,11 +65,15 @@ from night_voyager.dra.live_storage import (
 )
 from night_voyager.dra.models import (
     DraCandidateImportV1,
+    DraCandidateImportV2,
     DraCanonicalArtifactInputV1,
     DraEvidenceProjectionV1,
+    DraObservedProfileManifestV1,
     DraRunAcceptanceV1,
     DraRunProjectionV1,
     DraRunRequestIdentityV1,
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
 )
 from night_voyager.dra.ports import VerifyDraCandidateCommand
 from night_voyager.dra.reconciliation import (
@@ -545,17 +556,48 @@ class DraLiveCaptureController:
     def __init__(
         self,
         transport: DraLiveTransportPort,
-        candidate_gateway: DraCandidateGatewayPort,
+        candidate_gateway: (
+            DraCandidateGatewayPort | DraStrictCandidateGatewayPort
+        ),
         store: LiveReceiptStore,
         *,
         clock: DraLiveClockPort | None = None,
         sleeper: DraLiveSleepPort | None = None,
+        strict_scenario: DraLiveScenarioV2 | None = None,
     ) -> None:
         self._transport = transport
         self._candidate_gateway = candidate_gateway
         self._store = store
         self._clock = clock or _SystemClock()
         self._sleeper = sleeper or _AsyncioSleeper()
+        self._strict_scenario = strict_scenario
+        self._observed_profile: DraObservedProfileManifestV1 | None = None
+
+    async def _load_strict_profile(
+        self,
+    ) -> DraObservedProfileManifestV1:
+        scenario = self._strict_scenario
+        if scenario is None:
+            raise ValueError("dra_strict_scenario_required")
+        observed = await self._transport.get_profile(
+            scenario.producer.profile_id
+        )
+        if observed != scenario.profile_manifest:
+            raise ValueError("dra_strict_profile_identity_invalid")
+        self._observed_profile = observed
+        return observed
+
+    def _strict_request_identity(
+        self, intent: DraCaptureIntentV2
+    ) -> DraRunRequestIdentityV2:
+        scenario = self._strict_scenario
+        if scenario is None:
+            raise ValueError("dra_strict_scenario_required")
+        return DraRunRequestIdentityV2(
+            schema_version="night-voyager.dra-run-request-identity.v2",
+            profile_id=scenario.producer.profile_id,
+            request_sha256=intent.capture.request.effective_sha256,
+        )
 
     def preflight(self, intent: DraCaptureIntentV2) -> DraPreflightReceiptV2:
         capture = intent.capture
@@ -704,8 +746,12 @@ class DraLiveCaptureController:
             )
         try:
             await self._transport.health()
+            profile_id = "generic"
+            if self._strict_scenario is not None:
+                await self._load_strict_profile()
+                profile_id = self._strict_scenario.producer.profile_id
             acceptance = await self._transport.create_run(
-                {"profile_id": "generic", "query": query},
+                {"profile_id": profile_id, "query": query},
                 create_key,
             )
         except DraAmbiguousOutcome:
@@ -773,8 +819,12 @@ class DraLiveCaptureController:
         )
         try:
             await self._transport.health()
+            profile_id = "generic"
+            if self._strict_scenario is not None:
+                await self._load_strict_profile()
+                profile_id = self._strict_scenario.producer.profile_id
             acceptance = await self._transport.create_run(
-                {"profile_id": "generic", "query": query},
+                {"profile_id": profile_id, "query": query},
                 expected_key,
             )
         except DraAmbiguousOutcome:
@@ -802,7 +852,15 @@ class DraLiveCaptureController:
         deadline = self._clock.monotonic() + intent.capture.deadline_seconds
         while True:
             try:
-                run = await self._transport.get_run(acceptance.run_id)
+                if self._strict_scenario is None:
+                    run: (
+                        DraLiveRunEnvelopeV1
+                        | DraStrictLiveRunEnvelopeV2
+                    ) = await self._transport.get_run(acceptance.run_id)
+                else:
+                    run = await self._transport.get_strict_run(
+                        acceptance.run_id
+                    )
             except (DraTransportError, ValueError):
                 return self._stop(
                     intent,
@@ -826,7 +884,30 @@ class DraLiveCaptureController:
                 )
             try:
                 result = await self._transport.get_result(acceptance.run_id)
-                projection = project_terminal_result(acceptance, run, result)
+                if self._strict_scenario is None:
+                    if not isinstance(run, DraLiveRunEnvelopeV1):
+                        raise DraLiveContractError(
+                            "terminal_profile_invalid"
+                        )
+                    projection: (
+                        DraTerminalProjectionV1
+                        | DraStrictTerminalProjectionV2
+                    ) = project_terminal_result(acceptance, run, result)
+                else:
+                    if not isinstance(run, DraStrictLiveRunEnvelopeV2):
+                        raise DraLiveContractError("terminal_profile_invalid")
+                    observed = (
+                        self._observed_profile
+                        or await self._load_strict_profile()
+                    )
+                    projection = project_strict_terminal_result(
+                        acceptance,
+                        run,
+                        result,
+                        self._strict_scenario.producer,
+                        self._strict_request_identity(intent),
+                        observed,
+                    )
                 artifact = projection.artifact
                 artifact_identity = DraArtifactIdentityV1(
                     artifact_id=artifact.artifact_id,
@@ -961,7 +1042,28 @@ class DraLiveCaptureController:
                     for row in inspection.evidence
                 ),
             )
-            selected = select_cited_evidence(projection, command.declared_raw_url)
+            if self._strict_scenario is None:
+                selected = select_cited_evidence(
+                    projection, command.declared_raw_url
+                )
+            else:
+                strict_projection = DraStrictTerminalProjectionV2(
+                    **projection.model_dump(exclude_computed_fields=True),
+                    consumer_identity=DraStrictConsumerIdentityV2(
+                        schema_version=(
+                            "night-voyager.dra-strict-consumer-identity.v2"
+                        ),
+                        producer=self._strict_scenario.producer,
+                        request=self._strict_request_identity(intent),
+                        observed_profile=(
+                            self._observed_profile
+                            or self._strict_scenario.profile_manifest
+                        ),
+                    ),
+                )
+                selected = select_strict_cited_evidence(
+                    strict_projection, command.declared_raw_url
+                )
         except DraAuthorizationError:
             return self._stop(
                 intent,
@@ -982,52 +1084,93 @@ class DraLiveCaptureController:
                 provider_attempt_consumed=True,
             )
 
-        candidate_import = DraCandidateImportV1(
-            schema_version="night-voyager.dra-candidate-import.v1",
-            organization_id=capture.organization_id,
-            case_id=capture.case_id,
-            expected_case_revision=capture.expected_case_revision,
-            producer=capture.producer.pin,
-            request_identity=DraRunRequestIdentityV1(
-                profile_id="generic",
-                request_sha256=capture.request.effective_sha256,
-            ),
-            acceptance=DraRunAcceptanceV1(
-                thread_id=inspection.thread_id,
-                run_id=inspection.run_id,
-                segment_id=inspection.segment_id,
-                idempotent_replay=inspection.acceptance_idempotent_replay,
-            ),
-            run=DraRunProjectionV1(
-                run_id=inspection.run_id,
-                state_version=inspection.state_version,
-                execution_status="completed",
-                review_status="not_required",
-                delivery_status="ready",
-            ),
-            artifact=projection.artifact,
-            evidence=(
-                DraEvidenceProjectionV1(
-                    evidence_id=selected.evidence_id,
-                    source_url=selected.source_url,
-                    source_identity=selected.source_identity,
-                    retrieved_at=selected.retrieved_at,
-                    citation_status=selected.citation_status,
-                    verification_status=selected.verification_status,
-                ),
+        acceptance = DraRunAcceptanceV1(
+            thread_id=inspection.thread_id,
+            run_id=inspection.run_id,
+            segment_id=inspection.segment_id,
+            idempotent_replay=inspection.acceptance_idempotent_replay,
+        )
+        run_projection = DraRunProjectionV1(
+            run_id=inspection.run_id,
+            state_version=inspection.state_version,
+            execution_status="completed",
+            review_status="not_required",
+            delivery_status="ready",
+        )
+        evidence = (
+            DraEvidenceProjectionV1(
+                evidence_id=selected.evidence_id,
+                source_url=selected.source_url,
+                source_identity=selected.source_identity,
+                retrieved_at=selected.retrieved_at,
+                citation_status=selected.citation_status,
+                verification_status=selected.verification_status,
             ),
         )
+        candidate_import: DraCandidateImportV1 | DraCandidateImportV2
+        if self._strict_scenario is None:
+            candidate_import = DraCandidateImportV1(
+                schema_version="night-voyager.dra-candidate-import.v1",
+                organization_id=capture.organization_id,
+                case_id=capture.case_id,
+                expected_case_revision=capture.expected_case_revision,
+                producer=capture.producer.pin,
+                request_identity=DraRunRequestIdentityV1(
+                    profile_id="generic",
+                    request_sha256=capture.request.effective_sha256,
+                ),
+                acceptance=acceptance,
+                run=run_projection,
+                artifact=projection.artifact,
+                evidence=evidence,
+            )
+        else:
+            candidate_import = DraCandidateImportV2(
+                schema_version="night-voyager.dra-candidate-import.v2",
+                organization_id=capture.organization_id,
+                case_id=capture.case_id,
+                expected_case_revision=capture.expected_case_revision,
+                consumer_identity=DraStrictConsumerIdentityV2(
+                    schema_version=(
+                        "night-voyager.dra-strict-consumer-identity.v2"
+                    ),
+                    producer=self._strict_scenario.producer,
+                    request=self._strict_request_identity(intent),
+                    observed_profile=(
+                        self._observed_profile
+                        or self._strict_scenario.profile_manifest
+                    ),
+                ),
+                acceptance=acceptance,
+                run=run_projection,
+                artifact=projection.artifact,
+                evidence=evidence,
+            )
         import_key = derive_stage_key(
             intent.intent_sha256,
             "candidate-import",
             str(capture.case_id),
         )
         try:
-            view = await self._candidate_gateway.import_candidate(
-                command.context,
-                candidate_import,
-                import_key,
-            )
+            if isinstance(candidate_import, DraCandidateImportV1):
+                gateway = cast(
+                    DraCandidateGatewayPort, self._candidate_gateway
+                )
+                view = await gateway.import_candidate(
+                    command.context,
+                    candidate_import,
+                    import_key,
+                )
+            else:
+                strict_gateway = cast(
+                    DraStrictCandidateGatewayPort,
+                    self._candidate_gateway,
+                )
+                view = await strict_gateway.import_strict_candidate(
+                    command.context,
+                    candidate_import,
+                    import_key,
+                )
             if view.verification is not None:
                 raise DraConflictError("dra_candidate_authority_invalid")
         except DraAuthorizationError:

@@ -8,17 +8,22 @@ from night_voyager.dra.fixtures import build_fixture_candidate_import
 from night_voyager.dra.live_models import (
     DraLiveRunEnvelopeV1,
     DraLiveScenarioV1,
+    DraLiveScenarioV2,
 )
+from night_voyager.dra.live_projection import DraStrictLiveRunEnvelopeV2
 from night_voyager.dra.models import (
     DraCandidateImportV1,
+    DraCandidateImportV2,
     DraCanonicalResultProjectionV1,
     DraHealthProjectionV1,
+    DraObservedProfileManifestV1,
     DraRunAcceptanceV1,
 )
 from night_voyager.dra.ports import (
     DraCandidateViewV1,
     DraVerificationViewV1,
     ImportDraCandidateCommand,
+    ImportStrictDraCandidateCommand,
     PromotionIdentities,
     VerifyDraCandidateCommand,
 )
@@ -34,26 +39,32 @@ CANDIDATE_ID = UUID("90000000-0000-0000-0000-000000000001")
 class ScenarioDraLiveTransport:
     def __init__(
         self,
-        scenario: DraLiveScenarioV1,
+        scenario: DraLiveScenarioV1 | DraLiveScenarioV2,
         *,
         ambiguous_create_once: bool = False,
         in_progress_polls: int = 0,
     ) -> None:
         self._scenario = scenario
-        self.run = DraLiveRunEnvelopeV1.model_validate(
-            scenario.status.model_dump(mode="json")
-            | {
-                "evidence": [
-                    row.model_dump(mode="json") for row in scenario.evidence
-                ]
-            }
-        )
-        fixture_artifact = build_fixture_candidate_import().artifact
-        if (
-            fixture_artifact.content_hash != scenario.result.artifact.sha256
-            or fixture_artifact.byte_length != scenario.result.artifact.byte_length
-        ):
-            raise ValueError("dra_live_fake_artifact_identity_mismatch")
+        run_payload = scenario.status.model_dump(mode="json") | {
+            "evidence": [
+                row.model_dump(mode="json") for row in scenario.evidence
+            ]
+        }
+        if type(scenario) is DraLiveScenarioV2:
+            self.run: DraLiveRunEnvelopeV1 | DraStrictLiveRunEnvelopeV2 = (
+                DraStrictLiveRunEnvelopeV2.model_validate(run_payload)
+            )
+            fixture_artifact = scenario.canonical_artifact
+        else:
+            self.run = DraLiveRunEnvelopeV1.model_validate(run_payload)
+            fixture_artifact = build_fixture_candidate_import().artifact
+            if (
+                fixture_artifact.content_hash
+                != scenario.result.artifact.sha256
+                or fixture_artifact.byte_length
+                != scenario.result.artifact.byte_length
+            ):
+                raise ValueError("dra_live_fake_artifact_identity_mismatch")
         self.result = DraCanonicalResultProjectionV1(
             run_id=scenario.result.run_id,
             execution_status=scenario.result.execution_status,
@@ -64,6 +75,7 @@ class ScenarioDraLiveTransport:
         self.health_calls = 0
         self.create_keys: list[str] = []
         self.requests: list[dict[str, object]] = []
+        self.profile_requests: list[str] = []
         self._ambiguous_create_once = ambiguous_create_once
         self._in_progress_polls = in_progress_polls
         self._accepted_key: str | None = None
@@ -103,7 +115,20 @@ class ScenarioDraLiveTransport:
             idempotent_replay=replay,
         )
 
-    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1:
+    async def get_profile(
+        self, profile_id: str
+    ) -> DraObservedProfileManifestV1:
+        self.profile_requests.append(profile_id)
+        if (
+            type(self._scenario) is not DraLiveScenarioV2
+            or profile_id != self._scenario.producer.profile_id
+        ):
+            raise ValueError("dra_profile_id_invalid")
+        return self._scenario.profile_manifest
+
+    def _selected_run(
+        self, run_id: str
+    ) -> DraLiveRunEnvelopeV1 | DraStrictLiveRunEnvelopeV2:
         if run_id != self.run.run_id:
             raise ValueError("dra_live_fake_run_identity_invalid")
         if self._in_progress_polls > 0:
@@ -118,6 +143,20 @@ class ScenarioDraLiveTransport:
             )
         return self.run
 
+    async def get_run(self, run_id: str) -> DraLiveRunEnvelopeV1:
+        run = self._selected_run(run_id)
+        if not isinstance(run, DraLiveRunEnvelopeV1):
+            raise ValueError("dra_live_fake_profile_identity_invalid")
+        return run
+
+    async def get_strict_run(
+        self, run_id: str
+    ) -> DraStrictLiveRunEnvelopeV2:
+        run = self._selected_run(run_id)
+        if not isinstance(run, DraStrictLiveRunEnvelopeV2):
+            raise ValueError("dra_live_fake_profile_identity_invalid")
+        return run
+
     async def get_result(self, run_id: str) -> DraCanonicalResultProjectionV1:
         if run_id != self.result.run_id:
             raise ValueError("dra_live_fake_run_identity_invalid")
@@ -126,12 +165,14 @@ class ScenarioDraLiveTransport:
 
 class _ScenarioCandidateRepository:
     def __init__(self) -> None:
-        self.imported: ImportDraCandidateCommand | None = None
+        self.imported: (
+            ImportDraCandidateCommand | ImportStrictDraCandidateCommand | None
+        ) = None
 
     async def import_candidate(
         self,
         context: ActorContext,
-        command: ImportDraCandidateCommand,
+        command: ImportDraCandidateCommand | ImportStrictDraCandidateCommand,
         candidate_id: UUID,
         idempotency_key: str,
     ) -> DraCandidateViewV1:
@@ -174,12 +215,29 @@ class ScenarioCandidateGateway:
         )
         self.import_calls = 0
         self.last_view: DraCandidateViewV1 | None = None
-        self.last_import: DraCandidateImportV1 | None = None
+        self.last_import: DraCandidateImportV1 | DraCandidateImportV2 | None = (
+            None
+        )
 
     async def import_candidate(
         self,
         context: ActorContext,
         candidate_import: DraCandidateImportV1,
+        idempotency_key: str,
+    ) -> DraCandidateViewV1:
+        self.import_calls += 1
+        self.last_import = candidate_import
+        self.last_view = await self._service.import_candidate(
+            context,
+            candidate_import,
+            idempotency_key,
+        )
+        return self.last_view
+
+    async def import_strict_candidate(
+        self,
+        context: ActorContext,
+        candidate_import: DraCandidateImportV2,
         idempotency_key: str,
     ) -> DraCandidateViewV1:
         self.import_calls += 1

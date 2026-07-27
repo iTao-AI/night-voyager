@@ -4,7 +4,14 @@ from typing import Annotated, Literal, Self
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, PositiveInt, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    StringConstraints,
+    model_validator,
+)
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import JSONResponse
 
@@ -13,12 +20,14 @@ from night_voyager.dra.application import DraCandidateService
 from night_voyager.dra.errors import DraAuthorizationError, DraConflictError
 from night_voyager.dra.models import (
     DraCandidateImportV1,
+    DraCandidateImportV2,
     DraCanonicalArtifactInputV1,
     DraEvidenceProjectionV1,
     DraProducerPinV1,
     DraRunAcceptanceV1,
     DraRunProjectionV1,
     DraRunRequestIdentityV1,
+    DraStrictConsumerIdentityV2,
     SourceAttestationV1,
 )
 from night_voyager.dra.ports import VerifyDraCandidateCommand
@@ -39,7 +48,7 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class DraCandidateImportRequest(StrictModel):
+class DraCandidateImportRequestV1(StrictModel):
     schema_version: Literal["night-voyager.dra-candidate-import.v1"]
     expected_case_revision: PositiveInt
     producer: DraProducerPinV1
@@ -48,6 +57,22 @@ class DraCandidateImportRequest(StrictModel):
     run: DraRunProjectionV1
     artifact: DraCanonicalArtifactInputV1
     evidence: tuple[DraEvidenceProjectionV1, ...]
+
+
+class DraCandidateImportRequestV2(StrictModel):
+    schema_version: Literal["night-voyager.dra-candidate-import.v2"]
+    expected_case_revision: PositiveInt
+    consumer_identity: DraStrictConsumerIdentityV2
+    acceptance: DraRunAcceptanceV1
+    run: DraRunProjectionV1
+    artifact: DraCanonicalArtifactInputV1
+    evidence: tuple[DraEvidenceProjectionV1, ...]
+
+
+DraCandidateImportRequest = Annotated[
+    DraCandidateImportRequestV1 | DraCandidateImportRequestV2,
+    Field(discriminator="schema_version"),
+]
 
 
 class DraVerificationDecisionRequest(StrictModel):
@@ -111,11 +136,19 @@ def create_dra_router(
             return key
         async with session_factory() as session, session.begin():
             context = await mutation_context(session, raw_session, csrf)
-            command = DraCandidateImportV1(
-                organization_id=context.organization_id,
-                case_id=case_id,
-                **payload.model_dump(exclude_computed_fields=True),
-            )
+            command: DraCandidateImportV1 | DraCandidateImportV2
+            if isinstance(payload, DraCandidateImportRequestV1):
+                command = DraCandidateImportV1(
+                    organization_id=context.organization_id,
+                    case_id=case_id,
+                    **payload.model_dump(exclude_computed_fields=True),
+                )
+            else:
+                command = DraCandidateImportV2(
+                    organization_id=context.organization_id,
+                    case_id=case_id,
+                    **payload.model_dump(exclude_computed_fields=True),
+                )
             try:
                 result = await DraCandidateService(
                     PostgresDraCandidateRepository(session)

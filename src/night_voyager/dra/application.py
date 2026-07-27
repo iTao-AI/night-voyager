@@ -5,13 +5,17 @@ from uuid import UUID, uuid4, uuid5
 
 from night_voyager.decision.hashing import canonical_request_sha256
 from night_voyager.dra.errors import DraAuthorizationError
-from night_voyager.dra.models import DraCandidateImportV1
+from night_voyager.dra.models import (
+    DraCandidateImportV1,
+    DraCandidateImportV2,
+)
 from night_voyager.dra.ports import (
     CopiedEvidenceIdentity,
     DraCandidateRepository,
     DraCandidateViewV1,
     DraVerificationViewV1,
     ImportDraCandidateCommand,
+    ImportStrictDraCandidateCommand,
     PromotionIdentities,
     VerifyDraCandidateCommand,
 )
@@ -39,30 +43,56 @@ class DraCandidateService:
     async def import_candidate(
         self,
         context: ActorContext,
-        candidate_import: DraCandidateImportV1,
+        candidate_import: DraCandidateImportV1 | DraCandidateImportV2,
         idempotency_key: str,
     ) -> DraCandidateViewV1:
         self._require_advisor(context)
         if candidate_import.organization_id != context.organization_id:
             raise DraAuthorizationError("dra_candidate_organization_mismatch")
         artifact = candidate_import.artifact
-        command = ImportDraCandidateCommand(
-            organization_id=candidate_import.organization_id,
-            case_id=candidate_import.case_id,
-            expected_case_revision=candidate_import.expected_case_revision,
-            producer=candidate_import.producer,
-            request_identity=candidate_import.request_identity,
-            run_id=candidate_import.run.run_id,
-            artifact_id=artifact.artifact_id,
-            artifact_kind=artifact.kind,
-            artifact_media_type=artifact.media_type,
-            artifact_byte_length=artifact.byte_length,
-            artifact_sha256=artifact.content_hash,
-            evidence=candidate_import.evidence,
-            import_request_sha256=canonical_request_sha256(
-                candidate_import.model_dump(mode="json", exclude_computed_fields=True)
-            ),
+        import_request_sha256 = canonical_request_sha256(
+            candidate_import.model_dump(
+                mode="json", exclude_computed_fields=True
+            )
         )
+        command: ImportDraCandidateCommand | ImportStrictDraCandidateCommand
+        if type(candidate_import) is DraCandidateImportV1:
+            command = ImportDraCandidateCommand(
+                organization_id=candidate_import.organization_id,
+                case_id=candidate_import.case_id,
+                expected_case_revision=(
+                    candidate_import.expected_case_revision
+                ),
+                producer=candidate_import.producer,
+                request_identity=candidate_import.request_identity,
+                run_id=candidate_import.run.run_id,
+                artifact_id=artifact.artifact_id,
+                artifact_kind=artifact.kind,
+                artifact_media_type=artifact.media_type,
+                artifact_byte_length=artifact.byte_length,
+                artifact_sha256=artifact.content_hash,
+                evidence=candidate_import.evidence,
+                import_request_sha256=import_request_sha256,
+            )
+        elif type(candidate_import) is DraCandidateImportV2:
+            command = ImportStrictDraCandidateCommand(
+                organization_id=candidate_import.organization_id,
+                case_id=candidate_import.case_id,
+                expected_case_revision=(
+                    candidate_import.expected_case_revision
+                ),
+                consumer_identity=candidate_import.consumer_identity,
+                run_id=candidate_import.run.run_id,
+                artifact_id=artifact.artifact_id,
+                artifact_kind=artifact.kind,
+                artifact_media_type=artifact.media_type,
+                artifact_byte_length=artifact.byte_length,
+                artifact_sha256=artifact.content_hash,
+                evidence=candidate_import.evidence,
+                import_request_sha256=import_request_sha256,
+            )
+        else:
+            raise TypeError("unsupported DRA candidate import")
         return await self._repository.import_candidate(
             context, command, self._id_factory(), idempotency_key
         )
