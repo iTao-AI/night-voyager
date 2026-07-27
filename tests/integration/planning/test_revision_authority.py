@@ -286,6 +286,9 @@ async def request_revision(
 async def prepare_preferred_countries_candidate(
     connection: AsyncConnection,
     revision_fixture: RevisionFixture,
+    *,
+    fact_key: str = "student.preferred_countries",
+    value: object | None = None,
 ) -> UUID:
     thread_id = revision_fixture.identifier("9a000000")
     message_id = revision_fixture.identifier("9b000000")
@@ -323,12 +326,12 @@ async def prepare_preferred_countries_candidate(
             "key": digest(f"message-key-{revision_fixture.suffix}"),
         },
     )
-    value = ["australia", "japan"]
+    value = ["australia", "japan"] if value is None else value
     await connection.execute(
         text(
             "SELECT * FROM app.propose_memory_candidate("
             ":org,:actor,'student',:message,:candidate,1,"
-            "'student.preferred_countries',CAST(:value AS jsonb),"
+            ":fact_key,CAST(:value AS jsonb),"
             ":value_hash,:request,:key)"
         ),
         {
@@ -336,6 +339,7 @@ async def prepare_preferred_countries_candidate(
             "actor": STUDENT,
             "message": message_id,
             "candidate": candidate_id,
+            "fact_key": fact_key,
             "value": json.dumps(value),
             "value_hash": canonical_sha256(value),
             "request": digest(f"candidate-request-{revision_fixture.suffix}"),
@@ -343,6 +347,73 @@ async def prepare_preferred_countries_candidate(
         },
     )
     return candidate_id
+
+
+@pytest.mark.asyncio
+async def test_unsupported_fact_cannot_publish_revision_or_leave_partial_writes() -> None:
+    target = fixture(1220)
+    review_id = target.identifier("8a000000")
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        await seed_reviewable_case(migrator, target)
+        async with api.begin() as connection:
+            await request_revision(
+                connection,
+                target,
+                review_id=review_id,
+                key_hash=digest("unsupported-review-key"),
+                request_hash=digest("unsupported-review-request"),
+            )
+            candidate_id = await prepare_preferred_countries_candidate(
+                connection,
+                target,
+                fact_key="student.intended_field",
+                value="computer_science",
+            )
+        async with api.begin() as connection:
+            with pytest.raises(
+                DBAPIError, match="unsupported planning revision fact"
+            ):
+                await confirm_candidate(
+                    connection, target, candidate_id, key_label="unsupported"
+                )
+        async with migrator.begin() as connection:
+            snapshot = (
+                await connection.execute(
+                    text(
+                        "SELECT c.current_revision,r.is_current,"
+                        "(SELECT count(*) FROM app.memory_candidate_verifications v "
+                        " WHERE v.organization_id=:org AND v.candidate_id=:candidate) "
+                        "AS verifications,"
+                        "(SELECT count(*) FROM app.confirmed_profile_facts f "
+                        " WHERE f.organization_id=:org AND f.case_id=:case "
+                        " AND f.fact_key='student.intended_field') AS facts,"
+                        "(SELECT count(*) FROM app.student_case_revisions cr "
+                        " WHERE cr.organization_id=:org AND cr.case_id=:case "
+                        " AND cr.revision=2) AS revisions "
+                        "FROM app.student_cases c JOIN app.planning_runs r "
+                        "ON r.organization_id=c.organization_id AND r.id=:run "
+                        "WHERE c.organization_id=:org AND c.id=:case"
+                    ),
+                    {
+                        "org": ORG,
+                        "case": target.case_id,
+                        "run": target.run_id,
+                        "candidate": candidate_id,
+                    },
+                )
+            ).mappings().one()
+        assert dict(snapshot) == {
+            "current_revision": 1,
+            "is_current": True,
+            "verifications": 0,
+            "facts": 0,
+            "revisions": 0,
+        }
+    finally:
+        await api.dispose()
+        await migrator.dispose()
 
 
 async def confirm_candidate(
@@ -560,6 +631,109 @@ async def test_reviewed_waiting_task_allows_exact_revision_lineage_without_task_
             "revision_requested_by_review_id": review_id,
             "superseded_planning_run_id": target.run_id,
         }
+    finally:
+        await worker.dispose()
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_terminal_finalize_replay_requires_exact_durable_result() -> None:
+    target = fixture(1221)
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    try:
+        target, task_id = await seed_reviewable_case_from_worker(
+            migrator, api, worker, target
+        )
+        async with migrator.begin() as connection:
+            durable = (
+                await connection.execute(
+                    text(
+                        "SELECT t.lease_generation,r.state,r.reason_code,"
+                        "r.evidence_projection_sha256,r.output_sha256,"
+                        "r.supersedes_run_id "
+                        "FROM app.agent_tasks t JOIN app.planning_runs r "
+                        "ON r.organization_id=t.organization_id "
+                        "AND r.id=t.result_planning_run_id "
+                        "WHERE t.organization_id=:org AND t.id=:task"
+                    ),
+                    {"org": ORG, "task": task_id},
+                )
+            ).mappings().one()
+            before_counts = (
+                await connection.execute(
+                    text(
+                        "SELECT "
+                        "(SELECT count(*) FROM app.planning_runs "
+                        " WHERE organization_id=:org AND case_id=:case) AS runs,"
+                        "(SELECT count(*) FROM app.agent_executions "
+                        " WHERE organization_id=:org AND task_id=:task) AS executions,"
+                        "(SELECT count(*) FROM app.agent_task_events "
+                        " WHERE organization_id=:org AND task_id=:task) AS events"
+                    ),
+                    {"org": ORG, "case": target.case_id, "task": task_id},
+                )
+            ).mappings().one()
+
+        async def replay(**changes: object) -> str:
+            values = {
+                "generation": durable["lease_generation"],
+                "state": durable["state"],
+                "reason": durable["reason_code"],
+                "evidence": durable["evidence_projection_sha256"],
+                "output_hash": durable["output_sha256"],
+                "supersedes": durable["supersedes_run_id"],
+                **changes,
+            }
+            async with worker.begin() as connection:
+                await set_context(connection, ADVISOR, "advisor")
+                return str(
+                    await connection.scalar(
+                        text(
+                            "SELECT app.finalize_agent_task_result("
+                            ":org,:task,'replay-worker',:generation,:run,"
+                            ":evidence,:state,:reason,:output_hash,"
+                            "'{\"routes\":[],\"costs\":[],\"rankings\":[]}'::jsonb,"
+                            ":supersedes)"
+                        ),
+                        {
+                            "org": ORG,
+                            "task": task_id,
+                            "run": target.run_id,
+                            **values,
+                        },
+                    )
+                )
+
+        assert await replay() == "waiting_review"
+        for changes, error in (
+            ({"generation": durable["lease_generation"] + 1}, "lease generation lost"),
+            ({"state": "blocked"}, "task result replay mismatch"),
+            ({"reason": "altered"}, "task result replay mismatch"),
+            ({"evidence": digest("altered-evidence")}, "task result replay mismatch"),
+            ({"output_hash": digest("altered-output")}, "task result replay mismatch"),
+            ({"supersedes": target.identifier("7f000000")}, "task result replay mismatch"),
+        ):
+            with pytest.raises(DBAPIError, match=error):
+                await replay(**changes)
+        async with migrator.begin() as connection:
+            counts = (
+                await connection.execute(
+                    text(
+                        "SELECT "
+                        "(SELECT count(*) FROM app.planning_runs "
+                        " WHERE organization_id=:org AND case_id=:case) AS runs,"
+                        "(SELECT count(*) FROM app.agent_executions "
+                        " WHERE organization_id=:org AND task_id=:task) AS executions,"
+                        "(SELECT count(*) FROM app.agent_task_events "
+                        " WHERE organization_id=:org AND task_id=:task) AS events"
+                    ),
+                    {"org": ORG, "case": target.case_id, "task": task_id},
+                )
+            ).mappings().one()
+        assert dict(counts) == dict(before_counts)
     finally:
         await worker.dispose()
         await api.dispose()
