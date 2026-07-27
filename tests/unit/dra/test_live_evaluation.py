@@ -7,17 +7,25 @@ from uuid import UUID
 import pytest
 from pydantic import ValidationError
 
-from night_voyager.dra.fixtures import load_live_closure_scenario
+from night_voyager.dra.fixtures import (
+    load_live_closure_scenario,
+    load_strict_live_closure_scenario,
+)
 from night_voyager.dra.live_evaluation import (
     OUTCOME_ASSERTIONS,
     TRAJECTORY_ASSERTIONS,
+    DraDurableCandidateIdentityV2,
     DraEvaluationReceiptV1,
+    DraLiveCandidateReadinessV3,
     DraLiveEvaluationReportV1,
+    DraLiveEvaluationReportV2,
     DraLiveOutcomeExpectedV1,
     DraLiveOutcomeProjectionV1,
+    DraLiveOutcomeProjectionV2,
     build_evaluation_report,
     canonical_report_bytes,
     evaluate_outcome,
+    evaluate_strict_candidate,
     evaluate_trajectory,
 )
 from night_voyager.dra.live_models import (
@@ -54,6 +62,34 @@ SKILL_DEFINITION = UUID("10000000-0000-4000-8000-000000000015")
 SKILL_VERSION = UUID("10000000-0000-4000-8000-000000000016")
 SKILL_EVENT = UUID("10000000-0000-4000-8000-000000000017")
 URL = "https://example.edu/source"
+
+
+def strict_readiness() -> DraLiveCandidateReadinessV3:
+    scenario = load_strict_live_closure_scenario()
+    return DraLiveCandidateReadinessV3(
+        schema_version="night-voyager.dra-live-candidate-readiness.v3",
+        status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        producer=scenario.producer,
+        request_identity=scenario.request_identity,
+        observed_profile=scenario.profile_manifest,
+        authorization="PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION",
+    )
+
+
+def strict_outcome_projection() -> DraLiveOutcomeProjectionV2:
+    scenario = load_strict_live_closure_scenario()
+    base = outcome_projection()
+    return DraLiveOutcomeProjectionV2(
+        **base.model_dump(mode="python"),
+        schema_version="night-voyager.dra-live-outcome-projection.v2",
+        durable_candidate=DraDurableCandidateIdentityV2(
+            schema_version="night-voyager.dra-durable-candidate-identity.v2",
+            candidate_id=str(CANDIDATE),
+            producer=scenario.producer,
+            request_identity=scenario.request_identity,
+            observed_profile=scenario.profile_manifest,
+        ),
+    )
 
 
 def typed_receipts() -> tuple[
@@ -381,3 +417,97 @@ def test_report_rejects_content_keys() -> None:
         DraLiveEvaluationReportV1.model_validate(
             report.model_dump(mode="json") | {"content": "forbidden"}
         )
+
+
+def test_strict_readiness_rejects_legacy_generic_and_mixed_identity() -> None:
+    scenario = load_strict_live_closure_scenario()
+    readiness = strict_readiness()
+    assert readiness.producer == scenario.producer
+    assert readiness.request_identity.profile_id == "generic-strict-citation"
+    assert readiness.observed_profile.profile_version == "1"
+    assert readiness.producer.proof_schema == "dra.strict-citation-profile.v1"
+
+    payload = readiness.model_dump(mode="json")
+    for mutation in (
+        {"schema_version": "night-voyager.dra-live-candidate-readiness.v2"},
+        {
+            "request_identity": {
+                "profile_id": "generic",
+                "request_sha256": scenario.request_identity.request_sha256,
+            }
+        },
+        {
+            "producer": {
+                **scenario.producer.model_dump(mode="json", by_alias=True),
+                "commit": "0" * 40,
+            }
+        },
+        {
+            "producer": {
+                key: value
+                for key, value in scenario.producer.model_dump(
+                    mode="json", by_alias=True
+                ).items()
+                if key != "proof_schema"
+            }
+        },
+    ):
+        with pytest.raises(ValidationError):
+            DraLiveCandidateReadinessV3.model_validate(
+                {**payload, **mutation}
+            )
+
+
+def test_strict_evaluation_binds_only_matching_durable_candidate_authority() -> None:
+    readiness = strict_readiness()
+    projection = strict_outcome_projection()
+
+    report = evaluate_strict_candidate(readiness, projection)
+
+    assert isinstance(report, DraLiveEvaluationReportV2)
+    assert report.status == "passed"
+    assert report.candidate_id == str(CANDIDATE)
+    for field in (
+        "durable_candidate_identity_sha256",
+        "readiness_sha256",
+        "request_identity_sha256",
+        "outcome_projection_sha256",
+    ):
+        assert len(getattr(report, field)) == 64
+
+    durable = projection.durable_candidate
+    assert durable is not None
+    for mutation in (
+        {"candidate_id": "10000000-0000-4000-8000-000000000099"},
+        {
+            "request_identity": durable.request_identity.model_copy(
+                update={"request_sha256": "f" * 64}
+            )
+        },
+        {
+            "observed_profile": durable.observed_profile.model_copy(
+                update={"profile_version": "2"}
+            )
+        },
+        {
+            "producer": durable.producer.model_copy(
+                update={"proof_schema": "dra.unknown.v1"}
+            )
+        },
+    ):
+        mismatched = projection.model_copy(
+            update={
+                "durable_candidate": durable.model_copy(update=mutation)
+            }
+        )
+        with pytest.raises(ValueError, match="strict_candidate_identity"):
+            evaluate_strict_candidate(readiness, mismatched)
+
+
+def test_strict_evaluation_never_refills_missing_database_identity() -> None:
+    projection = strict_outcome_projection().model_copy(
+        update={"durable_candidate": None}
+    )
+
+    with pytest.raises(ValueError, match="strict_candidate_identity"):
+        evaluate_strict_candidate(strict_readiness(), projection)

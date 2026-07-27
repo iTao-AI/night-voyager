@@ -82,12 +82,13 @@ class RecoveryBundleV1(BaseModel):
     artifact: StoredArtifactIdentityV1 | None
 
     def canonical_bytes(self) -> bytes:
-        return _canonical_bytes(self)
+        return canonical_receipt_bytes(self)
 
 
-def _canonical_bytes(model: BaseModel) -> bytes:
+def canonical_receipt_bytes(model: BaseModel) -> bytes:
+    """Return the exact canonical bytes used for persisted receipt identity."""
     return json.dumps(
-        model.model_dump(mode="json"),
+        model.model_dump(mode="json", by_alias=True),
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,
@@ -391,7 +392,7 @@ class LiveReceiptStore:
         self._validate_receipt_name(logical_name)
         return self._publish_bytes(
             logical_name,
-            _canonical_bytes(model),
+            canonical_receipt_bytes(model),
             conflict_code="receipt_conflict",
         )
 

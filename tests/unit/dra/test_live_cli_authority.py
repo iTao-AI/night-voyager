@@ -19,12 +19,19 @@ from uuid import UUID
 import httpx2
 import pytest
 
-from night_voyager.dra.fixtures import build_v0_1_6_scenario_candidate_import
+from night_voyager.dra.fixtures import (
+    build_v0_1_6_scenario_candidate_import,
+    load_live_closure_scenario,
+)
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV3
 from night_voyager.dra.live_http import (
     EphemeralHttpAuthority,
     NightVoyagerAuthorityGateway,
 )
-from night_voyager.dra.live_models import DraCandidateReadinessReceiptV2
+from night_voyager.dra.live_models import (
+    DraCandidateReadinessReceiptV2,
+    compose_effective_query_v2,
+)
 from night_voyager.dra.live_storage import LiveReceiptStore
 from night_voyager.dra.ports import VerifyDraCandidateCommand
 from night_voyager.dra.reconciliation import DraAmbiguousOutcome
@@ -156,7 +163,58 @@ def test_freeze_candidate_rejects_feature_head_and_arbitrary_inventory(
     assert not receipts.exists()
 
 
-def test_freeze_candidate_writes_canonical_v2_effective_query_readiness(
+def test_strict_freeze_rejects_legacy_readiness_before_provider_construction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    legacy = tmp_path / "legacy-v2.json"
+    legacy.write_text(
+        DraCandidateReadinessReceiptV2(
+            merged_main_sha="0" * 40,
+            request=compose_effective_query_v2(
+                b"bounded synthetic query",
+                logical_name="query.txt",
+            )[1],
+            spec_sha256="1" * 64,
+            plan_sha256="2" * 64,
+            scenario_sha256="3" * 64,
+            intent_schema_sha256="4" * 64,
+            receipt_schema_sha256="5" * 64,
+            cli_sha256="6" * 64,
+            producer=load_live_closure_scenario().producer,
+            required_hosted_checks=("compose", "frontend", "python"),
+            recovery_matrix_status="passed",
+            docker_preflight_status="passed",
+            docker_inventory_sha256="7" * 64,
+            hosted_checks_evidence_sha256="8" * 64,
+            recovery_matrix_evidence_sha256="9" * 64,
+            authority_review_evidence_sha256="a" * 64,
+            cleanup_state="clean",
+            authorization_placeholder=(
+                "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+            ),
+        ).model_dump_json(),
+        encoding="utf-8",
+    )
+    provider_create_calls = 0
+
+    def forbidden_provider(*_args: object, **_kwargs: object) -> object:
+        nonlocal provider_create_calls
+        provider_create_calls += 1
+        raise AssertionError("provider construction must not occur")
+
+    monkeypatch.setattr(live_cli, "_live_transport", forbidden_provider)
+
+    with pytest.raises(SystemExit) as stopped:
+        live_cli.main(["freeze-candidate", "--readiness", str(legacy)])
+
+    assert stopped.value.code == 30
+    assert "candidate_readiness_invalid" in capsys.readouterr().out
+    assert provider_create_calls == 0
+
+
+def test_freeze_candidate_writes_canonical_v3_strict_readiness(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -232,29 +290,26 @@ def test_freeze_candidate_writes_canonical_v2_effective_query_readiness(
     result = json.loads(capsys.readouterr().out)
     assert result["problem_code"] == "candidate_readiness_frozen"
     readiness_bytes = (receipts / "readiness.json").read_bytes()
-    readiness = DraCandidateReadinessReceiptV2.model_validate_json(
+    readiness = DraLiveCandidateReadinessV3.model_validate_json(
         readiness_bytes
     )
     assert readiness.schema_version == (
-        "night-voyager.dra-live-candidate-readiness.v2"
+        "night-voyager.dra-live-candidate-readiness.v3"
     )
-    assert readiness.merged_main_sha == head
-    assert readiness.request.schema_version == (
-        "night-voyager.dra-live-effective-query.v2"
+    assert readiness.status == "INCOMPLETE_PENDING_LIVE_ACCEPTANCE"
+    assert readiness.producer.ref_kind == "commit"
+    assert readiness.producer.profile_id == "generic-strict-citation"
+    assert readiness.request_identity.schema_version == (
+        "night-voyager.dra-run-request-identity.v2"
     )
-    assert readiness.request.logical_name == query.name
-    assert readiness.request.encoding == "utf-8"
-    assert readiness.request.base_byte_length == len(query_bytes)
-    assert readiness.request.base_sha256 == hashlib.sha256(
-        query_bytes
-    ).hexdigest()
-    assert readiness.request.effective_byte_length == len(effective_bytes)
-    assert readiness.request.effective_sha256 == hashlib.sha256(
+    assert readiness.request_identity.profile_id == "generic-strict-citation"
+    assert readiness.request_identity.request_sha256 == hashlib.sha256(
         effective_bytes
     ).hexdigest()
-    assert readiness.request.citation_clause_sha256 == hashlib.sha256(
-        exact_clause
-    ).hexdigest()
+    assert readiness.observed_profile.profile_version == "1"
+    assert readiness.authorization == (
+        "PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION"
+    )
     canonical_round_trip = json.dumps(
         readiness.model_dump(mode="json"),
         sort_keys=True,

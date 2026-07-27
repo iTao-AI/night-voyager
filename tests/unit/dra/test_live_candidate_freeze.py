@@ -12,6 +12,8 @@ from typing import cast
 
 import pytest
 
+from night_voyager.dra.fixtures import load_strict_live_closure_scenario
+from night_voyager.dra.live_evaluation import DraLiveCandidateReadinessV3
 from scripts.verify_dra_live_closure import (
     _canonical_docker_inventory,
     _canonical_docker_inventory_bytes,
@@ -896,3 +898,21 @@ def test_candidate_evidence_rejects_failed_stale_or_arbitrary_receipts(
 
     with pytest.raises(ValueError):
         _validated_candidate_evidence(args, HEAD)
+
+
+def test_strict_readiness_is_closed_to_exact_provider_free_scenario() -> None:
+    scenario = load_strict_live_closure_scenario()
+    readiness = DraLiveCandidateReadinessV3(
+        schema_version="night-voyager.dra-live-candidate-readiness.v3",
+        status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        producer=scenario.producer,
+        request_identity=scenario.request_identity,
+        observed_profile=scenario.profile_manifest,
+        authorization="PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION",
+    )
+    payload = readiness.model_dump(mode="json")
+
+    with pytest.raises(ValueError):
+        DraLiveCandidateReadinessV3.model_validate(
+            payload | {"unexpected": "self-asserted"}
+        )

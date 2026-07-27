@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import uuid
+from collections.abc import Sequence
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Literal, NoReturn, cast
@@ -28,7 +29,10 @@ from night_voyager.adapters.dra_readonly import (
     DraClientConfig,
     Httpx2DraTransport,
 )
-from night_voyager.dra.fixtures import load_live_closure_scenario
+from night_voyager.dra.fixtures import (
+    load_live_closure_scenario,
+    load_strict_live_closure_scenario,
+)
 from night_voyager.dra.live_controller import (
     CaptureLiveCommand,
     DecideCommand,
@@ -41,6 +45,7 @@ from night_voyager.dra.live_controller import (
     SelectAndImportCommand,
 )
 from night_voyager.dra.live_evaluation import (
+    DraLiveCandidateReadinessV3,
     DraLiveEvaluationReportV1,
     DraLiveOutcomeExpectedV1,
     evaluate_full_closure,
@@ -81,7 +86,10 @@ from night_voyager.dra.live_storage import (
     LiveStorageError,
     LiveStorageInvalid,
 )
-from night_voyager.dra.models import DraCandidateImportV1
+from night_voyager.dra.models import (
+    DraCandidateImportV1,
+    DraRunRequestIdentityV2,
+)
 from night_voyager.dra.ports import DraCandidateViewV1
 from night_voyager.identity.models import ActorContext, ActorRole
 
@@ -1844,6 +1852,51 @@ def _validated_candidate_evidence(
 
 def freeze_candidate(args: argparse.Namespace) -> NoReturn:
     """Write a provider-free, executable post-merge readiness identity."""
+    supplied_readiness = getattr(args, "readiness", None)
+    if supplied_readiness:
+        try:
+            readiness_bytes = Path(supplied_readiness).read_bytes()
+            readiness = DraLiveCandidateReadinessV3.model_validate_json(
+                readiness_bytes
+            )
+        except (OSError, ValueError):
+            _emit(
+                _result_payload(
+                    "terminal_failure",
+                    "candidate_readiness_invalid",
+                    "stop",
+                ),
+                as_json=getattr(args, "json", False),
+            )
+        _emit(
+            _result_payload(
+                "success",
+                "candidate_readiness_validated",
+                "await-separate-live-authorization",
+                receipt=DraReceiptIdentityV1(
+                    logical_name=Path(supplied_readiness).name,
+                    byte_length=len(readiness_bytes),
+                    sha256=hashlib.sha256(readiness_bytes).hexdigest(),
+                ),
+                capability_status=readiness.status,
+            ),
+            as_json=getattr(args, "json", False),
+        )
+    required_values = (
+        "merged_main_sha",
+        "query_file",
+        "receipt_root",
+        "authorization_placeholder",
+    )
+    if any(not getattr(args, name, None) for name in required_values):
+        _emit(
+            _result_payload(
+                "terminal_failure",
+                "candidate_readiness_invalid",
+                "stop",
+            ),
+            as_json=getattr(args, "json", False),
+        )
     required_hosted_checks = tuple(sorted(set(args.hosted_check)))
     authorization_placeholder = args.authorization_placeholder
     try:
@@ -1904,44 +1957,22 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
             query_path.read_bytes(),
             logical_name=query_path.name,
         )
-        repository = Path(__file__).resolve().parents[1]
-
-        def digest(relative: str) -> str:
-            return hashlib.sha256(
-                (repository / relative).read_bytes()
-            ).hexdigest()
-
-        receipt = DraCandidateReadinessReceiptV2(
-            merged_main_sha=head,
-            request=request,
-            spec_sha256=digest(
-                "docs/superpowers/specs/"
-                "2026-07-25-dra-v0-1-6-governed-live-closure-design.md"
+        strict_scenario = load_strict_live_closure_scenario()
+        receipt = DraLiveCandidateReadinessV3(
+            schema_version=(
+                "night-voyager.dra-live-candidate-readiness.v3"
             ),
-            plan_sha256=digest(
-                "docs/superpowers/plans/"
-                "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md"
+            status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+            producer=strict_scenario.producer,
+            request_identity=DraRunRequestIdentityV2(
+                schema_version=(
+                    "night-voyager.dra-run-request-identity.v2"
+                ),
+                profile_id="generic-strict-citation",
+                request_sha256=request.effective_sha256,
             ),
-            scenario_sha256=digest(
-                "fixtures/dra/live-closure-scenario-v1.json"
-            ),
-            intent_schema_sha256=digest(
-                "src/night_voyager/dra/live_models.py"
-            ),
-            receipt_schema_sha256=digest(
-                "src/night_voyager/dra/live_storage.py"
-            ),
-            cli_sha256=digest("scripts/verify_dra_live_closure.py"),
-            producer=load_live_closure_scenario().producer,
-            required_hosted_checks=required_hosted_checks,
-            recovery_matrix_status="passed",
-            docker_preflight_status="passed",
-            docker_inventory_sha256=hashlib.sha256(inventory).hexdigest(),
-            hosted_checks_evidence_sha256=hashlib.sha256(hosted).hexdigest(),
-            recovery_matrix_evidence_sha256=hashlib.sha256(recovery).hexdigest(),
-            authority_review_evidence_sha256=hashlib.sha256(review).hexdigest(),
-            cleanup_state="clean",
-            authorization_placeholder=authorization_placeholder,
+            observed_profile=strict_scenario.profile_manifest,
+            authorization=authorization_placeholder,
         )
         with _open_root(Path(args.receipt_root), create=True) as store:
             identity = store.write_receipt("readiness.json", receipt)
@@ -1966,9 +1997,16 @@ def freeze_candidate(args: argparse.Namespace) -> NoReturn:
             "await-separate-live-authorization",
             receipt=identity,
             required_hosted_checks=required_hosted_checks,
-            docker_inventory_sha256=receipt.docker_inventory_sha256,
+            docker_inventory_sha256=hashlib.sha256(inventory).hexdigest(),
+            hosted_checks_evidence_sha256=hashlib.sha256(hosted).hexdigest(),
+            recovery_matrix_evidence_sha256=hashlib.sha256(
+                recovery
+            ).hexdigest(),
+            authority_review_evidence_sha256=hashlib.sha256(
+                review
+            ).hexdigest(),
             authorization_placeholder=authorization_placeholder,
-            capability_status="INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+            capability_status=receipt.status,
         ),
         as_json=args.json,
     )
@@ -1983,7 +2021,7 @@ def _raise_interrupt(_signum: int, _frame: object) -> NoReturn:
     raise KeyboardInterrupt
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Governed DRA live closure command surface"
     )
@@ -2067,10 +2105,12 @@ def parse_args() -> argparse.Namespace:
         "freeze-candidate",
         help="provider-free post-merge live-acceptance candidate freeze",
     )
-    _root_argument(candidate)
-    candidate.add_argument("--merged-main-sha", required=True)
-    candidate.add_argument("--query-file", required=True)
-    candidate.add_argument("--docker-inventory-file", required=True)
+    candidate.add_argument("--receipt-root")
+    candidate.add_argument("--json", action="store_true")
+    candidate.add_argument("--readiness")
+    candidate.add_argument("--merged-main-sha")
+    candidate.add_argument("--query-file")
+    candidate.add_argument("--docker-inventory-file")
     candidate.add_argument("--hosted-check-evidence-file")
     candidate.add_argument("--recovery-evidence-file")
     candidate.add_argument("--authority-review-evidence-file")
@@ -2078,11 +2118,10 @@ def parse_args() -> argparse.Namespace:
         "--hosted-check",
         action="append",
         choices=("python", "frontend", "compose"),
-        required=True,
+        default=[],
     )
     candidate.add_argument(
         "--authorization-placeholder",
-        required=True,
         choices=("PENDING_SEPARATE_LIVE_ACCEPTANCE_AUTHORIZATION",),
     )
 
@@ -2092,11 +2131,11 @@ def parse_args() -> argparse.Namespace:
     _root_argument(clean)
     clean.add_argument("--delete-ack")
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> None:
-    args = parse_args()
+def main(argv: Sequence[str] | None = None) -> None:
+    args = parse_args(argv)
     signal.signal(signal.SIGTERM, _raise_interrupt)
     handlers = {
         "freeze-intent": freeze_intent,
