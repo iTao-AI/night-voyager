@@ -55,11 +55,11 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/decision/test_postgres_decision.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_http_decision.py
-    if uv run alembic downgrade 0007 >"$downgrade_output" 2>&1; then
-        echo "expected DRA strict authority downgrade refusal" >&2
+    if uv run alembic downgrade 0011 >"$downgrade_output" 2>&1; then
+        echo "expected planning revision authority downgrade refusal" >&2
         exit 1
     fi
-    grep -q 'refusing downgrade: DRA strict candidate history exists' "$downgrade_output"
+    grep -q 'refusing downgrade: planning revision lineage exists' "$downgrade_output"
     uv run alembic current | grep '0012'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0

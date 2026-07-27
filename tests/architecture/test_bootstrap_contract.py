@@ -189,6 +189,9 @@ def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() 
     shared_main = script.split('if [ "${1:-}" = "inside" ]; then', 1)[1].split(
         'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
     )[0]
+    final_refusal = shared_main.split(
+        "tests/integration/decision/test_http_decision.py", 1
+    )[1]
     default_lanes = script.split(
         'if [ -n "${1:-}" ]; then', 1
     )[1]
@@ -197,6 +200,18 @@ def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() 
     assert 'if [ "${1:-}" = "dra-strict-migration" ]' in script
     assert "tests/integration/dra/test_dra_strict_migration.py" in script
     assert "--ignore=tests/integration/dra/test_dra_strict_migration.py" in shared_main
+    assert "uv run alembic downgrade 0011" in final_refusal
+    assert "uv run alembic downgrade 0007" not in final_refusal
+    assert "expected planning revision authority downgrade refusal" in final_refusal
+    assert "refusing downgrade: planning revision lineage exists" in final_refusal
+    assert final_refusal.index("refusing downgrade: planning revision lineage exists") < (
+        final_refusal.index("uv run alembic current | grep '0012'")
+    )
+    assert final_refusal.index("uv run alembic current | grep '0012'") < (
+        final_refusal.index(
+            "uv run --no-editable python scripts/verify_release.py --check-db-roles"
+        )
+    )
     assert (
         default_lanes.index(
             'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" '
