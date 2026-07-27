@@ -1,7 +1,9 @@
 FROM node:24.18.0-alpine AS dependencies
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --fetch-retries=5 \
+        --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=60000
 
 FROM node:24.18.0-alpine AS builder
 WORKDIR /app
