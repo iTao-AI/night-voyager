@@ -189,15 +189,58 @@ async def test_seeded_review_required_run_advances_case_to_advisor_review() -> N
 
 
 @pytest.mark.asyncio
+async def test_api_cannot_execute_legacy_internal_planning_persistence() -> None:
+    case_id = UUID("40000000-0000-0000-0000-000000000088")
+    run_id = UUID("70000000-0000-0000-0000-000000000088")
+    await bootstrap_planning_case(case_id)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            with pytest.raises(DBAPIError) as captured:
+                async with connection.begin():
+                    await set_context(connection, DEMO_ORG)
+                    await connection.execute(
+                        text(
+                            "SELECT app.persist_planning_result(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',repeat('a',64),'blocked','negative-result',repeat('b',64),NULL,'{\"routes\":[],\"costs\":[],\"rankings\":[]}'::jsonb)"
+                        ),
+                        {"org": DEMO_ORG, "run": run_id, "case": case_id},
+                    )
+            assert getattr(captured.value.orig, "sqlstate", None) == "42501"
+    finally:
+        await engine.dispose()
+
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await set_context(connection, DEMO_ORG)
+            assert (
+                await connection.scalar(
+                    text("SELECT count(*) FROM app.planning_runs WHERE id=:run"),
+                    {"run": run_id},
+                )
+                == 0
+            )
+            assert (
+                await connection.scalar(
+                    text("SELECT state FROM app.student_cases WHERE id=:case"),
+                    {"case": case_id},
+                )
+                == "planning"
+            )
+    finally:
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("terminal_state", ("blocked", "failed"))
-async def test_only_review_required_result_publication_advances_case(
+async def test_internal_persistence_only_review_required_result_advances_case(
     terminal_state: str,
 ) -> None:
     suffix = 81 if terminal_state == "blocked" else 82
     case_id = UUID(f"40000000-0000-0000-0000-{suffix:012d}")
     run_id = UUID(f"70000000-0000-0000-0000-{suffix:012d}")
     await bootstrap_planning_case(case_id)
-    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
@@ -216,7 +259,12 @@ async def test_only_review_required_result_publication_advances_case(
                 )
                 == "planning"
             )
-        async with engine.connect() as connection:
+    finally:
+        await engine.dispose()
+
+    api_engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with api_engine.connect() as connection:
             with pytest.raises(DBAPIError):
                 async with connection.begin():
                     await set_context(connection, DEMO_ORG)
@@ -225,11 +273,11 @@ async def test_only_review_required_result_publication_advances_case(
                         {"org": DEMO_ORG, "case": case_id},
                     )
     finally:
-        await engine.dispose()
+        await api_engine.dispose()
 
 
 @pytest.mark.asyncio
-async def test_review_required_publication_atomically_hands_off_current_case() -> None:
+async def test_internal_persistence_review_required_result_atomically_hands_off_current_case() -> None:
     fixture = validate_planning_fixture()
     case_id = UUID("40000000-0000-0000-0000-000000000083")
     run_id = UUID("70000000-0000-0000-0000-000000000083")
@@ -241,7 +289,7 @@ async def test_review_required_publication_atomically_hands_off_current_case() -
         }
     )
     await bootstrap_planning_case(case_id)
-    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
@@ -382,11 +430,12 @@ async def test_stale_current_review_required_trigger_fails_and_rolls_back() -> N
 
 
 @pytest.mark.asyncio
-async def test_api_persists_complete_result_and_supersedes_current_run_atomically() -> None:
+async def test_internal_persistence_complete_result_supersedes_current_run_atomically() -> None:
     fixture = validate_planning_fixture()
     case_id = UUID("40000000-0000-0000-0000-000000000087")
     old_run = UUID("70000000-0000-0000-0000-000000000087")
     new_run = UUID("70000000-0000-0000-0000-000000000097")
+    review_id = UUID("8a000000-0000-0000-0000-000000000087")
     output = json.dumps(
         {
             "routes": [item.model_dump(mode="json") for item in fixture.result.routes],
@@ -395,7 +444,7 @@ async def test_api_persists_complete_result_and_supersedes_current_run_atomicall
         }
     )
     await bootstrap_planning_case(case_id)
-    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
             await set_context(connection, DEMO_ORG)
@@ -407,7 +456,57 @@ async def test_api_persists_complete_result_and_supersedes_current_run_atomicall
             )
             await connection.execute(
                 text(
-                    "SELECT app.persist_planning_result(:org,:run,:case,1,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',:evidence_hash,'review_required',:reason,:output_hash,:supersedes,CAST(:output AS jsonb))"
+                    "INSERT INTO app.advisor_reviews("
+                    "organization_id,id,case_id,case_revision,planning_run_id,"
+                    "review_version,advisor_actor_id,action,eligible_route_ids,"
+                    "risk_acceptances,reviewer_notes) VALUES("
+                    ":org,:review,:case,1,:run,1,"
+                    "'20000000-0000-0000-0000-000000000001',"
+                    "'request_revision','[]'::jsonb,'[]'::jsonb,"
+                    "'internal persistence regression')"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "review": review_id,
+                    "case": case_id,
+                    "run": old_run,
+                },
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.student_case_revisions("
+                    "organization_id,case_id,revision,schema_version,"
+                    "student_preferences,family_preferences,"
+                    "revision_requested_by_review_id,superseded_planning_run_id) "
+                    "SELECT organization_id,case_id,2,schema_version,"
+                    "student_preferences,family_preferences,:review,:run "
+                    "FROM app.student_case_revisions "
+                    "WHERE organization_id=:org AND case_id=:case AND revision=1"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "review": review_id,
+                    "case": case_id,
+                    "run": old_run,
+                },
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.student_cases SET current_revision=2 "
+                    "WHERE organization_id=:org AND id=:case"
+                ),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.planning_runs SET is_current=false "
+                    "WHERE organization_id=:org AND id=:run"
+                ),
+                {"org": DEMO_ORG, "run": old_run},
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.persist_planning_result(:org,:run,:case,2,'50000000-0000-0000-0000-000000000001',1,'m3a-policy-v1',:evidence_hash,'review_required',:reason,:output_hash,:supersedes,CAST(:output AS jsonb))"
                 ),
                 {
                     "org": DEMO_ORG,

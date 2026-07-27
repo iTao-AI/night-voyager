@@ -45,6 +45,7 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/collaboration \
         --ignore=tests/integration/tasks/test_planning_start_migration.py \
         --ignore=tests/integration/dra/test_dra_live_migration.py \
+        --ignore=tests/integration/dra/test_dra_strict_migration.py \
         --ignore=tests/integration/tasks/test_mixed_downgrade.py \
         --ignore=tests/integration/collaboration/test_collaboration_downgrade.py \
         --ignore=tests/integration/dra/test_governed_closure.py
@@ -248,6 +249,7 @@ fi
 
 run_lane "${BASE_PROJECT_NAME}-planning-start-migration" inside-planning-start-migration
 run_lane "${BASE_PROJECT_NAME}-dra-live-migration" inside-dra-live-migration
+run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" inside-dra-strict-migration
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
 run_lane "${BASE_PROJECT_NAME}-main" inside
