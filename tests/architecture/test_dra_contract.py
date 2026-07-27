@@ -2,6 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
+import night_voyager.dra.ports as dra_ports
+from night_voyager.dra.models import (
+    DraObservedProfileManifestV1,
+    DraProducerPinV2,
+    DraRunRequestIdentityV2,
+    DraStrictConsumerIdentityV2,
+)
+
 ROOT = Path(__file__).parents[2]
 
 
@@ -138,3 +149,57 @@ def test_governed_mixed_planning_public_contract_is_closed() -> None:
     )
     assert "make compose-proof" in operations
     assert "Live provider proof was not run" in operations
+
+
+def test_strict_import_command_is_closed_and_separate_from_legacy() -> None:
+    strict_type = getattr(dra_ports, "ImportStrictDraCandidateCommand", None)
+    assert strict_type is not None
+    identity = DraStrictConsumerIdentityV2(
+        schema_version="night-voyager.dra-strict-consumer-identity.v2",
+        producer=DraProducerPinV2(),
+        request=DraRunRequestIdentityV2(
+            schema_version="night-voyager.dra-run-request-identity.v2",
+            profile_id="generic-strict-citation",
+            request_sha256="a" * 64,
+        ),
+        observed_profile=DraObservedProfileManifestV1(
+            schema_version="night-voyager.dra-observed-profile-manifest.v1",
+            profile_id="generic-strict-citation",
+            profile_version="1",
+        ),
+    )
+    payload = {
+        "organization_id": "10000000-0000-0000-0000-000000000001",
+        "case_id": "40000000-0000-0000-0000-000000000003",
+        "expected_case_revision": 1,
+        "consumer_identity": identity,
+        "run_id": "run-strict",
+        "artifact_id": "research-report.md",
+        "artifact_kind": "research_report_markdown",
+        "artifact_media_type": "text/markdown",
+        "artifact_byte_length": 81,
+        "artifact_sha256": "b" * 64,
+        "evidence": [
+            {
+                "evidence_id": "evidence-strict",
+                "source_url": "https://example.com/strict-source",
+                "source_identity": "https://example.com/strict-source",
+                "retrieved_at": "2026-07-27T00:00:00Z",
+                "citation_status": "cited",
+                "verification_status": "unverified",
+            }
+        ],
+        "import_request_sha256": "c" * 64,
+    }
+    command = strict_type.model_validate(payload)
+    assert command.consumer_identity == identity
+    with pytest.raises(ValidationError):
+        strict_type.model_validate(payload | {"producer": identity.producer})
+    with pytest.raises(ValidationError):
+        strict_type.model_validate(payload | {"unknown": True})
+
+    legacy_fields = dra_ports.ImportDraCandidateCommand.model_fields
+    assert "consumer_identity" not in legacy_fields
+    producer_annotation = legacy_fields["producer"].annotation
+    assert producer_annotation is not None
+    assert getattr(producer_annotation, "__name__", None) == "DraProducerPinV1"

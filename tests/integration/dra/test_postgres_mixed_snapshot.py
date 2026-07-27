@@ -33,6 +33,20 @@ HISTORICAL_IMPORT_SQL = IMPORT_SQL.replace(
     "'v0.1.6',\n  '7d43324b469cb5e445c2e8be83af3be4d841cf1c'",
     "'v0.1.3',\n  '87b2a8e335385eb865086f7a69fe2b190567cfa2'",
 )
+LEGACY_IMPORT_ARGUMENTS = (
+    "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+    "text, text, text, text, integer, text, jsonb, text, text"
+)
+STRICT_IMPORT_ARGUMENTS = (
+    "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+    "text, text, text, text, text, text, text, text, text, integer, text, "
+    "jsonb, text, text"
+)
+VERIFY_ARGUMENTS = (
+    "uuid, uuid, uuid, uuid, integer, text, text, text, text, text, text, "
+    "date, integer, text, text, text, integer, text, jsonb, uuid, integer, "
+    "text, text, uuid, uuid, uuid, jsonb, text, text"
+)
 
 
 def case_id_for(suffix: int) -> UUID:
@@ -227,18 +241,42 @@ async def test_api_cannot_load_snapshot_and_worker_cannot_promote_or_write_dra_t
             forbidden_execute = (
                 await connection.execute(
                     text(
-                        "SELECT p.proname,has_function_privilege(current_user,p.oid,'EXECUTE') "
+                        "SELECT p.proname,oidvectortypes(p.proargtypes),"
+                        "has_function_privilege(current_user,p.oid,'EXECUTE') "
                         "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
-                        "WHERE n.nspname='app' AND p.proname IN "
-                        "('import_dra_research_candidate','verify_and_promote_dra_candidate') "
-                        "ORDER BY p.proname"
-                    )
+                        "WHERE n.nspname='app' AND ("
+                        "(p.proname='import_dra_research_candidate' "
+                        "AND oidvectortypes(p.proargtypes) IN (:legacy,:strict)) OR "
+                        "(p.proname='verify_and_promote_dra_candidate' "
+                        "AND oidvectortypes(p.proargtypes)=:verify)) "
+                        "ORDER BY p.proname,oidvectortypes(p.proargtypes)"
+                    ),
+                    {
+                        "legacy": LEGACY_IMPORT_ARGUMENTS,
+                        "strict": STRICT_IMPORT_ARGUMENTS,
+                        "verify": VERIFY_ARGUMENTS,
+                    },
                 )
             ).all()
-            assert forbidden_execute == [
-                ("import_dra_research_candidate", False),
-                ("verify_and_promote_dra_candidate", False),
-            ]
+            assert forbidden_execute == sorted(
+                [
+                    (
+                        "import_dra_research_candidate",
+                        STRICT_IMPORT_ARGUMENTS,
+                        False,
+                    ),
+                    (
+                        "import_dra_research_candidate",
+                        LEGACY_IMPORT_ARGUMENTS,
+                        False,
+                    ),
+                    (
+                        "verify_and_promote_dra_candidate",
+                        VERIFY_ARGUMENTS,
+                        False,
+                    ),
+                ]
+            )
             await connection.commit()
             for statement in (
                 "DELETE FROM app.dra_research_candidates WHERE organization_id=:org",

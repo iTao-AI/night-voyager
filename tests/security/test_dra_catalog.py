@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_PATH = ROOT / "migrations/versions/0005_dra_candidate_promotion.py"
 LIVE_MIGRATION_PATH = ROOT / "migrations/versions/0010_dra_v0_1_6_live_consumer.py"
+STRICT_MIGRATION_PATH = ROOT / "migrations/versions/0011_dra_strict_consumer_identity.py"
 TABLES = ("dra_research_candidates", "external_evidence_verifications")
 
 
@@ -192,3 +193,38 @@ def test_live_outcome_adapter_uses_only_closed_0010_projection() -> None:
             assert source.count(forbidden) == 1
         else:
             assert forbidden not in source
+
+
+def test_0011_closes_strict_identity_and_preserves_runtime_authority() -> None:
+    source = STRICT_MIGRATION_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assignments = {
+        node.targets[0].id: node.value.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id in {"revision", "down_revision"}
+        and isinstance(node.value, ast.Constant)
+    }
+    assert assignments == {"revision": "0011", "down_revision": "0010"}
+    for fragment in (
+        "LOCK TABLE app.dra_research_candidates IN ACCESS EXCLUSIVE MODE",
+        "ALTER TABLE app.dra_research_candidates NO FORCE ROW LEVEL SECURITY",
+        "ALTER TABLE app.dra_research_candidates DISABLE TRIGGER "
+        "dra_research_candidates_immutable",
+        "producer_repository",
+        "producer_ref_kind",
+        "producer_ref",
+        "profile_version",
+        "proof_schema",
+        "generic-strict-citation",
+        "dra.strict-citation-profile.v1",
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "ALTER TABLE app.dra_research_candidates ENABLE TRIGGER "
+        "dra_research_candidates_immutable",
+        "ALTER TABLE app.dra_research_candidates FORCE ROW LEVEL SECURITY",
+    ):
+        assert fragment in source
+    assert "TO night_voyager_worker" not in source
+    assert "GRANT EXECUTE" in source
+    assert "REVOKE ALL" in source

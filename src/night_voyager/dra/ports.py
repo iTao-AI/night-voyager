@@ -9,6 +9,7 @@ from night_voyager.dra.models import (
     DraEvidenceProjectionV1,
     DraProducerPinV1,
     DraRunRequestIdentityV1,
+    DraStrictConsumerIdentityV2,
     Sha256,
     SourceAttestationV1,
 )
@@ -28,6 +29,22 @@ class ImportDraCandidateCommand(FrozenPortModel):
     expected_case_revision: PositiveInt
     producer: DraProducerPinV1
     request_identity: DraRunRequestIdentityV1
+    run_id: str
+    artifact_id: Literal["research-report.md"]
+    artifact_kind: Literal["research_report_markdown"]
+    artifact_media_type: Literal["text/markdown"]
+    artifact_byte_length: PositiveInt
+    artifact_sha256: Sha256
+    artifact_content: None = None
+    evidence: tuple[DraEvidenceProjectionV1, ...]
+    import_request_sha256: Sha256
+
+
+class ImportStrictDraCandidateCommand(FrozenPortModel):
+    organization_id: UUID
+    case_id: UUID
+    expected_case_revision: PositiveInt
+    consumer_identity: DraStrictConsumerIdentityV2
     run_id: str
     artifact_id: Literal["research-report.md"]
     artifact_kind: Literal["research_report_markdown"]
@@ -90,7 +107,7 @@ class DraCandidateRepository(Protocol):
     async def import_candidate(
         self,
         context: ActorContext,
-        command: ImportDraCandidateCommand,
+        command: ImportDraCandidateCommand | ImportStrictDraCandidateCommand,
         candidate_id: UUID,
         idempotency_key: str,
     ) -> DraCandidateViewV1: ...

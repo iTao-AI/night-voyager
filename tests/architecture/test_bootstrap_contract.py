@@ -182,3 +182,14 @@ def test_dependabot_disables_docker_version_updates_without_disabling_security_u
 
     assert "applies-to: security-updates" not in config
     assert "cooldown:" not in config
+
+
+def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() -> None:
+    script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    assert 'if [ "${1:-}" = "inside-dra-strict-migration" ]' in script
+    assert 'if [ "${1:-}" = "dra-strict-migration" ]' in script
+    assert "tests/integration/dra/test_dra_strict_migration.py" in script
+    assert "unknown database test mode" in script
+    assert script.index("unknown database test mode") < script.rindex(
+        'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"'
+    )
