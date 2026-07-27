@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+from dataclasses import replace
 from datetime import date
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from night_voyager.adapters.deterministic_planning import DeterministicPlanningAdapter
 from night_voyager.adapters.governed_mixed_planning import GovernedMixedPlanningAdapter
@@ -17,11 +24,12 @@ from night_voyager.connected_demo.fixtures import (
     CanonicalDemoSourceContract,
     resolve_canonical_demo_source_contract,
 )
-from night_voyager.connected_demo.models import DemoPhase
+from night_voyager.connected_demo.models import DemoPhase, DemoPhaseV2
 from night_voyager.connected_demo.postgres import PostgresConnectedDemoRepository
 from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.hashing import canonical_sha256
 from night_voyager.planning.mixed_postgres import PostgresMixedPlanningRepository
 from night_voyager.planning.synthetic_postgres import (
     PersistedSyntheticSnapshotRepository,
@@ -38,23 +46,66 @@ pytestmark = pytest.mark.database
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
+STUDENT = UUID("20000000-0000-0000-0000-000000000002")
 PLANNING_FIXTURE = validate_planning_fixture().planning_input
 
 
 def context(role: ActorRole = ActorRole.ADVISOR) -> ActorContext:
+    actor = {
+        ActorRole.ADVISOR: ADVISOR,
+        ActorRole.STUDENT: STUDENT,
+        ActorRole.PARENT: PARENT,
+    }[role]
     return ActorContext(
         organization_id=DEMO_ORG,
-        actor_id=ADVISOR if role is ActorRole.ADVISOR else PARENT,
+        actor_id=actor,
         role=role,
         session_id=UUID("30000000-0000-0000-0000-000000000001"),
     )
 
 
 async def set_context(session: AsyncSession) -> None:
-    await session.execute(
-        text("SELECT set_config('night_voyager.organization_id',:org,true)"),
-        {"org": str(DEMO_ORG)},
-    )
+    for name, value in (
+        ("night_voyager.organization_id", str(DEMO_ORG)),
+        ("night_voyager.actor_id", str(ADVISOR)),
+        ("night_voyager.role", "advisor"),
+    ):
+        await session.execute(
+            text("SELECT set_config(:name,:value,true)"),
+            {"name": name, "value": value},
+        )
+
+
+async def journey_status_for_role(
+    connection: AsyncConnection, case_id: UUID, role: ActorRole
+):
+    actor_context = context(role)
+    for name, value in (
+        ("night_voyager.actor_id", str(actor_context.actor_id)),
+        ("night_voyager.role", role.value),
+    ):
+        await connection.execute(
+            text("SELECT set_config(:name,:value,true)"),
+            {"name": name, "value": value},
+        )
+    async with AsyncSession(bind=connection) as session:
+        return await PostgresConnectedDemoRepository(session).journey_status(
+            actor_context, case_id
+        )
+
+
+async def set_connection_role(
+    connection: AsyncConnection, role: ActorRole
+) -> None:
+    actor_context = context(role)
+    for name, value in (
+        ("night_voyager.actor_id", str(actor_context.actor_id)),
+        ("night_voyager.role", role.value),
+    ):
+        await connection.execute(
+            text("SELECT set_config(:name,:value,true)"),
+            {"name": name, "value": value},
+        )
 
 
 @pytest.mark.asyncio
@@ -108,6 +159,20 @@ async def test_wrong_role_is_hidden_and_source_mismatch_fails_closed() -> None:
             assert (
                 await repository.advisor_ledger(
                     context(ActorRole.PARENT), CONNECTED_DEMO_CASE_ID, source
+                )
+                is None
+            )
+            assert (
+                await repository.journey_status(
+                    replace(context(), actor_id=uuid4()),
+                    CONNECTED_DEMO_CASE_ID,
+                )
+                is None
+            )
+            assert (
+                await repository.journey_status(
+                    replace(context(), organization_id=uuid4()),
+                    CONNECTED_DEMO_CASE_ID,
                 )
                 is None
             )
@@ -218,6 +283,409 @@ async def test_review_required_projection_reads_real_worker_result() -> None:
         assert japan.required_claims
         assert malaysia.required_claims
         assert malaysia.known_gaps
+    finally:
+        await migrator.dispose()
+        await api.dispose()
+        await worker_engine.dispose()
+
+
+@pytest.mark.parametrize("blocked", (False, True))
+@pytest.mark.asyncio
+async def test_revision_two_ledger_projects_exact_predecessor_comparison(
+    blocked: bool,
+) -> None:
+    case_id = uuid4()
+    first_task_id = uuid4()
+    second_task_id = uuid4()
+    review_id = uuid4()
+    thread_id = uuid4()
+    message_id = uuid4()
+    candidate_id = uuid4()
+    verification_id = uuid4()
+    fact_id = uuid4()
+    source = resolve_canonical_demo_source_contract()
+    revised_budget = {
+        **PLANNING_FIXTURE.case.family.budget.model_dump(mode="json"),
+        "preferred_minor": 10_000_000 if blocked else 31_000_000,
+        "hard_ceiling_minor": 12_000_000 if blocked else 37_000_000,
+        "elasticity_bps": 500 if blocked else 750,
+    }
+
+    def case_hash(label: str) -> str:
+        return hashlib.sha256(f"{label}:{case_id}".encode()).hexdigest()
+
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker_engine = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    api_sessions = async_sessionmaker(api, expire_on_commit=False)
+    worker_sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(DEMO_ORG)},
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.publish_case_revision(:org,:case,NULL,1,"
+                    "CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "student": json.dumps(
+                        PLANNING_FIXTURE.case.student.model_dump(mode="json")
+                    ),
+                    "family": json.dumps(
+                        PLANNING_FIXTURE.case.family.model_dump(mode="json")
+                    ),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_case_participants("
+                    ":org,:case,:advisor,:student,:parent)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                    "student": STUDENT,
+                    "parent": PARENT,
+                },
+            )
+            await connection.execute(
+                text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+
+        async with api_sessions() as session, session.begin():
+            for name, value in (
+                ("night_voyager.organization_id", str(DEMO_ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await session.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await TaskService(
+                PostgresTaskRepository(session),
+                registry=SkillRuntimeRegistry.load_packaged(),
+                id_factory=lambda: first_task_id,
+            ).create(
+                context(),
+                CreateTaskCommand(
+                    case_id=case_id,
+                    expected_case_revision=1,
+                    source_pack_id=source.source_pack_id,
+                    source_pack_version=source.source_pack_version,
+                    policy_version=source.policy_version,
+                ),
+                f"comparison-first-{first_task_id}",
+            )
+        factory = postgres_worker_repository_factory(worker_sessions)
+        first_worker = TaskWorker(
+            factory,
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(worker_sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(worker_sessions)
+                ),
+            ),
+            SkillRuntimeRegistry.load_packaged(),
+            worker_id=f"comparison-first-{case_id}",
+        )
+        assert await first_worker.run_once() is True
+        async with api.begin() as connection:
+            for name, value in (
+                ("night_voyager.organization_id", str(DEMO_ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            predecessor = await connection.scalar(
+                text(
+                    "SELECT id FROM app.planning_runs WHERE organization_id=:org "
+                    "AND case_id=:case AND is_current"
+                ),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+            assert predecessor is not None
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.review_planning_run("
+                    ":org,:actor,:case,:run,1,'request_revision',:review,"
+                    "'[]'::jsonb,'[]'::jsonb,'bounded revision request',"
+                    "NULL,'{}'::jsonb,current_date,:key_hash,:request_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": ADVISOR,
+                    "case": case_id,
+                    "run": predecessor,
+                    "review": review_id,
+                    "key_hash": case_hash("comparison-review-key"),
+                    "request_hash": case_hash("comparison-review-request"),
+                },
+            )
+            async with AsyncSession(bind=connection) as session:
+                requested_ledger = (
+                    await PostgresConnectedDemoRepository(session).advisor_ledger_v2(
+                        context(), case_id, source
+                    )
+                )
+            requested_status = await journey_status_for_role(
+                connection, case_id, ActorRole.STUDENT
+            )
+            assert requested_ledger is not None
+            assert requested_ledger.phase is DemoPhaseV2.REVISION_REQUESTED
+            assert requested_status is not None
+            assert requested_status.phase is DemoPhaseV2.REVISION_REQUESTED
+            await set_connection_role(connection, ActorRole.ADVISOR)
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.create_collaboration_thread("
+                    ":org,:actor,'advisor',:case,:thread,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": ADVISOR,
+                    "case": case_id,
+                    "thread": thread_id,
+                    "request_hash": case_hash("comparison-thread"),
+                    "key_hash": case_hash("comparison-thread-key"),
+                },
+            )
+            for name, value in (
+                ("night_voyager.actor_id", str(PARENT)),
+                ("night_voyager.role", "parent"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            body = "Synthetic revised family budget for comparison."
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.append_collaboration_message("
+                    ":org,:actor,'parent',:thread,:message,:body,:content_hash,"
+                    ":request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": PARENT,
+                    "thread": thread_id,
+                    "message": message_id,
+                    "body": body,
+                    "content_hash": hashlib.sha256(body.encode()).hexdigest(),
+                    "request_hash": case_hash("comparison-message"),
+                    "key_hash": case_hash("comparison-message-key"),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.propose_memory_candidate("
+                    ":org,:actor,'parent',:message,:candidate,1,'family.budget',"
+                    "CAST(:value AS jsonb),:value_hash,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": PARENT,
+                    "message": message_id,
+                    "candidate": candidate_id,
+                    "value": json.dumps(revised_budget),
+                    "value_hash": canonical_sha256(revised_budget),
+                    "request_hash": case_hash("comparison-candidate"),
+                    "key_hash": case_hash("comparison-candidate-key"),
+                },
+            )
+            for name, value in (
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            async with AsyncSession(bind=connection) as session:
+                pending_ledger = (
+                    await PostgresConnectedDemoRepository(session).advisor_ledger_v2(
+                        context(), case_id, source
+                    )
+                )
+            pending_statuses = tuple(
+                [
+                    await journey_status_for_role(connection, case_id, role)
+                    for role in (
+                        ActorRole.ADVISOR,
+                        ActorRole.STUDENT,
+                        ActorRole.PARENT,
+                    )
+                ]
+            )
+            assert pending_ledger is not None
+            assert pending_ledger.phase is DemoPhaseV2.REVISION_FACT_PENDING
+            assert all(status is not None for status in pending_statuses)
+            assert {
+                status.phase for status in pending_statuses if status is not None
+            } == {DemoPhaseV2.REVISION_FACT_PENDING}
+            assert {
+                status.active_role
+                for status in pending_statuses
+                if status is not None
+            } == {"advisor", "student", "parent"}
+            assert all(
+                status.model_dump(by_alias=True).keys()
+                == {
+                    "schema",
+                    "case_id",
+                    "current_revision",
+                    "phase",
+                    "active_role",
+                }
+                for status in pending_statuses
+                if status is not None
+            )
+            for name, value in (
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.verify_memory_candidate("
+                    ":org,:actor,:candidate,1,'confirm',:reason,:verification,"
+                    ":fact,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": ADVISOR,
+                    "candidate": candidate_id,
+                    "reason": "Confirmed synthetic budget revision.",
+                    "verification": verification_id,
+                    "fact": fact_id,
+                    "request_hash": case_hash("comparison-verify"),
+                    "key_hash": case_hash("comparison-verify-key"),
+                },
+            )
+            async with AsyncSession(bind=connection) as session:
+                replan_ledger = (
+                    await PostgresConnectedDemoRepository(session).advisor_ledger_v2(
+                        context(), case_id, source
+                    )
+                )
+            statuses = tuple(
+                [
+                    await journey_status_for_role(connection, case_id, role)
+                    for role in (
+                        ActorRole.ADVISOR,
+                        ActorRole.STUDENT,
+                        ActorRole.PARENT,
+                    )
+                ]
+            )
+            assert replan_ledger is not None
+            assert replan_ledger.phase is DemoPhaseV2.REPLAN_REQUIRED
+            assert all(status is not None for status in statuses)
+            assert {status.phase for status in statuses if status is not None} == {
+                DemoPhaseV2.REPLAN_REQUIRED
+            }
+            assert {
+                status.active_role for status in statuses if status is not None
+            } == {"advisor", "student", "parent"}
+        async with api_sessions() as session, session.begin():
+            for name, value in (
+                ("night_voyager.organization_id", str(DEMO_ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await session.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await TaskService(
+                PostgresTaskRepository(session),
+                registry=SkillRuntimeRegistry.load_packaged(),
+                id_factory=lambda: second_task_id,
+            ).create(
+                context(),
+                CreateTaskCommand(
+                    case_id=case_id,
+                    expected_case_revision=2,
+                    source_pack_id=source.source_pack_id,
+                    source_pack_version=source.source_pack_version,
+                    policy_version=source.policy_version,
+                ),
+                f"comparison-second-{second_task_id}",
+            )
+            repository = PostgresConnectedDemoRepository(session)
+            active_ledger = await repository.advisor_ledger_v2(
+                context(), case_id, source
+            )
+            active_status = await repository.journey_status(context(), case_id)
+            assert active_ledger is not None
+            assert active_ledger.phase is DemoPhaseV2.REVISION_TASK_ACTIVE
+            assert active_status is not None
+            assert active_status.phase is DemoPhaseV2.REVISION_TASK_ACTIVE
+        second_worker = TaskWorker(
+            factory,
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(worker_sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(worker_sessions)
+                ),
+            ),
+            SkillRuntimeRegistry.load_packaged(),
+            worker_id=f"comparison-second-{case_id}",
+        )
+        assert await second_worker.run_once() is True
+        async with AsyncSession(api) as session, session.begin():
+            await set_context(session)
+            repository = PostgresConnectedDemoRepository(session)
+            projection = await repository.advisor_ledger_v2(
+                context(), case_id, source
+            )
+            journey = await repository.journey_status(context(), case_id)
+        assert projection is not None
+        assert projection.phase is (
+            DemoPhaseV2.REVISION_BLOCKED
+            if blocked
+            else DemoPhaseV2.REVISION_REVIEW_REQUIRED
+        )
+        assert projection.case_revision == 2
+        assert projection.task is not None
+        assert projection.task.task_id == second_task_id
+        assert projection.comparison is not None
+        assert projection.comparison.previous_planning_run_id == predecessor
+        assert projection.planning_run is not None
+        assert projection.planning_run.state == (
+            "blocked" if blocked else "review_required"
+        )
+        assert (projection.review_inputs is None) is blocked
+        assert (
+            projection.comparison.current_planning_run_id
+            == projection.planning_run.planning_run_id
+        )
+        assert journey is not None
+        assert journey.phase is projection.phase
+        assert journey.model_dump(by_alias=True).keys() == {
+            "schema",
+            "case_id",
+            "current_revision",
+            "phase",
+            "active_role",
+        }
     finally:
         await migrator.dispose()
         await api.dispose()
@@ -342,9 +810,13 @@ async def test_plan_ready_projection_reads_decision_linked_completed_brief() -> 
                         {"name": name, "value": value},
                     )
                 async with AsyncSession(bind=connection) as session:
-                    projection = await PostgresConnectedDemoRepository(
-                        session
-                    ).current_decision_brief(context(ActorRole.PARENT), case_id)
+                    repository = PostgresConnectedDemoRepository(session)
+                    projection = await repository.current_decision_brief(
+                        context(ActorRole.PARENT), case_id
+                    )
+                    projection_v2 = await repository.current_decision_brief_v2(
+                        context(ActorRole.PARENT), case_id
+                    )
 
                 assert projection is not None
                 assert projection.phase is DemoPhase.PLAN_READY
@@ -352,6 +824,15 @@ async def test_plan_ready_projection_reads_decision_linked_completed_brief() -> 
                 assert projection.receipt is not None
                 assert projection.receipt.receipt_id == receipt_id
                 assert projection.timeline is not None
+                assert projection_v2 is not None
+                assert (
+                    projection_v2.revision_context.current_case_revision == 1
+                )
+                assert projection_v2.revision_context.planning_version == "initial"
+                assert (
+                    projection_v2.revision_context.advisor_authorization
+                    == "authorized_for_initial_revision"
+                )
             finally:
                 await transaction.rollback()
     finally:
