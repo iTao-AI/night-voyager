@@ -8,6 +8,14 @@
 
 **Plan status:** Approved; implementation has not started.
 
+## Implementation authority correction
+
+After Task 1, an audit of the real command and transport chain found that the
+original exact-file lists omitted the existing port, application, and HTTP
+transport surfaces required to carry the already approved v2 strict identity.
+The corrected lists below close that implementation gap. They do not add an
+endpoint, business workflow, provider attempt, or product claim.
+
 ## Global Constraints
 
 - Exact repository: `https://github.com/iTao-AI/decision-research-agent`.
@@ -269,6 +277,7 @@ git commit -m "feat: freeze DRA strict consumer identity"
 
 **Files:**
 - Create: `migrations/versions/0011_dra_strict_consumer_identity.py`
+- Modify: `src/night_voyager/dra/ports.py`
 - Modify: `src/night_voyager/dra/postgres.py`
 - Modify: `tests/integration/dra/test_dra_live_migration.py`
 - Create: `tests/integration/dra/test_dra_strict_migration.py`
@@ -288,6 +297,9 @@ git commit -m "feat: freeze DRA strict consumer identity"
 - Produces: an updated `app.project_dra_live_outcome(...)` that carries the
   complete durable candidate identity into evaluation.
 - Preserves: existing v1 import call and legacy rows through an explicit legacy branch.
+- Produces: a closed strict import command carrying
+  `DraStrictConsumerIdentityV2`, alongside the explicit legacy v1 command
+  branch.
 
 - [ ] **Step 1: Freeze migration and catalog failures**
 
@@ -311,6 +323,15 @@ def test_strict_candidate_rejects_release_overload(repository) -> None:
     with pytest.raises(DBAPIError, match="NV011"):
         repository.import_candidate(strict_command(producer_release="v0.1.6"))
 ```
+
+Add command-shape RED coverage proving that:
+
+- the legacy branch accepts only `DraProducerPinV1` and
+  `DraRunRequestIdentityV1`;
+- the strict branch requires a complete `DraStrictConsumerIdentityV2`;
+- mixed legacy/strict producer, request, or observed-profile tuples fail
+  closed;
+- unknown and extra fields fail closed.
 
 Add upgrade/downgrade tests for:
 
@@ -426,19 +447,22 @@ case cannot substitute for safe downgrade proof.
 
 - [ ] **Step 4: Update the PostgreSQL adapter**
 
-Extend the import parameter map with:
+Keep the current legacy command and adapter branch explicit. Add a separate
+closed strict command/adapter branch carrying `DraStrictConsumerIdentityV2`.
+Only the strict branch may extend the import parameter map with:
 
 ```python
 {
-    "producer_repository": command.producer.repository,
-    "producer_ref_kind": command.producer.ref_kind,
-    "producer_ref": command.producer.ref,
+    "producer_repository": command.consumer_identity.producer.repository,
+    "producer_ref_kind": command.consumer_identity.producer.ref_kind,
+    "producer_ref": command.consumer_identity.producer.ref,
     "profile_version": command.consumer_identity.observed_profile.profile_version,
-    "proof_schema": command.producer.proof_schema,
+    "proof_schema": command.consumer_identity.producer.proof_schema,
 }
 ```
 
-Keep the legacy adapter path explicit; do not infer a strict tuple from a v1 command.
+The adapter must not duck-type commands, infer a strict tuple from a v1
+command, or accept mixed identity.
 
 - [ ] **Step 5: Run database GREEN**
 
@@ -460,6 +484,7 @@ Expected: full migration graph, RLS, grants, downgrade, and strict import tests 
 ```bash
 git add \
   migrations/versions/0011_dra_strict_consumer_identity.py \
+  src/night_voyager/dra/ports.py \
   src/night_voyager/dra/postgres.py \
   tests/integration/dra/test_dra_live_migration.py \
   tests/integration/dra/test_dra_strict_migration.py \
@@ -475,16 +500,22 @@ git commit -m "feat: persist DRA strict consumer identity"
 ### Task 3: Thread the strict identity through the provider-free live controller
 
 **Files:**
+- Modify: `src/night_voyager/dra/models.py`
 - Modify: `src/night_voyager/dra/live_ports.py`
+- Modify: `src/night_voyager/dra/live_http.py`
 - Modify: `src/night_voyager/adapters/dra_readonly.py`
 - Modify: `src/night_voyager/dra/live_controller.py`
 - Modify: `src/night_voyager/dra/live_projection.py`
 - Modify: `src/night_voyager/dra/live_fakes.py`
 - Modify: `src/night_voyager/dra/fixtures.py`
 - Modify: `src/night_voyager/dra/application.py`
+- Modify: `src/night_voyager/interfaces/http/dra.py`
+- Modify: `tests/unit/dra/test_models.py`
+- Modify: `tests/unit/dra/test_application.py`
 - Modify: `tests/unit/dra/test_live_capture_controller.py`
 - Modify: `tests/contracts/test_dra_live_projection.py`
 - Modify: `tests/contracts/test_dra_transport.py`
+- Modify: `tests/integration/dra/test_http_dra.py`
 - Modify: `tests/integration/dra/test_live_capture_rehearsal.py`
 - Modify: `tests/integration/dra/test_governed_closure.py`
 
@@ -494,6 +525,11 @@ git commit -m "feat: persist DRA strict consumer identity"
 - Produces: a strict create payload with exact `profile_id` and effective-query bytes.
 - Produces: a bounded read of the existing single-profile manifest, a strict
   terminal projection, and `DraCandidateImportV2`.
+- Produces: `DraCandidateImportV2` in `models.py` and a closed application
+  conversion into the strict port command.
+- Preserves: the existing
+  `/api/v1/cases/{case_id}/dra-candidates` endpoint through a closed,
+  discriminated v1/v2 request contract; no endpoint is added.
 - Preserves: v1 fake/fixture tests as historical compatibility only.
 
 - [ ] **Step 1: Add request and projection RED tests**
@@ -517,6 +553,16 @@ Add counterfactuals for:
 - status/result run mismatch;
 - cited Evidence URL absent from canonical artifact;
 - zero cited rows.
+
+Add RED coverage for:
+
+- application conversion from `DraCandidateImportV2` to the closed strict port
+  command;
+- HTTP v1 compatibility and HTTP v2 strict success on the existing candidate
+  endpoint;
+- mixed-version, unknown-version, and extra-field HTTP failures;
+- actual v2 transport through `NightVoyagerAuthorityGateway`, the live port,
+  controller, and fake.
 
 - [ ] **Step 2: Run focused RED**
 
@@ -599,16 +645,22 @@ Expected: strict success and zero-cited stop are both deterministic and provider
 
 ```bash
 git add \
+  src/night_voyager/dra/models.py \
   src/night_voyager/dra/live_ports.py \
+  src/night_voyager/dra/live_http.py \
   src/night_voyager/adapters/dra_readonly.py \
   src/night_voyager/dra/live_controller.py \
   src/night_voyager/dra/live_projection.py \
   src/night_voyager/dra/live_fakes.py \
   src/night_voyager/dra/fixtures.py \
   src/night_voyager/dra/application.py \
+  src/night_voyager/interfaces/http/dra.py \
+  tests/unit/dra/test_models.py \
+  tests/unit/dra/test_application.py \
   tests/unit/dra/test_live_capture_controller.py \
   tests/contracts/test_dra_live_projection.py \
   tests/contracts/test_dra_transport.py \
+  tests/integration/dra/test_http_dra.py \
   tests/integration/dra/test_live_capture_rehearsal.py \
   tests/integration/dra/test_governed_closure.py
 git commit -m "feat: project DRA strict live candidates"
@@ -768,7 +820,9 @@ git commit -m "test: bind DRA strict readiness authority"
 - Modify: `docs/README.md`
 - Modify: `docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md`
 - Modify: `docs/operations/dra-consumer-proof.md`
+- Modify: `docs/operations/database-roles.md`
 - Modify: `docs/reference/dra-governed-evidence.md`
+- Modify: `docs/reference/http-api-v1.md`
 - Modify: `docs/superpowers/README.md`
 - Modify: `docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md`
 - Modify: `docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md`
@@ -814,6 +868,9 @@ Expected: stale current-status and missing strict-identity assertions fail.
 Synchronize ADR, operations, reference, design, root discovery, and plan/spec
 status. Preserve historical checklist text as historical where necessary; add a
 clearly labelled current-runtime correction rather than rewriting the past.
+Document the existing candidate endpoint's closed v1/v2 request contract,
+migration `0011` as the current head, strict overload grants/RLS, and safe
+downgrade boundary.
 Before the final documentation commit, run one targeted `document-release`
 audit over README discoverability, ADR/reference/operations accuracy, exact
 commands, relative links, and the no-third-attempt/non-release claims. Record
@@ -881,8 +938,8 @@ Confirm:
 git add \
   README.md README_CN.md DESIGN.md docs/README.md \
   docs/decisions/0011-dra-v0-1-6-live-consumer-boundary.md \
-  docs/operations/dra-consumer-proof.md \
-  docs/reference/dra-governed-evidence.md \
+  docs/operations/dra-consumer-proof.md docs/operations/database-roles.md \
+  docs/reference/dra-governed-evidence.md docs/reference/http-api-v1.md \
   docs/superpowers/README.md \
   docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md \
   docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md \
