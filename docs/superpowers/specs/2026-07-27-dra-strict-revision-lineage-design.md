@@ -157,7 +157,7 @@ explicit tag-or-commit reference model.
 
 ### The current request cannot prove the selected strict policy
 
-`profile_id` alone does not bind:
+The outbound `profile_id` alone does not bind:
 
 - the producer repository;
 - immutable source ref;
@@ -165,9 +165,21 @@ explicit tag-or-commit reference model.
 - proof schema;
 - persisted candidate identity.
 
-The complete tuple must survive from provider-free fixture and request
-composition through readiness, capture, candidate import, durable storage, and
-evaluation.
+Those values do not all come from the same producer response. Night Voyager
+must distinguish:
+
+- consumer-owned pin identity: repository, ref kind, ref, commit, downstream
+  contract, fixture hash, and proof schema;
+- producer request identity: requested `profile_id` and canonical request hash;
+- producer-observed identity: status `profile_id`, the existing single-profile
+  manifest's `profile_id` and `version`, plus run, artifact, and Evidence
+  identity.
+
+The proof schema is verified from the exact-commit source contract and a
+checked-in consumer constant. It is not claimed as a DRA request, status,
+manifest, or result field. The three provenance sources must be reconciled
+before candidate import and their closed identity must survive through
+readiness, durable candidate storage, outcome projection, and evaluation.
 
 ### Planning lineage is inferred too late
 
@@ -390,6 +402,16 @@ Legacy rows are backfilled as release-referenced rows:
 - `profile_version` and `proof_schema` remain absent under the explicit legacy
   branch.
 
+The backfill is a migration-owned exception to the immutable-row contract, not
+a runtime capability. In one Alembic transaction, migration `0011` takes an
+exclusive table lock, temporarily removes FORCE RLS for the table owner, and
+disables only the existing candidate immutable trigger. It adds nullable
+columns, updates only the five new fields on legacy rows, installs the closed
+constraints, re-enables the trigger, and restores FORCE RLS before commit.
+Success and injected-failure tests require the trigger and FORCE RLS flags,
+legacy row bytes, function ACL/search paths, and Alembic version to be fully
+restored.
+
 New strict rows require:
 
 - `producer_ref_kind="commit"`;
@@ -400,21 +422,35 @@ New strict rows require:
 - all current artifact, Evidence, request, selected-source, and actor gates.
 
 A closed table constraint distinguishes the legacy branch from the strict
-branch. Mixed tuples fail.
+branch. Mixed tuples fail. The current
+`app.import_dra_research_candidate(...)` signature remains the explicit legacy
+wire; strict input uses a separate expanded overload. Both overloads have
+closed signatures, fixed search paths, explicit grants, and replay tests.
 
 Downgrade is allowed only when no strict commit-referenced candidate or
 downstream row exists. Otherwise downgrade fails without partial mutation.
+Refusal tests exact-compare catalog, function, ACL, RLS/trigger, row, and
+Alembic-version snapshots. A separate empty-history test proves safe
+downgrade/re-upgrade and restores the exact `0010` legacy function.
+
+Migration `0011` also redefines `app.project_dra_live_outcome` so the durable
+candidate identity cannot disappear before evaluation. Its strict projection
+returns the candidate id plus repository, ref kind, ref, release-or-null,
+commit, downstream contract, fixture hash, profile id, profile version, proof
+schema, and request-identity hash. Safe downgrade restores the exact `0010`
+function shape.
 
 ### Runtime and DTO evolution
 
 New strict paths use versioned v2 models for:
 
 - producer pin;
-- run request identity;
-- terminal projection;
+- outbound run request identity;
+- observed single-profile manifest projection;
+- terminal status/result projection;
 - capture intent and receipts;
 - candidate import;
-- candidate evaluation;
+- durable outcome projection and candidate evaluation;
 - candidate readiness.
 
 Historical v1 generic models remain readable for immutable history and
@@ -429,17 +465,30 @@ The live controller composes:
 }
 ```
 
-The same canonical request hash and strict producer identity must appear in:
+The controller reads only the existing allowlisted
+`GET /api/profiles/generic-strict-citation` endpoint and projects
+`profile.profile_id` plus `profile.version`. It does not add a DRA endpoint,
+enumerate profiles, or perform a provider call. The terminal status must return
+the requested profile id; the profile manifest must resolve version `"1"`;
+`proof_schema="dra.strict-citation-profile.v1"` remains local exact-commit pin
+authority.
 
-- provider-free scenario;
-- create request;
-- accepted run receipt;
-- terminal status/result projection;
-- selected Evidence;
-- candidate import;
-- durable candidate row;
-- evaluation report;
-- readiness receipt.
+The canonical request hash and the reconciled strict consumer identity are
+bound across:
+
+- provider-free scenario and outbound create request;
+- accepted run receipt and terminal status/result projection;
+- observed profile-manifest projection;
+- selected Evidence and candidate import;
+- durable candidate row and `DraLiveOutcomeProjectionV2`;
+- evaluation report and readiness receipt.
+
+Evaluation V2 derives candidate authority only from the database outcome. It
+binds candidate id, durable candidate-identity digest, readiness digest,
+request-identity digest, and outcome-projection digest. Scenario or readiness
+data may be compared with that projection but cannot refill missing database
+authority. Any profile-version, proof-schema, request-hash, or producer-pin
+mismatch between candidate, readiness, outcome, and evaluation fails closed.
 
 ### Provider-free proof
 
@@ -534,10 +583,28 @@ required and must bind:
 For initial planning it is null. For revision planning it must equal the
 revision's `superseded_planning_run_id`.
 
+Migration `0012` owns every affected SQL authority function as one atomic
+catalog change: advisor review, fact confirmation, task creation, task
+finalization, and PlanningRun persistence. It freezes each signature, fixed
+search path, and API/worker/PUBLIC grant. The finalizer locks the task row,
+requires any compatibility caller predecessor to equal the task-owned value
+with null-safe equality, and supplies only the task-owned predecessor to
+persistence.
+
+Database uniqueness closes:
+
+- one `request_revision` review per PlanningRun;
+- one revision lineage row per predecessor;
+- one current task per Case revision;
+- one successor PlanningRun per predecessor.
+
 No existing PlanningRun, AdvisorReview, DecisionBrief, family decision, receipt,
 or timeline is deleted.
 
-Downgrade refuses when revision-lineage rows or revision tasks exist.
+Downgrade refuses when revision-lineage rows or revision tasks exist. Refusal
+must leave catalog, functions, grants, RLS/trigger flags, rows, and
+`alembic_version` byte-for-byte equivalent to the before snapshot. A separate
+empty-history round trip proves safe downgrade to exact `0011` and re-upgrade.
 
 ### `request_revision` authority
 
@@ -562,6 +629,12 @@ The successful transaction:
 - moves the Case to `planning`;
 - keeps the predecessor run current until a changed fact is confirmed;
 - creates no task and no successor run.
+
+Same-key/same-payload requests replay that review; same-key/different-payload
+requests return the public idempotency conflict. Different-key overlap is
+serialized by fixed Case-then-run locking plus a partial unique index on the
+request action. Exactly one review, audit record, and authority result survives;
+the loser receives a stable closed conflict rather than a raw database error.
 
 ### Confirmed fact revision authority
 
@@ -638,6 +711,11 @@ invalidate the predecessor a second time.
 Lost acknowledgements reconcile the same task and same successor. They do not
 create a second PlanningRun.
 
+Lease expiry and worker restart reclaim the same durable task, preserve its
+frozen predecessor, elect one execution winner, and still persist only one
+successor. A caller-supplied predecessor that differs from the task row fails
+before persistence.
+
 ### Planning state outcomes
 
 If deterministic planning produces one or more eligible recommended or
@@ -666,6 +744,8 @@ The server constructs one closed comparison:
   "current_revision": 2,
   "previous_planning_run_id": "<uuid>",
   "current_planning_run_id": "<uuid>",
+  "previous_output_sha256": "<sha256>",
+  "current_output_sha256": "<sha256>",
   "changed_fact": {
     "fact_key": "student.preferred_countries",
     "previous_value": ["australia", "japan", "malaysia"],
@@ -697,14 +777,26 @@ The projection rejects:
 - role-unsafe fact values;
 - caller-supplied `approval_eligible`;
 - a current run that is not the unique successor.
+- any reconstructed run state, top-level reason, route, comparison dimension,
+  or evidence-use row whose complete canonical `PlanningResult` bytes do not
+  match the corresponding retained `PlanningRun.output_sha256`.
 
 `approval_eligible` is true only when the current run is reviewable under the
 existing deterministic policy. It is false for blocked runs.
 
+The hash authority is the complete persisted `PlanningResult`, not the public
+comparison and not a route-only tuple. An internal closed projection rebuilds
+exactly the predecessor and current results in original policy order, validates
+them through the existing model, and applies the existing canonical hash
+algorithm before public comparison is allowed.
+
 ### Read models and HTTP
 
-The existing connected ledger and BFF are evolved; no second business API is
-created.
+The existing connected ledger and BFF are evolved; no second mutation API is
+created. To keep PR 2 compatible with the existing frontend and Compose proof,
+the advisor-ledger and current-decision-brief routes continue to return V1 by
+default. One exact `contract_version=2` query selects their V2 responses; empty,
+repeated, or unknown negotiation values fail closed. PR 3 opts in explicitly.
 
 The current projection must select:
 
@@ -717,6 +809,55 @@ The current projection must select:
 
 Old tasks and runs are audit/history inputs only. They cannot become current
 because they are more recently timestamped than another row.
+
+The comparison repository reads exactly the predecessor and current
+PlanningRun plus their persisted route projections. HTTP callers and browsers
+cannot submit route rows or output hashes. The query is bounded to those two
+runs and must not scan complete Case history. Migration/catalog tests provide
+indexes for current revision lineage, predecessor-to-successor lookup,
+Case-plus-revision task/run selection, and review/brief-to-current-run lookup;
+real PostgreSQL `EXPLAIN` regressions verify those access paths over bounded
+multi-revision history without asserting a wall-clock SLA. Tests seed a fixed
+minimum cardinality and run `ANALYZE`; natural plans are observed without
+requiring a small table to avoid sequential scan, while
+`SET LOCAL enable_seqscan=off` plus catalog assertions proves the exact indexes
+are usable.
+
+All assigned participants can read one server-owned recovery projection:
+
+```json
+{
+  "schema": "night-voyager.connected-journey-status.v1",
+  "case_id": "<uuid>",
+  "current_revision": 2,
+  "phase": "revision_requested",
+  "active_role": "student"
+}
+```
+
+This read-only status contains no task, run, review, candidate, route,
+Evidence, comparison, or other role-sensitive authority identifiers. It is
+derived only from durable state, is hidden from unassigned/cross-tenant actors,
+and lets student and parent recovery avoid treating browser storage as phase
+authority.
+
+The family-safe current brief also carries one server-derived revision context:
+
+```json
+{
+  "schema": "night-voyager.family-revision-context.v1",
+  "current_case_revision": 2,
+  "planning_version": "revised",
+  "advisor_authorization": "renewed_for_current_revision"
+}
+```
+
+`planning_version` is `initial` for the original path and `revised` only when
+the current revision has durable predecessor lineage. The renewed-authorization
+marker is emitted only when the current DecisionBrief is bound to an advisor
+approval for the exact current revision and current PlanningRun. Browser
+recovery metadata, timestamps, or client comparison state cannot produce this
+marker.
 
 Problem responses keep the existing public error taxonomy and do not expose SQL
 states, internal receipts, private paths, raw fact JSON, or cross-role content.
@@ -743,8 +884,36 @@ terminal_task_failure
 Recovery metadata may store bounded identifiers, cursor, role, phase, CSRF
 material, and idempotency records. It is not authority.
 
-On load, the server projection wins over browser state. Unsupported or
-inconsistent older envelopes are cleared fail closed.
+On load, after every role rotation or mutation, and after a lost
+acknowledgement, the browser first reads `ConnectedJourneyStatusV1`, then reads
+only the role-safe detail projection for that status. The server projection
+wins over browser state. A status/detail mismatch or unsupported/inconsistent
+older envelope is cleared fail closed.
+
+The visible role, phase, and action contract is closed:
+
+| Server phase | Active role | Visible view | Authority explanation | Actions |
+| --- | --- | --- | --- | --- |
+| `review_required` | advisor | initial plan and review basis | The current plan still awaits advisor judgment. | Primary: approve current plan. Secondary: request revision. |
+| `revision_requested` | student | current confirmed preference and bounded proposed target | The advisor requested a change, but no fact has changed yet. | Primary: submit change proposal. |
+| `revision_fact_pending` | advisor | read-only before/proposed fact delta | Only the assigned advisor may confirm the proposal as a new fact revision. | Primary: confirm proposal. |
+| `replan_required` | advisor | confirmed change plus retained-plan notice | The old plan is retained and non-current; a new plan does not exist yet. | Primary: create revised planning task. |
+| `revision_task_active` | advisor | confirmed change, retained plan, and task progress | Worker execution cannot approve or choose the current plan. | No mutation action. |
+| `revision_review_required` | advisor | changed fact and old/new comparison | Only a fresh approval for the current revision may continue. | Primary: approve revised plan. |
+| `revision_blocked` | advisor | changed fact, comparison, and deterministic block reason | The current revision has no approvable route. | No approval or family-decision action; only a non-business recovery/navigation exit. |
+| `family_review` | parent | current brief plus current revision and renewed-review context | The family decides only on the current re-reviewed version. | Primary: confirm current family decision. |
+| `plan_ready` | parent | current receipt and timeline | The current decision is final for this bounded journey. | No mutation action. |
+| `terminal_task_failure` | advisor | retained authoritative ledger and bounded failure | The failed task created no approval authority. | No business mutation; only the existing bounded recovery/navigation exit. |
+
+The initial `review_required` approval remains the visual primary action.
+`request_revision` is secondary and first expands an inline consequence
+summary: the previous plan remains retained, the fact is not changed by the
+request, and a new plan plus renewed advisor approval will be required.
+Student copy says “submit change proposal”, never “confirm fact”. The student
+view reads the current value from the role-safe confirmed-fact projection; only
+the synthetic proposed target is fixed. Missing, malformed, out-of-order, or
+unexpected current values disable submission and show a localized fail-closed
+message.
 
 ### Browser journey
 
@@ -760,7 +929,7 @@ The public journey uses existing role-scoped sessions and APIs:
 8. browser follows the existing SSE stream;
 9. browser renders the old/new comparison;
 10. advisor grants a new approval;
-11. browser rotates to student or parent;
+11. browser rotates to the assigned parent;
 12. family decision produces receipt and timeline.
 
 The interface must make these distinctions visible:
@@ -773,10 +942,53 @@ The interface must make these distinctions visible:
 - new advisor authorization;
 - current family decision.
 
+The comparison page has one information hierarchy:
+
+1. active role and authority;
+2. changed-fact summary;
+3. current-first old/new comparison;
+4. current-plan approval action;
+5. Evidence and bounded technical history.
+
+Desktop renders a semantic
+`country | previous result | current result | change` table. Mobile renders
+the same semantic content as one country-keyed `<dl>` at a time, with a
+`fieldset`/`legend` switcher and a visually hidden semantic table available to
+assistive technology. The current result is visually primary; the predecessor
+is explicitly “history, for comparison only”. `removed` displays “removed from
+the revised plan” in the current column and `added` displays “not present in
+the previous plan” in the previous column. These valid null cases must not use
+an unavailable-state message. Delta meaning is always visible in text and is
+never communicated by color alone.
+
+The family view displays the server-owned current Case revision and
+`renewed_for_current_revision` context. It cannot infer that statement from a
+successful reload, browser storage, or the presence of a comparison.
+
 The user-facing page does not expose raw UUIDs, internal JSON, SQL state, debug
 receipts, or private file paths.
 
 Both `zh-CN` and `en` must be first-class verified paths.
+
+All product overlines, roles, authority copy, revision labels, history/current
+labels, phases, disabled reasons, and recovery text come from the bilingual
+catalog or closed code maps. The Chinese path must not retain hard-coded English
+presentation copy; the English path must not fall back to Chinese copy.
+
+Focus moves only after a user-triggered full-phase transition. SSE refresh,
+reconnect, authoritative reload, and ignored stale events announce bounded
+updates with `aria-live="polite"` and do not move focus. Only a blocking error
+uses `role="alert"`. All interactive targets remain at least 44 by 44 CSS
+pixels, the fact proposal uses `fieldset`/`legend`, reduced-motion preferences
+are honored, and 320, 390, 768, and 1440 pixel layouts have no horizontal
+overflow.
+
+One dedicated screenshot flag may update only the new Chinese 1440px planning
+revision asset. The existing portfolio-entry, advisor-ledger, and
+family-receipt PNGs remain byte-identical. English 1440px, both 390px variants,
+and blocked-state captures are review-only artifacts. The general portfolio
+screenshot flag and the revision screenshot flag are mutually scoped by
+architecture tests.
 
 ### SSE, restart, and recovery
 
@@ -787,9 +999,26 @@ The journey uses one EventSource at a time.
 - Events for an old task cannot advance the current revision phase.
 - Reload during an active revised task recovers the same task.
 - Reload after terminal persistence does not require a new SSE request.
-- Worker restart resumes the same durable task and lease protocol.
-- API lost acknowledgement reconciles the same idempotency record.
+- Worker restart after the durable revised-task sentinel exercises lease
+  expiry/reclaim and resumes the same task and predecessor.
+- Request revision, fact confirmation, and revised task creation each have a
+  committed-response-lost proof: server commit, aborted response, same-key
+  retry, and authoritative journey-status reload reconcile the same record.
 - No recovery path creates a second revision, task, run, review, or decision.
+
+The visible asynchronous-state contract is also closed:
+
+| State | Retained view | Mutation state | Announcement and recovery |
+| --- | --- | --- | --- |
+| Initial load | skeleton only; no stale authority | disabled | polite loading status |
+| User mutation pending | last authoritative ledger | all business actions disabled | polite bounded busy copy |
+| SSE connected/reconnecting | current ledger and task progress | phase-derived | polite connection copy; no focus move |
+| Authoritative reload recovered | newly projected ledger | phase-derived | polite recovery copy; no focus move |
+| Lost-ack reconciliation | last ledger until exact response reload | disabled | polite reconciliation copy |
+| Stale/old-task event ignored | current ledger unchanged | unchanged | no focus move and no false phase advance |
+| `terminal_task_failure` | ledger, changed fact, and bounded task failure | no business action | bounded recovery/navigation exit |
+| `revision_blocked` | changed fact and comparison | no approval/family action | deterministic reason plus navigation exit |
+| Blocking `recoverable_error` | safe bounded context only | disabled | `role="alert"` and exact reconnect action |
 
 ## Negative scenario: budget decrease
 
@@ -824,6 +1053,9 @@ This scenario is a test and operational proof, not the primary public journey.
 
 Transaction-scoped locks and database uniqueness remain the final authority.
 Application pre-checks improve errors but cannot replace those constraints.
+The request-revision path has a partial unique index for one request per run;
+different-key races return one stable closed conflict and never leak a raw
+uniqueness error.
 
 ## Failure taxonomy
 
@@ -900,7 +1132,9 @@ smaller and more accurate than adding a parallel graph.
 
 - strict producer-pin canonical model tests;
 - legacy and strict tuple table constraints;
-- migration upgrade/downgrade parity;
+- trigger/RLS-safe legacy migration, injected rollback, and exact
+  upgrade/downgrade catalog parity;
+- legacy import wrapper plus strict overload signature, ACL, and replay parity;
 - provider-free strict cited success;
 - zero-cited pre-import rejection;
 - request/profile/proof identity collision tests;
@@ -911,14 +1145,21 @@ smaller and more accurate than adding a parallel graph.
 ### Pull request 2
 
 - request-revision database and HTTP authority;
+- same-key and different-key request-revision race closure;
 - revision lineage migration and downgrade guard;
 - fact confirmation atomicity;
 - predecessor freeze in AgentTask;
 - worker load and persist exact lineage;
 - one-current-run and one-successor concurrency;
 - idempotency and lost-ack recovery;
+- revision-task lease expiry/reclaim and one execution winner;
 - blocked revised-run authority;
 - deterministic comparison canonicalization;
+- complete predecessor/current `PlanningResult` reconstruction and
+  state/reason/route/dimension/evidence-use tamper rejection;
+- bounded two-run projection plus catalog and `EXPLAIN` access-path checks;
+- default-V1/explicit-V2 read compatibility and participant-safe journey
+  status across every role/phase;
 - stale review, brief, and family-decision counterfactuals.
 
 ### Pull request 3
@@ -928,8 +1169,10 @@ smaller and more accurate than adding a parallel graph.
 - `zh-CN` and `en` unit coverage;
 - browser happy path;
 - browser blocked-budget path;
+- committed-response-lost recovery for request, confirmation, and task create;
 - active-task reload and exact-cursor reconnect;
 - worker restart durability;
+- revision-only screenshot update with prior public PNG identity preservation;
 - browser-to-database verifier for:
   - two Case revisions;
   - two retained PlanningRuns;
@@ -1030,8 +1273,9 @@ Owns:
 - migration `0012`;
 - Case revision and task predecessor lineage;
 - worker and PlanningRun persistence;
-- comparison projection;
-- HTTP/read-model authority;
+- complete-result-verified comparison projection;
+- default-V1/explicit-V2 HTTP/read-model authority;
+- participant-safe journey-status recovery;
 - database concurrency, idempotency, and recovery.
 
 Does not own:
@@ -1052,11 +1296,13 @@ Owns:
 
 - connected ledger evolution;
 - role rotation and recovery;
+- BFF opt-in to V2 plus status-first lost-ack reconciliation;
 - request-revision and student-preference UI;
 - deterministic comparison presentation;
 - renewed advisor review and family decision;
 - blocked-budget presentation/proof;
 - bilingual browser and database verification;
+- isolated revision screenshot evidence without prior asset drift;
 - public design, operations, demo, and status documentation.
 
 Exit evidence:
@@ -1151,7 +1397,9 @@ The stage is complete only when:
 7. The new task freezes that predecessor before worker execution.
 8. The successor run points to exactly that predecessor.
 9. Old and new runs remain queryable while only the new run is current.
-10. The comparison is deterministic, closed, country-keyed, and role safe.
+10. The comparison is deterministic, closed, country-keyed, role safe, and
+    bound to both retained runs' reconstructed complete canonical output
+    hashes.
 11. The happy path changes preferred countries and requires renewed advisor
     approval.
 12. The budget counterfactual is blocked and cannot reach family decision.
@@ -1160,12 +1408,27 @@ The stage is complete only when:
     timeline.
 15. Reload, SSE reconnect, worker restart, and lost acknowledgements create no
     duplicate authority records.
-16. `zh-CN` and `en` browser-to-database proofs pass.
-17. Docker task resources are fully torn down and retained resources are
+16. Existing read routes remain V1 by default, explicit V2 negotiation is
+    closed, and every assigned role recovers phase/revision from the
+    participant-safe server status.
+17. Every revision phase exposes the exact active role, authority explanation,
+    action hierarchy, disabled reason, and recovery behavior defined above.
+18. The family brief identifies the current revision and renewed advisor
+    authorization from the server-owned current chain.
+19. `zh-CN` and `en` browser-to-database proofs pass, and the 320/390/768/1440
+    presentation matrix has no mixed-language copy, horizontal overflow, focus
+    theft, color-only delta, or sub-44px action target.
+20. The revision screenshot is isolated and the three existing public proof
+    PNGs remain byte-identical.
+21. Docker task resources are fully torn down and retained resources are
     preserved.
-18. Historical releases and migrations remain immutable.
-19. Three serial pull requests are merged and exact merged-main checks pass.
-20. Release remains a separate explicit decision.
+22. Historical releases and migrations remain immutable.
+23. Three serial pull requests are merged and exact merged-main checks pass.
+24. Release remains a separate explicit decision.
+25. Release verification preserves that the two prior 25/83-uncited live
+    attempts remain failed history, no third provider attempt or strict live
+    acceptance occurred, and the revision proof is controlled and
+    provider-free.
 
 ## Public non-claims
 
