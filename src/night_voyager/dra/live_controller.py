@@ -26,7 +26,6 @@ from night_voyager.dra.live_models import (
     DraInspectionRequiredReceiptV2,
     DraLiveFailurePhase,
     DraLiveRunEnvelopeV1,
-    DraLiveScenarioV2,
     DraMutationAmbiguousReceiptV1,
     DraPollRecoveryReceiptV1,
     DraPollRecoveryReceiptV2,
@@ -575,32 +574,18 @@ class DraLiveCaptureController:
         *,
         clock: DraLiveClockPort | None = None,
         sleeper: DraLiveSleepPort | None = None,
-        strict_scenario: DraLiveScenarioV2 | None = None,
     ) -> None:
         self._transport = transport
         self._candidate_gateway = candidate_gateway
         self._store = store
         self._clock = clock or _SystemClock()
         self._sleeper = sleeper or _AsyncioSleeper()
-        self._strict_scenario = strict_scenario
         self._observed_profile: DraObservedProfileManifestV1 | None = None
 
     def _strict_identity(self, intent: CaptureIntent) -> DraStrictConsumerIdentityV2 | None:
         if isinstance(intent, DraCaptureIntentV3):
             return intent.capture.consumer_identity
-        scenario = self._strict_scenario
-        if scenario is None:
-            return None
-        return DraStrictConsumerIdentityV2(
-            schema_version="night-voyager.dra-strict-consumer-identity.v2",
-            producer=scenario.producer,
-            request=DraRunRequestIdentityV2(
-                schema_version="night-voyager.dra-run-request-identity.v2",
-                profile_id=scenario.producer.profile_id,
-                request_sha256=intent.capture.request.effective_sha256,
-            ),
-            observed_profile=scenario.profile_manifest,
-        )
+        return None
 
     async def _load_strict_profile(self, intent: CaptureIntent) -> DraObservedProfileManifestV1:
         identity = self._strict_identity(intent)

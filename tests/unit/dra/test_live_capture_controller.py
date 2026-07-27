@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -773,6 +774,29 @@ async def test_zero_cited_evidence_stops_before_candidate_import(
     assert gateway.import_calls == 0
 
 
+def test_v2_intent_cannot_gain_strict_authority_from_constructor_fixture(
+    tmp_path: Path,
+) -> None:
+    scenario = DraLiveScenarioV2.model_validate_json(
+        Path("fixtures/dra/live-closure-scenario-v2.json").read_bytes()
+    )
+    transport = ScenarioDraLiveTransport(scenario)
+    gateway = ScenarioCandidateGateway()
+    with (
+        LiveReceiptStore.open(private_root(tmp_path)) as store,
+        pytest.raises(TypeError, match="strict_scenario"),
+    ):
+        cast(Any, DraLiveCaptureController)(
+            transport,
+            gateway,
+            store,
+            strict_scenario=scenario,
+        )
+    assert transport.health_calls == 0
+    assert transport.create_calls == 0
+    assert gateway.import_calls == 0
+
+
 @pytest.mark.asyncio
 async def test_strict_zero_cited_evidence_stops_without_authority_writes(
     tmp_path: Path,
@@ -793,13 +817,8 @@ async def test_strict_zero_cited_evidence_stops_without_authority_writes(
     )
     gateway = ScenarioCandidateGateway()
     with LiveReceiptStore.open(private_root(tmp_path)) as store:
-        controller = DraLiveCaptureController(
-            transport,
-            gateway,
-            store,
-            strict_scenario=scenario,
-        )
-        intent = frozen_intent(store)
+        controller = DraLiveCaptureController(transport, gateway, store)
+        intent = strict_frozen_intent(store)
         inspection = await controller.capture(
             CaptureLiveCommand(
                 intent=intent,
@@ -807,7 +826,7 @@ async def test_strict_zero_cited_evidence_stops_without_authority_writes(
                 query_path=query_file(tmp_path),
             )
         )
-        assert isinstance(inspection, DraInspectionRequiredReceiptV1)
+        assert isinstance(inspection, DraInspectionRequiredReceiptV2)
         stopped = await controller.select_and_import(
             SelectAndImportCommand(
                 intent=intent,
