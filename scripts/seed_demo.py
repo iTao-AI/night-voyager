@@ -417,7 +417,7 @@ async def _seed_planning_revision_cases(
     preferred_json = json.dumps([country.value for country in preferred])
     preferred_hash = canonical_sha256([country.value for country in preferred])
     for spec in PLANNING_REVISION_CASES:
-        case_id = cast(UUID, spec["case_id"])
+        case_id = spec["case_id"]
         await connection.execute(
             text(
                 "INSERT INTO app.student_cases(organization_id,id,state) "
@@ -573,7 +573,7 @@ async def _seed_planning_revision_cases(
         await _clone_planning_snapshot(
             connection,
             case_id=case_id,
-            run_id=cast(UUID, spec["run_id"]),
+            run_id=spec["run_id"],
         )
         await connection.execute(
             text(

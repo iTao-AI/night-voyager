@@ -132,6 +132,10 @@ it.each([
     ...ledger("revision_blocked"),
     review_inputs: ledger("revision_review_required").review_inputs,
   })],
+  ["blocked with terminal recovery", () => ({
+    ...ledger("revision_blocked"),
+    recovery: ledger("terminal_task_failure", "needs_evidence").recovery,
+  })],
   ["unknown v2 schema", () => ({
     ...ledger("revision_review_required"),
     schema_version: 1,

@@ -44,14 +44,14 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 3
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 4
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     assert script.count("docker compose --profile browser-proof build") == 1
-    assert script.count("docker compose up --no-build --wait") == 4
+    assert script.count("docker compose up --no-build --wait") == 5
     assert "docker compose up --build --wait" not in script
     assert "run --rm --build" not in script
 
@@ -459,3 +459,185 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
         assert f'"${path_variable}"' in cleanup
     assert "FACT_TO_PLAN_WORKER_READY_SENTINEL" in browser
     assert '`${workerReadySentinel}\\n`' in browser
+
+
+def test_planning_revision_compose_lane_is_closed_and_runs_both_locales() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert '"planning-revision.spec.ts"' in config
+    assert "UPDATE_PLANNING_REVISION_SCREENSHOT=${UPDATE_PLANNING_REVISION_SCREENSHOT:-0}" in script
+    assert (
+        "PLANNING_REVISION_REVIEW_DIR="
+        "${PLANNING_REVISION_REVIEW_DIR:-tmp/planning-revision-review}"
+        in script
+    )
+    assert "run_planning_revision_lane() {" in script
+    lane = script.split("run_planning_revision_lane() {", 1)[1].split("\n}", 1)[0]
+    assert 'case "$lane_locale" in' in lane
+    assert (
+        'zh-CN) set -- -e UPDATE_PLANNING_REVISION_SCREENSHOT='
+        '"$UPDATE_PLANNING_REVISION_SCREENSHOT" ;;'
+        in lane
+    )
+    assert (
+        "en) set -- -e PRESENTATION_LOCALE=en "
+        "-e UPDATE_PLANNING_REVISION_SCREENSHOT=0 ;;"
+        in lane
+    )
+    assert "docker compose down --volumes --remove-orphans" in lane
+    assert "docker compose up --no-build --wait" in lane
+    assert "docker compose pause worker" in lane
+    assert "docker compose unpause worker" in lane
+    assert "docker compose restart worker" in lane
+    assert "planning-revision.spec.ts" in lane
+    assert "verify_planning_revision_flow.py" in lane
+    assert '-v "$PWD/$PLANNING_REVISION_REVIEW_DIR:/workspace/tmp/planning-revision-review"' in lane
+    assert script.count('run_planning_revision_lane "zh-CN"') == 1
+    assert script.count('run_planning_revision_lane "en"') == 1
+
+    mode = script.split("case \"$mode\" in", 1)[1].split("esac", 1)[0]
+    assert "planning-revision)" in mode
+    assert "full)" in mode
+    assert "unsupported mode" in mode
+    assert script.index('case "$mode" in') < script.index("docker compose config --quiet")
+    for forbidden in ("HTTP_PROXY", "HTTPS_PROXY", "API_BASE_URL", "host.docker.internal"):
+        assert forbidden not in lane
+
+
+def test_planning_revision_restart_uses_a_deterministic_postgres_barrier() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    lane = script.split("run_planning_revision_lane() {", 1)[1].split("\n}", 1)[0]
+    cleanup = script.split("cleanup() {", 1)[1].split("\n}", 1)[0]
+
+    assert "sleep 0.01" not in lane
+    assert "mkfifo \"$PLANNING_REVISION_BARRIER_FIFO\"" in script
+    assert "FROM app.planning_runs" in script
+    assert "FOR UPDATE;" in script
+    assert "$PLANNING_REVISION_BARRIER_READY:$predecessor_id" in script
+    assert "pg_stat_activity" in script
+    assert "wait_event_type='Lock'" in script
+    assert "task.attempt_count=1" in script
+    assert "task.lease_generation=1" in script
+    assert "execution.attempt_no=1" in script
+    assert "execution.lease_generation=1" in script
+    assert "execution.status='running'" in script
+    assert lane.count("docker compose unpause worker") == 1
+    assert lane.index("docker compose restart worker") < lane.index(
+        "release_planning_revision_barrier"
+    )
+    assert "PLANNING_REVISION_BARRIER_FIFO" in cleanup
+    assert "PLANNING_REVISION_BARRIER_OUTPUT" in cleanup
+    assert "PLANNING_REVISION_BARRIER_STATE" in cleanup
+    assert "barrier_pid" in cleanup
+
+
+def test_planning_revision_predecessor_selector_is_cardinality_closed() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    barrier = script.split("start_planning_revision_barrier() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    cleanup = script.split("cleanup() {", 1)[1].split("\n}", 1)[0]
+
+    assert "min(id)" not in barrier
+    assert "max(id)" not in barrier
+    assert "count(*)::text || ':'" not in barrier
+    assert "SELECT selected.id::text FROM (" in barrier
+    assert "SELECT predecessor.id, count(*) OVER () AS match_count" in barrier
+    assert "FROM app.student_cases case_row" in barrier
+    assert "JOIN app.student_case_revisions revision_row" in barrier
+    assert "revision_row.organization_id=case_row.organization_id" in barrier
+    assert "revision_row.case_id=case_row.id" in barrier
+    assert "revision_row.revision=case_row.current_revision" in barrier
+    assert "JOIN app.agent_tasks task" in barrier
+    assert "task.organization_id=revision_row.organization_id" in barrier
+    assert "task.case_id=revision_row.case_id" in barrier
+    assert "task.case_revision=revision_row.revision" in barrier
+    assert "JOIN app.planning_runs predecessor" in barrier
+    assert "predecessor.organization_id=revision_row.organization_id" in barrier
+    assert "predecessor.case_id=revision_row.case_id" in barrier
+    assert "predecessor.id=revision_row.superseded_planning_run_id" in barrier
+    assert (
+        "case_row.organization_id='10000000-0000-0000-0000-000000000001'"
+        in barrier
+    )
+    assert "case_row.id='49000000-0000-0000-0000-000000000001'" in barrier
+    assert "case_row.current_revision=2" in barrier
+    assert "case_row.state='planning'" in barrier
+    assert "task.state='queued'" in barrier
+    assert "task.attempt_count=0" in barrier
+    assert "task.result_planning_run_id IS NULL" in barrier
+    assert (
+        "task.predecessor_planning_run_id="
+        "revision_row.superseded_planning_run_id"
+        in barrier
+    )
+    assert "predecessor.id=task.predecessor_planning_run_id" in barrier
+    assert "predecessor.case_revision=revision_row.revision - 1" in barrier
+    assert "NOT predecessor.is_current" in barrier
+    assert "case_revision=1 AND is_current" not in barrier
+    assert ") AS selected WHERE selected.match_count = 1" in barrier
+    assert "PLANNING_REVISION_PREDECESSOR_STDOUT" in barrier
+    assert "PLANNING_REVISION_PREDECESSOR_STDERR" in barrier
+    assert 'chmod 0600 "$PLANNING_REVISION_PREDECESSOR_STDOUT"' in barrier
+    assert 'grep -Eq "^[0-9a-f]{8}-' in barrier
+    assert barrier.index('grep -Eq "^[0-9a-f]{8}-') < barrier.index("mkfifo")
+    assert "planning revision predecessor selector failed" in barrier
+    assert "planning revision predecessor selector was not one UUID" in barrier
+    assert "PLANNING_REVISION_PREDECESSOR_STDOUT" in cleanup
+    assert "PLANNING_REVISION_PREDECESSOR_STDERR" in cleanup
+
+
+def test_planning_revision_ipc_resets_symlinks_and_prepares_only_owned_files(
+    tmp_path: Path,
+) -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    reset_prepare = (
+        '    rm -f "$PLANNING_REVISION_PROOF_FILE" "$PLANNING_REVISION_WORKER_READY_FILE"\n'
+        '    : > "$PLANNING_REVISION_PROOF_FILE"\n'
+        '    : > "$PLANNING_REVISION_WORKER_READY_FILE"'
+    )
+    permission = (
+        'chmod 0666 "$PLANNING_REVISION_PROOF_FILE" '
+        '"$PLANNING_REVISION_WORKER_READY_FILE"'
+    )
+    assert reset_prepare in script
+    assert permission in script
+    assert 'chmod 0666 "$PLANNING_REVISION_REVIEW_DIR"' not in script
+    assert 'grep -Fqx "$PLANNING_REVISION_INITIAL_SENTINEL"' in script
+    assert 'grep -Fqx "$PLANNING_REVISION_RESTART_SENTINEL"' in script
+    assert 'test -s "$PLANNING_REVISION_PROOF_FILE"' in script
+
+    proof_target = tmp_path / "proof-target"
+    ready_target = tmp_path / "ready-target"
+    proof_target.write_text("preserve proof\n", encoding="utf-8")
+    ready_target.write_text("preserve ready\n", encoding="utf-8")
+    proof_target.chmod(0o640)
+    ready_target.chmod(0o640)
+    proof_file = tmp_path / "proof.json"
+    ready_file = tmp_path / "worker-ready"
+    proof_file.symlink_to(proof_target)
+    ready_file.symlink_to(ready_target)
+    environment = os.environ.copy()
+    environment.update(
+        PLANNING_REVISION_PROOF_FILE=str(proof_file),
+        PLANNING_REVISION_WORKER_READY_FILE=str(ready_file),
+    )
+    subprocess.run(
+        ["sh", "-eu", "-c", f"{reset_prepare}\n    {permission}"],
+        check=True,
+        env=environment,
+    )
+    assert not proof_file.is_symlink()
+    assert not ready_file.is_symlink()
+    assert proof_file.read_bytes() == b""
+    assert ready_file.read_bytes() == b""
+    assert stat.S_IMODE(proof_file.stat().st_mode) == 0o666
+    assert stat.S_IMODE(ready_file.stat().st_mode) == 0o666
+    assert proof_target.read_text(encoding="utf-8") == "preserve proof\n"
+    assert ready_target.read_text(encoding="utf-8") == "preserve ready\n"
+
+    for locale in ("zh-CN", "en"):
+        for viewport in ("1440", "390"):
+            for state in ("happy", "blocked"):
+                assert f"planning-revision-{locale}-{viewport}-{state}.png" in script

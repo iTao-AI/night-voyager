@@ -298,8 +298,15 @@ class AdvisorLedgerV2(FrozenModel):
             or self.review_inputs is None
         ):
             raise ValueError("revision-review-required projection is incomplete")
-        if self.phase is DemoPhaseV2.REVISION_BLOCKED and self.review_inputs is not None:
-            raise ValueError("revision-blocked projection forbids review inputs")
+        if self.phase is DemoPhaseV2.REVISION_BLOCKED and (
+            self.task is None
+            or self.task.status is not TaskViewStatus.NEEDS_EVIDENCE
+            or self.planning_run is None
+            or self.planning_run.state != "blocked"
+            or self.review_inputs is not None
+            or self.recovery is not None
+        ):
+            raise ValueError("revision-blocked projection is invalid")
         return self
 
 

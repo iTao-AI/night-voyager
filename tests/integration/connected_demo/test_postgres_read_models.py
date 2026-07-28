@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import os
 from collections.abc import Mapping
@@ -187,6 +188,43 @@ def test_journey_phase_projects_terminal_tasks_as_failure(
         JourneyPhaseProbe.project(row)
         is DemoPhaseV2.TERMINAL_TASK_FAILURE
     )
+
+
+def test_journey_brief_authority_is_state_aware_and_cardinality_closed() -> None:
+    source = inspect.getsource(PostgresConnectedDemoRepository.journey_status)
+    authority = source.split(
+        "LEFT JOIN LATERAL (SELECT brief_row.id", 1
+    )[1].split("brief ON true", 1)[0]
+
+    assert "c.state='family_review'" in authority
+    assert "brief_row.is_current" in authority
+    assert "decision_row.id IS NULL" in authority
+    assert "c.state='plan_ready'" in authority
+    assert "NOT brief_row.is_current" in authority
+    assert "decision_row.id IS NOT NULL" in authority
+    assert "LIMIT" not in authority
+    assert "ORDER BY" not in authority
+
+
+def test_journey_phase_rejects_brief_without_matching_decision() -> None:
+    class JourneyPhaseProbe(PostgresConnectedDemoRepository):
+        @classmethod
+        def project(cls, row: Mapping[str, Any]) -> DemoPhaseV2:
+            return cls._journey_phase(row)
+
+    row = {
+        "state": "plan_ready",
+        "current_revision": 1,
+        "brief_id": UUID("81000000-0000-0000-0000-000000000399"),
+        "decision_id": None,
+        "revision_requested": False,
+        "revision_fact_pending": False,
+        "run_state": None,
+        "supersedes_run_id": None,
+        "task_state": None,
+    }
+
+    assert JourneyPhaseProbe.project(row) is not DemoPhaseV2.PLAN_READY
 
 
 @pytest.mark.asyncio
@@ -774,10 +812,15 @@ async def test_revision_two_ledger_projects_exact_predecessor_comparison(
         async with AsyncSession(api) as session, session.begin():
             await set_context(session)
             repository = PostgresConnectedDemoRepository(session)
+            legacy = await repository.advisor_ledger(context(), case_id, source)
             projection = await repository.advisor_ledger_v2(
                 context(), case_id, source
             )
             journey = await repository.journey_status(context(), case_id)
+        assert legacy is not None
+        if blocked:
+            assert legacy.phase is DemoPhase.TERMINAL_TASK_FAILURE
+            assert legacy.recovery is not None
         assert projection is not None
         assert projection.phase is (
             DemoPhaseV2.REVISION_BLOCKED
@@ -794,6 +837,7 @@ async def test_revision_two_ledger_projects_exact_predecessor_comparison(
             "blocked" if blocked else "review_required"
         )
         assert (projection.review_inputs is None) is blocked
+        assert projection.recovery is None
         assert (
             projection.comparison.current_planning_run_id
             == projection.planning_run.planning_run_id
@@ -884,6 +928,28 @@ async def test_plan_ready_projection_reads_decision_linked_completed_brief() -> 
                         "request_hash": "32" * 32,
                     },
                 )
+                family_review_statuses = tuple(
+                    [
+                        await journey_status_for_role(connection, case_id, role)
+                        for role in (
+                            ActorRole.ADVISOR,
+                            ActorRole.STUDENT,
+                            ActorRole.PARENT,
+                        )
+                    ]
+                )
+                assert all(status is not None for status in family_review_statuses)
+                assert {
+                    status.phase
+                    for status in family_review_statuses
+                    if status is not None
+                } == {DemoPhaseV2.FAMILY_REVIEW}
+                assert {
+                    status.active_role
+                    for status in family_review_statuses
+                    if status is not None
+                } == {"parent"}
+                await set_connection_role(connection, ActorRole.ADVISOR)
                 await connection.execute(
                     text(
                         "SELECT * FROM app.decide_family_brief("
@@ -913,6 +979,55 @@ async def test_plan_ready_projection_reads_decision_linked_completed_brief() -> 
                         "request_hash": "34" * 32,
                     },
                 )
+                durable = (
+                    await connection.execute(
+                        text(
+                            "SELECT c.state,b.is_current,d.id AS decision_id,"
+                            "d.receipt_id,t.id AS timeline_id "
+                            "FROM app.student_cases c JOIN app.decision_briefs b "
+                            "ON b.organization_id=c.organization_id "
+                            "AND b.case_id=c.id "
+                            "JOIN app.family_decisions d "
+                            "ON d.organization_id=b.organization_id "
+                            "AND d.decision_brief_id=b.id "
+                            "JOIN app.timeline_plans t "
+                            "ON t.organization_id=d.organization_id "
+                            "AND t.family_decision_id=d.id "
+                            "WHERE c.organization_id=:org AND c.id=:case "
+                            "AND b.id=:brief"
+                        ),
+                        {"org": DEMO_ORG, "case": case_id, "brief": brief_id},
+                    )
+                ).mappings().one()
+                assert dict(durable) == {
+                    "state": "plan_ready",
+                    "is_current": False,
+                    "decision_id": decision_id,
+                    "receipt_id": receipt_id,
+                    "timeline_id": timeline_id,
+                }
+                plan_ready_statuses = tuple(
+                    [
+                        await journey_status_for_role(connection, case_id, role)
+                        for role in (
+                            ActorRole.ADVISOR,
+                            ActorRole.STUDENT,
+                            ActorRole.PARENT,
+                        )
+                    ]
+                )
+                assert all(status is not None for status in plan_ready_statuses)
+                assert {
+                    status.phase
+                    for status in plan_ready_statuses
+                    if status is not None
+                } == {DemoPhaseV2.PLAN_READY}
+                assert {
+                    status.active_role
+                    for status in plan_ready_statuses
+                    if status is not None
+                } == {"parent"}
+                await set_connection_role(connection, ActorRole.ADVISOR)
                 async with AsyncSession(bind=connection) as session:
                     advisor_ledger = await PostgresConnectedDemoRepository(session).advisor_ledger(
                         context(), case_id, resolve_canonical_demo_source_contract()

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
+from pathlib import Path
 from uuid import UUID
 
 import pytest
@@ -16,6 +19,87 @@ HAPPY_CASE_ID = UUID("49000000-0000-0000-0000-000000000001")
 BUDGET_CASE_ID = UUID("49000000-0000-0000-0000-000000000002")
 HAPPY_THREAD_ID = UUID("4b000000-0000-0000-0000-000000000001")
 BUDGET_THREAD_ID = UUID("4b000000-0000-0000-0000-000000000002")
+
+
+def load_verifier():
+    path = Path("scripts/verify_planning_revision_flow.py")
+    spec = importlib.util.spec_from_file_location(
+        "verify_planning_revision_flow", path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _verified_row(*, blocked: bool) -> dict[str, object]:
+    return {
+        "case_id": str(BUDGET_CASE_ID if blocked else HAPPY_CASE_ID),
+        "state": "planning" if blocked else "plan_ready",
+        "current_revision": 2,
+        "revision_predecessor": "4d000000-0000-0000-0000-000000000001",
+        "task_predecessor": "4d000000-0000-0000-0000-000000000001",
+        "task_run": "4d000000-0000-0000-0000-000000000002",
+        "run_predecessor": "4d000000-0000-0000-0000-000000000001",
+        "current_run_state": "blocked" if blocked else "review_required",
+        "revision_count": 2,
+        "candidate_count": 2,
+        "confirmed_fact_count": 2,
+        "run_count": 2,
+        "current_run_count": 1,
+        "revised_task_count": 1,
+        "execution_count": 1 if blocked else 2,
+        "task_event_count": 4 if blocked else 7,
+        "request_review_count": 1,
+        "approval_review_count": 0 if blocked else 1,
+        "brief_count": 0 if blocked else 1,
+        "decision_count": 0 if blocked else 1,
+        "receipt_count": 0 if blocked else 1,
+        "timeline_count": 0 if blocked else 1,
+    }
+
+
+def _identity(*, blocked: bool) -> dict[str, str]:
+    return {
+        "case_id": str(BUDGET_CASE_ID if blocked else HAPPY_CASE_ID),
+        "request_review_id": "4e000000-0000-0000-0000-000000000001",
+        "predecessor_run_id": "4d000000-0000-0000-0000-000000000001",
+        "task_id": "4f000000-0000-0000-0000-000000000001",
+        "current_run_id": "4d000000-0000-0000-0000-000000000002",
+    }
+
+
+def test_revision_browser_proof_parser_and_exact_count_validation(tmp_path: Path) -> None:
+    verifier = load_verifier()
+    proof_path = tmp_path / "proof.json"
+    proof_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "locale": "zh-CN",
+                "happy": _identity(blocked=False),
+                "blocked": _identity(blocked=True),
+            }
+        ),
+        encoding="utf-8",
+    )
+    proof = verifier.load_proof(proof_path)
+    verifier.validate_happy(_verified_row(blocked=False), proof["happy"])
+    verifier.validate_blocked(_verified_row(blocked=True), proof["blocked"])
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("candidate_count", 1), ("execution_count", 1), ("task_event_count", 6)),
+)
+def test_revision_happy_verifier_fails_closed_on_count_drift(
+    field: str, value: int
+) -> None:
+    verifier = load_verifier()
+    row = _verified_row(blocked=False)
+    row[field] = value
+    with pytest.raises(SystemExit):
+        verifier.validate_happy(row, _identity(blocked=False))
 
 
 def test_revision_journey_phase_contract_is_closed() -> None:

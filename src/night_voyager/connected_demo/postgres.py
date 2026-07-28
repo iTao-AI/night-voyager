@@ -319,6 +319,9 @@ class PostgresConnectedDemoRepository:
                             if run.state == "review_required"
                             else None
                         ),
+                        "recovery": (
+                            None if phase is DemoPhaseV2.REVISION_BLOCKED else legacy.recovery
+                        ),
                     }
                 )
             elif legacy.task is None:
@@ -396,7 +399,7 @@ class PostgresConnectedDemoRepository:
                 text(
                     "SELECT c.state,c.current_revision,p.role,"
                     "t.state AS task_state,r.state AS run_state,"
-                    "r.supersedes_run_id,b.id AS brief_id,d.id AS decision_id,"
+                    "r.supersedes_run_id,brief.brief_id,brief.decision_id,"
                     "EXISTS(SELECT 1 FROM app.advisor_reviews request_review "
                     "JOIN app.planning_runs requested_run "
                     "ON requested_run.organization_id=request_review.organization_id "
@@ -422,11 +425,18 @@ class PostgresConnectedDemoRepository:
                     "ORDER BY task_row.created_at DESC,task_row.id LIMIT 1) t ON true "
                     "LEFT JOIN app.planning_runs r ON r.organization_id=c.organization_id "
                     "AND r.id=t.result_planning_run_id "
-                    "LEFT JOIN app.decision_briefs b ON b.organization_id=c.organization_id "
-                    "AND b.case_id=c.id AND b.case_revision=c.current_revision "
-                    "AND b.is_current "
-                    "LEFT JOIN app.family_decisions d ON d.organization_id=b.organization_id "
-                    "AND d.decision_brief_id=b.id "
+                    "LEFT JOIN LATERAL (SELECT brief_row.id AS brief_id,"
+                    "decision_row.id AS decision_id FROM app.decision_briefs brief_row "
+                    "LEFT JOIN app.family_decisions decision_row "
+                    "ON decision_row.organization_id=brief_row.organization_id "
+                    "AND decision_row.decision_brief_id=brief_row.id "
+                    "WHERE brief_row.organization_id=c.organization_id "
+                    "AND brief_row.case_id=c.id "
+                    "AND brief_row.case_revision=c.current_revision "
+                    "AND ((c.state='family_review' AND brief_row.is_current "
+                    "AND decision_row.id IS NULL) OR "
+                    "(c.state='plan_ready' AND NOT brief_row.is_current "
+                    "AND decision_row.id IS NOT NULL))) brief ON true "
                     "WHERE c.organization_id=:org AND c.id=:case"
                 ),
                 {

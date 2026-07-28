@@ -20,16 +20,20 @@ const CANDIDATE_ID = "44000000-0000-0000-0000-000000000001";
 const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 
-const advisorMetadata = (phase: "task_ready" | "review_required" | "revision_task_active" = "task_ready") => ({
+const advisorMetadata = (phase: "task_ready" | "review_required" | "revision_task_active" | "revision_blocked" = "task_ready") => ({
   schema_version: 3 as const,
   journey: "advisor-family" as const,
   role: "advisor" as const,
   csrf: "csrf",
   caseId: CASE_ID,
-  currentRevision: phase === "revision_task_active" ? 2 : 1,
-  currentTaskId: phase === "revision_task_active" ? TASK_ID : null,
-  predecessorRunId: null,
-  currentRunId: phase === "review_required" ? "70000000-0000-0000-0000-000000000001" : null,
+  currentRevision: phase === "revision_task_active" || phase === "revision_blocked" ? 2 : 1,
+  currentTaskId: phase === "revision_task_active" || phase === "revision_blocked" ? TASK_ID : null,
+  predecessorRunId: phase === "revision_blocked" ? "70000000-0000-0000-0000-000000000001" : null,
+  currentRunId: phase === "review_required"
+    ? "70000000-0000-0000-0000-000000000001"
+    : phase === "revision_blocked"
+      ? "70000000-0000-0000-0000-000000000002"
+      : null,
   cursor: 0,
   phase,
   mutations: {},
@@ -157,6 +161,33 @@ it("recovers advisor status first, then reads only advisor-safe detail", async (
     currentRevision: 1,
     currentRunId: "70000000-0000-0000-0000-000000000001",
   });
+});
+
+it("restores an exact valid revision-blocked projection without recovery fallback", async () => {
+  saveRecoveryMetadata(advisorMetadata("revision_blocked"));
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    requests.push(path);
+    if (path.endsWith("/journey-status")) return Response.json(status("revision_blocked"));
+    if (path.endsWith("/advisor-ledger")) return Response.json(ledger("revision_blocked"));
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [], history: [], next_cursor: null });
+    if (path.endsWith("/memory-candidates")) return Response.json([]);
+    if (path.endsWith("/collaboration-thread")) return Response.json(thread);
+    if (path.includes("/messages?")) return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
+    if (path.endsWith("/planning-skill-inspector")) return Response.json({ code: "unavailable" }, { status: 404 });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("revision_blocked"));
+
+  expect(result.current.state).toMatchObject({
+    value: "revision_blocked",
+    ledger: { recovery: null },
+  });
+  expect(requests[0]).toBe(`/api/demo/cases/${CASE_ID}/journey-status`);
+  expect(requests[1]).toBe(`/api/demo/cases/${CASE_ID}/advisor-ledger`);
 });
 
 it("recovers student status before participant-safe collaboration detail", async () => {

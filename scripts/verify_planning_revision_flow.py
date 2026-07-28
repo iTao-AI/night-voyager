@@ -48,21 +48,25 @@ def _uuid_string(value: object) -> bool:
 def load_proof(path: Path) -> BrowserProof:
     try:
         raw: object = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict) or set(raw) != ROOT_KEYS:
+        if not isinstance(raw, dict):
             raise ValueError
-        if raw["schema_version"] != 1 or raw["locale"] not in {"zh-CN", "en"}:
+        proof = cast(dict[str, object], raw)
+        if set(proof) != ROOT_KEYS:
+            raise ValueError
+        if proof["schema_version"] != 1 or proof["locale"] not in {"zh-CN", "en"}:
             raise ValueError
         for lane in ("happy", "blocked"):
-            identity = raw[lane]
-            if (
-                not isinstance(identity, dict)
-                or set(identity) != FLOW_KEYS
-                or not all(_uuid_string(value) for value in identity.values())
+            identity_raw = proof[lane]
+            if not isinstance(identity_raw, dict):
+                raise ValueError
+            identity = cast(dict[str, object], identity_raw)
+            if set(identity) != FLOW_KEYS or not all(
+                _uuid_string(value) for value in identity.values()
             ):
                 raise ValueError
     except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
         raise SystemExit("invalid planning revision proof file") from exc
-    return cast(BrowserProof, raw)
+    return cast(BrowserProof, proof)
 
 
 async def _read_flow(
@@ -92,6 +96,12 @@ async def _read_flow(
                         "(SELECT count(*)::integer FROM app.student_case_revisions item "
                         "WHERE item.organization_id=c.organization_id "
                         "AND item.case_id=c.id) AS revision_count,"
+                        "(SELECT count(*)::integer FROM app.memory_candidates item "
+                        "WHERE item.organization_id=c.organization_id "
+                        "AND item.case_id=c.id) AS candidate_count,"
+                        "(SELECT count(*)::integer FROM app.confirmed_facts item "
+                        "WHERE item.organization_id=c.organization_id "
+                        "AND item.case_id=c.id) AS confirmed_fact_count,"
                         "(SELECT count(*)::integer FROM app.planning_runs item "
                         "WHERE item.organization_id=c.organization_id "
                         "AND item.case_id=c.id) AS run_count,"
@@ -101,6 +111,12 @@ async def _read_flow(
                         "(SELECT count(*)::integer FROM app.agent_tasks item "
                         "WHERE item.organization_id=c.organization_id "
                         "AND item.case_id=c.id AND item.case_revision=2) AS revised_task_count,"
+                        "(SELECT count(*)::integer FROM app.agent_executions item "
+                        "WHERE item.organization_id=c.organization_id "
+                        "AND item.task_id=task.id) AS execution_count,"
+                        "(SELECT count(*)::integer FROM app.agent_task_events item "
+                        "WHERE item.organization_id=c.organization_id "
+                        "AND item.task_id=task.id) AS task_event_count,"
                         "(SELECT count(*)::integer FROM app.advisor_reviews item "
                         "WHERE item.organization_id=c.organization_id "
                         "AND item.case_id=c.id AND item.action='request_revision') "
@@ -115,12 +131,11 @@ async def _read_flow(
                         "(SELECT count(*)::integer FROM app.family_decisions item "
                         "WHERE item.organization_id=c.organization_id "
                         "AND item.case_id=c.id) AS decision_count,"
-                        "(SELECT count(*)::integer FROM app.decision_receipts item "
-                        "JOIN app.family_decisions decision "
-                        "ON decision.organization_id=item.organization_id "
-                        "AND decision.receipt_id=item.id "
-                        "WHERE decision.organization_id=c.organization_id "
-                        "AND decision.case_id=c.id) AS receipt_count,"
+                        "(SELECT count(DISTINCT item.receipt_id)::integer "
+                        "FROM app.family_decisions item "
+                        "WHERE item.organization_id=c.organization_id "
+                        "AND item.case_id=c.id "
+                        "AND item.receipt_id IS NOT NULL) AS receipt_count,"
                         "(SELECT count(*)::integer FROM app.timeline_plans item "
                         "JOIN app.family_decisions decision "
                         "ON decision.organization_id=item.organization_id "
@@ -172,6 +187,8 @@ def _validate_identity(row: dict[str, Any], identity: FlowIdentity) -> None:
             row["run_predecessor"] == predecessor,
             row["task_run"] == current,
             row["revision_count"] == 2,
+            row["candidate_count"] == 2,
+            row["confirmed_fact_count"] == 2,
             row["run_count"] == 2,
             row["current_run_count"] == 1,
             row["revised_task_count"] == 1,
@@ -188,6 +205,8 @@ def validate_happy(row: dict[str, Any], identity: FlowIdentity) -> None:
             row["state"] == "plan_ready",
             row["current_run_state"] == "review_required",
             row["approval_review_count"] == 1,
+            row["execution_count"] == 2,
+            row["task_event_count"] == 7,
             row["brief_count"] == 1,
             row["decision_count"] == 1,
             row["receipt_count"] == 1,
@@ -204,6 +223,8 @@ def validate_blocked(row: dict[str, Any], identity: FlowIdentity) -> None:
             row["state"] == "planning",
             row["current_run_state"] == "blocked",
             row["approval_review_count"] == 0,
+            row["execution_count"] == 1,
+            row["task_event_count"] == 4,
             row["brief_count"] == 0,
             row["decision_count"] == 0,
             row["receipt_count"] == 0,
