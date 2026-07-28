@@ -35,7 +35,7 @@ it("proves parent message through advisor confirmation and authoritative fact/re
     }
     if (path.includes("/verification-decisions")) { confirmed = true; keys.push(new Headers(init?.headers).get("Idempotency-Key") ?? ""); return Response.json({ schema_version: 1, verification_id: MESSAGE, candidate_id: CANDIDATE, decision: "confirm", result_fact_id: FACT, result_revision: 2, replayed: false }, { status: 201 }); }
     if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [{ schema_version: 1, fact_key: "family.budget", value: { schema_version: 1, currency: "CNY", period: "program_total", preferred_minor: 30000000, hard_ceiling_minor: 40000000, elasticity_bps: 1000, refused: false }, fact_version: 1, confirmed_at: AT, subject_role: "parent", confirming_advisor_role: "advisor", confirmed_fact_id: FACT, candidate_id: CANDIDATE, verification_id: MESSAGE, source_message_event_id: MESSAGE, source_message_sequence_no: 1, source_message_sha256_prefix: "aaaaaaaaaaaa", confirming_advisor_actor_id: CASE, reason: "Confirmed by advisor.", supersedes_fact_id: null }], history: [], next_cursor: null });
-    if (path.endsWith("/advisor-ledger")) return Response.json({ schema_version: 1, proof_mode: "synthetic-demo", phase: "task-ready", case_id: CASE, case_revision: confirmed ? 2 : 1, case_state: "intake", canonical_task_inputs: { schema_version: 1, operation: "generate_planning_run_v1", case_id: CASE, expected_case_revision: confirmed ? 2 : 1, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null });
+    if (path.endsWith("/advisor-ledger")) return Response.json({ schema_version: 2, proof_mode: "synthetic-demo", phase: "task_ready", case_id: CASE, case_revision: confirmed ? 2 : 1, case_state: "intake", canonical_task_inputs: { schema_version: 1, operation: "generate_planning_run_v1", case_id: CASE, expected_case_revision: confirmed ? 2 : 1, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null });
     if (path.endsWith("/planning-skill-inspector")) return Response.json({ schema_version: 1, case_id: CASE, operation: null, active_skill_key: "study-destination-compare", active_version: "1.0.0", activation_sequence: 1, evaluator_id: "night-voyager.deterministic-skill-evaluator", evaluator_version: "v1", evaluation_dataset_id: "night-voyager.study-destination-compare.eval", evaluation_dataset_version: "1.0.0", task_request_sha256_prefix: null, version_content_sha256_prefix: "111111111111", runtime_binding_sha256_prefix: "abcdef123456", adapter_id: null, adapter_version: null, pin_status: "not_created" });
     throw new Error(`unexpected ${path}`);
   }));
@@ -58,7 +58,7 @@ it("proves parent message through advisor confirmation and authoritative fact/re
   const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
   const callsBeforeHandoff = vi.mocked(fetch).mock.calls.length;
   await act(async () => result.current.continueToPlanning());
-  expect(loadDemoJourneyEnvelope()).toEqual({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: "advisor-csrf", caseId: CASE, taskId: null, briefId: null, cursor: 0, mutations: {} });
+  expect(loadDemoJourneyEnvelope()).toEqual({ schema_version: 3, journey: "advisor-family", role: "advisor", csrf: "advisor-csrf", caseId: CASE, currentRevision: 2, currentTaskId: null, predecessorRunId: null, currentRunId: null, cursor: 0, phase: "replan_required", mutations: {} });
   expect(navigate).toHaveBeenCalledOnce();
   const handoffCalls = vi.mocked(fetch).mock.calls.slice(callsBeforeHandoff);
   expect(handoffCalls.map(([input]) => String(input))).toEqual([
@@ -71,7 +71,7 @@ it("proves parent message through advisor confirmation and authoritative fact/re
 });
 
 it("preserves a valid advisor-family journey instead of bootstrapping over it", async () => {
-  sessionStorage.setItem("night-voyager:m5", JSON.stringify({ schema_version: 2, journey: "advisor-family", role: "advisor", csrf: "csrf", caseId: "40000000-0000-0000-0000-000000000002", taskId: null, briefId: null, cursor: 0, mutations: {} }));
+  sessionStorage.setItem("night-voyager:m5", JSON.stringify({ schema_version: 3, journey: "advisor-family", role: "advisor", csrf: "csrf", caseId: "40000000-0000-0000-0000-000000000002", currentRevision: 1, currentTaskId: null, predecessorRunId: null, currentRunId: null, cursor: 0, phase: "task_ready", mutations: {} }));
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
   const { result } = renderHook(() => useCollaborationDemo());
