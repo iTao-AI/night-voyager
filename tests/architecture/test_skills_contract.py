@@ -43,9 +43,17 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     assert "night-voyager-skills-db-check" in runner
     assert "uv run --no-editable python scripts/seed_demo.py" in runner
     legacy = runner.index("uv run alembic downgrade 0007")
-    legacy_seed = runner.index("uv run --no-editable python scripts/seed_demo.py --without-skills")
+    legacy_seed = runner.index(
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "            --without-skills --without-planning-revision"
+    )
     head = runner.index("uv run alembic upgrade head")
     assert legacy < legacy_seed < head
+    assert (
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "            --without-skills --without-collaboration "
+        "--without-planning-revision"
+    ) in runner
 
 
 def test_skills_database_runner_freezes_the_approved_suite_map() -> None:

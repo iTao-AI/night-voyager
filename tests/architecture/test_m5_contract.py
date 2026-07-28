@@ -70,6 +70,7 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0010_dra_v0_1_6_live_consumer.py",
         "0011_dra_strict_consumer_identity.py",
         "0012_versioned_planning_revision.py",
+        "0013_planning_revision_demo_seed.py",
     ]
     for relative in (
         "0005_dra_candidate_promotion.py",
@@ -117,7 +118,8 @@ def test_demo_bff_has_only_explicit_route_handlers() -> None:
         "cases/[caseId]/advisor-ledger/route.ts",
         "cases/[caseId]/advisor-reviews/route.ts",
         "cases/[caseId]/agent-tasks/route.ts",
-        "cases/[caseId]/current-decision-brief/route.ts",
+            "cases/[caseId]/current-decision-brief/route.ts",
+            "cases/[caseId]/journey-status/route.ts",
         "decision-briefs/[briefId]/family-decisions/route.ts",
         "session-bootstrap/route.ts",
         "session/route.ts",

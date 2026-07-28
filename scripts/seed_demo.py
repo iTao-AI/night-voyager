@@ -499,106 +499,36 @@ async def _seed_planning_revision_cases(
                 "advisor": ACTORS[0][1],
             },
         )
-        body = "Synthetic initial preferred countries."
-        body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
         await connection.execute(
             text(
-                "INSERT INTO app.message_events("
-                "organization_id,id,thread_id,case_id,sequence_no,actor_id,actor_role,"
-                "body,content_sha256,request_sha256,created_at) VALUES("
-                ":org,:message,:thread,:case,1,:student,'student',:body,:body_hash,"
-                ":request_hash,timestamptz '2026-01-01 00:00:01+00') "
-                "ON CONFLICT DO NOTHING"
+                "SELECT app.seed_demo_planning_revision_fact("
+                ":org,:case,:thread,:advisor,:student,:message,:candidate,"
+                ":verification,:fact,CAST(:value AS jsonb),:value_hash,"
+                ":message_request_hash,:candidate_request_hash,"
+                ":verification_request_hash)"
             ),
             {
                 "org": DEMO_ORG,
-                "message": spec["message_id"],
-                "thread": spec["thread_id"],
                 "case": case_id,
+                "thread": spec["thread_id"],
+                "advisor": ACTORS[0][1],
                 "student": ACTORS[1][1],
-                "body": body,
-                "body_hash": body_hash,
-                "request_hash": hashlib.sha256(
+                "message": spec["message_id"],
+                "candidate": spec["candidate_id"],
+                "verification": spec["verification_id"],
+                "fact": spec["fact_id"],
+                "value": preferred_json,
+                "value_hash": preferred_hash,
+                "message_request_hash": hashlib.sha256(
                     f"revision-seed-message:{case_id}".encode()
                 ).hexdigest(),
-            },
-        )
-        await connection.execute(
-            text(
-                "INSERT INTO app.memory_candidates("
-                "organization_id,id,case_id,case_revision,message_event_id,"
-                "subject_actor_id,subject_role,proposing_actor_id,proposing_role,"
-                "fact_key,proposed_value,value_sha256,request_sha256,created_at,expires_at) "
-                "VALUES(:org,:candidate,:case,1,:message,:student,'student',"
-                ":student,'student','student.preferred_countries',CAST(:value AS jsonb),"
-                ":value_hash,:request_hash,timestamptz '2026-01-01 00:00:02+00',"
-                "timestamptz '2026-01-08 00:00:02+00') ON CONFLICT DO NOTHING"
-            ),
-            {
-                "org": DEMO_ORG,
-                "candidate": spec["candidate_id"],
-                "case": case_id,
-                "message": spec["message_id"],
-                "student": ACTORS[1][1],
-                "value": preferred_json,
-                "value_hash": preferred_hash,
-                "request_hash": hashlib.sha256(
+                "candidate_request_hash": hashlib.sha256(
                     f"revision-seed-candidate:{case_id}".encode()
                 ).hexdigest(),
-            },
-        )
-        await connection.execute(
-            text(
-                "INSERT INTO app.confirmed_facts("
-                "organization_id,id,case_id,fact_key,value,value_sha256,"
-                "source_candidate_id,source_message_event_id,subject_actor_id,subject_role,"
-                "confirming_advisor_actor_id,confirming_advisor_role,fact_version,confirmed_at) "
-                "VALUES(:org,:fact,:case,'student.preferred_countries',"
-                "CAST(:value AS jsonb),:value_hash,:candidate,:message,:student,'student',"
-                ":advisor,'advisor',1,timestamptz '2026-01-01 00:00:03+00') "
-                "ON CONFLICT DO NOTHING"
-            ),
-            {
-                "org": DEMO_ORG,
-                "fact": spec["fact_id"],
-                "case": case_id,
-                "value": preferred_json,
-                "value_hash": preferred_hash,
-                "candidate": spec["candidate_id"],
-                "message": spec["message_id"],
-                "student": ACTORS[1][1],
-                "advisor": ACTORS[0][1],
-            },
-        )
-        await connection.execute(
-            text(
-                "INSERT INTO app.memory_candidate_verifications("
-                "organization_id,id,candidate_id,case_id,advisor_actor_id,advisor_role,"
-                "decision,reason,request_sha256,result_fact_id,result_revision,created_at) "
-                "VALUES(:org,:verification,:candidate,:case,:advisor,'advisor','confirm',"
-                "'Synthetic initial fact seed.',:request_hash,:fact,1,"
-                "timestamptz '2026-01-01 00:00:03+00') ON CONFLICT DO NOTHING"
-            ),
-            {
-                "org": DEMO_ORG,
-                "verification": spec["verification_id"],
-                "candidate": spec["candidate_id"],
-                "case": case_id,
-                "advisor": ACTORS[0][1],
-                "request_hash": hashlib.sha256(
+                "verification_request_hash": hashlib.sha256(
                     f"revision-seed-verification:{case_id}".encode()
                 ).hexdigest(),
-                "fact": spec["fact_id"],
             },
-        )
-        await connection.execute(
-            text(
-                "INSERT INTO app.case_revision_confirmed_fact_refs("
-                "organization_id,case_id,case_revision,fact_key,confirmed_fact_id,created_at) "
-                "VALUES(:org,:case,1,'student.preferred_countries',:fact,"
-                "timestamptz '2026-01-01 00:00:03+00') ON CONFLICT DO NOTHING"
-            ),
-            {"org": DEMO_ORG, "case": case_id, "fact": spec["fact_id"]},
         )
         await _clone_planning_snapshot(
             connection,

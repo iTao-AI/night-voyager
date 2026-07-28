@@ -152,6 +152,11 @@ PLANNING_REVISION_PENDING_IDENTITY = (
     "read_connected_journey_fact_pending",
     "uuid, uuid, text, uuid",
 )
+PLANNING_REVISION_SEED_IDENTITY = (
+    "seed_demo_planning_revision_fact",
+    "uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, jsonb, "
+    "text, text, text, text",
+)
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -1025,8 +1030,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0012"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0012")
+    if heads != {"0013"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0013")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -1039,7 +1044,10 @@ def verify_alembic_contract() -> None:
         "inside-dra-strict-migration": 3,
         "tests/integration/dra/test_dra_strict_migration.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 2,
-        "inside-planning-revision": 6,
+        "inside-planning-revision": 11,
+        "inside-planning-revision-seed-migration": 3,
+        "tests/integration/planning/test_revision_seed_migration.py": 4,
+        'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
         "tests/integration/planning/test_revision_migration.py": 1,
         "tests/integration/planning/test_revision_authority.py": 1,
         "tests/integration/connected_demo/test_postgres_read_models.py": 1,
@@ -1049,8 +1057,9 @@ def verify_alembic_contract() -> None:
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0012 with planning-start, "
-        "DRA live, strict parity, and planning-revision lanes confirmed"
+        "proof migrations: exact Alembic head 0013 with planning-start, "
+        "DRA live, strict parity, planning-revision, and migrator-only "
+        "revision-seed lanes confirmed"
     )
 
 
@@ -1348,7 +1357,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'read_collaboration_thread','read_collaboration_messages',
                            'read_memory_candidates','read_confirmed_facts',
                            'read_connected_journey_fact_pending',
-                           'seed_demo_collaboration')
+                           'seed_demo_collaboration',
+                           'seed_demo_planning_revision_fact')
                            OR p.proname IN
                           ('create_skill_change_candidate','record_skill_candidate_evaluation',
                            'promote_skill_change_candidate','rollback_skill_activation',
@@ -1394,10 +1404,14 @@ async def verify_database_catalog(database_url: str) -> None:
             alembic_revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            if alembic_revision == "0012":
+            if alembic_revision in {"0012", "0013"}:
                 expected_app_functions.add(
                     PLANNING_REVISION_PENDING_IDENTITY[0]
                 )
+                if alembic_revision == "0013":
+                    expected_app_functions.add(
+                        PLANNING_REVISION_SEED_IDENTITY[0]
+                    )
                 expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
             elif alembic_revision == "0011":
                 expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
@@ -1447,7 +1461,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 | COLLABORATION_API_FUNCTIONS
                 | SKILL_API_FUNCTIONS
             )
-            if alembic_revision == "0012":
+            if alembic_revision in {"0012", "0013"}:
                 api_functions.remove("persist_planning_result")
                 api_functions.add(PLANNING_REVISION_PENDING_IDENTITY[0])
             worker_functions = {
@@ -1533,7 +1547,7 @@ async def verify_database_catalog(database_url: str) -> None:
             }
             expected_planning_revision_function = (
                 {PLANNING_REVISION_PENDING_IDENTITY: (True, False)}
-                if alembic_revision == "0012"
+                if alembic_revision in {"0012", "0013"}
                 else {}
             )
             if (
@@ -1542,6 +1556,26 @@ async def verify_database_catalog(database_url: str) -> None:
             ):
                 raise SystemExit(
                     "planning revision projection violates API/worker separation"
+                )
+            planning_revision_seed_function = {
+                (row["proname"], row["identity_arguments"]): (
+                    row["api_execute"],
+                    row["worker_execute"],
+                )
+                for row in app_functions
+                if row["proname"] == PLANNING_REVISION_SEED_IDENTITY[0]
+            }
+            expected_planning_revision_seed_function = (
+                {PLANNING_REVISION_SEED_IDENTITY: (False, False)}
+                if alembic_revision == "0013"
+                else {}
+            )
+            if (
+                planning_revision_seed_function
+                != expected_planning_revision_seed_function
+            ):
+                raise SystemExit(
+                    "planning revision demo seed helper violates migrator-only authority"
                 )
             skill_signatures = {
                 row["proname"]: row["identity_arguments"]
