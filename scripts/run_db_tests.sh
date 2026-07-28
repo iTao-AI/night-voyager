@@ -182,6 +182,18 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-planning-revision-journey" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0012'
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/connected_demo/test_postgres_read_models.py \
+        tests/integration/connected_demo/test_http_read_models.py \
+        tests/integration/connected_demo/test_planning_revision_flow.py
+    uv run alembic current | grep '0012'
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -233,6 +245,9 @@ if [ "${1:-}" = "planning-revision" ]; then
             run_lane "${BASE_PROJECT_NAME}-worker" inside-planning-revision worker
             run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade
             run_lane "${BASE_PROJECT_NAME}-projection" inside-planning-revision projection
+            ;;
+        journey)
+            run_lane "${BASE_PROJECT_NAME}-journey" inside-planning-revision-journey
             ;;
         *)
             echo "unknown planning revision suite: ${suite:-<missing>}" >&2

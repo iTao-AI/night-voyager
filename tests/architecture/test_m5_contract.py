@@ -185,3 +185,11 @@ def test_m5_connected_demo_public_docs_and_screenshots_are_current() -> None:
         assert asset.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"), relative
         assert readme.count(relative) == 1, relative
         assert readme_cn.count(relative) == 1, relative
+
+
+def test_planning_revision_journey_has_dedicated_verifier_and_closed_db_lane() -> None:
+    verifier = ROOT / "scripts/verify_planning_revision_flow.py"
+    runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    assert verifier.is_file()
+    assert "inside-planning-revision-journey" in runner
+    assert "tests/integration/connected_demo/test_planning_revision_flow.py" in runner

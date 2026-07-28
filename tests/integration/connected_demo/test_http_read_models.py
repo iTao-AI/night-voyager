@@ -245,6 +245,21 @@ def test_connected_demo_read_routes_are_registered() -> None:
     assert "get" in paths["/api/v1/cases/{case_id}/advisor-ledger"]
     assert "get" in paths["/api/v1/cases/{case_id}/current-decision-brief"]
     assert "get" in paths["/api/v1/cases/{case_id}/journey-status"]
+    phase_schema = app.openapi()["components"]["schemas"]["DemoPhaseV2"]
+    assert set(phase_schema["enum"]) == {
+        "task_ready",
+        "active_task",
+        "review_required",
+        "revision_requested",
+        "revision_fact_pending",
+        "replan_required",
+        "revision_task_active",
+        "revision_review_required",
+        "revision_blocked",
+        "family_review",
+        "plan_ready",
+        "terminal_task_failure",
+    }
 
 
 @pytest.mark.parametrize(

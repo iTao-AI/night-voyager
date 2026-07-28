@@ -52,6 +52,21 @@ STUDENT = UUID("20000000-0000-0000-0000-000000000002")
 PLANNING_FIXTURE = validate_planning_fixture().planning_input
 
 
+def test_demo_phase_v2_contains_every_revision_journey_projection() -> None:
+    assert {
+        DemoPhaseV2.REVIEW_REQUIRED,
+        DemoPhaseV2.REVISION_REQUESTED,
+        DemoPhaseV2.REVISION_FACT_PENDING,
+        DemoPhaseV2.REPLAN_REQUIRED,
+        DemoPhaseV2.REVISION_TASK_ACTIVE,
+        DemoPhaseV2.REVISION_REVIEW_REQUIRED,
+        DemoPhaseV2.REVISION_BLOCKED,
+        DemoPhaseV2.FAMILY_REVIEW,
+        DemoPhaseV2.PLAN_READY,
+        DemoPhaseV2.TERMINAL_TASK_FAILURE,
+    } <= set(DemoPhaseV2)
+
+
 def context(role: ActorRole = ActorRole.ADVISOR) -> ActorContext:
     actor = {
         ActorRole.ADVISOR: ADVISOR,
