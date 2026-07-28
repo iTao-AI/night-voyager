@@ -244,7 +244,8 @@ def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_hist
 
     assert "--ignore=tests/integration/tasks/test_mixed_downgrade.py" in main_lane
     assert (
-        "uv run --no-editable python scripts/seed_demo.py --without-collaboration"
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "        --without-collaboration --without-planning-revision"
         in isolated_lane
     )
     assert "tests/integration/tasks/test_mixed_downgrade.py" in isolated_lane
@@ -254,7 +255,16 @@ def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_hist
         in runner
     )
     assert "include_collaboration: bool = True" in seed
+    assert "include_planning_revision: bool = True" in seed
     assert 'parser.add_argument("--without-collaboration", action="store_true")' in seed
+    assert (
+        'parser.add_argument("--without-planning-revision", action="store_true")'
+        in seed
+    )
+    assert (
+        "include_planning_revision=not arguments.without_planning_revision"
+        in seed
+    )
 
 
 def test_planning_revision_worker_isolates_historical_mixed_downgrade() -> None:

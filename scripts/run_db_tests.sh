@@ -68,7 +68,8 @@ fi
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
     uv run alembic current | grep '0012'
-    uv run --no-editable python scripts/seed_demo.py --without-collaboration
+    uv run --no-editable python scripts/seed_demo.py \
+        --without-collaboration --without-planning-revision
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
     uv run alembic current | grep '0012'

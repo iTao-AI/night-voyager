@@ -10,12 +10,38 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
+from night_voyager.identity.demo_seed import (
+    COLLABORATION_ACTIVE_CASE_ID,
+    COLLABORATION_CASE_ID,
+    COLLABORATION_EXPIRED_CASE_ID,
+    COLLABORATION_STALE_CASE_ID,
+    CONNECTED_DEMO_CASE_ID,
+)
 from night_voyager.planning.fixtures import validate_planning_fixture
 
 pytestmark = pytest.mark.database
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 OTHER_ORG = UUID("10000000-0000-0000-0000-000000000002")
 RUN_ID = UUID("70000000-0000-0000-0000-000000000001")
+PLANNING_CASE_ID = UUID("40000000-0000-0000-0000-000000000001")
+PLANNING_REVISION_CASE_IDS = {
+    UUID("49000000-0000-0000-0000-000000000001"),
+    UUID("49000000-0000-0000-0000-000000000002"),
+}
+PLANNING_REVISION_RUN_IDS = {
+    UUID("79000000-0000-0000-0000-000000000001"),
+    UUID("79000000-0000-0000-0000-000000000002"),
+}
+DEMO_CASE_IDS = {
+    PLANNING_CASE_ID,
+    CONNECTED_DEMO_CASE_ID,
+    COLLABORATION_CASE_ID,
+    COLLABORATION_ACTIVE_CASE_ID,
+    COLLABORATION_STALE_CASE_ID,
+    COLLABORATION_EXPIRED_CASE_ID,
+    *PLANNING_REVISION_CASE_IDS,
+}
+DEMO_PLANNING_RUN_IDS = {RUN_ID, *PLANNING_REVISION_RUN_IDS}
 
 
 async def set_context(connection: object, organization_id: UUID) -> None:
@@ -82,8 +108,26 @@ async def test_api_and_worker_same_tenant_reads_cross_tenant_hidden_and_pool_cle
                 assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 0
             async with engine.begin() as connection:
                 await set_context(connection, DEMO_ORG)
-                assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 6
-                assert await connection.scalar(text("SELECT count(*) FROM app.planning_runs")) == 1
+                case_ids = set(
+                    (
+                        await connection.execute(
+                            text("SELECT id FROM app.student_cases ORDER BY id")
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                assert case_ids == DEMO_CASE_IDS
+                planning_run_ids = set(
+                    (
+                        await connection.execute(
+                            text("SELECT id FROM app.planning_runs ORDER BY id")
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                assert planning_run_ids == DEMO_PLANNING_RUN_IDS
                 assert (
                     await connection.scalar(
                         text("SELECT count(*) FROM app.student_cases WHERE organization_id=:other"),
@@ -91,12 +135,24 @@ async def test_api_and_worker_same_tenant_reads_cross_tenant_hidden_and_pool_cle
                     )
                     == 0
                 )
-                joined = await connection.scalar(
-                    text(
-                        "SELECT count(*) FROM app.planning_runs r JOIN app.planning_routes p ON (p.organization_id,p.planning_run_id)=(r.organization_id,r.id)"
+                route_groups = (
+                    await connection.execute(
+                        text(
+                            "SELECT r.id AS planning_run_id,count(p.id)::integer AS route_count "
+                            "FROM app.planning_runs r "
+                            "JOIN app.planning_routes p "
+                            "ON (p.organization_id,p.planning_run_id)="
+                            "(r.organization_id,r.id) "
+                            "GROUP BY r.id ORDER BY r.id"
+                        )
                     )
-                )
-                assert joined == 3
+                ).mappings().all()
+                expected_route_count = len(validate_planning_fixture().result.routes)
+                assert {
+                    row["planning_run_id"]: row["route_count"] for row in route_groups
+                } == {
+                    run_id: expected_route_count for run_id in DEMO_PLANNING_RUN_IDS
+                }
             async with engine.begin() as connection:
                 await set_context(connection, OTHER_ORG)
                 assert await connection.scalar(text("SELECT count(*) FROM app.student_cases")) == 1
