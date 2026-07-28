@@ -262,6 +262,153 @@ it("uses status to recover a pending explicit role rotation without reading wron
   expect(requests).toEqual([`/api/demo/cases/${CASE_ID}/journey-status`]);
 });
 
+it("recovers the exact target role when bootstrap fails after revoke", async () => {
+  saveRecoveryMetadata(advisorMetadata("review_required"));
+  const mintedRoles: string[] = [];
+  const detailReads: string[] = [];
+  let targetProjected = false;
+  let revoked = false;
+  let revokeAttempts = 0;
+  let targetBootstrapAttempts = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/journey-status")) {
+      return Response.json(status(targetProjected ? "revision_requested" : "review_required"));
+    }
+    if (path.endsWith("/advisor-ledger")) {
+      detailReads.push("advisor");
+      return Response.json(ledger("review_required"));
+    }
+    if (path.endsWith("/confirmed-facts")) {
+      detailReads.push(revoked ? "student" : "advisor");
+      return Response.json(revoked
+        ? { schema_version: 1, current: [preferredFact] }
+        : { schema_version: 1, current: [], history: [], next_cursor: null });
+    }
+    if (path.endsWith("/memory-candidates")) {
+      detailReads.push("student");
+      return Response.json([]);
+    }
+    if (path.endsWith("/collaboration-thread")) {
+      detailReads.push("student");
+      return Response.json(thread);
+    }
+    if (path.includes("/messages?")) {
+      detailReads.push("student");
+      return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
+    }
+    if (path.endsWith("/planning-skill-inspector")) return Response.json({ code: "unavailable" }, { status: 404 });
+    if (path.endsWith("/session") && init?.method === "DELETE") {
+      revokeAttempts += 1;
+      if (revokeAttempts > 1) {
+        return Response.json({ code: "session_revoke_failed" }, { status: 401 });
+      }
+      revoked = true;
+      return new Response(null, { status: 204 });
+    }
+    if (path.endsWith("/session-bootstrap")) {
+      targetBootstrapAttempts += 1;
+      return targetBootstrapAttempts === 1
+        ? Response.json({ code: "bff_upstream_unavailable" }, { status: 503 })
+        : Response.json({ csrf_token: "bootstrap" });
+    }
+    if (path.endsWith("/sessions")) {
+      const role = JSON.parse(String(init?.body)).demo_actor;
+      mintedRoles.push(role);
+      return Response.json({
+        role,
+        proof_mode: "synthetic-demo",
+        csrf_token: `${role}-csrf`,
+      }, { status: 201 });
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("advisor_review"));
+  detailReads.length = 0;
+  targetProjected = true;
+
+  await act(async () => result.current.rotateToStudent(CASE_ID));
+  expect(result.current.state.value).toBe("recoverable_error");
+  await act(async () => result.current.retry());
+  await waitFor(() => expect(result.current.state.value).toBe("revision_requested"));
+
+  expect(mintedRoles).toEqual(["student"]);
+  expect(revokeAttempts).toBe(2);
+  expect(detailReads).not.toContain("advisor");
+  expect(loadRecoveryMetadata()).toMatchObject({
+    schema_version: 3,
+    role: "student",
+    csrf: "student-csrf",
+    caseId: CASE_ID,
+    phase: "revision_requested",
+  });
+  expect(loadRecoveryMetadata()).not.toHaveProperty("pendingRole");
+});
+
+it("recovers a server-projected target role when bootstrap starts without an envelope", async () => {
+  const mintedRoles: string[] = [];
+  const detailReads: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/session-bootstrap")) return Response.json({ csrf_token: "bootstrap" });
+    if (path.endsWith("/sessions")) {
+      const role = JSON.parse(String(init?.body)).demo_actor;
+      mintedRoles.push(role);
+      return Response.json({
+        role,
+        proof_mode: "synthetic-demo",
+        csrf_token: `${role}-csrf`,
+      }, { status: 201 });
+    }
+    if (path.endsWith("/session") && init?.method === "DELETE") return new Response(null, { status: 204 });
+    if (path.endsWith("/journey-status")) return Response.json(status("revision_requested"));
+    if (path.endsWith("/collaboration-thread")) {
+      detailReads.push("student");
+      return Response.json(thread);
+    }
+    if (path.endsWith("/confirmed-facts")) {
+      detailReads.push("student");
+      return Response.json({ schema_version: 1, current: [preferredFact] });
+    }
+    if (path.endsWith("/memory-candidates")) {
+      detailReads.push("student");
+      return Response.json([]);
+    }
+    if (path.includes("/messages?")) {
+      detailReads.push("student");
+      return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
+    }
+    if (path.endsWith("/advisor-ledger")) {
+      detailReads.push("advisor");
+      return Response.json(ledger("review_required"));
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await act(async () => result.current.connectAdvisor());
+  await waitFor(() => expect(result.current.state).toMatchObject({
+    value: "role_switching",
+    targetRole: "student",
+  }));
+
+  await act(async () => result.current.retry());
+  await waitFor(() => expect(result.current.state.value).toBe("revision_requested"));
+
+  expect(mintedRoles).toEqual(["advisor", "student"]);
+  expect(detailReads).toEqual(["student", "student", "student", "student"]);
+  expect(loadRecoveryMetadata()).toMatchObject({
+    schema_version: 3,
+    role: "student",
+    csrf: "student-csrf",
+    caseId: CASE_ID,
+    phase: "revision_requested",
+  });
+  expect(loadRecoveryMetadata()).not.toHaveProperty("pendingRole");
+});
+
 it("reuses the request-revision key after a committed response is lost", async () => {
   saveRecoveryMetadata(advisorMetadata("review_required"));
   const keys: string[] = [];
@@ -341,6 +488,74 @@ it("submits the bounded student proposal and reconciles status before role rotat
     },
   });
   expect(calls.at(-1)?.path).toBe(`/api/demo/cases/${CASE_ID}/journey-status`);
+});
+
+it("reuses both student proposal keys after the candidate response is lost", async () => {
+  saveRecoveryMetadata(studentMetadata());
+  const messageKeys: string[] = [];
+  const candidateKeys: string[] = [];
+  const durableMessages = new Set<string>();
+  const durableCandidates = new Set<string>();
+  let candidateAttempts = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith("/journey-status")) {
+      return Response.json(status(durableCandidates.size === 0 ? "revision_requested" : "revision_fact_pending"));
+    }
+    if (path.endsWith("/collaboration-thread")) return Response.json(thread);
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [preferredFact] });
+    if (path.endsWith("/memory-candidates") && init?.method !== "POST") return Response.json([]);
+    if (path.includes("/messages?")) return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
+    if (path.endsWith("/messages") && init?.method === "POST") {
+      const key = new Headers(init.headers).get("Idempotency-Key") ?? "";
+      messageKeys.push(key);
+      durableMessages.add(key);
+      return Response.json({
+        schema_version: 1,
+        message_event_id: MESSAGE_ID,
+        thread_id: THREAD_ID,
+        case_id: CASE_ID,
+        sequence_no: 1,
+        actor_id: CASE_ID,
+        actor_role: "student",
+        body: JSON.parse(String(init.body)).body,
+        content_sha256: SHA,
+        created_at: AT,
+      });
+    }
+    if (path.endsWith("/memory-candidates") && init?.method === "POST") {
+      const key = new Headers(init.headers).get("Idempotency-Key") ?? "";
+      candidateKeys.push(key);
+      durableCandidates.add(key);
+      candidateAttempts += 1;
+      return candidateAttempts === 1
+        ? Response.json({ code: "bff_upstream_unavailable" }, { status: 503 })
+        : Response.json(participantCandidate);
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("revision_requested"));
+
+  await act(async () => result.current.submitPreferredCountries());
+  expect(result.current.state.value).toBe("recoverable_error");
+  await act(async () => result.current.retry());
+  await waitFor(() => expect(result.current.state).toMatchObject({
+    value: "role_switching",
+    targetRole: "advisor",
+  }));
+
+  expect(messageKeys).toHaveLength(2);
+  expect(messageKeys[0]).toBe(messageKeys[1]);
+  expect(candidateKeys).toHaveLength(2);
+  expect(candidateKeys[0]).toBe(candidateKeys[1]);
+  expect(durableMessages.size).toBe(1);
+  expect(durableCandidates.size).toBe(1);
+  expect(loadRecoveryMetadata()?.mutations).toMatchObject({
+    "fact-proposal-message": { idempotencyKey: messageKeys[0] },
+    "fact-proposal-candidate": { idempotencyKey: candidateKeys[0] },
+  });
 });
 
 it("confirms only the exact pending preferred-country candidate", async () => {

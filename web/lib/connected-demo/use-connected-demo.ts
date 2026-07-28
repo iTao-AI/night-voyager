@@ -104,6 +104,32 @@ function metadataFor(
   };
 }
 
+function pendingRoleMetadata(
+  current: RecoveryMetadata | null,
+  status: ConnectedJourneyStatus,
+  role: RecoveryMetadata["role"],
+  csrf: string,
+): RecoveryMetadata {
+  const retained = current?.caseId === status.case_id && current.role === role
+    ? current
+    : null;
+  return {
+    schema_version: 3,
+    journey: "advisor-family",
+    role,
+    csrf,
+    caseId: status.case_id,
+    currentRevision: status.current_revision,
+    currentTaskId: retained?.currentTaskId ?? null,
+    predecessorRunId: retained?.predecessorRunId ?? null,
+    currentRunId: retained?.currentRunId ?? null,
+    cursor: retained?.cursor ?? 0,
+    phase: status.phase,
+    mutations: retained?.mutations ?? {},
+    pendingRole: status.active_role,
+  };
+}
+
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
@@ -168,11 +194,12 @@ export function useConnectedDemo() {
   ) => {
     const status = await api.journeyStatus(caseId);
     if (status.case_id !== caseId) throw new Error("projection identity mismatch");
-    if (status.active_role !== role) {
-      dispatch({ type: "ROLE_SWITCH", caseId, targetRole: status.active_role });
-      return;
-    }
     const current = recoveryHint ?? loadRecoveryMetadata();
+    if (status.active_role !== role) {
+      saveRecoveryMetadata(pendingRoleMetadata(current, status, role, csrf));
+      dispatch({ type: "ROLE_SWITCH", caseId, targetRole: status.active_role });
+      return false;
+    }
     if (role === "advisor") {
       const ledger = await api.advisorLedger(caseId);
       if (ledger.case_id !== caseId || ledger.case_revision !== status.current_revision || ledger.phase !== status.phase) throw new Error("projection identity mismatch");
@@ -187,7 +214,7 @@ export function useConnectedDemo() {
       saveRecoveryMetadata(metadata);
       dispatch({ type: "STATUS_RELOADED", status, ledger });
       if (!["active_task", "revision_task_active"].includes(status.phase)) void refreshInspector(caseId);
-      return;
+      return true;
     }
     setInspector(null);
     if (role === "student") {
@@ -197,7 +224,7 @@ export function useConnectedDemo() {
       setCurrentFacts({ caseId, caseRevision: status.current_revision, facts: projection.facts });
       saveRecoveryMetadata(metadataFor(current, status, role, csrf));
       dispatch({ type: "STATUS_RELOADED", status });
-      return;
+      return true;
     }
     setRevision(null);
     setCurrentFacts(null);
@@ -205,7 +232,44 @@ export function useConnectedDemo() {
     if (brief.case_id !== caseId || brief.phase !== status.phase || brief.revision_context.current_case_revision !== status.current_revision) throw new Error("projection identity mismatch");
     saveRecoveryMetadata(metadataFor(current, status, role, csrf));
     dispatch({ type: "STATUS_RELOADED", status, brief });
+    return true;
   }, [loadRevisionProjection, refreshInspector]);
+
+  const transitionRole = useCallback(async (
+    metadata: RecoveryMetadata,
+    target: RecoveryMetadata["role"],
+  ) => {
+    const attempt = async () => {
+      let current = loadRecoveryMetadata() ?? metadata;
+      try {
+        if (current.caseId !== metadata.caseId) {
+          throw new Error("role transition identity mismatch");
+        }
+        if (current.pendingRole !== target) {
+          const status = await api.journeyStatus(current.caseId);
+          if (status.case_id !== current.caseId || status.active_role !== target) {
+            throw new Error("role transition authority mismatch");
+          }
+          current = pendingRoleMetadata(current, status, current.role, current.csrf);
+          saveRecoveryMetadata(current);
+        }
+        try {
+          await api.revoke(current.csrf);
+        } catch (error) {
+          if (!(error instanceof ConnectedDemoApiError) || error.status !== 401) throw error;
+        }
+        const bootstrap = await api.bootstrap();
+        const session = await api.mint(target, bootstrap.csrf_token);
+        const loaded = await loadAuthoritative(current.caseId, target, session.csrf_token, current);
+        if (!loaded) throw new Error("role transition authority mismatch");
+        retryAction.current = null;
+      } catch (error) {
+        dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
+      }
+    };
+    retryAction.current = attempt;
+    await attempt();
+  }, [loadAuthoritative]);
 
   const connectAdvisor = useCallback(async () => {
     const existing = loadDemoJourneyEnvelope();
@@ -233,6 +297,10 @@ export function useConnectedDemo() {
       await connectAdvisor();
       return;
     }
+    if (metadata.pendingRole) {
+      await transitionRole(metadata, metadata.pendingRole);
+      return;
+    }
     try {
       await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
     } catch (error) {
@@ -240,7 +308,7 @@ export function useConnectedDemo() {
       if (code === "session_expired") clearRecoveryMetadata();
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [connectAdvisor, loadAuthoritative]);
+  }, [connectAdvisor, loadAuthoritative, transitionRole]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -302,7 +370,11 @@ export function useConnectedDemo() {
     return { record, updated };
   }, []);
 
-  const handleMutationFailure = useCallback(async (error: unknown, operation: MutationOperation) => {
+  const handleMutationFailure = useCallback(async (
+    error: unknown,
+    operation: MutationOperation,
+    preserveOnStale = false,
+  ) => {
     const code = failure(error);
     if (code === "session_expired") {
       retryAction.current = null;
@@ -310,7 +382,9 @@ export function useConnectedDemo() {
     } else if (code === "stale_conflict") {
       retryAction.current = null;
       const current = loadRecoveryMetadata();
-      if (current) saveRecoveryMetadata(withMutation(current, operation, undefined));
+      if (current && !preserveOnStale) {
+        saveRecoveryMetadata(withMutation(current, operation, undefined));
+      }
       await recover();
       return;
     }
@@ -379,16 +453,8 @@ export function useConnectedDemo() {
   const rotate = useCallback(async (caseId: string, target: "advisor" | "student" | "parent") => {
     const metadata = loadRecoveryMetadata();
     if (!metadata || metadata.caseId !== caseId || metadata.role === target) return;
-    try {
-      await api.revoke(metadata.csrf);
-      clearRecoveryMetadata();
-      const bootstrap = await api.bootstrap();
-      const session = await api.mint(target, bootstrap.csrf_token);
-      await loadAuthoritative(caseId, target, session.csrf_token, metadata);
-    } catch (error) {
-      dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
-    }
-  }, [loadAuthoritative]);
+    await transitionRole(metadata, target);
+  }, [transitionRole]);
 
   const submitPreferredCountries = useCallback(async () => {
     if (state.value !== "revision_requested" || !revision) return;
@@ -399,17 +465,17 @@ export function useConnectedDemo() {
     const attempt = async () => {
       try {
         let current = loadRecoveryMetadata() ?? metadata;
-        const messageMutation = await mutationRecord(current, "fact-proposal", messageBody);
+        const messageMutation = await mutationRecord(current, "fact-proposal-message", messageBody);
         const message = await collaboration.appendMessage(revision.thread.thread_id, messageBody, current.csrf, messageMutation.record.idempotencyKey);
         current = loadRecoveryMetadata() ?? messageMutation.updated;
-        const proposalMutation = await mutationRecord(withMutation(current, "fact-proposal", undefined), "fact-proposal", proposalBody);
+        const proposalMutation = await mutationRecord(current, "fact-proposal-candidate", proposalBody);
         await collaboration.proposeCandidate(message.message_event_id, proposalBody, current.csrf, proposalMutation.record.idempotencyKey);
         const status = await api.journeyStatus(current.caseId);
         if (status.phase !== "revision_fact_pending" || status.active_role !== "advisor") throw new Error("projection identity mismatch");
         retryAction.current = null;
         dispatch({ type: "ROLE_SWITCH", caseId: current.caseId, targetRole: "advisor" });
       } catch (error) {
-        await handleMutationFailure(error, "fact-proposal");
+        await handleMutationFailure(error, "fact-proposal-candidate", true);
       }
     };
     retryAction.current = attempt;

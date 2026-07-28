@@ -133,3 +133,73 @@ it("keeps advisor-family V3 metadata exact and request-bound", () => {
   sessionStorage.setItem("night-voyager:m5", JSON.stringify({ ...advisor, mutations: { "create-task": { fingerprint: "0".repeat(64), idempotencyKey: "bad" } } }));
   expect(loadDemoJourneyEnvelope()).toBeNull();
 });
+
+it("keeps the two student proposal request identities in separate closed slots", () => {
+  const advisor = {
+    schema_version: 3 as const,
+    journey: "advisor-family" as const,
+    role: "advisor" as const,
+    csrf: "csrf",
+    caseId: CASE,
+    currentRevision: 2,
+    currentTaskId: null,
+    predecessorRunId: null,
+    currentRunId: null,
+    cursor: 0,
+    phase: "replan_required" as const,
+    mutations: {
+      "fact-proposal-message": {
+        fingerprint: "1".repeat(64),
+        idempotencyKey: MESSAGE,
+      },
+      "fact-proposal-candidate": {
+        fingerprint: "2".repeat(64),
+        idempotencyKey: CANDIDATE,
+      },
+    },
+  };
+
+  saveRecoveryMetadata(advisor);
+  expect(loadRecoveryMetadata()).toEqual(advisor);
+
+  sessionStorage.setItem("night-voyager:m5", JSON.stringify({
+    ...advisor,
+    mutations: {
+      "fact-proposal": {
+        fingerprint: "1".repeat(64),
+        idempotencyKey: MESSAGE,
+      },
+    },
+  }));
+  expect(loadRecoveryMetadata()).toBeNull();
+});
+
+it("keeps only a server-bound pending role in the transitional V3 envelope", () => {
+  const transition = {
+    schema_version: 3 as const,
+    journey: "advisor-family" as const,
+    role: "advisor" as const,
+    csrf: "advisor-csrf",
+    caseId: CASE,
+    currentRevision: 1,
+    currentTaskId: null,
+    predecessorRunId: null,
+    currentRunId: null,
+    cursor: 0,
+    phase: "revision_requested" as const,
+    mutations: {},
+    pendingRole: "student" as const,
+  };
+
+  saveRecoveryMetadata(transition);
+  expect(loadRecoveryMetadata()).toEqual(transition);
+
+  for (const invalid of [
+    { ...transition, pendingRole: "advisor" },
+    { ...transition, pendingRole: "parent" },
+    { ...transition, pendingRole: "unknown" },
+  ]) {
+    sessionStorage.setItem("night-voyager:m5", JSON.stringify(invalid));
+    expect(loadRecoveryMetadata()).toBeNull();
+  }
+});
