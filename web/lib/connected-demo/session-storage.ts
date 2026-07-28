@@ -1,6 +1,9 @@
 import type { IdempotencyRecord } from "./idempotency";
+import type { DemoPhaseV2 } from "./contracts";
 
-export type AdvisorFamilyMutationKind = "create-task" | "advisor-review" | "family-decision";
+export type AdvisorFamilyMutationKind =
+  | "request-revision" | "fact-proposal" | "fact-confirmation"
+  | "create-task" | "new-review" | "family-decision";
 export type CollaborationMutationKind = "append-message" | "propose-memory-candidate" | "verify-memory-candidate";
 export type CollaborationPersistedPhase =
   | "bootstrapping_parent"
@@ -12,15 +15,18 @@ export type CollaborationPersistedPhase =
   | "confirmation_submitting"
   | "replan_required";
 
-export interface AdvisorFamilyJourneyEnvelopeV2 {
-  schema_version: 2;
+export interface AdvisorFamilyJourneyEnvelopeV3 {
+  schema_version: 3;
   journey: "advisor-family";
-  role: "advisor" | "parent";
+  role: "advisor" | "student" | "parent";
   csrf: string;
   caseId: string;
-  taskId: string | null;
-  briefId: string | null;
+  currentRevision: number;
+  currentTaskId: string | null;
+  predecessorRunId: string | null;
+  currentRunId: string | null;
   cursor: number;
+  phase: DemoPhaseV2;
   mutations: Partial<Record<AdvisorFamilyMutationKind, IdempotencyRecord>>;
 }
 
@@ -37,16 +43,17 @@ export interface CollaborationJourneyEnvelopeV2 {
   mutations: Partial<Record<CollaborationMutationKind, IdempotencyRecord>>;
 }
 
-export type DemoJourneyEnvelopeV2 = AdvisorFamilyJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV2;
-export type RecoveryMetadata = AdvisorFamilyJourneyEnvelopeV2;
+export type DemoJourneyEnvelope = AdvisorFamilyJourneyEnvelopeV3 | CollaborationJourneyEnvelopeV2;
+export type RecoveryMetadata = AdvisorFamilyJourneyEnvelopeV3;
 export type MutationOperation = AdvisorFamilyMutationKind;
 
 const KEY = "night-voyager:m5";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
-const ADVISOR_OPERATIONS = ["create-task", "advisor-review", "family-decision"] as const;
+const ADVISOR_OPERATIONS = ["request-revision", "fact-proposal", "fact-confirmation", "create-task", "new-review", "family-decision"] as const;
 const COLLABORATION_OPERATIONS = ["append-message", "propose-memory-candidate", "verify-memory-candidate"] as const;
 const COLLABORATION_PHASES: readonly CollaborationPersistedPhase[] = ["bootstrapping_parent", "thread_ready", "message_submitting", "proposal_pending", "switching_to_advisor", "advisor_reviewing", "confirmation_submitting", "replan_required"];
+const PHASES: readonly DemoPhaseV2[] = ["task_ready", "active_task", "review_required", "revision_requested", "revision_fact_pending", "replan_required", "revision_task_active", "revision_review_required", "revision_blocked", "family_review", "plan_ready", "terminal_task_failure"];
 
 function object(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 function exact(value: Record<string, unknown>, keys: readonly string[]): boolean { const actual = Object.keys(value).sort(); const expected = [...keys].sort(); return actual.length === expected.length && actual.every((key, index) => key === expected[index]); }
@@ -57,10 +64,13 @@ function validMutations(value: unknown, operations: readonly string[]): boolean 
   return Object.entries(value).every(([operation, record]) => operations.includes(operation) && object(record) && exact(record, ["fingerprint", "idempotencyKey"]) && typeof record.fingerprint === "string" && SHA256.test(record.fingerprint) && uuid(record.idempotencyKey));
 }
 
-function advisorFamily(value: Record<string, unknown>): value is Record<string, unknown> & AdvisorFamilyJourneyEnvelopeV2 {
-  if (!exact(value, ["schema_version", "journey", "role", "csrf", "caseId", "taskId", "briefId", "cursor", "mutations"]) || value.schema_version !== 2 || value.journey !== "advisor-family" || !["advisor", "parent"].includes(String(value.role)) || typeof value.csrf !== "string" || !value.csrf || !uuid(value.caseId) || !nullableUuid(value.taskId) || !nullableUuid(value.briefId) || !Number.isSafeInteger(value.cursor) || Number(value.cursor) < 0 || !validMutations(value.mutations, ADVISOR_OPERATIONS)) return false;
-  if (value.role === "advisor") return value.briefId === null;
-  return value.taskId === null && value.briefId !== null && value.cursor === 0;
+function advisorFamily(value: Record<string, unknown>): value is Record<string, unknown> & AdvisorFamilyJourneyEnvelopeV3 {
+  const keys = ["schema_version", "journey", "role", "csrf", "caseId", "currentRevision", "currentTaskId", "predecessorRunId", "currentRunId", "cursor", "phase", "mutations"];
+  if (!exact(value, keys) || value.schema_version !== 3 || value.journey !== "advisor-family" || !["advisor", "student", "parent"].includes(String(value.role)) || typeof value.csrf !== "string" || !value.csrf || !uuid(value.caseId) || !Number.isSafeInteger(value.currentRevision) || Number(value.currentRevision) <= 0 || !nullableUuid(value.currentTaskId) || !nullableUuid(value.predecessorRunId) || !nullableUuid(value.currentRunId) || !Number.isSafeInteger(value.cursor) || Number(value.cursor) < 0 || !PHASES.includes(value.phase as DemoPhaseV2) || !validMutations(value.mutations, ADVISOR_OPERATIONS)) return false;
+  const expectedRole = value.phase === "revision_requested" ? "student" : ["family_review", "plan_ready"].includes(String(value.phase)) ? "parent" : "advisor";
+  if (value.role !== expectedRole) return false;
+  if (value.role !== "advisor" && (value.currentTaskId !== null || value.cursor !== 0)) return false;
+  return true;
 }
 
 function collaboration(value: Record<string, unknown>): value is Record<string, unknown> & CollaborationJourneyEnvelopeV2 {
@@ -76,7 +86,7 @@ function collaboration(value: Record<string, unknown>): value is Record<string, 
   return value.role === "advisor" && value.messageId !== null && value.candidateId !== null;
 }
 
-export function loadDemoJourneyEnvelope(): DemoJourneyEnvelopeV2 | null {
+export function loadDemoJourneyEnvelope(): DemoJourneyEnvelope | null {
   const raw = sessionStorage.getItem(KEY);
   if (!raw) return null;
   try {
@@ -85,23 +95,23 @@ export function loadDemoJourneyEnvelope(): DemoJourneyEnvelopeV2 | null {
       sessionStorage.removeItem(KEY);
       return null;
     }
-    return value as DemoJourneyEnvelopeV2;
+    return value as DemoJourneyEnvelope;
   } catch {
     sessionStorage.removeItem(KEY);
     return null;
   }
 }
 
-export function saveRecoveryMetadata(value: AdvisorFamilyJourneyEnvelopeV2): void { sessionStorage.setItem(KEY, JSON.stringify(value)); }
+export function saveRecoveryMetadata(value: AdvisorFamilyJourneyEnvelopeV3): void { sessionStorage.setItem(KEY, JSON.stringify(value)); }
 export function saveCollaborationJourney(value: CollaborationJourneyEnvelopeV2): void { sessionStorage.setItem(KEY, JSON.stringify(value)); }
 export function clearDemoJourneyEnvelope(): void { sessionStorage.removeItem(KEY); }
 export const clearRecoveryMetadata = clearDemoJourneyEnvelope;
-export function loadRecoveryMetadata(): AdvisorFamilyJourneyEnvelopeV2 | null { const value = loadDemoJourneyEnvelope(); return value?.journey === "advisor-family" ? value : null; }
+export function loadRecoveryMetadata(): AdvisorFamilyJourneyEnvelopeV3 | null { const value = loadDemoJourneyEnvelope(); return value?.journey === "advisor-family" ? value : null; }
 
 export function continueCollaborationAsAdvisorFamily(
   current: CollaborationJourneyEnvelopeV2,
   taskId: string | null,
-): AdvisorFamilyJourneyEnvelopeV2 {
+): AdvisorFamilyJourneyEnvelopeV3 {
   if (
     !object(current)
     || !collaboration(current)
@@ -113,19 +123,22 @@ export function continueCollaborationAsAdvisorFamily(
     throw new Error("invalid collaboration handoff");
   }
   return {
-    schema_version: 2,
+    schema_version: 3,
     journey: "advisor-family",
     role: "advisor",
     csrf: current.csrf,
     caseId: current.caseId,
-    taskId,
-    briefId: null,
+    currentRevision: 2,
+    currentTaskId: taskId,
+    predecessorRunId: null,
+    currentRunId: null,
     cursor: 0,
+    phase: taskId === null ? "replan_required" : "revision_task_active",
     mutations: {},
   };
 }
 
-export function withMutation(metadata: AdvisorFamilyJourneyEnvelopeV2, operation: AdvisorFamilyMutationKind, record: IdempotencyRecord | undefined): AdvisorFamilyJourneyEnvelopeV2 {
+export function withMutation(metadata: AdvisorFamilyJourneyEnvelopeV3, operation: AdvisorFamilyMutationKind, record: IdempotencyRecord | undefined): AdvisorFamilyJourneyEnvelopeV3 {
   const mutations = { ...metadata.mutations };
   if (record) mutations[operation] = record; else delete mutations[operation];
   return { ...metadata, mutations };

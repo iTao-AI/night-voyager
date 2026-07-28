@@ -12,9 +12,9 @@ import { TaskProgress } from "./TaskProgress";
 import { CurrentConfirmedFacts } from "./CurrentConfirmedFacts";
 
 function actionKey(phase: Ledger["phase"]): PresentationCopyKey {
-  if (phase === "task-ready") return "advisorCreateTask";
-  if (phase === "review-required") return "advisorApproveAustralia";
-  if (phase === "family-review" || phase === "plan-ready") return "advisorContinueFamily";
+  if (phase === "task_ready" || phase === "replan_required") return "advisorCreateTask";
+  if (phase === "review_required" || phase === "revision_review_required") return "advisorApproveAustralia";
+  if (phase === "family_review" || phase === "plan_ready") return "advisorContinueFamily";
   return "advisorTaskInProgress";
 }
 
@@ -33,7 +33,7 @@ export function AdvisorLedger({
   const routes = ledger.routes;
   const [selectedCountry, setSelectedCountry] = useState<string>(String(routes[0]?.country ?? ""));
   const selectedRoute = routes.find((route) => route.country === selectedCountry) ?? routes[0];
-  const disabled = busy || ledger.phase === "active-task";
+  const disabled = busy || ledger.phase === "active_task" || ledger.phase === "revision_task_active";
   const primaryAction = copy(actionKey(ledger.phase));
   const presentClaims = (values: readonly string[], kind: "evidenceClaim" | "knownGap", emptyKey: PresentationCopyKey) =>
     values.length ? values.map((value) => presentCode(locale, kind, value)).join(", ") : copy(emptyKey);

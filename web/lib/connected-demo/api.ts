@@ -1,6 +1,7 @@
 import {
   parseBootstrap,
   parseBrief,
+  parseJourneyStatus,
   parseLedger,
   parseSession,
   parseTask,
@@ -9,6 +10,7 @@ import {
   type CancelTaskBody,
   type CreateTaskBody,
   type CurrentDecisionBrief,
+  type ConnectedJourneyStatus,
   type DecisionResult,
   type FamilyDecisionBody,
   type ReviewResult,
@@ -18,9 +20,10 @@ import {
 
 export interface ConnectedDemoApi {
   bootstrap(): Promise<{ csrf_token: string }>;
-  mint(role: "advisor" | "parent", csrf: string): Promise<SessionProjection>;
+  mint(role: "advisor" | "student" | "parent", csrf: string): Promise<SessionProjection>;
   revoke(csrf: string): Promise<void>;
   advisorLedger(caseId: string): Promise<AdvisorLedger>;
+  journeyStatus(caseId: string): Promise<ConnectedJourneyStatus>;
   createTask(caseId: string, body: CreateTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
   task(taskId: string): Promise<StandaloneTaskProjection>;
   cancelTask(taskId: string, body: CancelTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
@@ -76,6 +79,9 @@ export function createConnectedDemoApi(): ConnectedDemoApi {
     },
     async advisorLedger(caseId) {
       return parseLedger(await json(`/api/demo/cases/${caseId}/advisor-ledger`));
+    },
+    async journeyStatus(caseId) {
+      return parseJourneyStatus(await json(`/api/demo/cases/${caseId}/journey-status`));
     },
     async createTask(caseId, body, csrf, key) {
       return parseTask(await json(`/api/demo/cases/${caseId}/agent-tasks`, {

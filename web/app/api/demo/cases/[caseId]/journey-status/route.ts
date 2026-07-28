@@ -11,7 +11,7 @@ export async function GET(
     const { caseId } = await params;
     return forwardDemoJson(request, {
       method: "GET",
-      upstreamPath: `/api/v1/cases/${requireCanonicalUuid(caseId)}/advisor-ledger?contract_version=2`,
+      upstreamPath: `/api/v1/cases/${requireCanonicalUuid(caseId)}/journey-status`,
       mutation: false,
     });
   } catch {

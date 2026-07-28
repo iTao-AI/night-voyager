@@ -6,6 +6,7 @@ import { GET as bootstrap } from "../../app/api/demo/session-bootstrap/route";
 import { POST as sessions } from "../../app/api/demo/sessions/route";
 import { DELETE as session } from "../../app/api/demo/session/route";
 import { GET as ledger } from "../../app/api/demo/cases/[caseId]/advisor-ledger/route";
+import { GET as journeyStatus } from "../../app/api/demo/cases/[caseId]/journey-status/route";
 import { POST as tasks } from "../../app/api/demo/cases/[caseId]/agent-tasks/route";
 import { GET as task } from "../../app/api/demo/tasks/[taskId]/route";
 import { POST as cancel } from "../../app/api/demo/tasks/[taskId]/cancel/route";
@@ -31,13 +32,14 @@ const cases = [
   ["bootstrap", "GET", bootstrap, "/api/v1/demo/session-bootstrap", undefined],
   ["sessions", "POST", sessions, "/api/v1/demo/sessions", undefined],
   ["session", "DELETE", session, "/api/v1/demo/session", undefined],
-  ["ledger", "GET", ledger, `/api/v1/cases/${ID}/advisor-ledger`, { caseId: ID }],
+  ["ledger", "GET", ledger, `/api/v1/cases/${ID}/advisor-ledger?contract_version=2`, { caseId: ID }],
+  ["journey-status", "GET", journeyStatus, `/api/v1/cases/${ID}/journey-status`, { caseId: ID }],
   ["tasks", "POST", tasks, `/api/v1/cases/${ID}/agent-tasks`, { caseId: ID }],
   ["task", "GET", task, `/api/v1/tasks/${ID}`, { taskId: ID }],
   ["cancel", "POST", cancel, `/api/v1/tasks/${ID}/cancel`, { taskId: ID }],
   ["events", "GET", events, `/api/v1/tasks/${ID}/events`, { taskId: ID }],
   ["review", "POST", review, `/api/v1/cases/${ID}/advisor-reviews`, { caseId: ID }],
-  ["brief", "GET", currentBrief, `/api/v1/cases/${ID}/current-decision-brief`, { caseId: ID }],
+  ["brief", "GET", currentBrief, `/api/v1/cases/${ID}/current-decision-brief?contract_version=2`, { caseId: ID }],
   ["decide", "POST", decide, `/api/v1/decision-briefs/${ID}/family-decisions`, { briefId: ID }],
   ["collaboration-thread", "GET", collaborationThread, `/api/v1/cases/${ID}/collaboration-thread`, { caseId: ID }],
   ["collaboration-messages", "GET", collaborationMessages, `/api/v1/collaboration-threads/${ID}/messages`, { threadId: ID }],

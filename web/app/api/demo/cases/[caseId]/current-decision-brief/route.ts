@@ -11,7 +11,7 @@ export async function GET(
     const { caseId } = await params;
     return forwardDemoJson(request, {
       method: "GET",
-      upstreamPath: `/api/v1/cases/${requireCanonicalUuid(caseId)}/current-decision-brief`,
+      upstreamPath: `/api/v1/cases/${requireCanonicalUuid(caseId)}/current-decision-brief?contract_version=2`,
       mutation: false,
     });
   } catch {

@@ -532,10 +532,10 @@ export function useCollaborationDemo() {
         }
 
         let taskId: string | null;
-        if (["active-task", "review-required", "terminal-task-failure"].includes(ledger.phase)) {
+        if (["active_task", "review_required", "terminal_task_failure"].includes(ledger.phase)) {
           requireHandoff(ledger.task?.task_id, "stale");
           taskId = ledger.task.task_id;
-        } else if (["task-ready", "family-review", "plan-ready"].includes(ledger.phase)) {
+        } else if (["task_ready", "family_review", "plan_ready"].includes(ledger.phase)) {
           taskId = null;
         } else {
           throw new HandoffValidationError("stale");

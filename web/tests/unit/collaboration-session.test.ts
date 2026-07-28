@@ -24,18 +24,24 @@ it("converts one exact confirmed collaboration envelope without mutating it", ()
   const snapshot = structuredClone(current);
 
   expect(continueCollaborationAsAdvisorFamily(current, null)).toEqual({
-    schema_version: 2,
+    schema_version: 3,
     journey: "advisor-family",
     role: "advisor",
     csrf: current.csrf,
     caseId: current.caseId,
-    taskId: null,
-    briefId: null,
+    currentRevision: 2,
+    currentTaskId: null,
+    predecessorRunId: null,
+    currentRunId: null,
     cursor: 0,
+    phase: "replan_required",
     mutations: {},
   });
   expect(current).toEqual(snapshot);
-  expect(continueCollaborationAsAdvisorFamily(current, CANDIDATE)).toMatchObject({ taskId: CANDIDATE });
+  expect(continueCollaborationAsAdvisorFamily(current, CANDIDATE)).toMatchObject({
+    currentTaskId: CANDIDATE,
+    phase: "revision_task_active",
+  });
 });
 
 it("rejects every non-terminal role/phase and malformed conversion input", () => {
@@ -107,8 +113,21 @@ it("enforces collaboration phase, role, and server-ID cross-field invariants", (
   }
 });
 
-it("keeps advisor-family metadata exact and request-bound", () => {
-  const advisor = { schema_version: 2 as const, journey: "advisor-family" as const, role: "advisor" as const, csrf: "csrf", caseId: CASE, taskId: null, briefId: null, cursor: 0, mutations: {} };
+it("keeps advisor-family V3 metadata exact and request-bound", () => {
+  const advisor = {
+    schema_version: 3 as const,
+    journey: "advisor-family" as const,
+    role: "advisor" as const,
+    csrf: "csrf",
+    caseId: CASE,
+    currentRevision: 2,
+    currentTaskId: null,
+    predecessorRunId: null,
+    currentRunId: null,
+    cursor: 0,
+    phase: "replan_required" as const,
+    mutations: {},
+  };
   saveRecoveryMetadata(advisor);
   expect(loadRecoveryMetadata()).toEqual(advisor);
   sessionStorage.setItem("night-voyager:m5", JSON.stringify({ ...advisor, mutations: { "create-task": { fingerprint: "0".repeat(64), idempotencyKey: "bad" } } }));

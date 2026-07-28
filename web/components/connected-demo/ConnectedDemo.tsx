@@ -9,6 +9,7 @@ import { FamilyDecisionBrief } from "./FamilyDecisionBrief";
 import { RecoveryNotice } from "./RecoveryNotice";
 import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
 import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
+import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
 
 export function ConnectedDemo() {
   const demo = useConnectedDemo();
@@ -17,11 +18,16 @@ export function ConnectedDemo() {
   const advisorAction = () => {
     if (state.value !== "advisor_ready" && state.value !== "advisor_review") return;
     if (state.value === "advisor_review") void demo.approve();
-    else if (state.ledger.phase === "task-ready") void demo.createTask();
+    else if (state.ledger.phase === "task_ready") void demo.createTask();
     else if (state.ledger.current_brief_id) void demo.rotateToParent(state.ledger.case_id);
   };
   const inspectorVisible = ["advisor_ready", "task_creating", "task_streaming", "advisor_review", "review_submitting", "terminal_task_failure"].includes(state.value);
-  const confirmedFactsFor = (caseId: string, caseRevision: number) => demo.currentFacts?.caseId === caseId && demo.currentFacts.caseRevision === caseRevision ? demo.currentFacts.facts : null;
+  const confirmedFactsFor = (caseId: string, caseRevision: number): readonly ConfirmedFactAdvisor[] | null =>
+    demo.currentFacts?.caseId === caseId && demo.currentFacts.caseRevision === caseRevision
+      ? demo.currentFacts.facts.filter(
+          (fact): fact is ConfirmedFactAdvisor => "confirmed_fact_id" in fact,
+        )
+      : null;
 
   return (
     <PresentationShell contextKey="contextAdvisorFamily" mainId="demo-main">
