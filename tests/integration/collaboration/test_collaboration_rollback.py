@@ -15,14 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
+    BudgetProposal,
     FactKey,
     JapanRiskAcceptedProposal,
     ProposeMemoryCandidateCommand,
-    RiskToleranceProposal,
     VerificationDecision,
     VerifyMemoryCandidateCommand,
 )
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.models import BudgetEnvelope
 
 pytestmark = pytest.mark.database
 
@@ -425,10 +426,17 @@ async def _seed_runtime_authority(
     target_proposal = ProposeMemoryCandidateCommand(
         message_event_id=fixture.target_message_id,
         case_revision=2,
-        proposal=RiskToleranceProposal(
+        proposal=BudgetProposal(
             schema_version=1,
-            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
-            value="high",
+            fact_key=FactKey.FAMILY_BUDGET,
+            value=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=31_000_000,
+                hard_ceiling_minor=37_000_000,
+                elasticity_bps=750,
+            ),
         ),
     )
     target_value = target_proposal.proposal.model_dump(mode="json")["value"]
@@ -436,7 +444,7 @@ async def _seed_runtime_authority(
         text(
             "SELECT * FROM app.propose_memory_candidate("
             ":org,:actor,'parent',:message,:candidate,2,"
-            "'family.risk_tolerance',CAST(:value AS jsonb),"
+            "'family.budget',CAST(:value AS jsonb),"
             ":value_hash,:request_hash,:key_hash)"
         ),
         {

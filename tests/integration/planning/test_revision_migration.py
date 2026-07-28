@@ -388,6 +388,47 @@ async def test_revision_authority_function_acl_and_search_paths_are_closed() -> 
 
 
 @pytest.mark.asyncio
+async def test_finalize_replay_authority_compiles_on_fresh_0012_upgrade() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            row = (
+                await connection.execute(
+                    text(
+                        "SELECT p.prosecdef,p.proconfig,"
+                        "has_function_privilege('night_voyager_api',p.oid,'EXECUTE'),"
+                        "has_function_privilege('night_voyager_worker',p.oid,'EXECUTE'),"
+                        "has_function_privilege('public',p.oid,'EXECUTE'),"
+                        "pg_get_functiondef(p.oid) "
+                        "FROM pg_proc p "
+                        "WHERE p.oid=to_regprocedure("
+                        "'app.finalize_agent_task_result("
+                        "uuid,uuid,text,bigint,uuid,text,text,text,text,jsonb,uuid)')"
+                    )
+                )
+            ).one()
+    finally:
+        await engine.dispose()
+
+    function_sql = str(row[5])
+    assert row[0] is True
+    assert row[1] == ["search_path=pg_catalog, pg_temp"]
+    assert tuple(bool(value) for value in row[2:5]) == (False, True, False)
+    for token in (
+        "selected.lease_generation IS DISTINCT FROM p_generation",
+        "run_row.state=p_state",
+        "run_row.reason_code IS NOT DISTINCT FROM p_reason",
+        "run_row.evidence_projection_sha256=p_evidence_hash",
+        "run_row.output_sha256=p_output_hash",
+        "run_row.supersedes_run_id IS NOT DISTINCT FROM p_supersedes",
+        "execution_row.lease_generation=p_generation",
+        "execution_row.result_planning_run_id=p_run",
+        "execution_row.public_code IS NOT DISTINCT FROM p_reason",
+    ):
+        assert token in function_sql
+
+
+@pytest.mark.asyncio
 async def test_participant_safe_pending_fact_projection_is_exact_and_role_equal() -> None:
     migration = create_async_engine(
         os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]

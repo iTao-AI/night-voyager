@@ -49,7 +49,7 @@ APPEND_MESSAGE_SQL = text(
 )
 PROPOSE_CANDIDATE_SQL = text(
     "SELECT * FROM app.propose_memory_candidate("
-    ":org,:actor,'parent',:message,:candidate,1,'family.risk_tolerance',"
+    ":org,:actor,'parent',:message,:candidate,1,:fact_key,"
     "CAST(:value AS jsonb),:value_sha256,:request_sha256,:key_sha256)"
 )
 VERIFY_CANDIDATE_SQL = text(
@@ -302,6 +302,8 @@ async def propose_candidate(
     candidate_id: UUID,
     request_sha256: str,
     key_sha256: str,
+    fact_key: str = "family.risk_tolerance",
+    value: object = "high",
 ) -> dict[str, object]:
     result = await connection.execute(
         PROPOSE_CANDIDATE_SQL,
@@ -310,8 +312,9 @@ async def propose_candidate(
             "actor": PARENT_ID,
             "message": message_id,
             "candidate": candidate_id,
-            "value": json.dumps("high"),
-            "value_sha256": canonical_sha256("high"),
+            "fact_key": fact_key,
+            "value": json.dumps(value),
+            "value_sha256": canonical_sha256(value),
             "request_sha256": request_sha256,
             "key_sha256": key_sha256,
         },
@@ -467,6 +470,20 @@ async def prepare_candidate(
             candidate_id=candidate_id,
             request_sha256=stable_hash(f"candidate-request-{suffix}"),
             key_sha256=stable_hash(f"candidate-key-{suffix}"),
+            fact_key="family.budget" if planning else "family.risk_tolerance",
+            value=(
+                {
+                    "schema_version": 1,
+                    "currency": "CNY",
+                    "period": "program_total",
+                    "preferred_minor": 31_000_000,
+                    "hard_ceiling_minor": 37_000_000,
+                    "elasticity_bps": 750,
+                    "refused": False,
+                }
+                if planning
+                else "high"
+            ),
         )
     return CandidateGraph(
         case_id=case_id,

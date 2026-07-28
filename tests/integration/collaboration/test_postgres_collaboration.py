@@ -3393,10 +3393,17 @@ async def test_planning_confirmation_retires_only_the_locked_current_run() -> No
                     ProposeMemoryCandidateCommand(
                         message_event_id=PLANNING_MESSAGE_ID,
                         case_revision=1,
-                        proposal=RiskToleranceProposal(
+                        proposal=BudgetProposal(
                             schema_version=1,
-                            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
-                            value="high",
+                            fact_key=FactKey.FAMILY_BUDGET,
+                            value=BudgetEnvelope(
+                                schema_version=1,
+                                currency="CNY",
+                                period="program_total",
+                                preferred_minor=31_000_000,
+                                hard_ceiling_minor=37_000_000,
+                                elasticity_bps=750,
+                            ),
                         ),
                     ),
                     PLANNING_CANDIDATE_ID,

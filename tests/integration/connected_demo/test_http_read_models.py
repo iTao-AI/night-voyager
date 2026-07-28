@@ -16,12 +16,14 @@ from night_voyager.identity.demo_seed import CONNECTED_DEMO_CASE_ID
 from night_voyager.identity.models import DemoActorChoice
 from night_voyager.identity.repository import IdentityRepository
 from night_voyager.identity.service import IdentityService
+from night_voyager.planning.fixtures import validate_planning_fixture
 
 pytestmark = pytest.mark.database
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 STUDENT = UUID("20000000-0000-0000-0000-000000000002")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
+PLANNING_FIXTURE = validate_planning_fixture().planning_input
 
 
 async def seed_pending_revision_case() -> UUID:
@@ -179,16 +181,13 @@ async def seed_terminal_task_case() -> UUID:
     )
     try:
         async with engine.begin() as connection:
-            source = (
-                await connection.execute(
-                    text(
-                        "SELECT student_preferences,family_preferences "
-                        "FROM app.student_case_revisions "
-                        "WHERE organization_id=:org ORDER BY created_at LIMIT 1"
-                    ),
-                    {"org": DEMO_ORG},
-                )
-            ).mappings().one()
+            await connection.execute(
+                text(
+                    "SELECT set_config("
+                    "'night_voyager.organization_id',:org,true)"
+                ),
+                {"org": str(DEMO_ORG)},
+            )
             await connection.execute(
                 text(
                     "SELECT app.publish_case_revision("
@@ -197,8 +196,8 @@ async def seed_terminal_task_case() -> UUID:
                 {
                     "org": DEMO_ORG,
                     "case": case_id,
-                    "student": json.dumps(source["student_preferences"]),
-                    "family": json.dumps(source["family_preferences"]),
+                    "student": PLANNING_FIXTURE.case.student.model_dump_json(),
+                    "family": PLANNING_FIXTURE.case.family.model_dump_json(),
                 },
             )
             await connection.execute(

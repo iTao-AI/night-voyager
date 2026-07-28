@@ -83,6 +83,7 @@ async def journey_status_for_role(
 ):
     actor_context = context(role)
     for name, value in (
+        ("night_voyager.organization_id", str(actor_context.organization_id)),
         ("night_voyager.actor_id", str(actor_context.actor_id)),
         ("night_voyager.role", role.value),
     ):
@@ -181,6 +182,10 @@ async def test_terminal_task_phase_and_role_are_durable_across_repository_reload
     api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
         async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(DEMO_ORG)},
+            )
             await connection.execute(
                 text(
                     "SELECT app.publish_case_revision("

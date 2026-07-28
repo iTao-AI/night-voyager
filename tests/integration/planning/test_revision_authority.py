@@ -379,6 +379,7 @@ async def test_unsupported_fact_cannot_publish_revision_or_leave_partial_writes(
                     connection, target, candidate_id, key_label="unsupported"
                 )
         async with migrator.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
             snapshot = (
                 await connection.execute(
                     text(
@@ -386,7 +387,7 @@ async def test_unsupported_fact_cannot_publish_revision_or_leave_partial_writes(
                         "(SELECT count(*) FROM app.memory_candidate_verifications v "
                         " WHERE v.organization_id=:org AND v.candidate_id=:candidate) "
                         "AS verifications,"
-                        "(SELECT count(*) FROM app.confirmed_profile_facts f "
+                        "(SELECT count(*) FROM app.confirmed_facts f "
                         " WHERE f.organization_id=:org AND f.case_id=:case "
                         " AND f.fact_key='student.intended_field') AS facts,"
                         "(SELECT count(*) FROM app.student_case_revisions cr "
@@ -648,6 +649,7 @@ async def test_terminal_finalize_replay_requires_exact_durable_result() -> None:
             migrator, api, worker, target
         )
         async with migrator.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
             durable = (
                 await connection.execute(
                     text(
@@ -719,6 +721,7 @@ async def test_terminal_finalize_replay_requires_exact_durable_result() -> None:
             with pytest.raises(DBAPIError, match=error):
                 await replay(**changes)
         async with migrator.begin() as connection:
+            await set_context(connection, ADVISOR, "advisor")
             counts = (
                 await connection.execute(
                     text(
