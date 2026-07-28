@@ -136,7 +136,8 @@ The revision phase union is:
 `family_review|plan_ready|terminal_task_failure`. PostgreSQL derives it from the
 current Case revision, request review, narrow pending-fact boolean, current task
 and run, Brief, and decision. Browser timestamps or recovery metadata are never
-phase authority. PR 3 browser journey remains unimplemented.
+phase authority. PR 3 browser journey is implemented provider-free and consumes
+only these closed projections; it does not compute phase in the client.
 
 ## Governed DRA candidate endpoints
 
@@ -305,9 +306,9 @@ explicit historical status.
 
 ## M5 same-origin BFF
 
-The connected browser uses eleven explicit `/api/demo/*` Route Handlers for
+The connected browser uses twelve explicit `/api/demo/*` Route Handlers for
 session bootstrap/create/delete, Ledger read, task create/read/cancel/events,
-advisor review, current Brief read, and family decision. There is no catch-all
+advisor review, current Brief read, journey-status read, and family decision. There is no catch-all
 proxy. The BFF validates UUID path segments, bounded bodies and deadlines,
 forwards direct SSE bytes, and maps only a closed set of public problems.
 
@@ -321,3 +322,10 @@ The current Brief `decision_requirements` contains the eligible Australia route
 identity, `currency=CNY`, pinned cost, hard ceiling, and exact one-element
 `required_trade_offs=["budget_elasticity"]`. These values come from current
 PostgreSQL rows and deterministic policy, not fixture labels or client constants.
+
+Planning-revision clients opt the Ledger and current Brief into exact
+`contract_version=2`, recover from `/journey-status`, and persist a closed V3
+advisor-family envelope. The UI may submit the bounded request-revision review and
+student preferred-country proposal through existing authority endpoints, but it
+cannot submit predecessor/run hashes, synthesize comparison, reuse an old approval,
+or decide a non-current Brief.

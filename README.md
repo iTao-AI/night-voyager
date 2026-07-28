@@ -12,9 +12,11 @@ The complete governed walkthrough begins at `/demo/collaboration` and continues 
 
 ![Governed collaboration confirmed fact](docs/assets/collaboration-confirmed-fact.png)
 
+![Planning revision comparison and renewed review](docs/assets/night-voyager-planning-revision.png)
+
 ## Engineering proof
 
-- **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the current development graph `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011`; the released v0.1.3 identity remains fixed at migration `0009`.
+- **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the current development graph `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013`; the released v0.1.3 identity remains fixed at migration `0009`.
 - **Durable task and SSE:** an `AgentTask` survives worker/API restarts, uses bounded leases and generation fencing, and resumes an authorized event stream.
 - **Human gates:** deterministic evidence policy, advisor review, and explicit family confirmation remain separate authorities; model or adapter output cannot promote itself.
 - **Governed DRA mixed planning:** an optional offline proof imports only `UNTRUSTED_CANDIDATE` rows, keeps assigned-advisor verification and promotion in one atomic database gate, and materializes one governed mixed PlanningRun through the existing durable worker. The current provider-free prerequisite pins new strict work to exact post-release commit `01ba21f2996769e68cbc88f4bb0596740df27f6b` and `generic-strict-citation@1`; it is not part of the DRA v0.1.6 release.
@@ -22,6 +24,7 @@ The complete governed walkthrough begins at `/demo/collaboration` and continues 
 - **Versioned Skill runtime:** the v0.1.2 release governs an exact six-key catalog, deterministic evaluation, owner activation/rollback, five-field task/execution pins, and pre-start packaged-registry validation.
 - **Explicit fact-to-plan authority:** v0.1.3 migration `0009` makes the first deterministic task creation the atomic `intake -> planning` authority with the pinned task, dispatch, first event, and idempotency result; legacy runtime transition authority stays revoked.
 - **Browser to database:** v0.1.3 `/demo/collaboration` hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
+- **Planning revision journey:** post-v0.1.3 unreleased development work implements provider-free `request revision`, a controlled student preferred-country change, retained predecessor lineage, a successor PlanningRun, deterministic old/new comparison, fresh advisor authorization, and only the current family decision. The blocked budget counterfactual reaches neither approval nor decision.
 - **Portfolio and dependency boundary:** v0.1.3 includes the responsive AVIF/WebP root presentation and Next.js / `eslint-config-next` `16.2.11`. The optional/transitive `sharp@0.34.5` advisory `GHSA-f88m-g3jw-g9cj` remains deferred, so this is not an audit-zero claim.
 
 ## Evaluate the release
@@ -43,6 +46,12 @@ confirm the synthetic family fact, choose `继续进入受治理规划` (`Contin
 planning` in English), and use the explicit task action on `/demo`. The handoff itself
 performs read-only validation and creates no task.
 
+The current focused planning-revision proof uses
+`NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. Screenshot maintenance is
+explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` retains the released portfolio
+captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
+`night-voyager-planning-revision.png`.
+
 `make doctor` checks Docker, Compose capability, local ports, at least 5 GiB on the host project filesystem, and at least 8 GiB on the Docker VM filesystem. Operators may override only the Docker VM threshold with `NIGHT_VOYAGER_DOCKER_MINIMUM_KB`; the check fails closed and never removes Docker resources. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
 ## Synthetic and local limits
@@ -51,6 +60,7 @@ performs read-only validation and creates no task.
 - The repository contains no real student records and makes no admissions outcome, real-user, SLA, availability, or business-impact claim.
 - The worker and SSE evidence is deterministic local proof, not distributed high availability.
 - Live DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. Deterministic offline DRA candidate import and atomic promotion are implemented locally; governed mixed PlanningRun generation is implemented locally through the existing durable worker. Two separately authorized bounded live attempts returned 25 and 83 same-run Evidence rows, all `uncited`, and both stopped before candidate import. No third provider attempt is authorized; strict live acceptance remains incomplete. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
+- PR 1, PR 2, and PR 3 of the planning-revision work are controlled provider-free evidence only. They remain post-v0.1.3 unreleased, preserve the failed 25 and 83 row attempts as zero cited rows, and require a separate release decision; strict live acceptance remains incomplete and there is no third provider attempt.
 - Governed collaboration PR A, versioned Skill governance PR B, and browser walkthrough/inspector PR C are released in v0.1.2 as local synthetic capabilities. `/demo/collaboration` itself creates no `AgentTask`; only the explicit action after the same-Case handoff to `/demo` starts the existing governed planning path.
 - The v0.1.3 release includes merged PRs #57–#62. It does not add live providers, production deployment, distributed HA, SLA, real student data, real school coverage, advisor-team adoption, or admissions outcomes.
 

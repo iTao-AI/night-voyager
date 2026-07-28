@@ -15,6 +15,8 @@ or enter the `sessionStorage` journey envelope.
 
 ![Chinese family receipt and timeline](../assets/m5-family-receipt-timeline.png)
 
+![Chinese planning revision comparison](../assets/night-voyager-planning-revision.png)
+
 The complete governed walkthrough begins at `/demo/collaboration` and is documented
 in the [governed collaboration walkthrough](collaboration-walkthrough.md). It shares
 the session envelope and read-only inspector. Its controlled handoff creates no task
@@ -35,16 +37,22 @@ to reach review, approve Australia,
 rotate into the parent session, confirm the server-derived trade-off, and retain the
 resulting receipt and timeline. Stop the stack with `make down`.
 
-The six backend phases expose one primary action:
+The revision-aware backend phases expose one primary action:
 
 | Phase | Projection | Primary action |
 | --- | --- | --- |
-| `task-ready` | canonical demo task inputs; task/run absent | create task |
-| `active-task` | latest task; run/review absent until persisted | follow SSE |
-| `review-required` | completed task, current run, routes, Evidence, review inputs | submit advisor review |
-| `family-review` | current family-safe Brief identity | revoke advisor and mint parent |
-| `plan-ready` | completed status plus persisted receipt/timeline | continue as family or read result |
-| `terminal-task-failure` | public failure and explicit recovery guidance | allowed retry/remediation only |
+| `task_ready` | canonical demo task inputs; task/run absent | create task |
+| `active_task` | latest task; run/review absent until persisted | follow SSE |
+| `review_required` | completed task, current run, routes/Evidence, review inputs | approve or request revision |
+| `revision_requested` | retained predecessor and exact request review | rotate to the student proposal |
+| `revision_fact_pending` | bounded student preferred-country change | assigned advisor confirmation |
+| `replan_required` | current revision owns retained predecessor; no task | create explicit revision task |
+| `revision_task_active` | exact revision task and durable SSE progress | follow SSE |
+| `revision_review_required` | successor PlanningRun and deterministic old/new comparison | fresh advisor authorization |
+| `revision_blocked` | comparison plus deterministic block reason | evidence/fact remediation only |
+| `family_review` | current family-safe Brief plus renewed authorization | revoke advisor and mint parent |
+| `plan_ready` | completed status plus persisted receipt/timeline | continue as family or read result |
+| `terminal_task_failure` | public failure and explicit recovery guidance | allowed retry/remediation only |
 
 Absent task, run, route, or review data is rendered as absent, never as placeholder
 authority. The default UI mints an advisor first. Its normal role transition is
@@ -53,14 +61,15 @@ fails and never performs a client-only role flip.
 
 ## Authority and transport boundaries
 
-FastAPI adds exactly two read endpoints:
+FastAPI exposes three connected read endpoints:
 
 - `GET /api/v1/cases/{case_id}/advisor-ledger`
 - `GET /api/v1/cases/{case_id}/current-decision-brief`
+- `GET /api/v1/cases/{case_id}/journey-status`
 
-The Next.js BFF exposes eleven explicit handlers: bootstrap, session create,
+The Next.js BFF exposes twelve explicit handlers: bootstrap, session create,
 session delete, Ledger read, task create/read/cancel/events, advisor review,
-current Brief read, and family decision. There is no catch-all proxy. All
+current Brief read, journey-status read, and family decision. There is no catch-all proxy. All
 identity upstream calls use the server-configured fixed public Origin. Browser
 mutations must first pass exact Origin validation; caller Origin is neither
 trusted nor reflected. Each upstream `Set-Cookie` field is appended separately,
@@ -94,9 +103,10 @@ support reload only in the same tab. If an opaque cookie exists while recovery
 metadata is missing or inconsistent, the UI fails closed: it does not mutate,
 guess a role, silently revoke, or show parent presentation.
 
-The shared `schema_version=2` journey envelope distinguishes
-`advisor-family|collaboration`; an existing other journey must be explicitly revoked,
-so a tab cannot run the two workflows concurrently. `/demo` preserves one active
+The collaboration journey remains V2; advisor-family recovery uses the closed V3
+envelope with snake_case phase, current revision/task/predecessor/run, cursor, and
+pending mutation identity. An existing other journey must be explicitly revoked, so a
+tab cannot run the two workflows concurrently. `/demo` preserves one active
 `EventSource` and a monotonic durable cursor. The explicit task action creates
 at most one task and opens exactly one initial `/events?after=0` stream. Reloads
 recover the stored cursor, review state, parent rotation, receipt, and timeline for
@@ -108,6 +118,22 @@ Run the real browser-to-database proof with:
 make compose-proof
 make down
 ```
+
+For the post-v0.1.3 planning-revision lane, set
+`NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. The lane proves request
+revision, the controlled student preferred-country change, retained predecessor,
+successor PlanningRun, lost-ack recovery, deterministic comparison, renewed review,
+only the current family decision, and the blocked budget counterfactual. The
+dedicated asset is updated only with `UPDATE_PLANNING_REVISION_SCREENSHOT=1`;
+`UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the released portfolio captures.
+
+Local Task 4 evidence used the exact host Playwright browser against Compose-served
+PostgreSQL/API/worker state because the local containerized browser image could not
+complete external Docker/apt transport. That controlled provider-free hybrid was
+GREEN for both locales and the database verifier, but it is not formal Compose GREEN.
+After publication, the exact-head hosted `python`, `frontend`, and `compose` checks
+remain mandatory, and the hosted `compose` check must run the normal containerized
+path successfully.
 
 The proof exercises PostgreSQL roles/RLS, identity cookies and fixed Origin,
 worker/SSE replay, advisor review, real role rotation, family decision,

@@ -64,7 +64,7 @@ No remote font or font package is required.
 
 ## Lifecycle and interaction contract
 
-The first screen contains exactly one current lifecycle stage, one required human decision, and one primary action. The connected lifecycle projects `task-ready`, `active-task`, `review-required`, `family-review`, `plan-ready`, or `terminal-task-failure` from the backend. Consequential actions expose disabled reasons and confirmation summaries; `plan-ready` retains a visible receipt and timeline. Same-tab recovery uses opaque-cookie bootstrap plus session-bound `sessionStorage` metadata and fails closed when that metadata is missing or inconsistent.
+The first screen contains exactly one current lifecycle stage, one required human decision, and one primary action. The connected lifecycle projects `task_ready`, `active_task`, `review_required`, `revision_requested`, `revision_fact_pending`, `replan_required`, `revision_task_active`, `revision_review_required`, `revision_blocked`, `family_review`, `plan_ready`, or `terminal_task_failure` from the backend. Consequential actions expose disabled reasons and confirmation summaries; `plan_ready` retains a visible receipt and timeline. Same-tab recovery uses opaque-cookie bootstrap plus a closed V3 advisor-family `sessionStorage` envelope and fails closed when that metadata is missing or inconsistent.
 
 The current walkthrough uses the canonical synthetic Australia Case and backend-owned route, budget, trade-off, role, task, review, and currentness facts. M1 Japan material is not current runtime authority. Technical lease and adapter detail remains secondary disclosure even though the UI follows the durable task through authorized SSE.
 
@@ -86,6 +86,13 @@ and preserves one SSE connection. Catalog-only Skills are never presented as exe
 capabilities merely because they have versions or passing evaluations.
 
 Fact-to-plan PRs #57–#59, the high-end root PR #60, and route presentation polish PR #61 are released in `v0.1.3`. This presentation surface owns only the route-specific shell, closed copy/data additions, responsive imagery, route atlas, continuous journey, accessibility proof, and refreshed root screenshot. It adds no backend, BFF, task, worker, provider, or deployment authority.
+
+The post-v0.1.3 planning revision journey keeps the same editorial hierarchy while
+adding a controlled student preferred-country editor, retained predecessor context,
+deterministic old/new comparison, renewed advisor review, and current-revision family
+decision. `revision_blocked` keeps the comparison visible but exposes no approval or
+family-decision action. This remains controlled provider-free evidence rather than
+strict live acceptance or a released capability.
 
 ## Accessibility
 
@@ -111,3 +118,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-20 | Add PR C as a secondary governed walkthrough | Proves collaboration authority and a read-only Skill projection while preserving `/demo`, backend ownership, and the no-task boundary. |
 | 2026-07-22 | Make the portfolio presentation Chinese-first | Adds an exact `zh-CN`/`en` presentation-only layer and outcome-first root while preserving the same server authority and warm-paper direction. |
 | 2026-07-23 | Split the root from the governed demo visual layer | Gives `/` the Virtual Night Voyage entry while preserving the warm-paper ledger and every existing authority boundary on both demo routes. |
+| 2026-07-28 | Extend the connected ledger with a revision journey | Preserves backend phase/role authority while presenting the retained predecessor, deterministic comparison, fresh advisor authorization, and a fail-closed blocked counterfactual. |

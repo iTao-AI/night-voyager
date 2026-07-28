@@ -2,7 +2,7 @@
 
 ## Status
 
-**Design status:** Approved; PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented.
+**Design status:** Approved; PR 1, PR 2, and PR 3 implemented provider-free; strict live acceptance remains incomplete.
 
 ### Current runtime correction after PR 1
 
@@ -15,8 +15,11 @@ live attempt, release, or deployment was performed. The two prior 25/83
 `uncited` attempts remain failed pre-import history and strict live acceptance
 remains incomplete. Planning revision PR 2 now adds migration `0012`, durable
 task-owned predecessor/successor lineage, deterministic comparison, negotiated
-V2 backend reads, and participant-safe journey status. Journey PR 3 remains
-approved but not implemented.
+V2 backend reads, and participant-safe journey status. Journey PR 3 now implements
+the bilingual request-revision browser journey, controlled student preference edit,
+closed V3 recovery, renewed review, current family decision, and blocked budget proof.
+This is post-v0.1.3 unreleased controlled provider-free evidence; it is not strict
+live acceptance and still requires a separate release decision.
 
 This design defines two ordered capabilities after the `v0.1.3` release:
 

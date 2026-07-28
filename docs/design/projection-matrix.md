@@ -7,10 +7,11 @@
 | `AdvisorReview` | required review and rationale | reviewed provenance | persisted review |
 | `DecisionBrief` | current Brief identity/status | family-safe Brief and requirements | current or decision-linked Brief |
 | `FamilyDecision` | completion status | confirmation and consequence | idempotent persisted mutation |
-| `DecisionReceipt` | completion summary | full persistent receipt | existing receipt row |
+| `DecisionReceipt` | completion summary | full persistent receipt | unique non-null `family_decisions.receipt_id` |
 | `TimelinePlan` | completion summary | dated next steps | existing timeline row |
 | `AgentTask` | task phase and progress | absent from main narrative | durable task/event rows |
 | revision predecessor/successor | exact current task/run and deterministic country-keyed comparison in V2 | participant-safe durable journey phase only | request review, Case revision lineage, task-owned predecessor, and two validated run hashes |
+| revision recovery | terminal failure carries bounded recovery; `revision_blocked` carries none | no recovery action | closed V2 adapter and model invariants |
 | pending changed planning fact | advisor V2 phase only; no candidate payload | same boolean-derived phase for assigned advisor/student/parent | API-only `read_connected_journey_fact_pending`; current revision loaded inside PostgreSQL |
 | `MemoryCandidate` | current handoff candidate | absent | current no-store candidate projection |
 | `ConfirmedFact` + Case revision | current confirmed facts, fact version, and revision | family-safe fact after role rotation | PostgreSQL current fact heads and Case |

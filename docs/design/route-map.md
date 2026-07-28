@@ -7,8 +7,9 @@ same-Case handoff then composes the existing focused advisor-family/evidence rou
 it adds no new BFF handler.
 
 `/demo` also remains independently available as the focused advisor-family/evidence
-route. Eleven explicit same-origin BFF handlers connect it to the existing FastAPI
-identity, task, review, decision, SSE, and exactly two M5 read endpoints. Both demo
+route. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI
+identity, task, review, decision, SSE, and three connected read endpoints, including
+participant-safe `journey-status`. Both demo
 routes retain the warm-paper ledger visual system.
 
 ```text
@@ -19,6 +20,10 @@ routes retain the warm-paper ledger visual system.
   -> family-review: revoke advisor -> bootstrap -> mint parent
   -> Family Decision Brief
   -> family decision -> plan-ready receipt + TimelinePlan
+  -> request revision -> controlled student preferred-country proposal
+  -> advisor fact confirmation -> explicit successor task
+  -> retained predecessor + deterministic old/new comparison
+  -> fresh advisor authorization -> only the current family decision
 
 /demo/collaboration
   -> parent bootstrap + shared thread

@@ -171,6 +171,27 @@ M5_SCREENSHOTS = (
     "docs/assets/m5-advisor-ledger.png",
     "docs/assets/m5-family-receipt-timeline.png",
 )
+PLANNING_REVISION_SCREENSHOT = "docs/assets/night-voyager-planning-revision.png"
+PLANNING_REVISION_CURRENT_DOCS = (
+    "README.md",
+    "README_CN.md",
+    "DESIGN.md",
+    "docs/README.md",
+    "docs/design/demo-storyboard.md",
+    "docs/design/projection-matrix.md",
+    "docs/design/route-map.md",
+    "docs/design/state-and-interaction-matrix.md",
+    "docs/operations/collaboration-authority.md",
+    "docs/operations/collaboration-walkthrough.md",
+    "docs/operations/connected-demo.md",
+    "docs/operations/worker-and-sse.md",
+    "docs/reference/agent-tasks-and-events.md",
+    "docs/reference/collaboration-and-confirmed-facts.md",
+    "docs/reference/http-api-v1.md",
+    "docs/superpowers/README.md",
+    "docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md",
+    "docs/superpowers/plans/2026-07-27-planning-revision-journey-pr-3-implementation-plan.md",
+)
 PORTFOLIO_SOURCE_SHA256 = (
     "4fe73754e5180e725bfc7d734fc9a9039030da5ebef41f31aa1cf2f1ccff55fc"
 )
@@ -886,7 +907,7 @@ def verify_planning_revision_surface() -> None:
         "V1 read routes remain default",
         "contract_version=2",
         "journey-status is participant-safe recovery authority",
-        "PR 3 browser journey remains unimplemented",
+        "PR 3 browser journey is implemented provider-free",
         "read_connected_journey_fact_pending",
     )
     if (
@@ -900,6 +921,48 @@ def verify_planning_revision_surface() -> None:
         )
     ):
         raise SystemExit("planning revision authority documentation drift")
+
+    screenshot = (ROOT / PLANNING_REVISION_SCREENSHOT).read_bytes()
+    if (
+        not screenshot.startswith(b"\x89PNG\r\n\x1a\n")
+        or len(screenshot) < 24
+        or int.from_bytes(screenshot[16:20], "big") != 1440
+        or int.from_bytes(screenshot[20:24], "big") < 900
+    ):
+        raise SystemExit("planning revision screenshot identity drift")
+
+    current_docs = " ".join(
+        "\n".join(
+            (ROOT / relative).read_text(encoding="utf-8")
+            for relative in PLANNING_REVISION_CURRENT_DOCS
+        ).split()
+    )
+    current_claims = (
+        "request revision",
+        "student preferred-country change",
+        "retained predecessor",
+        "successor PlanningRun",
+        "deterministic old/new comparison",
+        "fresh advisor authorization",
+        "only the current family decision",
+        "blocked budget counterfactual",
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "post-v0.1.3 unreleased",
+        "strict live acceptance remains incomplete",
+        "no third provider attempt",
+        "25 and 83",
+        "zero cited rows",
+        "controlled provider-free evidence",
+        "separate release decision",
+        "UPDATE_PORTFOLIO_SCREENSHOTS",
+        "UPDATE_PLANNING_REVISION_SCREENSHOT",
+    )
+    if (
+        any(token not in current_docs for token in current_claims)
+        or PLANNING_REVISION_SCREENSHOT not in current_docs
+        or "PR 3 browser journey remains unimplemented" in current_docs
+    ):
+        raise SystemExit("planning revision current documentation or non-claim drift")
     print("proof planning revision surface: durable lineage and role-safe projection confirmed")
 
 
@@ -1050,8 +1113,8 @@ def verify_alembic_contract() -> None:
         'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
         "tests/integration/planning/test_revision_migration.py": 1,
         "tests/integration/planning/test_revision_authority.py": 1,
-        "tests/integration/connected_demo/test_postgres_read_models.py": 1,
-        "tests/integration/connected_demo/test_http_read_models.py": 1,
+        "tests/integration/connected_demo/test_postgres_read_models.py": 2,
+        "tests/integration/connected_demo/test_http_read_models.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade': 3,
     }
     if any(gate.count(node) != count for node, count in required_node_counts.items()):

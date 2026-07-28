@@ -121,17 +121,24 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "DRA strict consumer and versioned planning revision",
-        "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented; "
+        "PR 1, PR 2, and PR 3 implemented provider-free; "
         "strict live acceptance incomplete",
         "2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md",
         "**Plan status:** Implementation complete locally; awaiting Career authority review.",
     ),
     (
         "DRA strict consumer and versioned planning revision",
-        "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented; "
+        "PR 1, PR 2, and PR 3 implemented provider-free; "
         "strict live acceptance incomplete",
         "2026-07-27-versioned-planning-revision-pr-2-implementation-plan.md",
         "**Plan status:** Implementation complete locally; awaiting Career authority review.",
+    ),
+    (
+        "DRA strict consumer and versioned planning revision",
+        "PR 1, PR 2, and PR 3 implemented provider-free; "
+        "strict live acceptance incomplete",
+        "2026-07-27-planning-revision-journey-pr-3-implementation-plan.md",
+        "**Plan status:** Implementation complete locally; awaiting maintainer review.",
     ),
     (
         "High-End Portfolio Entry v1",
@@ -208,6 +215,7 @@ def test_dra_strict_prerequisite_current_docs_are_truthful() -> None:
             "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md",
             "docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md",
             "docs/superpowers/plans/2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md",
+            "docs/superpowers/plans/2026-07-27-planning-revision-journey-pr-3-implementation-plan.md",
         )
     }
     combined = "\n".join(current_docs.values())
@@ -237,15 +245,15 @@ def test_dra_strict_prerequisite_current_docs_are_truthful() -> None:
     ]
     plans_index = current_docs["docs/superpowers/README.md"]
     assert (
-        "**Design status:** Approved; PR 1 and PR 2 implemented provider-free; "
-        "PR 3 approved but not implemented."
+        "**Design status:** Approved; PR 1, PR 2, and PR 3 implemented provider-free; "
+        "strict live acceptance remains incomplete."
     ) in strict_spec
     assert (
         "**Plan status:** Implementation complete locally; awaiting Career authority review."
     ) in strict_plan
     assert (
         "| DRA strict consumer and versioned planning revision | "
-        "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented; "
+        "PR 1, PR 2, and PR 3 implemented provider-free; "
         "strict live acceptance incomplete |"
     ) in plans_index
 MERGED_FACT_TO_PLAN_BANNERS = {
@@ -623,8 +631,12 @@ def test_versioned_planning_revision_authority_is_documented() -> None:
         "V1 read routes remain default",
         "contract_version=2",
         "journey-status is participant-safe recovery authority",
-        "PR 3 browser journey remains unimplemented",
+        "PR 3 browser journey is implemented provider-free",
         "read_connected_journey_fact_pending",
+        "Migration `0012` remains the runtime lineage authority",
+        "Migration `0013` adds only the closed provider-free demo seed helper",
+        "zero runtime grants",
+        "planning-revision-seed-migration",
     ):
         assert required in combined
     for mode in ("authority", "worker", "projection", "all"):
@@ -636,7 +648,7 @@ def test_versioned_planning_revision_authority_is_documented() -> None:
         / "docs/superpowers/plans/"
         "2026-07-27-versioned-planning-revision-pr-2-implementation-plan.md"
     ).read_text(encoding="utf-8")
-    assert "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented" in (
+    assert "PR 1, PR 2, and PR 3 implemented provider-free" in (
         plans_index
     )
     assert (
@@ -645,24 +657,94 @@ def test_versioned_planning_revision_authority_is_documented() -> None:
     )
 
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert 'heads != {"0012"}' in verifier
+    assert 'heads != {"0013"}' in verifier
     assert '"read_connected_journey_fact_pending"' in verifier
 
 
 def test_root_readmes_bind_current_development_migration_head() -> None:
     current_graph = (
         "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
-        "0009 -> 0010 -> 0011`"
+        "0009 -> 0010 -> 0011 -> 0012 -> 0013`"
     )
     stale_graph = (
         "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
-        "0009 -> 0010`"
+        "0009 -> 0010 -> 0011 -> 0012`"
     )
     for relative in ("README.md", "README_CN.md"):
         source = (ROOT / relative).read_text(encoding="utf-8")
         assert source.count(current_graph) == 1, relative
         assert stale_graph not in source, relative
         assert "v0.1.3 migration `0009`" in source, relative
+
+
+def test_planning_revision_journey_docs_are_current_and_claim_bounded() -> None:
+    current_docs = {
+        relative: (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "README.md",
+            "README_CN.md",
+            "DESIGN.md",
+            "docs/README.md",
+            "docs/design/demo-storyboard.md",
+            "docs/design/projection-matrix.md",
+            "docs/design/route-map.md",
+            "docs/design/state-and-interaction-matrix.md",
+            "docs/operations/collaboration-authority.md",
+            "docs/operations/collaboration-walkthrough.md",
+            "docs/operations/connected-demo.md",
+            "docs/operations/database-roles.md",
+            "docs/operations/worker-and-sse.md",
+            "docs/decisions/0012-versioned-planning-revision-authority.md",
+            "docs/reference/agent-tasks-and-events.md",
+            "docs/reference/collaboration-and-confirmed-facts.md",
+            "docs/reference/http-api-v1.md",
+            "docs/superpowers/README.md",
+            "docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md",
+            "docs/superpowers/plans/2026-07-27-planning-revision-journey-pr-3-implementation-plan.md",
+        )
+    }
+    combined = " ".join("\n".join(current_docs.values()).split())
+    for required in (
+        "request revision",
+        "student preferred-country change",
+        "retained predecessor",
+        "successor PlanningRun",
+        "deterministic old/new comparison",
+        "fresh advisor authorization",
+        "only the current family decision",
+        "blocked budget counterfactual",
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "strict live acceptance remains incomplete",
+        "post-v0.1.3 unreleased",
+        "no third provider attempt",
+        "25 and 83",
+        "zero cited rows",
+        "controlled provider-free evidence",
+        "separate release decision",
+        "night-voyager-planning-revision.png",
+        "planning-revision",
+        "UPDATE_PORTFOLIO_SCREENSHOTS",
+        "UPDATE_PLANNING_REVISION_SCREENSHOT",
+        "Amendments 26 and 27",
+        "Migration `0012` remains the runtime lineage authority",
+        "Migration `0013` adds only the closed provider-free demo seed helper",
+    ):
+        assert required in combined
+    assert "PR 3 browser journey remains unimplemented" not in combined
+
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    for required in (
+        "PLANNING_REVISION_CURRENT_DOCS",
+        "PLANNING_REVISION_SCREENSHOT",
+        "post-v0.1.3 unreleased",
+        "strict live acceptance remains incomplete",
+        "no third provider attempt",
+        "25 and 83",
+        "zero cited rows",
+        "controlled provider-free evidence",
+        "separate release decision",
+    ):
+        assert required in verifier
 
 
 def test_explicit_planning_start_documents_match_0009_authority() -> None:

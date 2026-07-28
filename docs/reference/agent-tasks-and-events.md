@@ -127,6 +127,12 @@ successor with `supersedes_run_id`. One predecessor -> at most one successor
 holds across reclaim, retry, concurrent finalization, and lost acknowledgement.
 Initial planning tasks have no predecessor.
 
+The provider-free browser proof binds restart/reclaim to this durable lineage. After
+the revision-2 task exists, a PostgreSQL transaction locks the exact superseded
+predecessor, the worker reaches durable `running`, and the worker is restarted before
+the barrier is released. Real lease expiry then reclaims the same task under a new
+generation; final verification requires exactly two executions and one successor.
+
 After a reviewed `waiting_review` task produces the exact current predecessor,
 an exact durable `request_revision` review allows fact revision without changing
 the task state. That task remains immutable historical evidence. Unreviewed or
@@ -181,6 +187,11 @@ The stream sends a `: heartbeat` comment after 15 seconds without an event.
 Comments are not durable rows. Once a closing state is reached and all durable
 events are delivered, the connection closes. Each page uses a short database
 transaction; waiting and yielding do not retain a session.
+
+The planning-revision browser lane also proves lost-ack recovery through the same
+idempotency key, cursor reload from authoritative journey status, renewed advisor
+review for the successor, and rejection of approval/family decision for the blocked
+budget counterfactual.
 
 ## Fixed bounds
 

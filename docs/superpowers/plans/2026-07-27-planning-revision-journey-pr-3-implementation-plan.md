@@ -6,7 +6,7 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Playwright, Python 3.12, FastAPI, PostgreSQL 18, Docker Compose, existing Night Voyager BFF and proof scripts.
 
-**Plan status:** Approved; implementation has not started.
+**Plan status:** Implementation complete locally; awaiting maintainer review.
 
 ## Global Constraints
 
@@ -1061,6 +1061,61 @@ git add \
   scripts/verify_release.py
 git commit -m "docs: publish the planning revision journey"
 ```
+
+## Implementation record
+
+The approved history above remains unchanged. Execution completed Tasks 1–4 with
+focused RED/GREEN evidence and semantic local commits. Targeted authority amendments
+closed contract-migration fixtures, the collaboration-to-advisor V3 handoff, and the
+revision-aware browser recovery surface without changing the collaboration journey's
+V2 contract.
+
+The browser-proof investigation recorded these bounded corrections:
+
+- the proposed apt transport amendment did not obtain runtime GREEN and was fully
+  rejected; no Dockerfile or apt architecture regression was committed;
+- the local host-browser recovery used exact Playwright 1.58.2 against
+  Compose-served PostgreSQL/API/worker authority. Later network-free diagnosis used
+  a current offline wheel with packaged runtime resources, not the editable proof
+  image as application authority;
+- the deterministic restart proof replaced timing pulses with a task-owned
+  PostgreSQL predecessor-row barrier, durable running/generation checks, worker PID
+  change, real lease expiry, and same-task reclaim;
+- focused regressions closed post-revision predecessor selection, `plan_ready`
+  journey projection, mixed `revision_blocked` recovery, real
+  `family_decisions.receipt_id` verification, and exact-head Pyright;
+- the final en-only replacement corrected a repo-external no-op return and reused
+  the already accepted zh-CN product evidence without changing repository source.
+- PostgreSQL replay evidence then closed the planning-revision seed as one
+  create-or-exact-replay fixture, aligned RLS tests to exact fixture identities,
+  and kept the historical mixed-downgrade lane empty through an independent
+  internal seed switch. That isolation switch has no public documentation impact.
+- Amendments 26 and 27 restored migrator-owned planning-revision seed authority
+  without rewriting the approved migration history. Migration `0012` remains
+  the runtime lineage authority. Migration `0013` adds only the closed
+  provider-free demo seed helper with zero runtime grants, while historical-head
+  seed calls explicitly exclude planning-revision fixtures. The isolated
+  `planning-revision-seed-migration` lane proves helper catalog/ACL, first
+  create, exact replay, drift and collision refusal, rollback, downgrade, and
+  re-upgrade.
+
+Both locales, the happy and blocked browser paths, lost-ack/reload/SSE/restart
+authority, family decision receipt/timeline, and the PostgreSQL verifier are GREEN
+under the controlled provider-free hybrid. The planning-revision screenshot was
+visually inspected, while the three existing public screenshots remained
+byte-identical.
+
+This evidence is not formal local containerized Compose GREEN: external Docker/apt
+transport prevented the local browser image proof. The exact-head hosted `python`,
+`frontend`, and normal containerized `compose` checks are mandatory after
+publication; any failure blocks merge. This gate-location amendment supersedes the
+local execution of Task 5 Step 5 without rewriting its originally approved text.
+
+PR 1, PR 2, and PR 3 are post-v0.1.3 unreleased controlled provider-free evidence.
+The exact DRA commit remains `01ba21f2996769e68cbc88f4bb0596740df27f6b`;
+strict live acceptance remains incomplete, the prior 25 and 83 row attempts retain
+zero cited rows, there was no third provider attempt, and publication requires a
+separate release decision.
 
 ## PR 3 Completion Gate
 

@@ -2,10 +2,9 @@
 
 ## Status
 
-Accepted for local authority review. The backend and migration are implemented
-provider-free. The PR 3 browser journey remains unimplemented. No provider,
-credential, live acceptance, tag, release, or deployment action is part of this
-decision.
+Accepted for local authority review. PR 1, PR 2, and PR 3 are implemented
+provider-free and remain post-v0.1.3 unreleased. No provider, credential, live
+acceptance, tag, release, or deployment action is part of this decision.
 
 ## Context
 
@@ -111,9 +110,14 @@ currentness, and idempotency state unchanged.
   participant-safe HTTP/PostgreSQL reads.
 - `scripts/run_db_tests.sh planning-revision all` runs the three authorities and
   the isolated downgrade lane serially.
-- PR 3 browser journey remains unimplemented. The backend status endpoint is a
-  recovery authority for that later work, not permission for a browser to
+- PR 3 browser journey is implemented provider-free. The backend status
+  endpoint remains recovery authority, not permission for a browser to
   calculate phase or retain database identities.
+- Migration `0012` remains the runtime lineage authority. Migration `0013` adds
+  only the closed provider-free demo seed helper, with zero runtime grants.
+  Its isolated `planning-revision-seed-migration` lane proves exact replay,
+  drift refusal, downgrade, and re-upgrade. This forward migration does not
+  change runtime lineage semantics or authority.
 
 ## Non-claims
 
