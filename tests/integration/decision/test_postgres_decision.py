@@ -352,7 +352,7 @@ async def test_api_role_rejects_wrong_role_stale_run_and_cross_run_risk() -> Non
                         "risks": json.dumps(
                             [
                                 {
-                                    "evidence_id": "60000000-0000-0000-0000-000000000099",
+                                    "evidence_id": str(UNLINKED_EVIDENCE),
                                     "kind": "optional",
                                     "reason": "explicit synthetic cross-run probe",
                                 }
@@ -360,8 +360,12 @@ async def test_api_role_rejects_wrong_role_stale_run_and_cross_run_risk() -> Non
                         ),
                         "projection": "{}",
                         "source_date": date(2026, 7, 1),
-                        "key_hash": "8" * 64,
-                        "request_hash": "9" * 64,
+                        "key_hash": (
+                            "fc2210567452efad10e6cd386917ca6338e31f4f460b6d7e66ef879811cae7b6"
+                        ),
+                        "request_hash": (
+                            "ee68ace09ea11e980593a476e41d08f3f0047ee31ff75e3b78f9c56276fdfd01"
+                        ),
                     },
                 )
             assert getattr(cross_run_risk.value.orig, "sqlstate", None) == "NV006"

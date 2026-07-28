@@ -2,7 +2,7 @@
 
 ## Status
 
-**Design status:** Approved; PR 1 implemented provider-free; PR 2 and PR 3 approved but not implemented.
+**Design status:** Approved; PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented.
 
 ### Current runtime correction after PR 1
 
@@ -13,8 +13,10 @@ candidate import on the existing endpoint, durable strict identity, V3
 readiness, and strict outcome evaluation. No provider, candidate freeze, third
 live attempt, release, or deployment was performed. The two prior 25/83
 `uncited` attempts remain failed pre-import history and strict live acceptance
-remains incomplete. Planning revision PR 2 and journey PR 3 remain approved but
-not implemented.
+remains incomplete. Planning revision PR 2 now adds migration `0012`, durable
+task-owned predecessor/successor lineage, deterministic comparison, negotiated
+V2 backend reads, and participant-safe journey status. Journey PR 3 remains
+approved but not implemented.
 
 This design defines two ordered capabilities after the `v0.1.3` release:
 

@@ -22,6 +22,7 @@ def _url(name: str) -> str:
 @pytest.mark.asyncio
 async def test_api_and_worker_see_only_transaction_tenant_and_pool_does_not_leak() -> None:
     migrator = create_async_engine(_url("NIGHT_VOYAGER_MIGRATION_DATABASE_URL"))
+    expected_joined: dict[UUID, int] = {}
     try:
         async with migrator.begin() as connection:
             await connection.execute(
@@ -55,6 +56,23 @@ async def test_api_and_worker_see_only_transaction_tenant_and_pool_does_not_leak
                     "actor_id": OTHER_ACTOR,
                 },
             )
+            for organization_id in (DEMO_ORG, OTHER_ORG):
+                await connection.execute(
+                    text("SELECT set_config('night_voyager.organization_id', :value, true)"),
+                    {"value": str(organization_id)},
+                )
+                expected_joined[organization_id] = int(
+                    await connection.scalar(
+                        text(
+                            "SELECT count(*) FROM app.actors a JOIN app.memberships m "
+                            "ON (m.organization_id, m.actor_id) = "
+                            "(a.organization_id, a.id) "
+                            "WHERE a.organization_id=:organization_id"
+                        ),
+                        {"organization_id": organization_id},
+                    )
+                    or 0
+                )
     finally:
         await migrator.dispose()
 
@@ -64,7 +82,7 @@ async def test_api_and_worker_see_only_transaction_tenant_and_pool_does_not_leak
             async with engine.begin() as connection:
                 missing = await connection.scalar(text("SELECT count(*) FROM app.organizations"))
                 assert missing == 0
-            for organization_id, expected_joined in ((DEMO_ORG, 3), (OTHER_ORG, 1)):
+            for organization_id in (DEMO_ORG, OTHER_ORG):
                 async with engine.begin() as connection:
                     await connection.execute(
                         text("SELECT set_config('night_voyager.organization_id', :value, true)"),
@@ -82,7 +100,7 @@ async def test_api_and_worker_see_only_transaction_tenant_and_pool_does_not_leak
                         {"id": organization_id},
                     )
                     assert own == 1
-                    assert joined == expected_joined
+                    assert joined == expected_joined[organization_id]
                     assert cross_tenant == 0
             async with engine.begin() as connection:
                 leaked = await connection.scalar(text("SELECT count(*) FROM app.organizations"))

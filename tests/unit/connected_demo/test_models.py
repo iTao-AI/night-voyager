@@ -9,9 +9,13 @@ from pydantic import ValidationError
 
 from night_voyager.connected_demo.models import (
     AdvisorLedgerV1,
+    AdvisorLedgerV2,
+    ConnectedJourneyStatusV1,
     CurrentDecisionBriefV1,
     DemoPhase,
+    DemoPhaseV2,
     FamilyDecisionRequirements,
+    FamilyRevisionContextV1,
 )
 
 CASE_ID = "40000000-0000-0000-0000-000000000002"
@@ -246,3 +250,102 @@ def test_plan_ready_requires_receipt_and_timeline() -> None:
     payload = current_brief_payload(DemoPhase.PLAN_READY)
     with pytest.raises(ValidationError, match="plan-ready projection"):
         CurrentDecisionBriefV1.model_validate(deepcopy(payload))
+
+
+def test_revision_phase_contract_is_exact_snake_case() -> None:
+    assert tuple(item.value for item in DemoPhaseV2) == (
+        "task_ready",
+        "active_task",
+        "review_required",
+        "revision_requested",
+        "revision_fact_pending",
+        "replan_required",
+        "revision_task_active",
+        "revision_review_required",
+        "revision_blocked",
+        "family_review",
+        "plan_ready",
+        "terminal_task_failure",
+    )
+    with pytest.raises(ValueError):
+        DemoPhaseV2("revision-review-required")
+
+
+def test_participant_journey_status_forbids_authority_fields() -> None:
+    payload = {
+        "schema": "night-voyager.connected-journey-status.v1",
+        "case_id": CASE_ID,
+        "current_revision": 2,
+        "phase": "revision_review_required",
+        "active_role": "advisor",
+    }
+    assert ConnectedJourneyStatusV1.model_validate(payload).current_revision == 2
+    payload["planning_run_id"] = RUN_ID
+    with pytest.raises(ValidationError):
+        ConnectedJourneyStatusV1.model_validate(payload)
+
+
+def test_family_revision_context_is_closed() -> None:
+    context = FamilyRevisionContextV1(
+        schema="night-voyager.family-revision-context.v1",
+        current_case_revision=2,
+        planning_version="revised",
+        advisor_authorization="renewed_for_current_revision",
+    )
+    assert context.current_case_revision == 2
+    with pytest.raises(ValidationError):
+        FamilyRevisionContextV1.model_validate(
+            {
+                **context.model_dump(mode="json", by_alias=True),
+                "advisor_authorization": "inferred_from_recovery",
+            }
+        )
+
+
+def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs() -> None:
+    payload = {
+        "schema_version": 2,
+        "proof_mode": "synthetic-demo",
+        "phase": "revision_blocked",
+        "case_id": CASE_ID,
+        "case_revision": 2,
+        "case_state": "planning",
+        "canonical_task_inputs": None,
+        "task": task("needs_evidence"),
+        "planning_run": {
+            **planning_run(),
+            "state": "blocked",
+        },
+        "comparison": {
+            "schema": "night-voyager.planning-revision-comparison.v1",
+            "case_id": CASE_ID,
+            "previous_revision": 1,
+            "current_revision": 2,
+            "previous_planning_run_id": "70000000-0000-0000-0000-000000000001",
+            "current_planning_run_id": RUN_ID,
+            "previous_output_sha256": "a" * 64,
+            "current_output_sha256": "b" * 64,
+            "changed_fact": {
+                "fact_key": "student.preferred_countries",
+                "previous_value": ("australia",),
+                "current_value": ("australia", "japan"),
+            },
+            "countries": (),
+            "current_run_state": "blocked",
+            "approval_eligible": False,
+        },
+        "routes": (),
+        "evidence": (),
+        "review_inputs": None,
+        "current_brief_id": None,
+        "recovery": None,
+    }
+    assert AdvisorLedgerV2.model_validate(payload).comparison is not None
+    payload["review_inputs"] = {
+        "planning_run_id": RUN_ID,
+        "expected_case_revision": 2,
+        "eligible_route_ids": (),
+        "risk_acceptance_options": (),
+    }
+    with pytest.raises(ValidationError, match="revision-blocked"):
+        AdvisorLedgerV2.model_validate(payload)

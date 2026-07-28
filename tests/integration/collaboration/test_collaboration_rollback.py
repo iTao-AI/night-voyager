@@ -15,14 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, create_async_en
 from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.collaboration.models import (
     AppendMessageCommand,
+    BudgetProposal,
     FactKey,
     JapanRiskAcceptedProposal,
     ProposeMemoryCandidateCommand,
-    RiskToleranceProposal,
     VerificationDecision,
     VerifyMemoryCandidateCommand,
 )
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.models import BudgetEnvelope
 
 pytestmark = pytest.mark.database
 
@@ -40,6 +41,7 @@ CASE_TABLE_PREDICATES = (
     ("student_cases", "id"),
     ("student_case_revisions", "case_id"),
     ("planning_runs", "case_id"),
+    ("agent_tasks", "case_id"),
     ("collaboration_threads", "case_id"),
     ("message_events", "case_id"),
     ("memory_candidates", "case_id"),
@@ -119,7 +121,10 @@ ROLLBACK_BOUNDARIES = (
     RollbackBoundary(
         name="confirm_revision",
         decision=VerificationDecision.CONFIRM,
-        pattern=(r"VALUES\(p_org,resolved_case,next_revision,1,next_student,next_family\);"),
+        pattern=(
+            r"VALUES\(p_org,resolved_case,next_revision,1,next_student,next_family,"
+            r"request_review\.id,current_run\.id\);"
+        ),
     ),
     RollbackBoundary(
         name="confirm_existing_fact_refs",
@@ -421,10 +426,17 @@ async def _seed_runtime_authority(
     target_proposal = ProposeMemoryCandidateCommand(
         message_event_id=fixture.target_message_id,
         case_revision=2,
-        proposal=RiskToleranceProposal(
+        proposal=BudgetProposal(
             schema_version=1,
-            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
-            value="high",
+            fact_key=FactKey.FAMILY_BUDGET,
+            value=BudgetEnvelope(
+                schema_version=1,
+                currency="CNY",
+                period="program_total",
+                preferred_minor=31_000_000,
+                hard_ceiling_minor=37_000_000,
+                elasticity_bps=750,
+            ),
         ),
     )
     target_value = target_proposal.proposal.model_dump(mode="json")["value"]
@@ -432,7 +444,7 @@ async def _seed_runtime_authority(
         text(
             "SELECT * FROM app.propose_memory_candidate("
             ":org,:actor,'parent',:message,:candidate,2,"
-            "'family.risk_tolerance',CAST(:value AS jsonb),"
+            "'family.budget',CAST(:value AS jsonb),"
             ":value_hash,:request_hash,:key_hash)"
         ),
         {
@@ -482,6 +494,16 @@ async def _ensure_runtime_fixture(fixture: RuntimeFixture) -> None:
                 )
                 await connection.execute(
                     text(
+                        "INSERT INTO app.source_pack_entries VALUES("
+                        ":org,:pack,1,'51000000-0000-0000-0000-000000000521',"
+                        "'revision.txt',repeat('5',64),current_date,'synthetic','synthetic',"
+                        "'https://example.invalid/revision',365,'synthetic_public',"
+                        "'synthetic_demo','[]'::jsonb,'[]'::jsonb) ON CONFLICT DO NOTHING"
+                    ),
+                    {"org": ORG_ID, "pack": PACK_ID},
+                )
+                await connection.execute(
+                    text(
                         "INSERT INTO app.planning_runs("
                         "organization_id,id,case_id,case_revision,source_pack_id,"
                         "source_pack_version,policy_version,evidence_projection_sha256,"
@@ -494,6 +516,50 @@ async def _ensure_runtime_fixture(fixture: RuntimeFixture) -> None:
                         "run": RUN_ID,
                         "case": fixture.case_id,
                         "pack": PACK_ID,
+                    },
+                )
+                await connection.execute(
+                    text(
+                        "UPDATE app.planning_runs SET state='review_required',"
+                        "reason_code='revision_requested',output_sha256=repeat('7',64) "
+                        "WHERE organization_id=:org AND id=:run"
+                    ),
+                    {"org": ORG_ID, "run": RUN_ID},
+                )
+                await _set_context(connection, ADVISOR_ID, "advisor")
+                await connection.execute(
+                    text(
+                        "SELECT * FROM app.review_planning_run("
+                        ":org,:actor,:case,:run,2,'request_revision',"
+                        "'80000000-0000-0000-0000-000000000522','[]'::jsonb,"
+                        "'[]'::jsonb,'bounded revision request',NULL,'{}'::jsonb,"
+                        "current_date,repeat('8',64),repeat('9',64))"
+                    ),
+                    {
+                        "org": ORG_ID,
+                        "actor": ADVISOR_ID,
+                        "case": fixture.case_id,
+                        "run": RUN_ID,
+                    },
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.agent_tasks("
+                        "organization_id,id,case_id,operation,case_revision,"
+                        "source_pack_id,source_pack_version,policy_version,"
+                        "request_sha256,created_by_actor_id,state,attempt_count,"
+                        "lease_generation,result_planning_run_id) VALUES("
+                        ":org,'80000000-0000-0000-0000-000000000522',:case,"
+                        "'generate_planning_run_v1',2,:pack,1,'m3a-policy-v1',"
+                        "repeat('a',64),:actor,'waiting_review',1,1,:run) "
+                        "ON CONFLICT (organization_id,id) DO NOTHING"
+                    ),
+                    {
+                        "org": ORG_ID,
+                        "case": fixture.case_id,
+                        "pack": PACK_ID,
+                        "actor": ADVISOR_ID,
+                        "run": RUN_ID,
                     },
                 )
     finally:
@@ -589,8 +655,9 @@ def _assert_pre_failure_authority(
     assert len(snapshot["memory_candidate_verifications"]) == 1
     assert len(snapshot["confirmed_facts"]) == 1
     assert len(snapshot["case_revision_confirmed_fact_refs"]) == 1
-    assert len(snapshot["audit_events"]) == 1
+    assert len(snapshot["audit_events"]) == (2 if fixture.planning else 1)
     assert len(snapshot["planning_runs"]) == (1 if fixture.planning else 0)
+    assert len(snapshot["agent_tasks"]) == (1 if fixture.planning else 0)
 
 
 async def _invoke_injected_boundary(

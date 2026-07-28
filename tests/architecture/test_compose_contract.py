@@ -147,7 +147,8 @@ def test_browser_proof_installer_uses_checked_in_lockfile_integrity_authority() 
         "COPY web/docker/browser-installer/package.json "
         "web/docker/browser-installer/package-lock.json ./"
     ) in dockerfile
-    assert "RUN --mount=type=cache,target=/root/.npm npm ci" in dockerfile
+    normalized = " ".join(dockerfile.replace("\\\n", " ").split())
+    assert "RUN --mount=type=cache,target=/root/.npm npm ci" in normalized
     assert "./node_modules/.bin/playwright install --with-deps chromium" in dockerfile
     assert "npx --yes playwright@" not in dockerfile
     assert "npm exec --package playwright@" not in dockerfile
@@ -217,6 +218,38 @@ def test_dockerfiles_keep_dependency_work_ahead_of_frequently_changed_source() -
 
     for content in (api, proof, web):
         assert not content.startswith("# syntax=docker/dockerfile:1\n")
+
+
+def test_web_docker_installs_use_locked_retrying_registry_reads() -> None:
+    web = Path("web/Dockerfile").read_text(encoding="utf-8")
+    browser = Path("web/Dockerfile.e2e").read_text(encoding="utf-8")
+    install = (
+        "npm ci --prefer-offline --fetch-retries=5 "
+        "--fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=60000"
+    )
+
+    normalized_web = " ".join(web.replace("\\\n", " ").split())
+    normalized_browser = " ".join(browser.replace("\\\n", " ").split())
+    assert normalized_web.count(
+        f"RUN --mount=type=cache,target=/root/.npm {install}"
+    ) == 1
+    assert normalized_browser.count(
+        f"RUN --mount=type=cache,target=/root/.npm {install}"
+    ) == 2
+
+    assert "COPY package.json package-lock.json ./" in web
+    assert browser.count(
+        "COPY web/docker/browser-installer/package.json "
+        "web/docker/browser-installer/package-lock.json ./"
+    ) == 1
+    assert browser.count("COPY web/package.json web/package-lock.json ./") == 1
+    for content in (web, browser):
+        assert " --offline" not in content
+        assert ".npmrc" not in content
+        assert "registry=" not in content
+        assert "HTTP_PROXY" not in content
+        assert "HTTPS_PROXY" not in content
+        assert "host.docker.internal" not in content
 
 
 def test_web_standalone_image_includes_public_portfolio_assets() -> None:

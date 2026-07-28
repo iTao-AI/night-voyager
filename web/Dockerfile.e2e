@@ -5,7 +5,8 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 WORKDIR /workspace/browser-installer
 COPY web/docker/browser-installer/package.json web/docker/browser-installer/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm ci \
+    npm ci --prefer-offline --fetch-retries=5 \
+        --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=60000 \
     && test "$(node --print "require('./node_modules/playwright/package.json').version")" = "${PLAYWRIGHT_VERSION}" \
     && ./node_modules/.bin/playwright install --with-deps chromium \
     && rm -rf node_modules
@@ -14,7 +15,9 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /workspace/web
 COPY web/package.json web/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline --fetch-retries=5 \
+        --fetch-retry-mintimeout=10000 --fetch-retry-maxtimeout=60000
 RUN mkdir -p /workspace/docs/assets /workspace/web/test-results \
     && useradd --create-home --uid 10001 browser \
     && chown browser:browser /workspace/docs/assets \

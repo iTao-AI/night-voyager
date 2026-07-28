@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+REVISION_MIGRATION = (
+    ROOT / "migrations/versions/0012_versioned_planning_revision.py"
+)
 MIGRATION = ROOT / "migrations/versions/0007_conversation_and_memory.py"
 TABLES = (
     "collaboration_threads",
@@ -190,6 +194,63 @@ def test_confirmation_validates_and_materializes_the_complete_strict_revision() 
         assert fragment in verification
 
 
+def test_revision_confirmation_freezes_the_exact_reviewed_waiting_task_exemption() -> None:
+    verification = runpy.run_path(str(REVISION_MIGRATION))["CONFIRM_SQL"]
+    assert isinstance(verification, str)
+
+    assert verification.index(
+        "SELECT * INTO request_review FROM app.advisor_reviews"
+    ) < verification.index("SELECT 1 FROM app.agent_tasks task")
+    for fragment in (
+        "review_row.organization_id=p_org",
+        "review_row.case_id=resolved_case",
+        "review_row.case_revision=p_expected_revision",
+        "review_row.planning_run_id=current_run.id",
+        "review_row.action='request_revision'",
+        "task.state IN ('queued','leased','running','waiting_review')",
+        "task.state='waiting_review'",
+        "task.case_revision=p_expected_revision",
+        "task.result_planning_run_id=current_run.id",
+        "request_review.id IS NOT NULL",
+        "active task blocks revision publication",
+    ):
+        assert fragment in verification
+    assert "UPDATE app.agent_tasks" not in verification
+
+
+def test_revision_migration_adds_only_the_participant_safe_pending_fact_projection() -> None:
+    source = REVISION_MIGRATION.read_text(encoding="utf-8")
+    migration = runpy.run_path(str(REVISION_MIGRATION))
+    privileges = migration["PRIVILEGE_SQL"]
+    assert isinstance(privileges, str)
+    signature = (
+        "app.read_connected_journey_fact_pending(uuid,uuid,text,uuid)"
+    )
+    for fragment in (
+        "CREATE FUNCTION app.read_connected_journey_fact_pending(",
+        "RETURNS boolean",
+        "SECURITY DEFINER SET search_path = pg_catalog, pg_temp",
+        "PERFORM app.assert_collaboration_context(p_org,p_actor,p_role)",
+        "candidate.case_revision=selected_case.current_revision",
+        "candidate.fact_key IN "
+        "('student.preferred_countries','family.budget')",
+        "candidate.expires_at>clock_timestamp()",
+        "NOT EXISTS(",
+        "FROM app.memory_candidate_verifications verification",
+    ):
+        assert fragment in source
+    for fragment in (
+        f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC",
+        f"REVOKE ALL ON FUNCTION {signature} FROM night_voyager_worker",
+        f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_api",
+    ):
+        assert fragment in privileges
+    assert 'op.execute(f"DROP FUNCTION {JOURNEY_PENDING_SIGNATURE}")' in source
+    assert f"GRANT EXECUTE ON FUNCTION {signature} TO night_voyager_worker" not in source
+    assert "GRANT SELECT ON app.memory_candidates" not in source
+    assert "GRANT SELECT ON app.memory_candidate_verifications" not in source
+
+
 def test_mutations_and_reads_fail_closed_on_null_or_changed_canonical_inputs() -> None:
     source = migration_source()
     assert "selected.request_sha256 IS DISTINCT FROM p_request_sha256" in source
@@ -224,6 +285,19 @@ def test_fact_and_revision_validation_rejects_sql_null_and_string_schema_version
     ) in verification
     assert "(p_value->>'elasticity_bps')::numeric NOT BETWEEN 0 AND 2500" in validation
     assert "(p_value->>'elasticity_bps')::integer" not in validation
+
+
+def test_revision_migration_owns_fact_confirmation_lineage_atomically() -> None:
+    assert REVISION_MIGRATION.is_file()
+    source = REVISION_MIGRATION.read_text(encoding="utf-8")
+    for fragment in (
+        "revision_requested_by_review_id",
+        "superseded_planning_run_id",
+        "student_case_revisions_one_planning_successor",
+    ):
+        assert fragment in source
+    assert "UPDATE app.planning_runs" in source
+    assert "SET is_current=false" in source
 
 
 def test_existing_candidate_projection_uses_terminal_stale_expired_precedence() -> None:

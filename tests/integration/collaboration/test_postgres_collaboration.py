@@ -78,6 +78,8 @@ PLANNING_CANDIDATE_ID = UUID("92000000-0000-0000-0000-000000000311")
 PLANNING_VERIFICATION_ID = UUID("93000000-0000-0000-0000-000000000311")
 PLANNING_FACT_ID = UUID("94000000-0000-0000-0000-000000000311")
 PLANNING_SOURCE_PACK_ID = UUID("50000000-0000-0000-0000-000000000311")
+PLANNING_SOURCE_ENTRY_ID = UUID("51000000-0000-0000-0000-000000000311")
+PLANNING_REVIEW_ID = UUID("80000000-0000-0000-0000-000000000311")
 NULL_SEED_THREAD_ID = UUID("90000000-0000-0000-0000-000000000312")
 COLLISION_CASE_ID = UUID("40000000-0000-0000-0000-000000000313")
 COLLISION_THREAD_ID = UUID("90000000-0000-0000-0000-000000000313")
@@ -585,6 +587,20 @@ async def ensure_planning_case() -> None:
             )
             await connection.execute(
                 text(
+                    "INSERT INTO app.source_pack_entries VALUES("
+                    ":org,:pack,1,:entry,'revision.txt',repeat('6',64),current_date,"
+                    "'synthetic','synthetic','https://example.invalid/revision',365,"
+                    "'synthetic_public','synthetic_demo','[]'::jsonb,'[]'::jsonb) "
+                    "ON CONFLICT DO NOTHING"
+                ),
+                {
+                    "org": ORG_ID,
+                    "pack": PLANNING_SOURCE_PACK_ID,
+                    "entry": PLANNING_SOURCE_ENTRY_ID,
+                },
+            )
+            await connection.execute(
+                text(
                     "INSERT INTO app.planning_runs("
                     "organization_id,id,case_id,case_revision,source_pack_id,"
                     "source_pack_version,policy_version,evidence_projection_sha256,"
@@ -597,6 +613,36 @@ async def ensure_planning_case() -> None:
                     "run": PLANNING_RUN_ID,
                     "case": PLANNING_CASE_ID,
                     "pack": PLANNING_SOURCE_PACK_ID,
+                },
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.planning_runs SET state='review_required',"
+                    "reason_code='revision_requested',output_sha256=repeat('9',64) "
+                    "WHERE organization_id=:org AND id=:run AND state='synthesizing'"
+                ),
+                {"org": ORG_ID, "run": PLANNING_RUN_ID},
+            )
+            await connection.execute(
+                text(
+                    "SELECT set_config('night_voyager.actor_id',:actor,true),"
+                    "set_config('night_voyager.role','advisor',true)"
+                ),
+                {"actor": str(ADVISOR_ID)},
+            )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.review_planning_run("
+                    ":org,:actor,:case,:run,1,'request_revision',:review,"
+                    "'[]'::jsonb,'[]'::jsonb,'bounded revision request',NULL,"
+                    "'{}'::jsonb,current_date,repeat('d',64),repeat('e',64))"
+                ),
+                {
+                    "org": ORG_ID,
+                    "actor": ADVISOR_ID,
+                    "case": PLANNING_CASE_ID,
+                    "run": PLANNING_RUN_ID,
+                    "review": PLANNING_REVIEW_ID,
                 },
             )
     finally:
@@ -3347,10 +3393,17 @@ async def test_planning_confirmation_retires_only_the_locked_current_run() -> No
                     ProposeMemoryCandidateCommand(
                         message_event_id=PLANNING_MESSAGE_ID,
                         case_revision=1,
-                        proposal=RiskToleranceProposal(
+                        proposal=BudgetProposal(
                             schema_version=1,
-                            fact_key=FactKey.FAMILY_RISK_TOLERANCE,
-                            value="high",
+                            fact_key=FactKey.FAMILY_BUDGET,
+                            value=BudgetEnvelope(
+                                schema_version=1,
+                                currency="CNY",
+                                period="program_total",
+                                preferred_minor=31_000_000,
+                                hard_ceiling_minor=37_000_000,
+                                elasticity_bps=750,
+                            ),
                         ),
                     ),
                     PLANNING_CANDIDATE_ID,
@@ -3386,7 +3439,10 @@ async def test_planning_confirmation_retires_only_the_locked_current_run() -> No
                     .one()
                 )
                 assert verified.result_revision == 2
-                assert dict(run) == {"state": "synthesizing", "is_current": False}
+                assert dict(run) == {
+                    "state": "review_required",
+                    "is_current": False,
+                }
             finally:
                 if transaction.is_active:
                     await transaction.rollback()

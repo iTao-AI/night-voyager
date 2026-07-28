@@ -112,7 +112,9 @@ Confirmation requires all of the following:
 - the expected revision equals the candidate revision and current Case revision;
 - the Case state is `intake` or `planning`;
 - the role, fact key, candidate value, and current revision projection remain valid;
-- no Case task is `queued`, `leased`, `running`, or `waiting_review`;
+- no Case task is `queued`, `leased`, or `running`; a `waiting_review` task is
+  exempt only when it produced the exact current run and the exact
+  current-revision `request_revision` review exists;
 - a `planning` Case has exactly one current PlanningRun, while an `intake` Case may
   have none.
 
@@ -144,6 +146,7 @@ app.read_collaboration_thread(...)
 app.read_collaboration_messages(...)
 app.read_memory_candidates(...)
 app.read_confirmed_facts(...)
+app.read_connected_journey_fact_pending(...)
 ```
 
 All are migrator-owned `SECURITY DEFINER` functions with fixed
@@ -156,6 +159,20 @@ The API grant on the legacy whole-revision writer
 `0007`. That function remains only for migrator-controlled bootstrap and test setup.
 The collaboration confirmation function is the sole runtime revision publication
 path introduced by PR A.
+
+Migration `0012` replaces the confirmation body without broadening the HTTP
+command. An exact `request_revision` review freezes the current PlanningRun into
+the new revision and makes it non-current atomically. The reviewed predecessor
+task remains immutable `waiting_review` history; every unrelated or unreviewed
+waiting task remains blocking.
+
+`read_connected_journey_fact_pending(uuid,uuid,text,uuid)` is a separate,
+API-only boolean projection for assigned participants. It loads the Case's
+current revision internally and counts only an exact unexpired, unverified
+`student.preferred_countries` or `family.budget` candidate for that revision.
+It returns no candidate row or internal identity. It does not broaden
+`read_memory_candidates(...)`, and the API and worker retain no direct
+candidate-table privilege.
 
 Idempotency reuses `app.idempotency_records` with these exact operation names:
 

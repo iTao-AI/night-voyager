@@ -59,6 +59,19 @@ adapter. Route, cost, ranking, route-to-Evidence, and advisor-eligibility produc
 rows are filtered to the selected non-empty country subset; fixture Case values cannot
 overwrite the requested revision.
 
+For a versioned revision task, migration `0012` copies the exact frozen
+predecessor PlanningRun from the Case revision into
+`agent_tasks.predecessor_planning_run_id`. The worker never infers predecessor
+from current PlanningRun. It loads the predecessor only from the claimed task
+and passes it to the migration-owned finalizer. Initial planning tasks keep a
+null predecessor.
+
+The finalizer requires the task predecessor, non-current retained predecessor,
+and successor revision to agree. It admits at most one successor across retry,
+lease reclaim, concurrent finalization, and lost acknowledgement. A replay can
+return only the already-persisted matching result; a wrong predecessor or
+changed output fails closed.
+
 After an advisor confirms a fact, creation of the first deterministic task may move the
 same Case from `intake` to `planning` atomically under migration `0009`. The worker does
 not perform that transition, and the API cannot invoke the legacy standalone transition
@@ -94,6 +107,10 @@ lease/reclaim/fencing/retry/cancel, SSE pagination, reconnect concurrency,
 capacity, downgrade/re-upgrade, and connection-pool cleanup evidence.
 Use `make skills-db-check SUITE=worker` for the focused task/execution pin,
 registry-leaf, persisted-revision, selected-country, and invalid-pin proof.
+Use `scripts/run_db_tests.sh planning-revision worker` for the revision-specific
+task-owned predecessor and successor proof. The command runs the ordinary
+worker authority first and the history-free mixed-downgrade proof in a separate
+task-owned database; it never clears durable rows to make downgrade pass.
 
 ## Troubleshooting
 

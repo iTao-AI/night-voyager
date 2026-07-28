@@ -121,9 +121,16 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "DRA strict consumer and versioned planning revision",
-        "PR 1 implemented provider-free; PR 2/3 approved but not implemented; "
+        "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented; "
         "strict live acceptance incomplete",
         "2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md",
+        "**Plan status:** Implementation complete locally; awaiting Career authority review.",
+    ),
+    (
+        "DRA strict consumer and versioned planning revision",
+        "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented; "
+        "strict live acceptance incomplete",
+        "2026-07-27-versioned-planning-revision-pr-2-implementation-plan.md",
         "**Plan status:** Implementation complete locally; awaiting Career authority review.",
     ),
     (
@@ -230,15 +237,15 @@ def test_dra_strict_prerequisite_current_docs_are_truthful() -> None:
     ]
     plans_index = current_docs["docs/superpowers/README.md"]
     assert (
-        "**Design status:** Approved; PR 1 implemented provider-free; "
-        "PR 2 and PR 3 approved but not implemented."
+        "**Design status:** Approved; PR 1 and PR 2 implemented provider-free; "
+        "PR 3 approved but not implemented."
     ) in strict_spec
     assert (
         "**Plan status:** Implementation complete locally; awaiting Career authority review."
     ) in strict_plan
     assert (
         "| DRA strict consumer and versioned planning revision | "
-        "PR 1 implemented provider-free; PR 2/3 approved but not implemented; "
+        "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented; "
         "strict live acceptance incomplete |"
     ) in plans_index
 MERGED_FACT_TO_PLAN_BANNERS = {
@@ -583,6 +590,63 @@ def test_current_documentation_release_and_planning_boundaries_do_not_drift() ->
     assert "no fixed lane count" in spec
     assert "ADR 0006 already records M5 as implemented" in spec
     assert "ADR 0006 already records M5 as implemented" in plan
+
+
+def test_versioned_planning_revision_authority_is_documented() -> None:
+    adr = (
+        ROOT / "docs/decisions/0012-versioned-planning-revision-authority.md"
+    ).read_text(encoding="utf-8")
+    operations = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "docs/operations/database-roles.md",
+            "docs/operations/worker-and-sse.md",
+        )
+    )
+    references = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "docs/reference/agent-tasks-and-events.md",
+            "docs/reference/collaboration-and-confirmed-facts.md",
+            "docs/reference/http-api-v1.md",
+            "docs/design/projection-matrix.md",
+            "docs/design/state-and-interaction-matrix.md",
+        )
+    )
+    combined = " ".join(f"{adr}\n{operations}\n{references}".split())
+    for required in (
+        "request_revision review -> fact revision -> frozen task predecessor",
+        "worker never infers predecessor from current PlanningRun",
+        "one predecessor -> at most one successor",
+        "old run retained but non-authoritative",
+        "comparison is deterministic and country-keyed",
+        "V1 read routes remain default",
+        "contract_version=2",
+        "journey-status is participant-safe recovery authority",
+        "PR 3 browser journey remains unimplemented",
+        "read_connected_journey_fact_pending",
+    ):
+        assert required in combined
+    for mode in ("authority", "worker", "projection", "all"):
+        assert f"planning-revision {mode}" in operations
+
+    plans_index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    pr2_plan = (
+        ROOT
+        / "docs/superpowers/plans/"
+        "2026-07-27-versioned-planning-revision-pr-2-implementation-plan.md"
+    ).read_text(encoding="utf-8")
+    assert "PR 1 and PR 2 implemented provider-free; PR 3 approved but not implemented" in (
+        plans_index
+    )
+    assert (
+        "**Plan status:** Implementation complete locally; awaiting Career authority review."
+        in pr2_plan
+    )
+
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    assert 'heads != {"0012"}' in verifier
+    assert '"read_connected_journey_fact_pending"' in verifier
 
 
 def test_root_readmes_bind_current_development_migration_head() -> None:

@@ -2,14 +2,20 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Cookie, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import JSONResponse
 
 from night_voyager.config import Settings
 from night_voyager.connected_demo.application import ConnectedDemoService
 from night_voyager.connected_demo.errors import DemoContractUnavailableError
-from night_voyager.connected_demo.models import AdvisorLedgerV1, CurrentDecisionBriefV1
+from night_voyager.connected_demo.models import (
+    AdvisorLedgerV1,
+    AdvisorLedgerV2,
+    ConnectedJourneyStatusV1,
+    CurrentDecisionBriefV1,
+    CurrentDecisionBriefV2,
+)
 from night_voyager.connected_demo.postgres import PostgresConnectedDemoRepository
 from night_voyager.identity.models import ActorContext
 from night_voyager.identity.repository import IdentityRepository
@@ -39,18 +45,33 @@ def create_connected_demo_router(
         expired.delete_cookie(BOOTSTRAP_COOKIE, path="/")
         return expired
 
-    @router.get("/cases/{case_id}/advisor-ledger", response_model=AdvisorLedgerV1)
+    def contract_version(request: Request) -> int | JSONResponse:
+        values = request.query_params.getlist("contract_version")
+        if not values:
+            return 1
+        if values != ["2"]:
+            return problem(422, "request_validation_failed", "request validation failed")
+        return 2
+
+    @router.get(
+        "/cases/{case_id}/advisor-ledger",
+        response_model=AdvisorLedgerV1 | AdvisorLedgerV2,
+    )
     async def advisor_ledger(  # pyright: ignore[reportUnusedFunction]
         case_id: UUID,
+        request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
-    ) -> AdvisorLedgerV1 | JSONResponse:
+    ) -> AdvisorLedgerV1 | AdvisorLedgerV2 | JSONResponse:
+        version = contract_version(request)
+        if isinstance(version, JSONResponse):
+            return version
         try:
             async with session_factory() as session, session.begin():
                 context = await read_context(session, raw_session)
                 projection = await ConnectedDemoService(
                     PostgresConnectedDemoRepository(session)
-                ).advisor_ledger(context, case_id)
+                ).advisor_ledger(context, case_id, contract_version=version)
         except HTTPException as error:
             if error.status_code == status.HTTP_401_UNAUTHORIZED:
                 return expired_session_response()
@@ -66,19 +87,51 @@ def create_connected_demo_router(
 
     @router.get(
         "/cases/{case_id}/current-decision-brief",
-        response_model=CurrentDecisionBriefV1,
+        response_model=CurrentDecisionBriefV1 | CurrentDecisionBriefV2,
     )
     async def current_decision_brief(  # pyright: ignore[reportUnusedFunction]
         case_id: UUID,
+        request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
-    ) -> CurrentDecisionBriefV1 | JSONResponse:
+    ) -> CurrentDecisionBriefV1 | CurrentDecisionBriefV2 | JSONResponse:
+        version = contract_version(request)
+        if isinstance(version, JSONResponse):
+            return version
         try:
             async with session_factory() as session, session.begin():
                 context = await read_context(session, raw_session)
                 projection = await ConnectedDemoService(
                     PostgresConnectedDemoRepository(session)
-                ).current_decision_brief(context, case_id)
+                ).current_decision_brief(context, case_id, contract_version=version)
+        except HTTPException as error:
+            if error.status_code == status.HTTP_401_UNAUTHORIZED:
+                return expired_session_response()
+            raise
+        except DemoContractUnavailableError:
+            return problem(
+                503, "demo_contract_unavailable", "connected demo contract unavailable"
+            )
+        if projection is None:
+            return problem(404, "resource_unavailable", "resource unavailable")
+        response.headers["Cache-Control"] = "no-store"
+        return projection
+
+    @router.get(
+        "/cases/{case_id}/journey-status",
+        response_model=ConnectedJourneyStatusV1,
+    )
+    async def journey_status(  # pyright: ignore[reportUnusedFunction]
+        case_id: UUID,
+        response: Response,
+        raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    ) -> ConnectedJourneyStatusV1 | JSONResponse:
+        try:
+            async with session_factory() as session, session.begin():
+                context = await read_context(session, raw_session)
+                projection = await ConnectedDemoService(
+                    PostgresConnectedDemoRepository(session)
+                ).journey_status(context, case_id)
         except HTTPException as error:
             if error.status_code == status.HTTP_401_UNAUTHORIZED:
                 return expired_session_response()

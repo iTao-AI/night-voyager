@@ -112,6 +112,27 @@ cannot replace them. Preferred countries are a non-empty sorted unique subset of
 Australia, Japan, and Malaysia. Route, cost, ranking, route-to-Evidence, and eligible
 advisor-review product projections contain selected countries only.
 
+## Versioned planning predecessor and successor
+
+Migration `0012` binds a revision task to one predecessor through
+`agent_tasks.predecessor_planning_run_id`. The identity originates in the exact
+current-revision `request_revision` review and fact-confirmation transaction;
+HTTP cannot submit it. Task creation copies the revision-owned value and
+idempotent replay returns the same stored task.
+
+The worker never infers predecessor from current PlanningRun. It reads only the
+claimed task's immutable predecessor. Result finalization validates that row,
+requires the predecessor to be retained but non-current, and persists one exact
+successor with `supersedes_run_id`. One predecessor -> at most one successor
+holds across reclaim, retry, concurrent finalization, and lost acknowledgement.
+Initial planning tasks have no predecessor.
+
+After a reviewed `waiting_review` task produces the exact current predecessor,
+an exact durable `request_revision` review allows fact revision without changing
+the task state. That task remains immutable historical evidence. Unreviewed or
+unrelated `waiting_review` tasks and every queued, leased, or running task still
+block revision publication.
+
 ## State projection
 
 | Internal state | Public status |

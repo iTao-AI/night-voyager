@@ -186,10 +186,67 @@ def test_dependabot_disables_docker_version_updates_without_disabling_security_u
 
 def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() -> None:
     script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    shared_main = script.split('if [ "${1:-}" = "inside" ]; then', 1)[1].split(
+        'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
+    )[0]
+    final_refusal = shared_main.split(
+        "tests/integration/decision/test_http_decision.py", 1
+    )[1]
+    default_lanes = script.split(
+        'if [ -n "${1:-}" ]; then', 1
+    )[1]
+
     assert 'if [ "${1:-}" = "inside-dra-strict-migration" ]' in script
     assert 'if [ "${1:-}" = "dra-strict-migration" ]' in script
     assert "tests/integration/dra/test_dra_strict_migration.py" in script
+    assert "--ignore=tests/integration/dra/test_dra_strict_migration.py" in shared_main
+    assert "uv run alembic downgrade 0011" in final_refusal
+    assert "uv run alembic downgrade 0007" not in final_refusal
+    assert "expected planning revision authority downgrade refusal" in final_refusal
+    assert "refusing downgrade: planning revision lineage exists" in final_refusal
+    assert final_refusal.index("refusing downgrade: planning revision lineage exists") < (
+        final_refusal.index("uv run alembic current | grep '0012'")
+    )
+    assert final_refusal.index("uv run alembic current | grep '0012'") < (
+        final_refusal.index(
+            "uv run --no-editable python scripts/verify_release.py --check-db-roles"
+        )
+    )
+    assert (
+        default_lanes.index(
+            'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" '
+            "inside-dra-strict-migration"
+        )
+        < default_lanes.index('run_lane "${BASE_PROJECT_NAME}-main" inside')
+    )
     assert "unknown database test mode" in script
     assert script.index("unknown database test mode") < script.rindex(
         'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"'
     )
+
+
+def test_planning_persistence_tests_separate_internal_writer_from_api_denial() -> None:
+    source = (
+        ROOT / "tests/integration/planning/test_postgres_planning.py"
+    ).read_text(encoding="utf-8")
+    positive_tests = (
+        "test_internal_persistence_only_review_required_result_advances_case",
+        "test_internal_persistence_review_required_result_atomically_hands_off_current_case",
+        "test_internal_persistence_complete_result_supersedes_current_run_atomically",
+    )
+
+    for test_name in positive_tests:
+        assert f"async def {test_name}" in source
+        block = source.split(f"async def {test_name}", 1)[1].split(
+            "\n\n@pytest.mark.asyncio", 1
+        )[0]
+        assert 'os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]' in block
+
+    denial_name = "test_api_cannot_execute_legacy_internal_planning_persistence"
+    assert f"async def {denial_name}" in source
+    denial = source.split(f"async def {denial_name}", 1)[1].split(
+        "\n\n@pytest.mark.asyncio", 1
+    )[0]
+    assert 'os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]' in denial
+    assert "SELECT app.persist_planning_result" in denial
+    assert "pytest.raises(DBAPIError)" in denial

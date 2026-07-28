@@ -6,7 +6,14 @@ from enum import StrEnum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, NonNegativeInt, PositiveInt, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    model_validator,
+)
 
 from night_voyager.decision.models import (
     DecisionBriefProjection,
@@ -14,7 +21,8 @@ from night_voyager.decision.models import (
     EvidenceRiskKind,
     TimelinePlan,
 )
-from night_voyager.planning.models import Country, RouteOutcome
+from night_voyager.planning.models import CaseState, Country, RouteOutcome
+from night_voyager.planning.revision import PlanningRevisionComparisonV1
 from night_voyager.tasks.models import TaskViewStatus
 
 
@@ -29,6 +37,21 @@ class DemoPhase(StrEnum):
     FAMILY_REVIEW = "family-review"
     PLAN_READY = "plan-ready"
     TERMINAL_TASK_FAILURE = "terminal-task-failure"
+
+
+class DemoPhaseV2(StrEnum):
+    TASK_READY = "task_ready"
+    ACTIVE_TASK = "active_task"
+    REVIEW_REQUIRED = "review_required"
+    REVISION_REQUESTED = "revision_requested"
+    REVISION_FACT_PENDING = "revision_fact_pending"
+    REPLAN_REQUIRED = "replan_required"
+    REVISION_TASK_ACTIVE = "revision_task_active"
+    REVISION_REVIEW_REQUIRED = "revision_review_required"
+    REVISION_BLOCKED = "revision_blocked"
+    FAMILY_REVIEW = "family_review"
+    PLAN_READY = "plan_ready"
+    TERMINAL_TASK_FAILURE = "terminal_task_failure"
 
 
 class CanonicalDemoTaskInputs(FrozenModel):
@@ -69,6 +92,15 @@ class PublicTaskProjection(FrozenModel):
 class PublicPlanningRunProjection(FrozenModel):
     planning_run_id: UUID
     state: Literal["review_required"]
+    source_pack_id: UUID
+    source_pack_version: PositiveInt
+    policy_version: Literal["m3a-policy-v1"]
+    source_snapshot_date: date
+
+
+class PublicPlanningRunProjectionV2(FrozenModel):
+    planning_run_id: UUID
+    state: Literal["review_required", "blocked"]
     source_pack_id: UUID
     source_pack_version: PositiveInt
     policy_version: Literal["m3a-policy-v1"]
@@ -228,6 +260,77 @@ class AdvisorLedgerV1(FrozenModel):
         return self
 
 
+class AdvisorLedgerV2(FrozenModel):
+    schema_version: Literal[2] = 2
+    proof_mode: Literal["synthetic-demo"] = "synthetic-demo"
+    phase: DemoPhaseV2
+    case_id: UUID
+    case_revision: PositiveInt
+    case_state: CaseState
+    canonical_task_inputs: CanonicalDemoTaskInputs | None
+    task: PublicTaskProjection | None
+    planning_run: PublicPlanningRunProjectionV2 | None
+    comparison: PlanningRevisionComparisonV1 | None
+    routes: tuple[AdvisorRouteProjection, ...]
+    evidence: tuple[EvidenceDisclosure, ...]
+    review_inputs: AdvisorReviewInputs | None
+    current_brief_id: UUID | None
+    recovery: PublicRecoveryProjection | None
+
+    @model_validator(mode="after")
+    def validate_revision_projection(self) -> AdvisorLedgerV2:
+        revised = {
+            DemoPhaseV2.REVISION_REVIEW_REQUIRED,
+            DemoPhaseV2.REVISION_BLOCKED,
+        }
+        if self.phase in revised and (
+            self.case_revision < 2
+            or self.planning_run is None
+            or self.comparison is None
+            or self.comparison.current_revision != self.case_revision
+            or self.comparison.current_planning_run_id
+            != self.planning_run.planning_run_id
+        ):
+            raise ValueError(f"{self.phase.value.replace('_', '-')} projection is incomplete")
+        if self.phase is DemoPhaseV2.REVISION_REVIEW_REQUIRED and (
+            self.planning_run is None
+            or self.planning_run.state != "review_required"
+            or self.review_inputs is None
+        ):
+            raise ValueError("revision-review-required projection is incomplete")
+        if self.phase is DemoPhaseV2.REVISION_BLOCKED and self.review_inputs is not None:
+            raise ValueError("revision-blocked projection forbids review inputs")
+        return self
+
+
+class ConnectedJourneyStatusV1(FrozenModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    schema_: Literal["night-voyager.connected-journey-status.v1"] = Field(
+        alias="schema",
+        serialization_alias="schema",
+    )
+    case_id: UUID
+    current_revision: PositiveInt
+    phase: DemoPhaseV2
+    active_role: Literal["advisor", "student", "parent"]
+
+
+class FamilyRevisionContextV1(FrozenModel):
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+
+    schema_: Literal["night-voyager.family-revision-context.v1"] = Field(
+        alias="schema",
+        serialization_alias="schema",
+    )
+    current_case_revision: PositiveInt
+    planning_version: Literal["initial", "revised"]
+    advisor_authorization: Literal[
+        "authorized_for_initial_revision",
+        "renewed_for_current_revision",
+    ]
+
+
 class CurrentDecisionBriefV1(FrozenModel):
     schema_version: Literal[1] = 1
     proof_mode: Literal["synthetic-demo"] = "synthetic-demo"
@@ -248,6 +351,33 @@ class CurrentDecisionBriefV1(FrozenModel):
         ):
             raise ValueError("family-review projection cannot contain receipt or timeline")
         if self.phase is DemoPhase.PLAN_READY and (
+            self.receipt is None or self.timeline is None
+        ):
+            raise ValueError("plan-ready projection requires receipt and timeline")
+        return self
+
+
+class CurrentDecisionBriefV2(FrozenModel):
+    schema_version: Literal[2] = 2
+    proof_mode: Literal["synthetic-demo"] = "synthetic-demo"
+    phase: Literal[DemoPhaseV2.FAMILY_REVIEW, DemoPhaseV2.PLAN_READY]
+    case_id: UUID
+    brief_id: UUID
+    brief_version: PositiveInt
+    source_snapshot_date: date
+    family_safe_projection: DecisionBriefProjection
+    decision_requirements: FamilyDecisionRequirements
+    revision_context: FamilyRevisionContextV1
+    receipt: DecisionReceiptProjection | None
+    timeline: TimelinePlan | None
+
+    @model_validator(mode="after")
+    def validate_phase_projection(self) -> CurrentDecisionBriefV2:
+        if self.phase is DemoPhaseV2.FAMILY_REVIEW and (
+            self.receipt is not None or self.timeline is not None
+        ):
+            raise ValueError("family-review projection cannot contain receipt or timeline")
+        if self.phase is DemoPhaseV2.PLAN_READY and (
             self.receipt is None or self.timeline is None
         ):
             raise ValueError("plan-ready projection requires receipt and timeline")

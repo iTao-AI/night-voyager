@@ -49,7 +49,7 @@ APPEND_MESSAGE_SQL = text(
 )
 PROPOSE_CANDIDATE_SQL = text(
     "SELECT * FROM app.propose_memory_candidate("
-    ":org,:actor,'parent',:message,:candidate,1,'family.risk_tolerance',"
+    ":org,:actor,'parent',:message,:candidate,1,:fact_key,"
     "CAST(:value AS jsonb),:value_sha256,:request_sha256,:key_sha256)"
 )
 VERIFY_CANDIDATE_SQL = text(
@@ -199,15 +199,10 @@ async def ensure_case(
             },
         )
         if planning_run_id is not None:
-            state = await connection.scalar(
-                text("SELECT state FROM app.student_cases WHERE organization_id=:org AND id=:case"),
+            await connection.execute(
+                text("SELECT app.transition_case(:org,:case,'intake','planning')"),
                 {"org": ORG_ID, "case": case_id},
             )
-            if state == "intake":
-                await connection.execute(
-                    text("SELECT app.transition_case(:org,:case,'intake','planning')"),
-                    {"org": ORG_ID, "case": case_id},
-                )
             await connection.execute(
                 text(
                     "INSERT INTO app.planning_runs("
@@ -222,6 +217,32 @@ async def ensure_case(
                     "run": planning_run_id,
                     "case": case_id,
                     "pack": PACK_ID,
+                },
+            )
+            await connection.execute(
+                text(
+                    "UPDATE app.planning_runs SET state='review_required',"
+                    "reason_code='revision_requested',output_sha256=repeat('c',64) "
+                    "WHERE organization_id=:org AND id=:run"
+                ),
+                {"org": ORG_ID, "run": planning_run_id},
+            )
+            await set_context(connection, actor_id=ADVISOR_ID, role="advisor")
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.review_planning_run("
+                    ":org,:actor,:case,:run,1,'request_revision',:review,"
+                    "'[]'::jsonb,'[]'::jsonb,'bounded revision request',NULL,"
+                    "'{}'::jsonb,current_date,:key_hash,:request_hash)"
+                ),
+                {
+                    "org": ORG_ID,
+                    "actor": ADVISOR_ID,
+                    "case": case_id,
+                    "run": planning_run_id,
+                    "review": resource_id("80000000", int(str(case_id)[-12:])),
+                    "key_hash": stable_hash(f"revision-review-key-{case_id}"),
+                    "request_hash": stable_hash(f"revision-review-request-{case_id}"),
                 },
             )
 
@@ -281,6 +302,8 @@ async def propose_candidate(
     candidate_id: UUID,
     request_sha256: str,
     key_sha256: str,
+    fact_key: str = "family.risk_tolerance",
+    value: object = "high",
 ) -> dict[str, object]:
     result = await connection.execute(
         PROPOSE_CANDIDATE_SQL,
@@ -289,8 +312,9 @@ async def propose_candidate(
             "actor": PARENT_ID,
             "message": message_id,
             "candidate": candidate_id,
-            "value": json.dumps("high"),
-            "value_sha256": canonical_sha256("high"),
+            "fact_key": fact_key,
+            "value": json.dumps(value),
+            "value_sha256": canonical_sha256(value),
             "request_sha256": request_sha256,
             "key_sha256": key_sha256,
         },
@@ -446,6 +470,20 @@ async def prepare_candidate(
             candidate_id=candidate_id,
             request_sha256=stable_hash(f"candidate-request-{suffix}"),
             key_sha256=stable_hash(f"candidate-key-{suffix}"),
+            fact_key="family.budget" if planning else "family.risk_tolerance",
+            value=(
+                {
+                    "schema_version": 1,
+                    "currency": "CNY",
+                    "period": "program_total",
+                    "preferred_minor": 31_000_000,
+                    "hard_ceiling_minor": 37_000_000,
+                    "elasticity_bps": 750,
+                    "refused": False,
+                }
+                if planning
+                else "high"
+            ),
         )
     return CandidateGraph(
         case_id=case_id,
@@ -629,16 +667,6 @@ async def test_worker_finalize_waits_for_case_before_verifier_current_run(
     try:
         graph = await prepare_candidate(migrator, api, suffix, planning=True)
         assert graph.run_id is not None
-        async with migrator.begin() as connection:
-            await set_migrator_context(connection)
-            await connection.execute(
-                text(
-                    "UPDATE app.planning_runs SET state='blocked',"
-                    "reason_code='missing_evidence',output_sha256=repeat('d',64) "
-                    "WHERE organization_id=:org AND id=:run"
-                ),
-                {"org": ORG_ID, "run": graph.run_id},
-            )
         async with api.begin() as connection:
             await set_context(connection, actor_id=ADVISOR_ID, role="advisor")
             await create_task(
@@ -696,7 +724,6 @@ async def test_worker_finalize_waits_for_case_before_verifier_current_run(
                 await finalizer.execute(text("SET LOCAL statement_timeout = '10s'"))
                 blocker_pid = await backend_pid(candidate_blocker)
                 verifier_pid = await backend_pid(verifier)
-                finalizer_pid = await backend_pid(finalizer)
                 locked_candidate = await candidate_blocker.scalar(
                     text(
                         "SELECT id FROM app.memory_candidates "
@@ -744,12 +771,16 @@ async def test_worker_finalize_waits_for_case_before_verifier_current_run(
                     return cast(str, result)
 
                 finalize_call = asyncio.create_task(finalize())
-                await wait_until_blocked(
-                    inspector,
-                    blocked_pid=finalizer_pid,
-                    blocker_pid=verifier_pid,
-                    pending=finalize_call,
+                with pytest.raises(DBAPIError) as rejected_finalize:
+                    async with asyncio.timeout(10):
+                        await finalize_call
+                finalize_sqlstate = getattr(
+                    rejected_finalize.value.orig, "sqlstate", None
                 )
+                assert finalize_sqlstate != "40P01"
+                assert finalize_sqlstate == "NV003"
+                finalize_call = None
+                await finalizer_transaction.rollback()
 
                 unlocked_run = await inspector.scalar(
                     text(
@@ -782,14 +813,6 @@ async def test_worker_finalize_waits_for_case_before_verifier_current_run(
                     assert verification["result_revision"] is None
                     await verifier_transaction.commit()
 
-                try:
-                    async with asyncio.timeout(10):
-                        finalized_state = await finalize_call
-                except DBAPIError as error:
-                    assert getattr(error.orig, "sqlstate", None) != "40P01"
-                    raise
-                assert finalized_state == "blocked"
-                await finalizer_transaction.commit()
             finally:
                 await cancel_if_pending(verification_call)
                 await cancel_if_pending(finalize_call)
@@ -867,9 +890,9 @@ async def test_worker_finalize_waits_for_case_before_verifier_current_run(
                 .one()
             )
             assert dict(task) == {
-                "state": "blocked",
-                "result_planning_run_id": result_run_id,
-                "lease_owner": None,
+                "state": "running",
+                "result_planning_run_id": None,
+                "lease_owner": worker_name,
             }
             run_currentness = (
                 (
@@ -890,8 +913,7 @@ async def test_worker_finalize_waits_for_case_before_verifier_current_run(
                 .all()
             )
             assert {row.id: row.is_current for row in run_currentness} == {
-                graph.run_id: False,
-                result_run_id: True,
+                graph.run_id: True,
             }
     finally:
         await api.dispose()
