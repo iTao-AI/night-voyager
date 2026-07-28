@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
@@ -10,50 +11,87 @@ import type { PresentationCopyKey } from "../../lib/presentation/catalog";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { TaskProgress } from "./TaskProgress";
 import { CurrentConfirmedFacts } from "./CurrentConfirmedFacts";
+import { PlanningRevisionComparison } from "./PlanningRevisionComparison";
 
-function actionKey(phase: Ledger["phase"]): PresentationCopyKey {
-  if (phase === "task-ready") return "advisorCreateTask";
-  if (phase === "review-required") return "advisorApproveAustralia";
-  if (phase === "family-review" || phase === "plan-ready") return "advisorContinueFamily";
-  return "advisorTaskInProgress";
+function actionKey(phase: Ledger["phase"]): PresentationCopyKey | null {
+  if (phase === "task_ready" || phase === "replan_required") return "advisorCreateTask";
+  if (phase === "review_required") return "approveCurrentPlanAction";
+  if (phase === "revision_fact_pending") return "confirmRevisionFactAction";
+  if (phase === "revision_review_required") return "approveRevisedPlanAction";
+  if (phase === "family_review" || phase === "plan_ready") return "advisorContinueFamily";
+  return null;
 }
 
 export function AdvisorLedger({
   ledger,
   confirmedFacts = null,
   onPrimaryAction,
+  onSecondaryAction,
   busy = false,
 }: {
   ledger: Ledger;
   confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
   onPrimaryAction: () => void;
+  onSecondaryAction?: () => void;
   busy?: boolean;
 }) {
   const { locale, copy } = usePresentation();
   const routes = ledger.routes;
   const [selectedCountry, setSelectedCountry] = useState<string>(String(routes[0]?.country ?? ""));
   const selectedRoute = routes.find((route) => route.country === selectedCountry) ?? routes[0];
-  const disabled = busy || ledger.phase === "active-task";
-  const primaryAction = copy(actionKey(ledger.phase));
+  const primaryActionKey = actionKey(ledger.phase);
+  const primaryAction = primaryActionKey ? copy(
+    ledger.phase === "replan_required" ? "createRevisedTaskAction" : primaryActionKey,
+  ) : null;
   const presentClaims = (values: readonly string[], kind: "evidenceClaim" | "knownGap", emptyKey: PresentationCopyKey) =>
     values.length ? values.map((value) => presentCode(locale, kind, value)).join(", ") : copy(emptyKey);
 
   return (
     <section className="advisor-ledger" aria-labelledby="advisor-ledger-title">
       <header className="section-heading outcome-heading">
-        <p className="overline">Advisor Ledger × Global Journey</p>
+        <p className="overline">{copy("advisorLedgerOverline")}</p>
         <h1 id="advisor-ledger-title">{copy("advisorStageTitle")}</h1>
+        <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", "advisor")}</p>
         <p className="stage-outcome"><strong>{presentCode(locale, "demoPhase", ledger.phase)}</strong></p>
-        <p>{copy("advisorStageAuthority")}</p>
+        <p>{copy("advisorRoleAuthority")}</p>
         <p>{copy("caseRevisionLabel")} {ledger.case_revision}</p>
       </header>
 
-      <div className="current-stage">
-        <div><h2>{primaryAction}</h2><p>{copy("advisorActionExplanation")}</p></div>
-        <button className="primary-action" type="button" disabled={disabled} onClick={onPrimaryAction}>{primaryAction}</button>
-      </div>
+      {ledger.comparison ? <PlanningRevisionComparison comparison={ledger.comparison} /> : null}
 
-      {routes.length ? (
+      <div className="current-stage">
+        <div>
+          <h2>
+            {ledger.phase === "revision_blocked"
+              ? copy("revisionBlockedTitle")
+              : ledger.phase === "terminal_task_failure"
+                ? copy("terminalFailureTitle")
+                : primaryAction ?? presentCode(locale, "demoPhase", ledger.phase)}
+          </h2>
+          <p>
+            {ledger.phase === "revision_blocked"
+              ? copy("revisionBlockedBody")
+              : primaryAction
+                ? copy("advisorActionExplanation")
+                : copy("noBusinessAction")}
+          </p>
+        </div>
+        {primaryAction ? (
+          <div className="action-row">
+            <button className="primary-action" type="button" disabled={busy} onClick={onPrimaryAction}>{primaryAction}</button>
+            {ledger.phase === "review_required" && onSecondaryAction ? (
+              <button className="secondary-action" type="button" disabled={busy} onClick={onSecondaryAction}>
+                {copy("requestRevisionAction")}
+              </button>
+            ) : null}
+          </div>
+        ) : ["revision_blocked", "terminal_task_failure"].includes(ledger.phase) ? (
+          <Link className="secondary-action" href="/">{copy("safeNavigationExit")}</Link>
+        ) : null}
+      </div>
+      {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
+
+      {!ledger.comparison && routes.length ? (
         <>
           <div className="table-wrap">
             <table aria-label={copy("routeComparisonLabel")}>
@@ -93,7 +131,7 @@ export function AdvisorLedger({
             </fieldset>
           ) : null}
         </>
-      ) : <p className="empty-state">{copy("noRoutes")}</p>}
+      ) : !ledger.comparison ? <p className="empty-state">{copy("noRoutes")}</p> : null}
 
       <CurrentConfirmedFacts facts={confirmedFacts} caseRevision={ledger.case_revision} />
       <TaskProgress ledger={ledger} />

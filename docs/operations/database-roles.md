@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -159,6 +159,21 @@ A safe `0012 -> 0011` downgrade requires no planning-revision lineage. It drops
 the narrow projection and restores the exact `0011` function signatures and
 grants. When lineage exists, downgrade refuses before any schema or authority
 mutation and preserves rows, functions, and ACLs.
+
+Migration `0012` remains the runtime lineage authority. Migration `0013` adds
+only the closed provider-free demo seed helper
+`app.seed_demo_planning_revision_fact(...)`; it adds no runtime tables,
+policies, roles, or grants. The helper is migrator-owned, uses a fixed search
+path, and has zero runtime grants: `PUBLIC`, API, and worker cannot execute it.
+It atomically creates or exact-compares the five collaboration authority rows
+needed by each synthetic planning-revision fixture. A safe `0013 -> 0012`
+downgrade drops only that exact helper and leaves business data unchanged.
+
+The isolated `planning-revision-seed-migration` database lane proves the helper
+catalog and ACL, first create, exact replay, drift and collision refusal,
+transactional rollback, downgrade, and re-upgrade. Historical-head seed calls
+explicitly exclude planning-revision fixtures; current-head demo and journey
+lanes retain the complete deterministic fixture.
 
 Use the focused planning-revision modes:
 

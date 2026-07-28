@@ -70,6 +70,7 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0010_dra_v0_1_6_live_consumer.py",
         "0011_dra_strict_consumer_identity.py",
         "0012_versioned_planning_revision.py",
+        "0013_planning_revision_demo_seed.py",
     ]
     for relative in (
         "0005_dra_candidate_promotion.py",
@@ -117,7 +118,8 @@ def test_demo_bff_has_only_explicit_route_handlers() -> None:
         "cases/[caseId]/advisor-ledger/route.ts",
         "cases/[caseId]/advisor-reviews/route.ts",
         "cases/[caseId]/agent-tasks/route.ts",
-        "cases/[caseId]/current-decision-brief/route.ts",
+            "cases/[caseId]/current-decision-brief/route.ts",
+            "cases/[caseId]/journey-status/route.ts",
         "decision-briefs/[briefId]/family-decisions/route.ts",
         "session-bootstrap/route.ts",
         "session/route.ts",
@@ -185,3 +187,11 @@ def test_m5_connected_demo_public_docs_and_screenshots_are_current() -> None:
         assert asset.read_bytes().startswith(b"\x89PNG\r\n\x1a\n"), relative
         assert readme.count(relative) == 1, relative
         assert readme_cn.count(relative) == 1, relative
+
+
+def test_planning_revision_journey_has_dedicated_verifier_and_closed_db_lane() -> None:
+    verifier = ROOT / "scripts/verify_planning_revision_flow.py"
+    runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    assert verifier.is_file()
+    assert "inside-planning-revision-journey" in runner
+    assert "tests/integration/connected_demo/test_planning_revision_flow.py" in runner

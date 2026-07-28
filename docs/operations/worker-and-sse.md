@@ -26,6 +26,13 @@ rechecks the same durable task, then runs the connected advisor-to-parent browse
 flow in real Chromium at 1440, 768, and 390 px before removing isolated containers
 and volumes.
 
+The focused `planning-revision` proof adds a deterministic PostgreSQL barrier over
+the exact retained predecessor after revision 2 is durable. It waits for the same
+revision task/execution to be durably `running`, restarts the worker, releases only
+after the worker PID changes, and lets the real lease expire and reclaim the same
+task. The verifier requires two executions with one successor result; no timing pulse
+or lease-duration override is accepted.
+
 ## Runtime behavior
 
 The worker globally claims only payload-free dispatch identity, then loads
@@ -111,6 +118,12 @@ Use `scripts/run_db_tests.sh planning-revision worker` for the revision-specific
 task-owned predecessor and successor proof. The command runs the ordinary
 worker authority first and the history-free mixed-downgrade proof in a separate
 task-owned database; it never clears durable rows to make downgrade pass.
+
+The browser planning-revision verifier also requires the request review, two Case
+revisions, retained predecessor, successor PlanningRun, fresh advisor authorization,
+one current family decision, distinct non-null `family_decisions.receipt_id`, and the
+separate `timeline_plans` row. Its blocked budget Case must have neither approval nor
+decision/receipt/timeline.
 
 ## Troubleshooting
 

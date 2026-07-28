@@ -7,6 +7,9 @@ ROOT = Path(__file__).resolve().parents[2]
 REVISION_MIGRATION = (
     ROOT / "migrations/versions/0012_versioned_planning_revision.py"
 )
+REVISION_SEED_MIGRATION = (
+    ROOT / "migrations/versions/0013_planning_revision_demo_seed.py"
+)
 MIGRATION = ROOT / "migrations/versions/0007_conversation_and_memory.py"
 TABLES = (
     "collaboration_threads",
@@ -140,9 +143,32 @@ def test_demo_seed_script_uses_only_migrator_owned_collaboration_functions() -> 
     script = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
     assert "SELECT app.seed_demo_collaboration(" in script
     assert "SELECT app.seed_demo_pinned_collaboration_task(" in script
+    assert "SELECT app.seed_demo_planning_revision_fact(" in script
     assert "await _seed_collaboration(" in script
     for table in TABLES:
         assert f"INSERT INTO app.{table}" not in script
+
+
+def test_planning_revision_demo_seed_helper_is_closed_and_migrator_only() -> None:
+    source = REVISION_SEED_MIGRATION.read_text(encoding="utf-8")
+    signature = (
+        "app.seed_demo_planning_revision_fact("
+        "uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,uuid,jsonb,text,text,text,text)"
+    )
+    assert 'revision = "0013"' in source
+    assert 'down_revision = "0012"' in source
+    assert (
+        "CREATE FUNCTION app.seed_demo_planning_revision_fact("
+        in source
+    )
+    assert "SECURITY DEFINER SET search_path = pg_catalog, pg_temp" in source
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM PUBLIC" in source
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM night_voyager_api" in source
+    assert f"REVOKE ALL ON FUNCTION {signature} FROM night_voyager_worker" in source
+    assert f"GRANT EXECUTE ON FUNCTION {signature}" not in source
+    assert f"DROP FUNCTION {signature}" in source
+    for table in TABLES[1:]:
+        assert f"INSERT INTO app.{table}" in source
 
 
 def test_legacy_whole_revision_writer_is_removed_from_runtime_authority() -> None:

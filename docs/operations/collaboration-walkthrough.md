@@ -38,7 +38,7 @@ The handoff sends zero task POST requests, creates no `AgentTask`, and opens no
 `EventSource`; the collaboration route does not use polling. It keeps the same
 opaque advisor cookie, CSRF value, and Case; it
 does not bootstrap, mint, revoke, or perform a client-only identity change. A
-successful handoff performs one exact `schema_version=2` storage replacement and
+successful handoff performs one exact closed V3 advisor-family storage replacement and
 one navigation. Standalone `/demo/collaboration` remains independently usable.
 
 ## Inspector and authority boundaries
@@ -73,6 +73,14 @@ errors remain closed to the documented seven browser categories.
 the original collaboration envelope byte-for-byte intact; retry re-reads authority.
 If navigation is interrupted after replacement, `/demo` recovers the advisor-family
 envelope for the same Case rather than substituting the default fixture.
+
+The collaboration journey itself remains V2. Its handoff writes the V3
+advisor-family envelope with snake_case phase plus current revision/task/predecessor/
+run fields. Legacy V1, hyphen phases, and V2 advisor-family envelopes fail closed.
+After the first review, the continued route can request revision, accept the
+controlled student preferred-country change, create the explicit successor task,
+render the deterministic old/new comparison, require fresh advisor authorization,
+and allow only the current family decision.
 
 Run the real browser-to-database proof with:
 

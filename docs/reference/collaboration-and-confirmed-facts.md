@@ -224,13 +224,20 @@ After advisor confirmation, `/demo/collaboration` may validate the current candi
 confirmed facts, Case revision, advisor ledger, and Planning Skill inspector through
 the existing `no-store` BFF reads. The handoff itself does not create a task, resolve
 task inputs, open SSE, or change database authority. It keeps the same Case and
-advisor session, replaces the strict `schema_version=2` journey envelope once, and
+advisor session, replaces the strict V3 advisor-family journey envelope once, and
 navigates to `/demo` once.
 
 Validation failure preserves the original collaboration envelope. The destination
 re-reads the same Case and consumes only `ledger.canonical_task_inputs`; active,
 review, or terminal task identity is adopted only from the ledger. Confirmation
 therefore remains separate from the explicit advisor task action.
+
+The collaboration envelope remains V2. The destination envelope is V3 and binds the
+exact current revision, optional current task, predecessor/current run, snake_case
+phase, durable cursor, and pending mutation fingerprints. A legacy V1 envelope,
+hyphen phase, or V2 advisor-family envelope is not accepted. The later request
+revision path uses the same collaboration authority for a controlled student
+preferred-country change before publishing the successor Case revision.
 
 ### Role-safe projections
 

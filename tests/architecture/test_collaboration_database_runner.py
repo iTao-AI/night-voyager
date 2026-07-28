@@ -25,9 +25,23 @@ def test_collaboration_database_runner_is_disposable_and_suite_bounded() -> None
     assert "uv run --no-editable python scripts/seed_demo.py" in source
     assert "PYTEST_ADDOPTS= uv run --no-editable pytest" in source
     assert source.count(
-        "uv run --no-editable python scripts/seed_demo.py --without-skills"
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "                --without-skills --without-planning-revision"
     ) == 2
     assert source.count("down --volumes --remove-orphans --rmi local") == 2
+
+
+def test_0007_skill_migration_parity_seed_excludes_revision_fixtures() -> None:
+    source = (
+        ROOT / "tests/integration/skills/test_skill_migration_parity.py"
+    ).read_text(encoding="utf-8")
+    seed_helper = source[
+        source.index("def _seed_0007_demo()") : source.index(
+            "\n\nasync def _function_definition"
+        )
+    ]
+    assert '"--without-skills",' in seed_helper
+    assert '"--without-planning-revision",' in seed_helper
 
 
 def test_required_local_and_hosted_gates_execute_the_authority_suite() -> None:

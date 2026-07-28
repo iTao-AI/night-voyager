@@ -44,9 +44,10 @@ const presentationCopy = presentationLocale === "en" ? {
   familyBudget: "Total family budget",
   createTask: "Create planning task",
   pinMatched: "Runtime Skill pin matched",
-  approve: "Approve Australia for family review",
+  approve: "Approve current plan",
+  continueParent: "Continue as parent",
   familyBrief: "Family Decision Brief",
-  confirmRoute: "Confirm Australia route",
+  continueDecision: "Continue family decision",
   receipt: "Family Decision Receipt",
   timeline: "Action timeline",
 } : {
@@ -61,9 +62,10 @@ const presentationCopy = presentationLocale === "en" ? {
   familyBudget: "家庭总预算",
   createTask: "创建规划任务",
   pinMatched: "运行时 Skill pin 已匹配",
-  approve: "批准澳大利亚进入家庭审核",
+  approve: "批准当前计划",
+  continueParent: "以家长身份继续",
   familyBrief: "家庭决定简报",
-  confirmRoute: "确认澳大利亚路线",
+  continueDecision: "继续家庭决定",
   receipt: "家庭决定回执",
   timeline: "行动时间线",
 };
@@ -191,12 +193,63 @@ async function capturePublicScreenshot(page: Page, filename: string) {
 
 test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database journey", async ({ page }) => {
   test.skip(!proofFile || !workerReadyFile || !workerReadySentinel, "runs only in the isolated fact-to-plan Compose lane");
-  let storageReplacements = 0;
-  await page.exposeFunction("recordFactToPlanStorageWrite", () => { storageReplacements += 1; });
+  const storageReplacements: Array<{
+    pathname: string;
+    schemaVersion: 3;
+    journey: "advisor-family";
+    phase: string;
+    currentRevision: number;
+    hasCurrentTask: boolean;
+  }> = [];
+  await page.exposeFunction("recordFactToPlanStorageWrite", (record: typeof storageReplacements[number]) => {
+    storageReplacements.push(record);
+  });
   await page.addInitScript(() => {
     const original = Storage.prototype.setItem;
     Storage.prototype.setItem = function setItem(key: string, value: string) {
-      if (this === sessionStorage && key === "night-voyager:m5") void (window as typeof window & { recordFactToPlanStorageWrite: () => Promise<void> }).recordFactToPlanStorageWrite();
+      if (this === sessionStorage && key === "night-voyager:m5") {
+        try {
+          const parsed: unknown = JSON.parse(value);
+          if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+            const envelope = parsed as Record<string, unknown>;
+            const exactKeys = [
+              "schema_version", "journey", "role", "csrf", "caseId", "currentRevision",
+              "currentTaskId", "predecessorRunId", "currentRunId", "cursor", "phase", "mutations",
+            ].sort();
+            const keys = Object.keys(envelope).sort();
+            if (
+              keys.length === exactKeys.length
+              && keys.every((entry, index) => entry === exactKeys[index])
+              && envelope.schema_version === 3
+              && envelope.journey === "advisor-family"
+              && typeof envelope.phase === "string"
+              && Number.isSafeInteger(envelope.currentRevision)
+              && Number(envelope.currentRevision) > 0
+              && (envelope.currentTaskId === null || typeof envelope.currentTaskId === "string")
+            ) {
+              void (window as typeof window & {
+                recordFactToPlanStorageWrite: (record: {
+                  pathname: string;
+                  schemaVersion: 3;
+                  journey: "advisor-family";
+                  phase: string;
+                  currentRevision: number;
+                  hasCurrentTask: boolean;
+                }) => Promise<void>;
+              }).recordFactToPlanStorageWrite({
+                pathname: window.location.pathname,
+                schemaVersion: 3,
+                journey: "advisor-family",
+                phase: envelope.phase,
+                currentRevision: Number(envelope.currentRevision),
+                hasCurrentTask: envelope.currentTaskId !== null,
+              });
+            }
+          }
+        } catch {
+          // Closed V3 advisor-family writes are the only records relevant to this proof.
+        }
+      }
       return original.call(this, key, value);
     };
   });
@@ -253,7 +306,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   }
   await expectPortfolioEntry(page);
   expect(rootApiRequests).toHaveLength(0);
-  expect(storageReplacements).toBe(0);
+  expect(storageReplacements).toHaveLength(0);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
   await expectPortfolioEntry(page);
@@ -262,7 +315,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     "0px",
   );
   expect(rootApiRequests).toHaveLength(0);
-  expect(storageReplacements).toBe(0);
+  expect(storageReplacements).toHaveLength(0);
   if (presentationLocale === "zh-CN" && updatePortfolioScreenshots) {
     await capturePublicScreenshot(page, "night-voyager-portfolio-entry.png");
   }
@@ -301,7 +354,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     if (request.method() === "GET" && ["memory-candidates", "confirmed-facts", "advisor-ledger", "planning-skill-inspector"].some((suffix) => path.endsWith(`/${suffix}`))) handoffReads.push(path);
   };
   page.on("request", readListener);
-  storageReplacements = 0;
+  expect(storageReplacements).toHaveLength(0);
   const eventsBeforeHandoff = eventRequests.length;
   let planningNavigations = 0;
   let planningNavigationSeen = false;
@@ -325,7 +378,25 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   ]);
   expect(taskPostsForCase(caseId)).toHaveLength(0);
   expect(eventRequests).toHaveLength(eventsBeforeHandoff);
-  expect(storageReplacements).toBe(1);
+  await expect.poll(() => storageReplacements.length).toBe(2);
+  expect(storageReplacements).toEqual([
+    {
+      pathname: "/demo/collaboration",
+      schemaVersion: 3,
+      journey: "advisor-family",
+      phase: "task_ready",
+      currentRevision: 2,
+      hasCurrentTask: false,
+    },
+    {
+      pathname: "/demo",
+      schemaVersion: 3,
+      journey: "advisor-family",
+      phase: "task_ready",
+      currentRevision: 2,
+      hasCurrentTask: false,
+    },
+  ]);
   expect(planningNavigations).toBe(1);
 
   const firstStream = page.waitForRequest((request) => request.url().includes("/events?after=0"));
@@ -334,11 +405,30 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await writeFile(workerReadyFile!, `${workerReadySentinel}\n`, { encoding: "utf8", mode: 0o600 });
   await page.waitForFunction(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0);
   const beforeReload = await page.evaluate(() => {
-    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    if (typeof metadata !== "object" || metadata === null) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
+    const envelope = metadata as Record<string, unknown>;
+    const caseId = envelope.caseId;
+    const currentTaskId = envelope.currentTaskId;
+    const cursor = envelope.cursor;
+    if (
+      envelope.schema_version !== 3
+      || envelope.journey !== "advisor-family"
+      || typeof caseId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(caseId)
+      || typeof currentTaskId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(currentTaskId)
+      || !Number.isSafeInteger(cursor)
+      || Number(cursor) < 0
+    ) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
     return {
-      caseId: metadata.caseId as string,
-      taskId: metadata.taskId as string,
-      cursor: Number(metadata.cursor),
+      caseId,
+      taskId: currentTaskId,
+      cursor: Number(cursor),
     };
   });
   expect(beforeReload.caseId).toBe(caseId);
@@ -350,11 +440,30 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled();
   await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
   const afterReload = await page.evaluate(() => {
-    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    if (typeof metadata !== "object" || metadata === null) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
+    const envelope = metadata as Record<string, unknown>;
+    const caseId = envelope.caseId;
+    const currentTaskId = envelope.currentTaskId;
+    const cursor = envelope.cursor;
+    if (
+      envelope.schema_version !== 3
+      || envelope.journey !== "advisor-family"
+      || typeof caseId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(caseId)
+      || typeof currentTaskId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(currentTaskId)
+      || !Number.isSafeInteger(cursor)
+      || Number(cursor) < 0
+    ) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
     return {
-      caseId: metadata.caseId as string,
-      taskId: metadata.taskId as string,
-      cursor: Number(metadata.cursor),
+      caseId,
+      taskId: currentTaskId,
+      cursor: Number(cursor),
     };
   });
   expect(afterReload).toMatchObject({ caseId: beforeReload.caseId, taskId: beforeReload.taskId });
@@ -372,11 +481,13 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   }
 
   await page.getByRole("button", { name: presentationCopy.approve }).click();
+  await expect(page.getByRole("button", { name: presentationCopy.continueParent })).toBeEnabled();
+  await page.getByRole("button", { name: presentationCopy.continueParent }).click();
   await expect(page.getByRole("heading", { name: presentationCopy.familyBrief })).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(page.getByRole("heading", { name: presentationCopy.familyBrief })).toBeVisible();
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: presentationCopy.confirmRoute }).click();
+  await page.getByRole("button", { name: presentationCopy.continueDecision }).click();
   await expect(page.getByRole("heading", { name: presentationCopy.receipt })).toBeVisible();
   await expect(page.getByRole("heading", { name: presentationCopy.timeline })).toBeVisible();
   await page.reload();

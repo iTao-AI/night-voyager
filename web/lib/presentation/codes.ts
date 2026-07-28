@@ -4,10 +4,11 @@ import type { PresentationLocale } from "./locales";
 export const PRESENTATION_CODE_VALUES = {
   role: ["advisor", "student", "parent"],
   country: ["australia", "japan", "malaysia"],
-  demoPhase: ["task-ready", "active-task", "review-required", "family-review", "plan-ready", "terminal-task-failure"],
+  demoPhase: ["task_ready", "active_task", "review_required", "revision_requested", "revision_fact_pending", "replan_required", "revision_task_active", "revision_review_required", "revision_blocked", "family_review", "plan_ready", "terminal_task_failure"],
   taskStatus: ["preparing", "needs_advisor_review", "ready", "needs_evidence", "timed_out", "failed", "cancelled", "outdated"],
   routeOutcome: ["recommended_with_condition", "conditional", "blocked"],
-  routeReason: ["complete_cost_and_fx_within_boundary", "synthetic_high_risk_alternative", "direct_program_fit_evidence_absent"],
+  routeReason: ["complete_cost_and_fx_within_boundary", "synthetic_high_risk_alternative", "direct_program_fit_evidence_absent", "budget_above_hard_ceiling", "budget_hard_ceiling_or_elasticity_exceeded"],
+  comparisonDelta: ["added", "removed", "changed", "unchanged"],
   tradeOff: ["budget_elasticity"],
   candidateState: ["pending", "stale", "expired", "confirmed", "rejected"],
   collaborationError: ["stale", "expired_or_terminal", "active_task_blocked", "unsafe_or_unsupported", "wrong_role_or_not_found", "session_recovery_required", "transport_unavailable_or_timeout"],
@@ -34,12 +35,18 @@ const CODE_COPY_KEYS = {
   role: { advisor: "roleAdvisor", student: "roleStudent", parent: "roleParent" },
   country: { australia: "countryAustralia", japan: "countryJapan", malaysia: "countryMalaysia" },
   demoPhase: {
-    "task-ready": "phaseTaskReady",
-    "active-task": "phaseActiveTask",
-    "review-required": "phaseReviewRequired",
-    "family-review": "phaseFamilyReview",
-    "plan-ready": "phasePlanReady",
-    "terminal-task-failure": "phaseTerminalTaskFailure",
+    task_ready: "phaseTaskReady",
+    active_task: "phaseActiveTask",
+    review_required: "phaseReviewRequired",
+    revision_requested: "phaseRevisionRequested",
+    revision_fact_pending: "phaseRevisionFactPending",
+    replan_required: "phaseReplanRequired",
+    revision_task_active: "phaseRevisionTaskActive",
+    revision_review_required: "phaseRevisionReviewRequired",
+    revision_blocked: "phaseRevisionBlocked",
+    family_review: "phaseFamilyReview",
+    plan_ready: "phasePlanReady",
+    terminal_task_failure: "phaseTerminalTaskFailure",
   },
   taskStatus: {
     preparing: "taskPreparing",
@@ -60,6 +67,14 @@ const CODE_COPY_KEYS = {
     complete_cost_and_fx_within_boundary: "reasonCompleteCostAndFx",
     synthetic_high_risk_alternative: "reasonSyntheticHighRisk",
     direct_program_fit_evidence_absent: "reasonProgramFitAbsent",
+    budget_above_hard_ceiling: "reasonBudgetAboveHardCeiling",
+    budget_hard_ceiling_or_elasticity_exceeded: "reasonBudgetBoundaryExceeded",
+  },
+  comparisonDelta: {
+    added: "deltaAdded",
+    removed: "deltaRemoved",
+    changed: "deltaChanged",
+    unchanged: "deltaUnchanged",
   },
   tradeOff: { budget_elasticity: "tradeOffBudgetElasticity" },
   candidateState: {
@@ -159,6 +174,10 @@ export function presentRouteOutcome(locale: PresentationLocale, value: unknown):
 
 export function presentRouteReason(locale: PresentationLocale, value: unknown): string {
   return presentCode(locale, "routeReason", value);
+}
+
+export function presentComparisonDelta(locale: PresentationLocale, value: unknown): string {
+  return presentCode(locale, "comparisonDelta", value);
 }
 
 export function presentTradeOff(locale: PresentationLocale, value: unknown): string {

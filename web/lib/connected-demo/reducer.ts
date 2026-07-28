@@ -1,4 +1,8 @@
-import type { AdvisorLedger, CurrentDecisionBrief } from "./contracts";
+import type {
+  AdvisorLedger,
+  ConnectedJourneyStatus,
+  CurrentDecisionBrief,
+} from "./contracts";
 
 export type RecoveryCode =
   | "invalid_transition"
@@ -7,88 +11,110 @@ export type RecoveryCode =
   | "stale_conflict"
   | "transport_failure";
 
+type AdvisorState =
+  | { value: "advisor_ready"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "task_creating"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "task_streaming"; status: ConnectedJourneyStatus; ledger: AdvisorLedger; taskId: string; after: number }
+  | { value: "advisor_review"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "review_submitting"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "revision_fact_pending"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "replan_required"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "revision_blocked"; status: ConnectedJourneyStatus; ledger: AdvisorLedger }
+  | { value: "terminal_task_failure"; status: ConnectedJourneyStatus; ledger: AdvisorLedger };
+
 export type DemoDisplayState =
   | { value: "bootstrapping" }
-  | { value: "advisor_ready"; ledger: AdvisorLedger }
-  | { value: "task_creating"; ledger: AdvisorLedger }
-  | { value: "task_streaming"; ledger: AdvisorLedger; taskId: string; after: number }
-  | { value: "advisor_review"; ledger: AdvisorLedger }
-  | { value: "review_submitting"; ledger: AdvisorLedger }
-  | { value: "role_switching"; caseId: string }
-  | { value: "family_review"; brief: CurrentDecisionBrief }
-  | { value: "decision_submitting"; brief: CurrentDecisionBrief }
-  | { value: "plan_ready"; brief: CurrentDecisionBrief }
-  | { value: "recoverable_error"; code: RecoveryCode; prior?: DemoDisplayState }
-  | { value: "terminal_task_failure"; ledger: AdvisorLedger };
+  | AdvisorState
+  | { value: "revision_requested"; status: ConnectedJourneyStatus }
+  | { value: "role_switching"; caseId: string; targetRole: "advisor" | "student" | "parent"; prior?: DemoDisplayState }
+  | { value: "family_review"; status: ConnectedJourneyStatus; brief: CurrentDecisionBrief }
+  | { value: "decision_submitting"; status: ConnectedJourneyStatus; brief: CurrentDecisionBrief }
+  | { value: "plan_ready"; status: ConnectedJourneyStatus; brief: CurrentDecisionBrief }
+  | { value: "recoverable_error"; code: RecoveryCode; prior?: DemoDisplayState };
 
 export type DemoEvent =
-  | { type: "ADVISOR_SESSION_READY"; ledger: AdvisorLedger }
+  | { type: "STATUS_RELOADED"; status: ConnectedJourneyStatus; ledger?: AdvisorLedger; brief?: CurrentDecisionBrief }
   | { type: "CREATE_TASK" }
   | { type: "TASK_ACCEPTED"; taskId: string }
-  | { type: "TASK_REFRESHED"; ledger: AdvisorLedger; after: number }
+  | { type: "TASK_REFRESHED"; status: ConnectedJourneyStatus; ledger: AdvisorLedger; taskId: string; after: number }
   | { type: "REVIEW_SUBMIT" }
-  | { type: "REVIEW_ACCEPTED"; caseId: string }
-  | { type: "PARENT_SESSION_READY"; brief: CurrentDecisionBrief }
+  | { type: "ROLE_SWITCH"; caseId: string; targetRole: "advisor" | "student" | "parent" }
   | { type: "DECISION_SUBMIT" }
-  | { type: "DECISION_ACCEPTED"; brief: CurrentDecisionBrief }
-  | { type: "AUTHORITATIVE_RELOAD"; ledger?: AdvisorLedger; brief?: CurrentDecisionBrief }
-  | { type: "RECOVERABLE_FAILURE"; code: RecoveryCode }
-  | { type: "TERMINAL_TASK"; ledger: AdvisorLedger };
+  | { type: "RECOVERABLE_FAILURE"; code: RecoveryCode };
 
 const invalid: DemoDisplayState = { value: "recoverable_error", code: "invalid_transition" };
 
-function advisorState(ledger: AdvisorLedger, after = 0): DemoDisplayState {
-  switch (ledger.phase) {
-    case "task-ready":
-    case "family-review":
-    case "plan-ready":
-      return { value: "advisor_ready", ledger };
-    case "active-task":
+function identitiesMatch(status: ConnectedJourneyStatus, detail: AdvisorLedger | CurrentDecisionBrief): boolean {
+  if (status.case_id !== detail.case_id || status.phase !== detail.phase) return false;
+  if ("case_revision" in detail) return status.current_revision === detail.case_revision;
+  return status.current_revision === detail.revision_context.current_case_revision;
+}
+
+function authoritative(
+  status: ConnectedJourneyStatus,
+  ledger?: AdvisorLedger,
+  brief?: CurrentDecisionBrief,
+  after = 0,
+): DemoDisplayState {
+  if (status.phase === "revision_requested") {
+    return status.active_role === "student" && ledger === undefined && brief === undefined
+      ? { value: "revision_requested", status }
+      : invalid;
+  }
+  if (status.phase === "family_review" || status.phase === "plan_ready") {
+    if (status.active_role !== "parent" || !brief || ledger || !identitiesMatch(status, brief)) return invalid;
+    return status.phase === "family_review"
+      ? { value: "family_review", status, brief }
+      : { value: "plan_ready", status, brief };
+  }
+  if (status.active_role !== "advisor" || !ledger || brief || !identitiesMatch(status, ledger)) return invalid;
+  switch (status.phase) {
+    case "task_ready":
+      return { value: "advisor_ready", status, ledger };
+    case "active_task":
+    case "revision_task_active":
       return ledger.task
-        ? { value: "task_streaming", ledger, taskId: ledger.task.task_id, after }
+        ? { value: "task_streaming", status, ledger, taskId: ledger.task.task_id, after }
         : invalid;
-    case "review-required":
-      return { value: "advisor_review", ledger };
-    case "terminal-task-failure":
-      return { value: "terminal_task_failure", ledger };
+    case "review_required":
+    case "revision_review_required":
+      return { value: "advisor_review", status, ledger };
+    case "revision_fact_pending":
+      return { value: "revision_fact_pending", status, ledger };
+    case "replan_required":
+      return { value: "replan_required", status, ledger };
+    case "revision_blocked":
+      return { value: "revision_blocked", status, ledger };
+    case "terminal_task_failure":
+      return { value: "terminal_task_failure", status, ledger };
+    default:
+      return invalid;
   }
 }
 
 export function demoReducer(state: DemoDisplayState, event: DemoEvent): DemoDisplayState {
   if (event.type === "RECOVERABLE_FAILURE") return { value: "recoverable_error", code: event.code, prior: state };
   if (state.value === "recoverable_error" && state.prior) return demoReducer(state.prior, event);
-  if (event.type === "TERMINAL_TASK") return { value: "terminal_task_failure", ledger: event.ledger };
-  if (event.type === "AUTHORITATIVE_RELOAD") {
-    if (event.brief) return event.brief.phase === "plan-ready" ? { value: "plan_ready", brief: event.brief } : { value: "family_review", brief: event.brief };
-    if (event.ledger) return advisorState(event.ledger);
-    return invalid;
-  }
+  if (event.type === "ROLE_SWITCH") return { value: "role_switching", caseId: event.caseId, targetRole: event.targetRole, prior: state };
+  if (event.type === "STATUS_RELOADED") return authoritative(event.status, event.ledger, event.brief);
   switch (state.value) {
-    case "bootstrapping":
-      return event.type === "ADVISOR_SESSION_READY" ? { value: "advisor_ready", ledger: event.ledger } : invalid;
     case "advisor_ready":
-      return event.type === "CREATE_TASK" ? { value: "task_creating", ledger: state.ledger } : invalid;
+    case "replan_required":
+      return event.type === "CREATE_TASK" ? { value: "task_creating", status: state.status, ledger: state.ledger } : invalid;
     case "task_creating":
-      return event.type === "TASK_ACCEPTED" ? { value: "task_streaming", ledger: state.ledger, taskId: event.taskId, after: 0 } : invalid;
+      return event.type === "TASK_ACCEPTED"
+        ? { value: "task_streaming", status: state.status, ledger: state.ledger, taskId: event.taskId, after: 0 }
+        : invalid;
     case "task_streaming":
       if (event.type !== "TASK_REFRESHED") return invalid;
-      if (event.ledger.phase === "terminal-task-failure") return { value: "terminal_task_failure", ledger: event.ledger };
-      if (event.ledger.phase === "review-required") return { value: "advisor_review", ledger: event.ledger };
-      if (event.ledger.phase !== "active-task" || event.ledger.task?.task_id !== state.taskId) return invalid;
-      return { value: "task_streaming", ledger: event.ledger, taskId: state.taskId, after: Math.max(state.after, event.after) };
+      if (event.taskId !== state.taskId) return state;
+      if (event.after < state.after) return state;
+      return authoritative(event.status, event.ledger, undefined, Math.max(state.after, event.after));
     case "advisor_review":
-      if (event.type === "TASK_REFRESHED" && event.ledger.phase === "review-required") {
-        return { value: "advisor_review", ledger: event.ledger };
-      }
-      return event.type === "REVIEW_SUBMIT" ? { value: "review_submitting", ledger: state.ledger } : invalid;
-    case "review_submitting":
-      return event.type === "REVIEW_ACCEPTED" ? { value: "role_switching", caseId: event.caseId } : invalid;
-    case "role_switching":
-      return event.type === "PARENT_SESSION_READY" ? { value: "family_review", brief: event.brief } : invalid;
+    case "revision_fact_pending":
+      return event.type === "REVIEW_SUBMIT" ? { value: "review_submitting", status: state.status, ledger: state.ledger } : invalid;
     case "family_review":
-      return event.type === "DECISION_SUBMIT" ? { value: "decision_submitting", brief: state.brief } : invalid;
-    case "decision_submitting":
-      return event.type === "DECISION_ACCEPTED" && event.brief.phase === "plan-ready" ? { value: "plan_ready", brief: event.brief } : invalid;
+      return event.type === "DECISION_SUBMIT" ? { value: "decision_submitting", status: state.status, brief: state.brief } : invalid;
     default:
       return invalid;
   }

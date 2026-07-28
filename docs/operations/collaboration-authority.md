@@ -7,6 +7,10 @@ publication. The PR C browser walkthrough is documented separately. PR B Skill
 governance, external message transport, and live-provider execution retain their own
 boundaries.
 
+Current development extends that authority through migration `0012`: a valid
+request-revision review and confirmed fact revision retain the predecessor and allow
+an explicit successor task. This post-v0.1.3 work is provider-free and unreleased.
+
 ## Deterministic checks
 
 Run the offline collaboration contract lane first:
@@ -59,6 +63,10 @@ empty upgrade to 0007
   -> expected with-collaboration-history downgrade refusal
 ```
 
+The current full migration graph continues through `0008 -> 0009 -> 0010 -> 0011
+-> 0012`; the historical `0007` sequence above remains the focused collaboration
+round-trip contract rather than the migration head.
+
 Do not interpret the final refusal as a migration failure. Refusing to remove
 collaboration authority history is the expected downgrade contract.
 
@@ -98,6 +106,11 @@ propose a typed candidate, confirm it as the assigned advisor, and reload the ne
 ConfirmedFact and Case revision. It also checks wrong-role, stale, expired, and
 active-task failures. `docker compose ps --all` should show no project containers
 after teardown. Do not claim success from health checks alone.
+
+The current planning-revision authority suites additionally prove the request review,
+student preferred-country change, retained predecessor, successor PlanningRun,
+deterministic old/new comparison, fresh advisor authorization, and blocked budget
+counterfactual. They do not run a live provider.
 
 ## Fixture inventory
 
@@ -182,6 +195,7 @@ intentional:
 RESET_DEMO=1 make reset-demo
 ```
 
-PR A stops at local backend authority proof. Do not use these operations to start PR
-B or PR C, run a live provider, publish a release, deploy, or claim production
+The historical PR A operation stops at local backend authority proof. Current
+planning-revision checks remain controlled provider-free evidence; do not use these
+operations to run a live provider, publish a release, deploy, or claim production
 readiness.

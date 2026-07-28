@@ -61,3 +61,13 @@ it("rejects wrong-role candidate projections in both directions", async () => {
   await expect(api.candidates(CASE, "advisor")).rejects.toThrow("invalid response");
   await expect(api.candidates(CASE, "parent")).rejects.toThrow("invalid response");
 });
+
+it("uses participant-safe projections for the student role", async () => {
+  const participant = { schema_version: 1, fact_key: "student.preferred_countries", value: ["australia", "japan"], state: "pending", created_at: AT, expires_at: "2026-07-27T01:02:03Z" };
+  const facts = { schema_version: 1, current: [] };
+  const responses = [[participant], facts];
+  vi.stubGlobal("fetch", vi.fn(async () => Response.json(responses.shift())));
+  const api = createCollaborationDemoApi();
+  await expect(api.candidates(CASE, "student")).resolves.toEqual([participant]);
+  await expect(api.confirmedFacts(CASE, "student")).resolves.toEqual(facts);
+});

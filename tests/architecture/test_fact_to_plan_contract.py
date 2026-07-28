@@ -126,3 +126,86 @@ def test_pr2_fact_to_plan_browser_contract_is_read_then_explicit_mutation() -> N
         "timeline_plans",
     ):
         assert relation in verifier
+
+
+def test_planning_revision_browser_proves_lost_ack_restart_and_closed_comparison() -> None:
+    browser = (ROOT / "web/e2e/planning-revision.spec.ts").read_text(
+        encoding="utf-8"
+    )
+    for token in (
+        "route.abort",
+        "Idempotency-Key",
+        "request-revision",
+        "fact-confirmation",
+        "create-task",
+        "events?after=0",
+        "PLANNING_REVISION_INITIAL_SENTINEL",
+        "PLANNING_REVISION_RESTART_SENTINEL",
+        "page.reload()",
+        "previous_value",
+        "current_value",
+        'delta).toBe("removed")',
+        "renewed_for_current_revision",
+        "revision_blocked",
+        "{ width: 1440",
+        "{ width: 768",
+        "{ width: 390",
+        "{ width: 320",
+    ):
+        assert token in browser
+
+
+def test_planning_revision_verifier_counts_all_authority_rows() -> None:
+    verifier = (ROOT / "scripts/verify_planning_revision_flow.py").read_text(
+        encoding="utf-8"
+    )
+    assert "app.decision_receipts" not in verifier
+    assert "count(DISTINCT item.receipt_id)::integer " in verifier
+    assert "FROM app.family_decisions item " in verifier
+    assert "AND item.receipt_id IS NOT NULL) AS receipt_count," in verifier
+    for relation in (
+        "student_case_revisions",
+        "memory_candidates",
+        "confirmed_facts",
+        "agent_tasks",
+        "agent_executions",
+        "planning_runs",
+        "agent_task_events",
+        "advisor_reviews",
+        "decision_briefs",
+        "family_decisions",
+        "timeline_plans",
+    ):
+        assert relation in verifier
+    for count in (
+        "revision_count",
+        "confirmed_fact_count",
+        "revised_task_count",
+        "execution_count",
+        "task_event_count",
+        "request_review_count",
+        "approval_review_count",
+        "brief_count",
+        "decision_count",
+        "receipt_count",
+        "timeline_count",
+    ):
+        assert count in verifier
+
+
+def test_planning_revision_screenshot_flags_are_strictly_isolated() -> None:
+    portfolio = (ROOT / "web/e2e/fact-to-plan.spec.ts").read_text(encoding="utf-8")
+    collaboration = (
+        ROOT / "web/e2e/connected-demo.spec.ts"
+    ).read_text(encoding="utf-8")
+    revision = (ROOT / "web/e2e/planning-revision.spec.ts").read_text(
+        encoding="utf-8"
+    )
+    assert "UPDATE_PLANNING_REVISION_SCREENSHOT" not in portfolio
+    assert "night-voyager-planning-revision.png" not in portfolio
+    assert "UPDATE_PLANNING_REVISION_SCREENSHOT" not in collaboration
+    assert "night-voyager-planning-revision.png" not in collaboration
+    assert "UPDATE_PORTFOLIO_SCREENSHOTS" not in revision
+    assert "night-voyager-portfolio-entry.png" not in revision
+    assert "m5-advisor-ledger.png" not in revision
+    assert "m5-family-receipt-timeline.png" not in revision

@@ -206,7 +206,8 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
     )
     legacy_upgrade = runner.index("uv run alembic upgrade 0007", identity_seed)
     legacy_seed = runner.index(
-        "uv run --no-editable python scripts/seed_demo.py --without-skills",
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "        --without-skills --without-planning-revision",
         legacy_upgrade,
     )
     final_upgrade = runner.index("uv run alembic upgrade head", legacy_seed)
@@ -244,7 +245,8 @@ def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_hist
 
     assert "--ignore=tests/integration/tasks/test_mixed_downgrade.py" in main_lane
     assert (
-        "uv run --no-editable python scripts/seed_demo.py --without-collaboration"
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "        --without-collaboration --without-planning-revision"
         in isolated_lane
     )
     assert "tests/integration/tasks/test_mixed_downgrade.py" in isolated_lane
@@ -254,7 +256,58 @@ def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_hist
         in runner
     )
     assert "include_collaboration: bool = True" in seed
+    assert "include_planning_revision: bool = True" in seed
     assert 'parser.add_argument("--without-collaboration", action="store_true")' in seed
+    assert (
+        'parser.add_argument("--without-planning-revision", action="store_true")'
+        in seed
+    )
+    assert (
+        "include_planning_revision=not arguments.without_planning_revision"
+        in seed
+    )
+
+
+def test_planning_revision_seed_helper_has_one_closed_migration_lane() -> None:
+    runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    lane_start = runner.index(
+        'if [ "${1:-}" = "inside-planning-revision-seed-migration" ]'
+    )
+    lane_end = runner.index(
+        'if [ "${1:-}" = "inside-planning-revision" ]',
+        lane_start,
+    )
+    lane = runner[lane_start:lane_end]
+
+    required = (
+        "uv run alembic upgrade 0012",
+        "uv run alembic current | grep '0012'",
+        "scripts/seed_demo.py --without-planning-revision",
+        "NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=absent-0012",
+        "uv run alembic upgrade 0013",
+        "NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=authority-0013",
+        "uv run alembic downgrade 0012",
+        "NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=safe-downgrade-0012",
+        "NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=restored-0013",
+    )
+    positions = [lane.index(node) for node in required]
+    assert positions == sorted(positions)
+    assert lane.count("tests/integration/planning/test_revision_seed_migration.py") == 4
+    assert (
+        'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" '
+        "\\\n        inside-planning-revision-seed-migration"
+    ) in runner
+
+    collaboration_runner = (
+        ROOT / "scripts/run_collaboration_db_tests.sh"
+    ).read_text(encoding="utf-8")
+    revision_lane = collaboration_runner[
+        collaboration_runner.index('if [ "$mode" = "inside-revision" ]') :
+        collaboration_runner.index('case "$suite" in')
+    ]
+    assert revision_lane.count("--without-planning-revision") == 2
+    assert "uv run alembic upgrade 0012" in revision_lane
+    assert "uv run alembic upgrade 0013" not in revision_lane
 
 
 def test_planning_revision_worker_isolates_historical_mixed_downgrade() -> None:
@@ -309,7 +362,8 @@ def test_http_suite_crosses_the_real_identity_postgres_and_rls_boundary() -> Non
     http_suite = runner[runner.index("        http)") : runner.index("        authority)")]
     legacy_downgrade = http_suite.index("uv run alembic downgrade 0007")
     legacy_seed = http_suite.index(
-        "uv run --no-editable python scripts/seed_demo.py --without-skills",
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "                --without-skills --without-planning-revision",
         legacy_downgrade,
     )
     head = http_suite.index("uv run alembic upgrade head", legacy_seed)

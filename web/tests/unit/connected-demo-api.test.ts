@@ -2,10 +2,15 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createConnectedDemoApi } from "../../lib/connected-demo/api";
-import { parseBrief, parseLedger, parseTask } from "../../lib/connected-demo/contracts";
+import {
+  parseBrief,
+  parseJourneyStatus,
+  parseLedger,
+  parseTask,
+} from "../../lib/connected-demo/contracts";
 import type { SkillLeafBindingV1, StandaloneTaskProjection } from "../../lib/connected-demo/contracts";
 import { requestFingerprint } from "../../lib/connected-demo/idempotency";
-import { CASE_ID, TASK_ID, brief, ledger, standaloneTask } from "./connected-demo-test-data";
+import { CASE_ID, TASK_ID, brief, comparison, ledger, standaloneTask } from "./connected-demo-test-data";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -110,6 +115,35 @@ it.each([
   expect(() => parseLedger(mutate())).toThrow("invalid response");
 });
 
+it.each([
+  ["missing comparison", () => {
+    const value = structuredClone(ledger("revision_review_required")) as unknown as Record<string, unknown>;
+    delete value.comparison;
+    return value;
+  }],
+  ["unknown country delta", () => ({
+    ...ledger("revision_review_required"),
+    comparison: {
+      ...comparison(),
+      countries: [{ ...comparison().countries[0], delta: "invented" }],
+    },
+  })],
+  ["blocked with review inputs", () => ({
+    ...ledger("revision_blocked"),
+    review_inputs: ledger("revision_review_required").review_inputs,
+  })],
+  ["blocked with terminal recovery", () => ({
+    ...ledger("revision_blocked"),
+    recovery: ledger("terminal_task_failure", "needs_evidence").recovery,
+  })],
+  ["unknown v2 schema", () => ({
+    ...ledger("revision_review_required"),
+    schema_version: 1,
+  })],
+])("rejects V2 revision authority with %s", (_name, make) => {
+  expect(() => parseLedger(make())).toThrow("invalid response");
+});
+
 it("rejects receipt/timeline phase inconsistencies", () => {
   const family = brief("family-review");
   const complete = brief("plan-ready");
@@ -136,4 +170,17 @@ it("fingerprints canonical requests without storing their body", async () => {
   const second = await requestFingerprint({ a: 1, b: 2 });
   expect(first).toBe(second);
   expect(first).toMatch(/^[0-9a-f]{64}$/);
+});
+
+it("requires the exact participant-safe journey status contract", () => {
+  const status = {
+    schema: "night-voyager.connected-journey-status.v1",
+    case_id: CASE_ID,
+    current_revision: 2,
+    phase: "revision_requested",
+    active_role: "student",
+  };
+  expect(parseJourneyStatus(status)).toEqual(status);
+  expect(() => parseJourneyStatus({ ...status, planning_run_id: TASK_ID })).toThrow("invalid response");
+  expect(() => parseJourneyStatus({ ...status, phase: "revision-requested" })).toThrow("invalid response");
 });

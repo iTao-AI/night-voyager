@@ -152,6 +152,11 @@ PLANNING_REVISION_PENDING_IDENTITY = (
     "read_connected_journey_fact_pending",
     "uuid, uuid, text, uuid",
 )
+PLANNING_REVISION_SEED_IDENTITY = (
+    "seed_demo_planning_revision_fact",
+    "uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, jsonb, "
+    "text, text, text, text",
+)
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -165,6 +170,27 @@ BINARY_SUFFIXES = {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".pdf", ".png", ".w
 M5_SCREENSHOTS = (
     "docs/assets/m5-advisor-ledger.png",
     "docs/assets/m5-family-receipt-timeline.png",
+)
+PLANNING_REVISION_SCREENSHOT = "docs/assets/night-voyager-planning-revision.png"
+PLANNING_REVISION_CURRENT_DOCS = (
+    "README.md",
+    "README_CN.md",
+    "DESIGN.md",
+    "docs/README.md",
+    "docs/design/demo-storyboard.md",
+    "docs/design/projection-matrix.md",
+    "docs/design/route-map.md",
+    "docs/design/state-and-interaction-matrix.md",
+    "docs/operations/collaboration-authority.md",
+    "docs/operations/collaboration-walkthrough.md",
+    "docs/operations/connected-demo.md",
+    "docs/operations/worker-and-sse.md",
+    "docs/reference/agent-tasks-and-events.md",
+    "docs/reference/collaboration-and-confirmed-facts.md",
+    "docs/reference/http-api-v1.md",
+    "docs/superpowers/README.md",
+    "docs/superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md",
+    "docs/superpowers/plans/2026-07-27-planning-revision-journey-pr-3-implementation-plan.md",
 )
 PORTFOLIO_SOURCE_SHA256 = (
     "4fe73754e5180e725bfc7d734fc9a9039030da5ebef41f31aa1cf2f1ccff55fc"
@@ -881,7 +907,7 @@ def verify_planning_revision_surface() -> None:
         "V1 read routes remain default",
         "contract_version=2",
         "journey-status is participant-safe recovery authority",
-        "PR 3 browser journey remains unimplemented",
+        "PR 3 browser journey is implemented provider-free",
         "read_connected_journey_fact_pending",
     )
     if (
@@ -895,6 +921,48 @@ def verify_planning_revision_surface() -> None:
         )
     ):
         raise SystemExit("planning revision authority documentation drift")
+
+    screenshot = (ROOT / PLANNING_REVISION_SCREENSHOT).read_bytes()
+    if (
+        not screenshot.startswith(b"\x89PNG\r\n\x1a\n")
+        or len(screenshot) < 24
+        or int.from_bytes(screenshot[16:20], "big") != 1440
+        or int.from_bytes(screenshot[20:24], "big") < 900
+    ):
+        raise SystemExit("planning revision screenshot identity drift")
+
+    current_docs = " ".join(
+        "\n".join(
+            (ROOT / relative).read_text(encoding="utf-8")
+            for relative in PLANNING_REVISION_CURRENT_DOCS
+        ).split()
+    )
+    current_claims = (
+        "request revision",
+        "student preferred-country change",
+        "retained predecessor",
+        "successor PlanningRun",
+        "deterministic old/new comparison",
+        "fresh advisor authorization",
+        "only the current family decision",
+        "blocked budget counterfactual",
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "post-v0.1.3 unreleased",
+        "strict live acceptance remains incomplete",
+        "no third provider attempt",
+        "25 and 83",
+        "zero cited rows",
+        "controlled provider-free evidence",
+        "separate release decision",
+        "UPDATE_PORTFOLIO_SCREENSHOTS",
+        "UPDATE_PLANNING_REVISION_SCREENSHOT",
+    )
+    if (
+        any(token not in current_docs for token in current_claims)
+        or PLANNING_REVISION_SCREENSHOT not in current_docs
+        or "PR 3 browser journey remains unimplemented" in current_docs
+    ):
+        raise SystemExit("planning revision current documentation or non-claim drift")
     print("proof planning revision surface: durable lineage and role-safe projection confirmed")
 
 
@@ -1025,8 +1093,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0012"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0012")
+    if heads != {"0013"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0013")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -1039,18 +1107,22 @@ def verify_alembic_contract() -> None:
         "inside-dra-strict-migration": 3,
         "tests/integration/dra/test_dra_strict_migration.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 2,
-        "inside-planning-revision": 6,
+        "inside-planning-revision": 11,
+        "inside-planning-revision-seed-migration": 3,
+        "tests/integration/planning/test_revision_seed_migration.py": 4,
+        'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
         "tests/integration/planning/test_revision_migration.py": 1,
         "tests/integration/planning/test_revision_authority.py": 1,
-        "tests/integration/connected_demo/test_postgres_read_models.py": 1,
-        "tests/integration/connected_demo/test_http_read_models.py": 1,
+        "tests/integration/connected_demo/test_postgres_read_models.py": 2,
+        "tests/integration/connected_demo/test_http_read_models.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade': 3,
     }
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0012 with planning-start, "
-        "DRA live, strict parity, and planning-revision lanes confirmed"
+        "proof migrations: exact Alembic head 0013 with planning-start, "
+        "DRA live, strict parity, planning-revision, and migrator-only "
+        "revision-seed lanes confirmed"
     )
 
 
@@ -1348,7 +1420,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'read_collaboration_thread','read_collaboration_messages',
                            'read_memory_candidates','read_confirmed_facts',
                            'read_connected_journey_fact_pending',
-                           'seed_demo_collaboration')
+                           'seed_demo_collaboration',
+                           'seed_demo_planning_revision_fact')
                            OR p.proname IN
                           ('create_skill_change_candidate','record_skill_candidate_evaluation',
                            'promote_skill_change_candidate','rollback_skill_activation',
@@ -1394,10 +1467,14 @@ async def verify_database_catalog(database_url: str) -> None:
             alembic_revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            if alembic_revision == "0012":
+            if alembic_revision in {"0012", "0013"}:
                 expected_app_functions.add(
                     PLANNING_REVISION_PENDING_IDENTITY[0]
                 )
+                if alembic_revision == "0013":
+                    expected_app_functions.add(
+                        PLANNING_REVISION_SEED_IDENTITY[0]
+                    )
                 expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
             elif alembic_revision == "0011":
                 expected_dra_function_identities = DRA_DATABASE_FUNCTION_IDENTITIES
@@ -1447,7 +1524,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 | COLLABORATION_API_FUNCTIONS
                 | SKILL_API_FUNCTIONS
             )
-            if alembic_revision == "0012":
+            if alembic_revision in {"0012", "0013"}:
                 api_functions.remove("persist_planning_result")
                 api_functions.add(PLANNING_REVISION_PENDING_IDENTITY[0])
             worker_functions = {
@@ -1533,7 +1610,7 @@ async def verify_database_catalog(database_url: str) -> None:
             }
             expected_planning_revision_function = (
                 {PLANNING_REVISION_PENDING_IDENTITY: (True, False)}
-                if alembic_revision == "0012"
+                if alembic_revision in {"0012", "0013"}
                 else {}
             )
             if (
@@ -1542,6 +1619,26 @@ async def verify_database_catalog(database_url: str) -> None:
             ):
                 raise SystemExit(
                     "planning revision projection violates API/worker separation"
+                )
+            planning_revision_seed_function = {
+                (row["proname"], row["identity_arguments"]): (
+                    row["api_execute"],
+                    row["worker_execute"],
+                )
+                for row in app_functions
+                if row["proname"] == PLANNING_REVISION_SEED_IDENTITY[0]
+            }
+            expected_planning_revision_seed_function = (
+                {PLANNING_REVISION_SEED_IDENTITY: (False, False)}
+                if alembic_revision == "0013"
+                else {}
+            )
+            if (
+                planning_revision_seed_function
+                != expected_planning_revision_seed_function
+            ):
+                raise SystemExit(
+                    "planning revision demo seed helper violates migrator-only authority"
                 )
             skill_signatures = {
                 row["proname"]: row["identity_arguments"]

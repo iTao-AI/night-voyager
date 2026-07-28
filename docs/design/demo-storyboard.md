@@ -52,3 +52,26 @@ real task. The [captured Chromium evidence](../assets/collaboration-confirmed-fa
 depicts the final collaboration state. The same real journey also produces the
 [advisor review](../assets/m5-advisor-ledger.png) and
 [family receipt/timeline](../assets/m5-family-receipt-timeline.png) captures.
+
+## Planning revision continuation
+
+The post-v0.1.3 provider-free continuation begins after the first advisor review:
+
+1. **Request revision** — the advisor requests one bounded change against the
+   current PlanningRun; this is not a rejection or an inferred Case mutation.
+2. **Student preferred-country change** — the student uses the controlled editor
+   to propose the exact supported country set.
+3. **Confirmed revision** — the assigned advisor confirms the proposal, retaining
+   the predecessor and publishing the new Case revision.
+4. **Explicit successor** — the advisor creates the revision-owned task; the
+   worker produces one successor PlanningRun without choosing or approving it.
+5. **Compare and re-authorize** — the ledger renders a deterministic old/new
+   comparison and requires fresh advisor authorization for the exact successor.
+6. **Current family decision** — the parent sees the renewed-review context and
+   only the current family decision can create the receipt and timeline.
+7. **Blocked budget counterfactual** — a separate synthetic Case reaches
+   `revision_blocked`, keeps comparison authority visible, and exposes no approval
+   or family-decision action.
+
+The dedicated capture is
+[night-voyager-planning-revision.png](../assets/night-voyager-planning-revision.png).

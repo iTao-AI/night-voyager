@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import UTC, date, datetime
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -303,7 +304,7 @@ def test_family_revision_context_is_closed() -> None:
 
 
 def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs() -> None:
-    payload = {
+    payload: dict[str, Any] = {
         "schema_version": 2,
         "proof_mode": "synthetic-demo",
         "phase": "revision_blocked",
@@ -341,11 +342,31 @@ def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs()
         "recovery": None,
     }
     assert AdvisorLedgerV2.model_validate(payload).comparison is not None
-    payload["review_inputs"] = {
+    with_recovery = deepcopy(payload)
+    with_recovery["recovery"] = {
+        "code": "needs_evidence",
+        "retry_allowed": False,
+        "guidance": "Review the public task status before retrying.",
+    }
+    with pytest.raises(ValidationError, match="revision-blocked"):
+        AdvisorLedgerV2.model_validate(with_recovery)
+
+    wrong_task_state = deepcopy(payload)
+    wrong_task_state["task"]["status"] = "needs_advisor_review"
+    with pytest.raises(ValidationError, match="revision-blocked"):
+        AdvisorLedgerV2.model_validate(wrong_task_state)
+
+    wrong_run_state = deepcopy(payload)
+    wrong_run_state["planning_run"]["state"] = "review_required"
+    with pytest.raises(ValidationError, match="revision-blocked"):
+        AdvisorLedgerV2.model_validate(wrong_run_state)
+
+    with_review_inputs = deepcopy(payload)
+    with_review_inputs["review_inputs"] = {
         "planning_run_id": RUN_ID,
         "expected_case_revision": 2,
         "eligible_route_ids": (),
         "risk_acceptance_options": (),
     }
     with pytest.raises(ValidationError, match="revision-blocked"):
-        AdvisorLedgerV2.model_validate(payload)
+        AdvisorLedgerV2.model_validate(with_review_inputs)

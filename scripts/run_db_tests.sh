@@ -9,31 +9,32 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
     uv run alembic upgrade 0007
     uv run alembic current | grep '0007'
-    uv run --no-editable python scripts/seed_demo.py --without-skills
+    uv run --no-editable python scripts/seed_demo.py \
+        --without-skills --without-planning-revision
     uv run alembic upgrade head
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -60,18 +61,19 @@ if [ "${1:-}" = "inside" ]; then
         exit 1
     fi
     grep -q 'refusing downgrade: planning revision lineage exists' "$downgrade_output"
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0012'
-    uv run --no-editable python scripts/seed_demo.py --without-collaboration
+    uv run alembic current | grep '0013'
+    uv run --no-editable python scripts/seed_demo.py \
+        --without-collaboration --without-planning-revision
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
     exit 0
 fi
 
@@ -79,7 +81,7 @@ if [ "${1:-}" = "inside-planning-start-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0008
     uv run alembic current | grep '0008'
-    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/tasks/test_planning_start_migration.py
     uv run alembic current | grep '0009'
@@ -91,7 +93,7 @@ if [ "${1:-}" = "inside-dra-live-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0009
     uv run alembic current | grep '0009'
-    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/dra/test_dra_live_migration.py
     uv run alembic current | grep '0010'
@@ -102,7 +104,7 @@ if [ "${1:-}" = "inside-dra-strict-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0009
     uv run alembic current | grep '0009'
-    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/dra/test_dra_live_migration.py \
         tests/integration/dra/test_dra_strict_migration.py \
@@ -133,6 +135,31 @@ if [ "${1:-}" = "inside-skill-seed-replay" ]; then
         tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_all_null_legacy_projection_drift \
         tests/integration/skills/test_postgres_skills.py::test_seed_replay_rejects_partial_pin_classification \
         tests/integration/skills/test_postgres_skills.py::test_pinned_active_task_seed_mismatch_has_no_partial_task_or_event
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-planning-revision-seed-migration" ]; then
+    uv run alembic downgrade base
+    uv run alembic upgrade 0012
+    uv run alembic current | grep '0012'
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=absent-0012 \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_seed_migration.py
+    uv run alembic upgrade 0013
+    uv run alembic current | grep '0013'
+    NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=authority-0013 \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_seed_migration.py
+    uv run alembic downgrade 0012
+    NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=safe-downgrade-0012 \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_seed_migration.py
+    uv run alembic upgrade 0013
+    NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=restored-0013 \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_seed_migration.py
+    uv run alembic current | grep '0013'
     exit 0
 fi
 
@@ -178,7 +205,19 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
                 tests/integration/planning/test_revision_query_plan.py
             ;;
     esac
-    uv run alembic current | grep '0012'
+    uv run alembic current | grep '0013'
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-planning-revision-journey" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0013'
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/connected_demo/test_postgres_read_models.py \
+        tests/integration/connected_demo/test_http_read_models.py \
+        tests/integration/connected_demo/test_planning_revision_flow.py
+    uv run alembic current | grep '0013'
     exit 0
 fi
 
@@ -218,6 +257,12 @@ if [ "${1:-}" = "dra-strict-migration" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "planning-revision-seed-migration" ]; then
+    run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" \
+        inside-planning-revision-seed-migration
+    exit 0
+fi
+
 if [ "${1:-}" = "planning-revision" ]; then
     suite=${2:-}
     case "$suite" in
@@ -233,6 +278,9 @@ if [ "${1:-}" = "planning-revision" ]; then
             run_lane "${BASE_PROJECT_NAME}-worker" inside-planning-revision worker
             run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade
             run_lane "${BASE_PROJECT_NAME}-projection" inside-planning-revision projection
+            ;;
+        journey)
+            run_lane "${BASE_PROJECT_NAME}-journey" inside-planning-revision-journey
             ;;
         *)
             echo "unknown planning revision suite: ${suite:-<missing>}" >&2
@@ -250,6 +298,8 @@ fi
 run_lane "${BASE_PROJECT_NAME}-planning-start-migration" inside-planning-start-migration
 run_lane "${BASE_PROJECT_NAME}-dra-live-migration" inside-dra-live-migration
 run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" inside-dra-strict-migration
+run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" \
+    inside-planning-revision-seed-migration
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
 run_lane "${BASE_PROJECT_NAME}-main" inside

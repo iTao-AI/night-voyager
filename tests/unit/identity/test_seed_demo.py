@@ -125,3 +125,29 @@ def test_head_seed_preserves_legacy_task_and_creates_a_pinned_fresh_head_fixture
     assert "partial Skill runtime pin" in source
     assert "await _seed_pinned_collaboration_task(" in source
     assert 'parser.add_argument("--without-skills", action="store_true")' in source
+
+
+def test_planning_revision_snapshot_replay_is_create_once_and_exact() -> None:
+    source = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
+    fixture_seed = source.split(
+        "async def _seed_planning_revision_cases(", 1
+    )[1].split("\n\nasync def _clone_planning_snapshot(", 1)[0]
+    clone = source.split("async def _clone_planning_snapshot(", 1)[1].split(
+        "\n\nasync def _seed_collaboration(", 1
+    )[0]
+
+    assert "ON CONFLICT DO NOTHING RETURNING id" in fixture_seed
+    assert "await _assert_exact_planning_revision_fixture(" in fixture_seed
+    assert fixture_seed.index("if inserted_case_id is None:") < fixture_seed.index(
+        "SELECT app.seed_case_participants("
+    )
+    assert fixture_seed.index("continue") < fixture_seed.index(
+        "SELECT app.seed_case_participants("
+    )
+    assert "ON CONFLICT DO NOTHING RETURNING id" in clone
+    assert "await _assert_exact_planning_snapshot(" in clone
+    assert "demo planning revision snapshot seed mismatch" in source
+    assert "demo planning revision fixture seed mismatch" in source
+    assert clone.index("if inserted_run_id is None:") < clone.index(
+        "for table, columns, projection in clone_specs:"
+    )

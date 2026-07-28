@@ -46,26 +46,26 @@ export interface CollaborationDemoApi {
   messages(threadId: string, afterSequence?: number, limit?: number): Promise<MessagePage>;
   appendMessage(threadId: string, body: AppendMessageBody, csrf: string, key: string): Promise<CollaborationMessage>;
   proposeCandidate(messageId: string, body: ProposalBody, csrf: string, key: string): Promise<MemoryCandidateParticipant>;
-  candidates(caseId: string, role: "parent"): Promise<readonly MemoryCandidateParticipant[]>;
+  candidates(caseId: string, role: "student" | "parent"): Promise<readonly MemoryCandidateParticipant[]>;
   candidates(caseId: string, role: "advisor"): Promise<readonly MemoryCandidateAdvisor[]>;
   verifyCandidate(candidateId: string, body: VerificationBody, csrf: string, key: string): Promise<MemoryCandidateVerification>;
-  confirmedFacts(caseId: string, role: "parent"): Promise<{ schema_version: 1; current: readonly ConfirmedFactParticipant[] }>;
+  confirmedFacts(caseId: string, role: "student" | "parent"): Promise<{ schema_version: 1; current: readonly ConfirmedFactParticipant[] }>;
   confirmedFacts(caseId: string, role: "advisor"): Promise<{ schema_version: 1; current: readonly ConfirmedFactAdvisor[]; history: readonly ConfirmedFactAdvisor[]; next_cursor: string | null }>;
   planningSkillInspector(caseId: string): Promise<PlanningSkillInspector>;
 }
 
-async function readCandidates(caseId: string, role: "parent"): Promise<readonly MemoryCandidateParticipant[]>;
+async function readCandidates(caseId: string, role: "student" | "parent"): Promise<readonly MemoryCandidateParticipant[]>;
 async function readCandidates(caseId: string, role: "advisor"): Promise<readonly MemoryCandidateAdvisor[]>;
-async function readCandidates(caseId: string, role: "parent" | "advisor"): Promise<readonly MemoryCandidateParticipant[] | readonly MemoryCandidateAdvisor[]> {
+async function readCandidates(caseId: string, role: "student" | "parent" | "advisor"): Promise<readonly MemoryCandidateParticipant[] | readonly MemoryCandidateAdvisor[]> {
   const payload = await json(`/api/demo/cases/${caseId}/memory-candidates`);
-  return role === "parent" ? parseParticipantMemoryCandidateList(payload) : parseAdvisorMemoryCandidateList(payload);
+  return role === "advisor" ? parseAdvisorMemoryCandidateList(payload) : parseParticipantMemoryCandidateList(payload);
 }
 
-async function readConfirmedFacts(caseId: string, role: "parent"): Promise<{ schema_version: 1; current: readonly ConfirmedFactParticipant[] }>;
+async function readConfirmedFacts(caseId: string, role: "student" | "parent"): Promise<{ schema_version: 1; current: readonly ConfirmedFactParticipant[] }>;
 async function readConfirmedFacts(caseId: string, role: "advisor"): Promise<{ schema_version: 1; current: readonly ConfirmedFactAdvisor[]; history: readonly ConfirmedFactAdvisor[]; next_cursor: string | null }>;
-async function readConfirmedFacts(caseId: string, role: "parent" | "advisor"): Promise<{ schema_version: 1; current: readonly ConfirmedFactParticipant[] } | { schema_version: 1; current: readonly ConfirmedFactAdvisor[]; history: readonly ConfirmedFactAdvisor[]; next_cursor: string | null }> {
+async function readConfirmedFacts(caseId: string, role: "student" | "parent" | "advisor"): Promise<{ schema_version: 1; current: readonly ConfirmedFactParticipant[] } | { schema_version: 1; current: readonly ConfirmedFactAdvisor[]; history: readonly ConfirmedFactAdvisor[]; next_cursor: string | null }> {
   const payload = await json(`/api/demo/cases/${caseId}/confirmed-facts`);
-  return role === "parent" ? parseParticipantConfirmedFactPage(payload) : parseAdvisorConfirmedFactPage(payload);
+  return role === "advisor" ? parseAdvisorConfirmedFactPage(payload) : parseParticipantConfirmedFactPage(payload);
 }
 
 export function createCollaborationDemoApi(): CollaborationDemoApi {

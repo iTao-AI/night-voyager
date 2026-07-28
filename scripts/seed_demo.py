@@ -3,14 +3,17 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
-from typing import cast
+from collections.abc import Mapping
+from typing import TypedDict, cast
 from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
+from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.identity.demo_seed import (
     COLLABORATION_ACTIVE_CASE_ID,
     COLLABORATION_ACTIVE_TASK_ID,
@@ -42,11 +45,53 @@ ACTORS = (
 )
 
 
+class PlanningRevisionSpec(TypedDict):
+    case_id: UUID
+    thread_id: UUID
+    run_id: UUID
+    task_id: UUID
+    execution_id: UUID
+    message_id: UUID
+    candidate_id: UUID
+    verification_id: UUID
+    fact_id: UUID
+    event_sequence: int
+
+
+PLANNING_REVISION_CASES: tuple[PlanningRevisionSpec, ...] = (
+    {
+        "case_id": UUID("49000000-0000-0000-0000-000000000001"),
+        "thread_id": UUID("4b000000-0000-0000-0000-000000000001"),
+        "run_id": UUID("79000000-0000-0000-0000-000000000001"),
+        "task_id": UUID("89000000-0000-0000-0000-000000000001"),
+        "execution_id": UUID("8a000000-0000-0000-0000-000000000001"),
+        "message_id": UUID("4c000000-0000-0000-0000-000000000001"),
+        "candidate_id": UUID("4d000000-0000-0000-0000-000000000001"),
+        "verification_id": UUID("4e000000-0000-0000-0000-000000000001"),
+        "fact_id": UUID("4f000000-0000-0000-0000-000000000001"),
+        "event_sequence": 1,
+    },
+    {
+        "case_id": UUID("49000000-0000-0000-0000-000000000002"),
+        "thread_id": UUID("4b000000-0000-0000-0000-000000000002"),
+        "run_id": UUID("79000000-0000-0000-0000-000000000002"),
+        "task_id": UUID("89000000-0000-0000-0000-000000000002"),
+        "execution_id": UUID("8a000000-0000-0000-0000-000000000002"),
+        "message_id": UUID("4c000000-0000-0000-0000-000000000002"),
+        "candidate_id": UUID("4d000000-0000-0000-0000-000000000002"),
+        "verification_id": UUID("4e000000-0000-0000-0000-000000000002"),
+        "fact_id": UUID("4f000000-0000-0000-0000-000000000002"),
+        "event_sequence": 1,
+    },
+)
+
+
 async def seed_demo(
     database_url: str,
     *,
     include_planning: bool = True,
     include_collaboration: bool = True,
+    include_planning_revision: bool = True,
     include_skills: bool = True,
 ) -> None:
     fixture = validate_planning_fixture()
@@ -74,6 +119,8 @@ async def seed_demo(
                     },
                 )
                 await _seed_task_case(connection, fixture)
+                if include_planning_revision:
+                    await _seed_planning_revision_cases(connection, fixture)
                 if include_collaboration:
                     await _seed_collaboration(
                         connection,
@@ -380,6 +427,623 @@ async def _seed_task_case(connection: AsyncConnection, fixture: ValidatedPlannin
             "parent": ACTORS[2][1],
         },
     )
+
+
+async def _seed_planning_revision_cases(
+    connection: AsyncConnection, fixture: ValidatedPlanningFixture
+) -> None:
+    source_case = fixture.planning_input.case
+    preferred = source_case.student.preferred_countries
+    preferred_json = json.dumps([country.value for country in preferred])
+    preferred_hash = canonical_sha256([country.value for country in preferred])
+    for spec in PLANNING_REVISION_CASES:
+        case_id = spec["case_id"]
+        inserted_case_id = (
+            await connection.execute(
+                text(
+                    "INSERT INTO app.student_cases(organization_id,id,state) "
+                    "VALUES(:org,:case,'planning') "
+                    "ON CONFLICT DO NOTHING RETURNING id"
+                ),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+        ).scalar_one_or_none()
+        if inserted_case_id is None:
+            await _assert_exact_planning_revision_fixture(
+                connection,
+                fixture,
+                spec,
+            )
+            continue
+        await connection.execute(
+            text(
+                "INSERT INTO app.student_case_revisions("
+                "organization_id,case_id,revision,schema_version,"
+                "student_preferences,family_preferences) "
+                "VALUES(:org,:case,1,1,CAST(:student AS jsonb),CAST(:family AS jsonb)) "
+                "ON CONFLICT DO NOTHING"
+            ),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "student": json.dumps(source_case.student.model_dump(mode="json")),
+                "family": json.dumps(source_case.family.model_dump(mode="json")),
+            },
+        )
+        await connection.execute(
+            text(
+                "UPDATE app.student_cases SET current_revision=1 "
+                "WHERE organization_id=:org AND id=:case AND current_revision IS NULL"
+            ),
+            {"org": DEMO_ORG, "case": case_id},
+        )
+        await connection.execute(
+            text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "advisor": ACTORS[0][1],
+                "student": ACTORS[1][1],
+                "parent": ACTORS[2][1],
+            },
+        )
+        await connection.execute(
+            text(
+                "SELECT app.seed_demo_collaboration("
+                ":org,:case,:thread,:advisor,NULL,NULL,NULL,NULL,'primary')"
+            ),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "thread": spec["thread_id"],
+                "advisor": ACTORS[0][1],
+            },
+        )
+        await connection.execute(
+            text(
+                "SELECT app.seed_demo_planning_revision_fact("
+                ":org,:case,:thread,:advisor,:student,:message,:candidate,"
+                ":verification,:fact,CAST(:value AS jsonb),:value_hash,"
+                ":message_request_hash,:candidate_request_hash,"
+                ":verification_request_hash)"
+            ),
+            {
+                "org": DEMO_ORG,
+                "case": case_id,
+                "thread": spec["thread_id"],
+                "advisor": ACTORS[0][1],
+                "student": ACTORS[1][1],
+                "message": spec["message_id"],
+                "candidate": spec["candidate_id"],
+                "verification": spec["verification_id"],
+                "fact": spec["fact_id"],
+                "value": preferred_json,
+                "value_hash": preferred_hash,
+                "message_request_hash": hashlib.sha256(
+                    f"revision-seed-message:{case_id}".encode()
+                ).hexdigest(),
+                "candidate_request_hash": hashlib.sha256(
+                    f"revision-seed-candidate:{case_id}".encode()
+                ).hexdigest(),
+                "verification_request_hash": hashlib.sha256(
+                    f"revision-seed-verification:{case_id}".encode()
+                ).hexdigest(),
+            },
+        )
+        await _clone_planning_snapshot(
+            connection,
+            case_id=case_id,
+            run_id=spec["run_id"],
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO app.agent_tasks("
+                "organization_id,id,case_id,operation,case_revision,source_pack_id,"
+                "source_pack_version,policy_version,request_sha256,created_by_actor_id,"
+                "state,attempt_count,lease_generation,result_planning_run_id,"
+                "created_at,updated_at) VALUES("
+                ":org,:task,:case,'generate_planning_run_v1',1,"
+                ":pack,:pack_version,:policy,:request_hash,:advisor,"
+                "'waiting_review',1,1,:run,timestamptz '2026-01-01 00:00:04+00',"
+                "timestamptz '2026-01-01 00:00:04+00') ON CONFLICT DO NOTHING"
+            ),
+            {
+                "org": DEMO_ORG,
+                "task": spec["task_id"],
+                "case": case_id,
+                "pack": fixture.planning_input.source_pack.pack_id,
+                "pack_version": fixture.planning_input.source_pack.version,
+                "policy": POLICY_VERSION,
+                "request_hash": hashlib.sha256(
+                    f"revision-seed-task:{case_id}".encode()
+                ).hexdigest(),
+                "advisor": ACTORS[0][1],
+                "run": spec["run_id"],
+            },
+        )
+        await connection.execute(
+            text(
+                "UPDATE app.planning_runs target SET state=source.state,"
+                "reason_code=source.reason_code,output_sha256=source.output_sha256 "
+                "FROM app.planning_runs source WHERE target.organization_id=:org "
+                "AND target.id=:run AND source.organization_id=:org AND source.id=:source "
+                "AND target.state='synthesizing'"
+            ),
+            {"org": DEMO_ORG, "source": RUN_ID, "run": spec["run_id"]},
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO app.agent_executions("
+                "organization_id,id,task_id,attempt_no,lease_generation,adapter_id,"
+                "adapter_version,status,retryable,fallback_used,output_sha256,"
+                "result_planning_run_id,cost_status,started_at,finished_at,created_at) "
+                "VALUES(:org,:execution,:task,1,1,'deterministic_planning','m4a-v1',"
+                "'succeeded',false,false,:output,:run,'not_applicable',"
+                "timestamptz '2026-01-01 00:00:03+00',"
+                "timestamptz '2026-01-01 00:00:04+00',"
+                "timestamptz '2026-01-01 00:00:03+00') ON CONFLICT DO NOTHING"
+            ),
+            {
+                "org": DEMO_ORG,
+                "execution": spec["execution_id"],
+                "task": spec["task_id"],
+                "output": fixture.output_sha256,
+                "run": spec["run_id"],
+            },
+        )
+        await connection.execute(
+            text(
+                "INSERT INTO app.agent_task_events("
+                "organization_id,task_id,event_sequence,event_code,public_status,"
+                "public_code,attempt_no,result_planning_run_id,created_at) VALUES("
+                ":org,:task,:event_sequence,'waiting_review',"
+                "'needs_advisor_review',NULL,1,:run,"
+                "timestamptz '2026-01-01 00:00:04+00') ON CONFLICT DO NOTHING"
+            ),
+            {
+                "org": DEMO_ORG,
+                "task": spec["task_id"],
+                "run": spec["run_id"],
+                "event_sequence": spec["event_sequence"],
+            },
+        )
+
+
+async def _assert_exact_fixture_rows(
+    connection: AsyncConnection,
+    *,
+    table: str,
+    scope: str,
+    exact: str,
+    parameters: dict[str, object],
+    expected_count: int = 1,
+) -> None:
+    matches = await connection.scalar(
+        text(
+            f"SELECT count(*)=:expected_count "
+            f"AND count(*) FILTER (WHERE {exact})=:expected_count "
+            f"FROM app.{table} WHERE organization_id=:org AND {scope}"
+        ),
+        {
+            "org": DEMO_ORG,
+            "expected_count": expected_count,
+            **parameters,
+        },
+    )
+    if matches is not True:
+        raise RuntimeError("demo planning revision fixture seed mismatch")
+
+
+async def _assert_exact_planning_revision_fixture(
+    connection: AsyncConnection,
+    fixture: ValidatedPlanningFixture,
+    spec: Mapping[str, object],
+) -> None:
+    case_id = cast(UUID, spec["case_id"])
+    run_id = cast(UUID, spec["run_id"])
+    task_id = cast(UUID, spec["task_id"])
+    source_case = fixture.planning_input.case
+    preferred = [country.value for country in source_case.student.preferred_countries]
+    preferred_json = json.dumps(preferred)
+    preferred_hash = canonical_sha256(preferred)
+    student_json = json.dumps(source_case.student.model_dump(mode="json"))
+    family_json = json.dumps(source_case.family.model_dump(mode="json"))
+    body = "Synthetic initial preferred countries."
+    body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    message_request_hash = hashlib.sha256(
+        f"revision-seed-message:{case_id}".encode()
+    ).hexdigest()
+    candidate_request_hash = hashlib.sha256(
+        f"revision-seed-candidate:{case_id}".encode()
+    ).hexdigest()
+    verification_request_hash = hashlib.sha256(
+        f"revision-seed-verification:{case_id}".encode()
+    ).hexdigest()
+    task_request_hash = hashlib.sha256(
+        f"revision-seed-task:{case_id}".encode()
+    ).hexdigest()
+
+    await _assert_exact_fixture_rows(
+        connection,
+        table="student_cases",
+        scope="id=:case",
+        exact="id=:case AND state='advisor_review' AND current_revision=1",
+        parameters={"case": case_id},
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="student_case_revisions",
+        scope="case_id=:case",
+        exact=(
+            "case_id=:case AND revision=1 AND schema_version=1 "
+            "AND student_preferences=CAST(:student AS jsonb) "
+            "AND family_preferences=CAST(:family AS jsonb) "
+            "AND revision_requested_by_review_id IS NULL "
+            "AND superseded_planning_run_id IS NULL"
+        ),
+        parameters={
+            "case": case_id,
+            "student": student_json,
+            "family": family_json,
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="student_case_participants",
+        scope="case_id=:case",
+        exact=(
+            "case_id=:case AND ("
+            "(actor_id=:advisor AND role='advisor') OR "
+            "(actor_id=:student_actor AND role='student') OR "
+            "(actor_id=:parent AND role='parent'))"
+        ),
+        parameters={
+            "case": case_id,
+            "advisor": ACTORS[0][1],
+            "student_actor": ACTORS[1][1],
+            "parent": ACTORS[2][1],
+        },
+        expected_count=3,
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="collaboration_threads",
+        scope="case_id=:case",
+        exact=(
+            "id=:thread AND case_id=:case "
+            "AND created_by_actor_id=:advisor AND created_by_role='advisor'"
+        ),
+        parameters={
+            "case": case_id,
+            "thread": spec["thread_id"],
+            "advisor": ACTORS[0][1],
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="message_events",
+        scope="case_id=:case",
+        exact=(
+            "id=:message AND thread_id=:thread AND case_id=:case "
+            "AND sequence_no=1 AND actor_id=:student_actor AND actor_role='student' "
+            "AND body=:body AND content_sha256=:content_hash "
+            "AND request_sha256=:request_hash "
+            "AND created_at=timestamptz '2026-01-01 00:00:01+00'"
+        ),
+        parameters={
+            "case": case_id,
+            "message": spec["message_id"],
+            "thread": spec["thread_id"],
+            "student_actor": ACTORS[1][1],
+            "body": body,
+            "content_hash": body_hash,
+            "request_hash": message_request_hash,
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="memory_candidates",
+        scope="case_id=:case",
+        exact=(
+            "id=:candidate AND case_id=:case AND case_revision=1 "
+            "AND message_event_id=:message AND subject_actor_id=:student_actor "
+            "AND subject_role='student' AND proposing_actor_id=:student_actor "
+            "AND proposing_role='student' "
+            "AND fact_key='student.preferred_countries' "
+            "AND proposed_value=CAST(:preferred AS jsonb) "
+            "AND value_sha256=:value_hash AND request_sha256=:request_hash "
+            "AND provenance_kind='participant_proposal' "
+            "AND created_at=timestamptz '2026-01-01 00:00:02+00' "
+            "AND expires_at=timestamptz '2026-01-08 00:00:02+00'"
+        ),
+        parameters={
+            "case": case_id,
+            "candidate": spec["candidate_id"],
+            "message": spec["message_id"],
+            "student_actor": ACTORS[1][1],
+            "preferred": preferred_json,
+            "value_hash": preferred_hash,
+            "request_hash": candidate_request_hash,
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="memory_candidate_verifications",
+        scope="case_id=:case",
+        exact=(
+            "id=:verification AND candidate_id=:candidate AND case_id=:case "
+            "AND advisor_actor_id=:advisor AND advisor_role='advisor' "
+            "AND decision='confirm' AND reason='Synthetic initial fact seed.' "
+            "AND request_sha256=:request_hash AND result_fact_id=:fact "
+            "AND result_revision=1 "
+            "AND created_at=timestamptz '2026-01-01 00:00:03+00'"
+        ),
+        parameters={
+            "case": case_id,
+            "verification": spec["verification_id"],
+            "candidate": spec["candidate_id"],
+            "advisor": ACTORS[0][1],
+            "request_hash": verification_request_hash,
+            "fact": spec["fact_id"],
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="confirmed_facts",
+        scope="case_id=:case",
+        exact=(
+            "id=:fact AND case_id=:case "
+            "AND fact_key='student.preferred_countries' "
+            "AND value=CAST(:preferred AS jsonb) AND value_sha256=:value_hash "
+            "AND source_candidate_id=:candidate "
+            "AND source_message_event_id=:message "
+            "AND subject_actor_id=:student_actor AND subject_role='student' "
+            "AND confirming_advisor_actor_id=:advisor "
+            "AND confirming_advisor_role='advisor' "
+            "AND supersedes_fact_id IS NULL AND fact_version=1 "
+            "AND confirmed_at=timestamptz '2026-01-01 00:00:03+00'"
+        ),
+        parameters={
+            "case": case_id,
+            "fact": spec["fact_id"],
+            "preferred": preferred_json,
+            "value_hash": preferred_hash,
+            "candidate": spec["candidate_id"],
+            "message": spec["message_id"],
+            "student_actor": ACTORS[1][1],
+            "advisor": ACTORS[0][1],
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="case_revision_confirmed_fact_refs",
+        scope="case_id=:case",
+        exact=(
+            "case_id=:case AND case_revision=1 "
+            "AND fact_key='student.preferred_countries' "
+            "AND confirmed_fact_id=:fact "
+            "AND created_at=timestamptz '2026-01-01 00:00:03+00'"
+        ),
+        parameters={"case": case_id, "fact": spec["fact_id"]},
+    )
+    await _assert_exact_planning_snapshot(
+        connection,
+        case_id=case_id,
+        run_id=run_id,
+        clone_tables=(
+            "planning_routes",
+            "comparison_dimensions",
+            "comparison_dimension_evidence_refs",
+            "cost_evidence",
+            "ranking_evidence",
+        ),
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="agent_tasks",
+        scope="case_id=:case",
+        exact=(
+            "id=:task AND case_id=:case "
+            "AND operation='generate_planning_run_v1' AND case_revision=1 "
+            "AND source_pack_id=:pack AND source_pack_version=:pack_version "
+            "AND policy_version=:policy AND request_sha256=:request_hash "
+            "AND created_by_actor_id=:advisor AND row_version=1 "
+            "AND state='waiting_review' AND attempt_count=1 "
+            "AND lease_owner IS NULL AND lease_generation=1 "
+            "AND lease_expires_at IS NULL AND result_planning_run_id=:run "
+            "AND terminal_code IS NULL "
+            "AND skill_definition_id IS NULL AND skill_version_id IS NULL "
+            "AND skill_activation_event_id IS NULL "
+            "AND skill_activation_sequence IS NULL "
+            "AND runtime_binding_sha256 IS NULL "
+            "AND predecessor_planning_run_id IS NULL "
+            "AND created_at=timestamptz '2026-01-01 00:00:04+00' "
+            "AND updated_at=timestamptz '2026-01-01 00:00:04+00'"
+        ),
+        parameters={
+            "case": case_id,
+            "task": task_id,
+            "pack": fixture.planning_input.source_pack.pack_id,
+            "pack_version": fixture.planning_input.source_pack.version,
+            "policy": POLICY_VERSION,
+            "request_hash": task_request_hash,
+            "advisor": ACTORS[0][1],
+            "run": run_id,
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="agent_executions",
+        scope="task_id=:task",
+        exact=(
+            "id=:execution AND task_id=:task AND attempt_no=1 "
+            "AND lease_generation=1 AND adapter_id='deterministic_planning' "
+            "AND adapter_version='m4a-v1' AND status='succeeded' "
+            "AND NOT retryable AND NOT fallback_used AND input_sha256 IS NULL "
+            "AND output_sha256=:output_hash AND result_planning_run_id=:run "
+            "AND public_code IS NULL AND duration_ms IS NULL "
+            "AND cost_status='not_applicable' "
+            "AND skill_definition_id IS NULL AND skill_version_id IS NULL "
+            "AND skill_activation_event_id IS NULL "
+            "AND skill_activation_sequence IS NULL "
+            "AND runtime_binding_sha256 IS NULL "
+            "AND started_at=timestamptz '2026-01-01 00:00:03+00' "
+            "AND finished_at=timestamptz '2026-01-01 00:00:04+00' "
+            "AND created_at=timestamptz '2026-01-01 00:00:03+00'"
+        ),
+        parameters={
+            "task": task_id,
+            "execution": spec["execution_id"],
+            "output_hash": fixture.output_sha256,
+            "run": run_id,
+        },
+    )
+    await _assert_exact_fixture_rows(
+        connection,
+        table="agent_task_events",
+        scope="task_id=:task",
+        exact=(
+            "task_id=:task AND event_sequence=:event_sequence "
+            "AND event_code='waiting_review' "
+            "AND public_status='needs_advisor_review' "
+            "AND public_code IS NULL AND attempt_no=1 "
+            "AND result_planning_run_id=:run "
+            "AND created_at=timestamptz '2026-01-01 00:00:04+00'"
+        ),
+        parameters={
+            "task": task_id,
+            "event_sequence": spec["event_sequence"],
+            "run": run_id,
+        },
+    )
+
+
+async def _clone_planning_snapshot(
+    connection: AsyncConnection, *, case_id: UUID, run_id: UUID
+) -> None:
+    clone_specs = (
+        (
+            "planning_routes",
+            "organization_id,planning_run_id,id,country,outcome,reason_code",
+            "organization_id,:run,id,country,outcome,reason_code",
+        ),
+        (
+            "comparison_dimensions",
+            "organization_id,planning_run_id,route_id,id,dimension_key,outcome,reason_code",
+            "organization_id,:run,route_id,id,dimension_key,outcome,reason_code",
+        ),
+        (
+            "comparison_dimension_evidence_refs",
+            "organization_id,planning_run_id,route_id,dimension_id,evidence_ref_id,evidence_role",
+            "organization_id,:run,route_id,dimension_id,evidence_ref_id,evidence_role",
+        ),
+        (
+            "cost_evidence",
+            "organization_id,planning_run_id,id,country,intake,period,currency,"
+            "tuition_minor,living_minor,fx_rate,fx_source,fx_date,tuition_evidence_id,"
+            "living_evidence_id,fx_evidence_id",
+            "organization_id,:run,id,country,intake,period,currency,tuition_minor,"
+            "living_minor,fx_rate,fx_source,fx_date,tuition_evidence_id,"
+            "living_evidence_id,fx_evidence_id",
+        ),
+        (
+            "ranking_evidence",
+            "organization_id,planning_run_id,id,country,ranking_system,rank,"
+            "publication_year,evidence_ref_id",
+            "organization_id,:run,id,country,ranking_system,rank,publication_year,"
+            "evidence_ref_id",
+        ),
+    )
+    inserted_run_id = (
+        await connection.execute(
+            text(
+                "INSERT INTO app.planning_runs("
+                "organization_id,id,case_id,case_revision,source_pack_id,"
+                "source_pack_version,policy_version,evidence_projection_sha256,state,"
+                "reason_code,output_sha256,is_current,created_at) "
+                "SELECT organization_id,:run,:case,1,source_pack_id,"
+                "source_pack_version,policy_version,evidence_projection_sha256,"
+                "'synthesizing',NULL,NULL,true,"
+                "timestamptz '2026-01-01 00:00:04+00' "
+                "FROM app.planning_runs WHERE organization_id=:org AND id=:source "
+                "ON CONFLICT DO NOTHING RETURNING id"
+            ),
+            {"org": DEMO_ORG, "source": RUN_ID, "run": run_id, "case": case_id},
+        )
+    ).scalar_one_or_none()
+    if inserted_run_id is None:
+        await _assert_exact_planning_snapshot(
+            connection,
+            case_id=case_id,
+            run_id=run_id,
+            clone_tables=tuple(spec[0] for spec in clone_specs),
+        )
+        return
+    for table, columns, projection in clone_specs:
+        await connection.execute(
+            text(
+                f"INSERT INTO app.{table}({columns}) SELECT {projection} "
+                f"FROM app.{table} WHERE organization_id=:org "
+                "AND planning_run_id=:source ON CONFLICT DO NOTHING"
+            ),
+            {"org": DEMO_ORG, "source": RUN_ID, "run": run_id},
+        )
+
+
+async def _assert_exact_planning_snapshot(
+    connection: AsyncConnection,
+    *,
+    case_id: UUID,
+    run_id: UUID,
+    clone_tables: tuple[str, ...],
+) -> None:
+    parent_matches = await connection.scalar(
+        text(
+            "SELECT count(*)=1 FROM app.planning_runs target "
+            "JOIN app.planning_runs source "
+            "ON source.organization_id=target.organization_id AND source.id=:source "
+            "WHERE target.organization_id=:org AND target.id=:run "
+            "AND target.case_id=:case AND target.case_revision=1 "
+            "AND target.source_pack_id=source.source_pack_id "
+            "AND target.source_pack_version=source.source_pack_version "
+            "AND target.policy_version=source.policy_version "
+            "AND target.evidence_projection_sha256=source.evidence_projection_sha256 "
+            "AND target.state=source.state "
+            "AND target.reason_code IS NOT DISTINCT FROM source.reason_code "
+            "AND target.output_sha256 IS NOT DISTINCT FROM source.output_sha256 "
+            "AND target.supersedes_run_id IS NULL AND target.is_current "
+            "AND target.created_at=timestamptz '2026-01-01 00:00:04+00' "
+            "AND (SELECT count(*) FROM app.planning_runs sibling "
+            "WHERE sibling.organization_id=:org AND sibling.case_id=:case)=1"
+        ),
+        {"org": DEMO_ORG, "source": RUN_ID, "run": run_id, "case": case_id},
+    )
+    if parent_matches is not True:
+        raise RuntimeError("demo planning revision snapshot seed mismatch")
+
+    for table in clone_tables:
+        source_projection = await connection.scalar(
+            text(
+                f"SELECT COALESCE(jsonb_agg(snapshot.projection "
+                "ORDER BY snapshot.projection::text),'[]'::jsonb) FROM ("
+                f"SELECT to_jsonb(child_row)-'planning_run_id' AS projection "
+                f"FROM app.{table} child_row WHERE organization_id=:org "
+                "AND planning_run_id=:source) snapshot"
+            ),
+            {"org": DEMO_ORG, "source": RUN_ID},
+        )
+        target_projection = await connection.scalar(
+            text(
+                f"SELECT COALESCE(jsonb_agg(snapshot.projection "
+                "ORDER BY snapshot.projection::text),'[]'::jsonb) FROM ("
+                f"SELECT to_jsonb(child_row)-'planning_run_id' AS projection "
+                f"FROM app.{table} child_row WHERE organization_id=:org "
+                "AND planning_run_id=:run) snapshot"
+            ),
+            {"org": DEMO_ORG, "run": run_id},
+        )
+        if target_projection != source_projection:
+            raise RuntimeError("demo planning revision snapshot seed mismatch")
 
 
 async def _seed_collaboration(
@@ -702,6 +1366,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--identity-only", action="store_true")
     parser.add_argument("--without-collaboration", action="store_true")
+    parser.add_argument("--without-planning-revision", action="store_true")
     parser.add_argument("--without-skills", action="store_true")
     arguments = parser.parse_args(argv)
     fixture = validate_planning_fixture()
@@ -720,6 +1385,7 @@ def main(argv: list[str] | None = None) -> None:
             database_url,
             include_planning=not arguments.identity_only,
             include_collaboration=not arguments.without_collaboration,
+            include_planning_revision=not arguments.without_planning_revision,
             include_skills=not arguments.without_skills,
         )
     )

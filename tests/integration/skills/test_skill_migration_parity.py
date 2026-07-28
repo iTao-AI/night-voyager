@@ -41,6 +41,7 @@ def _seed_0007_demo() -> None:
             "python",
             "scripts/seed_demo.py",
             "--without-skills",
+            "--without-planning-revision",
         ],
         check=True,
         env={**os.environ, "PYTHONUNBUFFERED": "1"},
