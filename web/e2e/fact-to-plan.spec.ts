@@ -334,11 +334,30 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await writeFile(workerReadyFile!, `${workerReadySentinel}\n`, { encoding: "utf8", mode: 0o600 });
   await page.waitForFunction(() => Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0);
   const beforeReload = await page.evaluate(() => {
-    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    if (typeof metadata !== "object" || metadata === null) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
+    const envelope = metadata as Record<string, unknown>;
+    const caseId = envelope.caseId;
+    const currentTaskId = envelope.currentTaskId;
+    const cursor = envelope.cursor;
+    if (
+      envelope.schema_version !== 3
+      || envelope.journey !== "advisor-family"
+      || typeof caseId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(caseId)
+      || typeof currentTaskId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(currentTaskId)
+      || !Number.isSafeInteger(cursor)
+      || Number(cursor) < 0
+    ) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
     return {
-      caseId: metadata.caseId as string,
-      taskId: metadata.taskId as string,
-      cursor: Number(metadata.cursor),
+      caseId,
+      taskId: currentTaskId,
+      cursor: Number(cursor),
     };
   });
   expect(beforeReload.caseId).toBe(caseId);
@@ -350,11 +369,30 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled();
   await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
   const afterReload = await page.evaluate(() => {
-    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    if (typeof metadata !== "object" || metadata === null) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
+    const envelope = metadata as Record<string, unknown>;
+    const caseId = envelope.caseId;
+    const currentTaskId = envelope.currentTaskId;
+    const cursor = envelope.cursor;
+    if (
+      envelope.schema_version !== 3
+      || envelope.journey !== "advisor-family"
+      || typeof caseId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(caseId)
+      || typeof currentTaskId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(currentTaskId)
+      || !Number.isSafeInteger(cursor)
+      || Number(cursor) < 0
+    ) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
     return {
-      caseId: metadata.caseId as string,
-      taskId: metadata.taskId as string,
-      cursor: Number(metadata.cursor),
+      caseId,
+      taskId: currentTaskId,
+      cursor: Number(cursor),
     };
   });
   expect(afterReload).toMatchObject({ caseId: beforeReload.caseId, taskId: beforeReload.taskId });

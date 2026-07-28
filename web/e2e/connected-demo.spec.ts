@@ -50,14 +50,30 @@ test("connected-demo.spec.ts preserves the native SSE cursor and renders a live 
   await expect(page.getByRole("status")).toContainText(/正在准备|Preparing/i);
 
   const cancelled = await page.evaluate(async () => {
-    const metadata = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
-    const current = await fetch(`/api/demo/tasks/${metadata.taskId}`, { cache: "no-store" });
+    const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+    if (typeof metadata !== "object" || metadata === null) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
+    const envelope = metadata as Record<string, unknown>;
+    const taskId = envelope.currentTaskId;
+    const csrf = envelope.csrf;
+    if (
+      envelope.schema_version !== 3
+      || envelope.journey !== "advisor-family"
+      || typeof taskId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(taskId)
+      || typeof csrf !== "string"
+      || csrf.length === 0
+    ) {
+      throw new Error("invalid advisor-family recovery metadata");
+    }
+    const current = await fetch(`/api/demo/tasks/${taskId}`, { cache: "no-store" });
     const task = await current.json();
-    const response = await fetch(`/api/demo/tasks/${metadata.taskId}/cancel`, {
+    const response = await fetch(`/api/demo/tasks/${taskId}/cancel`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-CSRF-Token": metadata.csrf,
+        "X-CSRF-Token": csrf,
         "Idempotency-Key": "00000000-0000-4000-8000-000000000777",
       },
       body: JSON.stringify({ schema_version: 1, expected_row_version: task.row_version }),
