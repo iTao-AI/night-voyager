@@ -106,7 +106,7 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   expect(new URL(firstStream.url()).searchParams.get("after")).toBe("0");
   await page.reload();
   await expect(page.getByRole("status")).toBeVisible();
-  await expect(page.getByRole("button", { name: /批准澳大利亚进入家庭审核|Approve Australia for family review/ })).toBeEnabled({ timeout: 60_000 });
+  await expect(page.getByRole("button", { name: /批准当前计划|Approve current plan/ })).toBeEnabled({ timeout: 60_000 });
   await expect(page.getByText(/在预算条件下推荐|Recommended with budget condition/).first()).toBeVisible();
   await expect(page.getByText(/成本与汇率证据均在已批准边界内|Cost and FX evidence are within the approved boundary/).first()).toBeVisible();
   await expect(page.getByText(/有条件备选|Conditional alternative/).first()).toBeVisible();
@@ -152,9 +152,11 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
     }
     await route.continue();
   });
-  await page.getByRole("button", { name: /批准澳大利亚进入家庭审核|Approve Australia for family review/ }).click();
+  await page.getByRole("button", { name: /批准当前计划|Approve current plan/ }).click();
   await expect(page.getByRole("heading", { name: /需要恢复|Recovery required/ })).toBeVisible();
   await page.getByRole("button", { name: /重新连接顾问流程|Reconnect advisor flow/ }).click();
+  await expect(page.getByRole("button", { name: /以家长身份继续|Continue as parent/ })).toBeEnabled();
+  await page.getByRole("button", { name: /以家长身份继续|Continue as parent/ }).click();
   await expect(page.getByRole("heading", { name: /家庭决定简报|Family Decision Brief/ })).toBeVisible({ timeout: 30_000 });
   expect(reviewKeys).toHaveLength(2);
   expect(reviewKeys[0]).toBe(reviewKeys[1]);
@@ -188,7 +190,7 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
     staleObserved = true;
     await route.fulfill({ response: stale });
   });
-  await page.getByRole("button", { name: /确认澳大利亚路线|Confirm Australia route/ }).click();
+  await page.getByRole("button", { name: /继续家庭决定|Continue family decision/ }).click();
   await expect(page.getByRole("heading", { name: /家庭决定回执|Family Decision Receipt/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: /行动时间线|Action timeline/ })).toBeVisible();
   expect(staleObserved).toBe(true);
