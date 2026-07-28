@@ -48,6 +48,13 @@ export interface CollaborationJourneyEnvelopeV2 {
 export type DemoJourneyEnvelope = AdvisorFamilyJourneyEnvelopeV3 | CollaborationJourneyEnvelopeV2;
 export type RecoveryMetadata = AdvisorFamilyJourneyEnvelopeV3;
 export type MutationOperation = AdvisorFamilyMutationKind;
+export interface CollaborationAdvisorFamilyAuthority {
+  phase: DemoPhaseV2;
+  currentRevision: number;
+  currentTaskId: string | null;
+  predecessorRunId: string | null;
+  currentRunId: string | null;
+}
 
 const KEY = "night-voyager:m5";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -115,16 +122,39 @@ export function loadRecoveryMetadata(): AdvisorFamilyJourneyEnvelopeV3 | null { 
 
 export function continueCollaborationAsAdvisorFamily(
   current: CollaborationJourneyEnvelopeV2,
-  taskId: string | null,
+  authority: CollaborationAdvisorFamilyAuthority,
 ): AdvisorFamilyJourneyEnvelopeV3 {
+  const authorityKeys = ["phase", "currentRevision", "currentTaskId", "predecessorRunId", "currentRunId"];
   if (
     !object(current)
     || !collaboration(current)
     || current.role !== "advisor"
     || current.phase !== "replan_required"
     || Object.keys(current.mutations).length !== 0
-    || !nullableUuid(taskId)
+    || !object(authority)
+    || !exact(authority, authorityKeys)
+    || !Number.isSafeInteger(authority.currentRevision)
+    || authority.currentRevision <= 0
+    || !nullableUuid(authority.currentTaskId)
+    || !nullableUuid(authority.predecessorRunId)
+    || !nullableUuid(authority.currentRunId)
+    || authority.predecessorRunId !== null
   ) {
+    throw new Error("invalid collaboration handoff");
+  }
+  const taskReady = authority.phase === "task_ready"
+    && authority.currentTaskId === null
+    && authority.currentRunId === null;
+  const active = authority.phase === "active_task"
+    && authority.currentTaskId !== null
+    && authority.currentRunId === null;
+  const review = authority.phase === "review_required"
+    && authority.currentTaskId !== null
+    && authority.currentRunId !== null;
+  const terminal = authority.phase === "terminal_task_failure"
+    && authority.currentTaskId !== null
+    && authority.currentRunId === null;
+  if (!taskReady && !active && !review && !terminal) {
     throw new Error("invalid collaboration handoff");
   }
   return {
@@ -133,12 +163,12 @@ export function continueCollaborationAsAdvisorFamily(
     role: "advisor",
     csrf: current.csrf,
     caseId: current.caseId,
-    currentRevision: 2,
-    currentTaskId: taskId,
-    predecessorRunId: null,
-    currentRunId: null,
+    currentRevision: authority.currentRevision,
+    currentTaskId: authority.currentTaskId,
+    predecessorRunId: authority.predecessorRunId,
+    currentRunId: authority.currentRunId,
     cursor: 0,
-    phase: taskId === null ? "replan_required" : "revision_task_active",
+    phase: authority.phase,
     mutations: {},
   };
 }

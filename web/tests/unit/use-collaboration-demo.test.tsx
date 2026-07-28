@@ -58,7 +58,7 @@ it("proves parent message through advisor confirmation and authoritative fact/re
   const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
   const callsBeforeHandoff = vi.mocked(fetch).mock.calls.length;
   await act(async () => result.current.continueToPlanning());
-  expect(loadDemoJourneyEnvelope()).toEqual({ schema_version: 3, journey: "advisor-family", role: "advisor", csrf: "advisor-csrf", caseId: CASE, currentRevision: 2, currentTaskId: null, predecessorRunId: null, currentRunId: null, cursor: 0, phase: "replan_required", mutations: {} });
+  expect(loadDemoJourneyEnvelope()).toEqual({ schema_version: 3, journey: "advisor-family", role: "advisor", csrf: "advisor-csrf", caseId: CASE, currentRevision: 2, currentTaskId: null, predecessorRunId: null, currentRunId: null, cursor: 0, phase: "task_ready", mutations: {} });
   expect(navigate).toHaveBeenCalledOnce();
   const handoffCalls = vi.mocked(fetch).mock.calls.slice(callsBeforeHandoff);
   expect(handoffCalls.map(([input]) => String(input))).toEqual([

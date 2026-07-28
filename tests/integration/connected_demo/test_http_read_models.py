@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
+import sys
+from pathlib import Path
+from types import ModuleType
 from uuid import UUID, uuid4
 
 import pytest
@@ -24,6 +28,18 @@ ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 STUDENT = UUID("20000000-0000-0000-0000-000000000002")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
 PLANNING_FIXTURE = validate_planning_fixture().planning_input
+
+
+def load_postgres_read_model_tests() -> ModuleType:
+    path = Path(__file__).with_name("test_postgres_read_models.py")
+    spec = importlib.util.spec_from_file_location(
+        "_fact_only_revision_postgres_tests", path
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 async def seed_pending_revision_case() -> UUID:
@@ -362,6 +378,63 @@ async def test_task_ready_http_projection_is_real_and_no_store() -> None:
         assert response_v2.json()["schema_version"] == 2
         assert response_v2.json()["phase"] == "task_ready"
         assert "comparison" in response_v2.json()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_fact_only_revision_http_projection_stays_in_initial_plan_lifecycle() -> None:
+    postgres_tests = load_postgres_read_model_tests()
+    completed = await postgres_tests.create_completed_preferred_country_revision()
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": ["http://127.0.0.1:3000"],
+            "secret_key": "test-session-secret",
+        }
+    )
+    try:
+        async with sessions() as session, session.begin():
+            issued = await IdentityService(
+                IdentityRepository(session), settings.secret_key
+            ).mint(DemoActorChoice.ADVISOR)
+        app = create_app(settings=settings, session_factory=sessions)
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://127.0.0.1:3000",
+        ) as client:
+            client.cookies.set("night_voyager_session", issued.raw_session_token)
+            status = await client.get(
+                f"/api/v1/cases/{completed.case_id}/journey-status"
+            )
+            ledger = await client.get(
+                f"/api/v1/cases/{completed.case_id}/advisor-ledger"
+                "?contract_version=2"
+            )
+
+        assert status.status_code == 200, status.text
+        assert status.json() == {
+            "schema": "night-voyager.connected-journey-status.v1",
+            "case_id": str(completed.case_id),
+            "current_revision": 2,
+            "phase": "review_required",
+            "active_role": "advisor",
+        }
+        assert ledger.status_code == 200, ledger.text
+        payload = ledger.json()
+        assert payload["phase"] == "review_required"
+        assert payload["case_revision"] == 2
+        assert payload["task"]["task_id"] == str(completed.task_id)
+        assert payload["planning_run"]["planning_run_id"] == str(
+            completed.current_run_id
+        )
+        assert payload["comparison"] is None
     finally:
         await engine.dispose()
 

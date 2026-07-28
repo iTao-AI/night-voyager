@@ -35,6 +35,7 @@ const CANDIDATE = "44000000-0000-0000-0000-000000000001";
 const FACT = "45000000-0000-0000-0000-000000000001";
 const REPLACEMENT_FACT = "45000000-0000-0000-0000-000000000002";
 const TASK = "61000000-0000-0000-0000-000000000001";
+const RUN = "71000000-0000-0000-0000-000000000001";
 const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 const MESSAGE_BODY = "Our confirmed program budget is 300,000 to 400,000 CNY.";
@@ -49,12 +50,14 @@ function ledger(caseRevision: number) {
   return { schema_version: 2 as const, proof_mode: "synthetic-demo" as const, phase: "task_ready" as const, case_id: CASE, case_revision: caseRevision, case_state: "intake" as const, canonical_task_inputs: { schema_version: 1 as const, operation: "generate_planning_run_v1" as const, case_id: CASE, expected_case_revision: caseRevision, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
 }
 
-function handoffLedger(phase: "task_ready" | "active_task" | "review_required" | "terminal_task_failure" | "family_review" | "plan_ready") {
+function handoffLedger(phase: "task_ready" | "active_task" | "review_required" | "terminal_task_failure") {
   return {
     ...ledger(2),
     phase,
-    task: ["active_task", "review_required", "terminal_task_failure"].includes(phase) ? { task_id: TASK } : null,
-    current_brief_id: ["family_review", "plan_ready"].includes(phase) ? FACT : null,
+    task: ["active_task", "review_required", "terminal_task_failure"].includes(phase)
+      ? { task_id: TASK }
+      : null,
+    planning_run: phase === "review_required" ? { planning_run_id: RUN } : null,
   };
 }
 
@@ -141,7 +144,13 @@ it("treats a completed conversion as the existing advisor-family journey on coll
     phase: "replan_required" as const,
     mutations: {},
   };
-  saveRecoveryMetadata(continueCollaborationAsAdvisorFamily(current, null));
+  saveRecoveryMetadata(continueCollaborationAsAdvisorFamily(current, {
+    phase: "task_ready",
+    currentRevision: 2,
+    currentTaskId: null,
+    predecessorRunId: null,
+    currentRunId: null,
+  }));
 
   const { result } = renderHook(() => useCollaborationDemo());
 
@@ -155,8 +164,6 @@ it.each([
   ["active_task", TASK],
   ["review_required", TASK],
   ["terminal_task_failure", TASK],
-  ["family_review", null],
-  ["plan_ready", null],
 ] as const)("validates exact authority and adopts %s task identity only from the ledger", async (phase, expectedTaskId) => {
   saveConfirmed();
   mocks.identity.advisorLedger.mockResolvedValue(handoffLedger(phase));
@@ -188,9 +195,9 @@ it.each([
     currentRevision: 2,
     currentTaskId: expectedTaskId,
     predecessorRunId: null,
-    currentRunId: null,
+    currentRunId: phase === "review_required" ? RUN : null,
     cursor: 0,
-    phase: expectedTaskId === null ? "replan_required" : "revision_task_active",
+    phase,
     mutations: {},
   });
   expect(writes).toHaveBeenCalledOnce();
@@ -199,6 +206,26 @@ it.each([
   expect(mocks.identity.mint).not.toHaveBeenCalled();
   expect(mocks.identity.revoke).not.toHaveBeenCalled();
   expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
+});
+
+it("rejects a revision-only ledger phase before V3 write or navigation", async () => {
+  saveConfirmed();
+  mocks.identity.advisorLedger.mockResolvedValue({
+    ...ledger(2),
+    phase: "replan_required",
+  });
+  const navigate = vi.spyOn(collaborationNavigation, "toPlanning").mockImplementation(() => undefined);
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  const original = sessionStorage.getItem("night-voyager:m5");
+  const writes = vi.spyOn(Storage.prototype, "setItem");
+
+  await act(async () => result.current.continueToPlanning());
+
+  expect(result.current.state).toMatchObject({ value: "recoverable_error", category: "stale" });
+  expect(writes).not.toHaveBeenCalled();
+  expect(sessionStorage.getItem("night-voyager:m5")).toBe(original);
+  expect(navigate).not.toHaveBeenCalled();
 });
 
 it.each([

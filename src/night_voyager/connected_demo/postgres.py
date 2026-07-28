@@ -278,13 +278,20 @@ class PostgresConnectedDemoRepository:
         }[legacy.phase]
         comparison: PlanningRevisionComparisonV1 | None = None
         payload = legacy.model_dump(mode="python")
+        lineage = await self._current_planning_revision_lineage(
+            context,
+            case_id,
+            legacy.case_revision,
+            legacy.task.task_id if legacy.task is not None else None,
+        )
+        revised = self._has_planning_revision_lineage(lineage)
         if revision_request["requested"]:
             phase = (
                 DemoPhaseV2.REVISION_FACT_PENDING
                 if revision_request["fact_pending"]
                 else DemoPhaseV2.REVISION_REQUESTED
             )
-        elif legacy.case_revision > 1:
+        elif revised:
             if (
                 legacy.task is not None
                 and legacy.task.planning_run_id is not None
@@ -336,6 +343,50 @@ class PostgresConnectedDemoRepository:
             }
         )
         return AdvisorLedgerV2.model_validate(payload)
+
+    async def _current_planning_revision_lineage(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        revision: int,
+        task_id: UUID | None,
+    ) -> Mapping[str, Any]:
+        lineage = (
+            await self._session.execute(
+                text(
+                    "SELECT revision.superseded_planning_run_id "
+                    "AS revision_predecessor_run_id,"
+                    "task.id AS task_id,"
+                    "task.predecessor_planning_run_id AS task_predecessor_run_id,"
+                    "task.result_planning_run_id,"
+                    "run.supersedes_run_id AS run_supersedes_run_id,"
+                    "run.is_current AS run_is_current "
+                    "FROM app.student_case_revisions revision "
+                    "LEFT JOIN app.agent_tasks task "
+                    "ON task.organization_id=revision.organization_id "
+                    "AND task.case_id=revision.case_id "
+                    "AND task.case_revision=revision.revision "
+                    "AND task.id=:task "
+                    "LEFT JOIN app.planning_runs run "
+                    "ON run.organization_id=task.organization_id "
+                    "AND run.id=task.result_planning_run_id "
+                    "WHERE revision.organization_id=:org "
+                    "AND revision.case_id=:case "
+                    "AND revision.revision=:revision"
+                ),
+                {
+                    "org": context.organization_id,
+                    "case": case_id,
+                    "revision": revision,
+                    "task": task_id,
+                },
+            )
+        ).mappings().one_or_none()
+        if lineage is None:
+            raise DemoContractUnavailableError(
+                "current revision authority is unavailable"
+            )
+        return dict(lineage)
 
     async def current_decision_brief_v2(
         self, context: ActorContext, case_id: UUID
@@ -398,8 +449,15 @@ class PostgresConnectedDemoRepository:
             await self._session.execute(
                 text(
                     "SELECT c.state,c.current_revision,p.role,"
-                    "t.state AS task_state,r.state AS run_state,"
-                    "r.supersedes_run_id,brief.brief_id,brief.decision_id,"
+                    "revision.superseded_planning_run_id "
+                    "AS revision_predecessor_run_id,"
+                    "t.id AS task_id,t.state AS task_state,"
+                    "t.predecessor_planning_run_id AS task_predecessor_run_id,"
+                    "t.result_planning_run_id,"
+                    "r.state AS run_state,"
+                    "r.supersedes_run_id AS run_supersedes_run_id,"
+                    "r.is_current AS run_is_current,"
+                    "brief.brief_id,brief.decision_id,"
                     "EXISTS(SELECT 1 FROM app.advisor_reviews request_review "
                     "JOIN app.planning_runs requested_run "
                     "ON requested_run.organization_id=request_review.organization_id "
@@ -417,7 +475,12 @@ class PostgresConnectedDemoRepository:
                     "FROM app.student_cases c JOIN app.student_case_participants p "
                     "ON p.organization_id=c.organization_id AND p.case_id=c.id "
                     "AND p.actor_id=:actor AND p.role=:role "
-                    "LEFT JOIN LATERAL (SELECT task_row.state,"
+                    "JOIN app.student_case_revisions revision "
+                    "ON revision.organization_id=c.organization_id "
+                    "AND revision.case_id=c.id "
+                    "AND revision.revision=c.current_revision "
+                    "LEFT JOIN LATERAL (SELECT task_row.id,task_row.state,"
+                    "task_row.predecessor_planning_run_id,"
                     "task_row.result_planning_run_id FROM app.agent_tasks task_row "
                     "WHERE task_row.organization_id=c.organization_id "
                     "AND task_row.case_id=c.id "
@@ -730,7 +793,9 @@ class PostgresConnectedDemoRepository:
     @staticmethod
     def _journey_phase(row: Mapping[str, Any]) -> DemoPhaseV2:
         state = row["state"]
-        revision = row["current_revision"]
+        revised = PostgresConnectedDemoRepository._has_planning_revision_lineage(
+            row
+        )
         if state == "family_review" and row["brief_id"] is not None:
             return DemoPhaseV2.FAMILY_REVIEW
         if state == "plan_ready" and row["decision_id"] is not None:
@@ -742,11 +807,15 @@ class PostgresConnectedDemoRepository:
                 else DemoPhaseV2.REVISION_REQUESTED
             )
         if row["run_state"] == "blocked":
-            return DemoPhaseV2.REVISION_BLOCKED
+            return (
+                DemoPhaseV2.REVISION_BLOCKED
+                if revised
+                else DemoPhaseV2.TERMINAL_TASK_FAILURE
+            )
         if row["run_state"] == "review_required":
             return (
                 DemoPhaseV2.REVISION_REVIEW_REQUIRED
-                if row["supersedes_run_id"] is not None
+                if revised
                 else DemoPhaseV2.REVIEW_REQUIRED
             )
         if row["task_state"] in {"blocked", "timed_out", "failed", "cancelled"}:
@@ -754,12 +823,53 @@ class PostgresConnectedDemoRepository:
         if row["task_state"] is not None:
             return (
                 DemoPhaseV2.REVISION_TASK_ACTIVE
-                if revision > 1
+                if revised
                 else DemoPhaseV2.ACTIVE_TASK
             )
-        if revision > 1:
+        if revised:
             return DemoPhaseV2.REPLAN_REQUIRED
         return DemoPhaseV2.TASK_READY
+
+    @staticmethod
+    def _has_planning_revision_lineage(row: Mapping[str, Any]) -> bool:
+        predecessor = row["revision_predecessor_run_id"]
+        task_id = row["task_id"]
+        task_predecessor = row["task_predecessor_run_id"]
+        result_run_id = row["result_planning_run_id"]
+        run_predecessor = row["run_supersedes_run_id"]
+        run_is_current = row["run_is_current"]
+        if predecessor is None:
+            if task_predecessor is not None or run_predecessor is not None:
+                raise DemoContractUnavailableError(
+                    "planning revision lineage is inconsistent"
+                )
+            return False
+        if task_id is None:
+            if (
+                task_predecessor is not None
+                or result_run_id is not None
+                or run_predecessor is not None
+                or run_is_current is not None
+            ):
+                raise DemoContractUnavailableError(
+                    "planning revision lineage is inconsistent"
+                )
+            return True
+        if task_predecessor != predecessor:
+            raise DemoContractUnavailableError(
+                "planning revision lineage is inconsistent"
+            )
+        if result_run_id is None:
+            if run_predecessor is not None or run_is_current is not None:
+                raise DemoContractUnavailableError(
+                    "planning revision lineage is inconsistent"
+                )
+            return True
+        if run_predecessor != predecessor or run_is_current is not True:
+            raise DemoContractUnavailableError(
+                "planning revision lineage is inconsistent"
+            )
+        return True
 
     @staticmethod
     def _journey_active_role(

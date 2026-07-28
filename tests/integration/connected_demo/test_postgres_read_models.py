@@ -5,7 +5,7 @@ import inspect
 import json
 import os
 from collections.abc import Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date
 from typing import Any
 from uuid import UUID, uuid4
@@ -51,6 +51,14 @@ ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 PARENT = UUID("20000000-0000-0000-0000-000000000003")
 STUDENT = UUID("20000000-0000-0000-0000-000000000002")
 PLANNING_FIXTURE = validate_planning_fixture().planning_input
+
+
+@dataclass(frozen=True)
+class CompletedPreferredCountryRevision:
+    case_id: UUID
+    predecessor_run_id: UUID | None
+    current_run_id: UUID
+    task_id: UUID
 
 
 def test_demo_phase_v2_contains_every_revision_journey_projection() -> None:
@@ -127,6 +135,303 @@ async def set_connection_role(
         )
 
 
+async def create_completed_preferred_country_revision() -> (
+    CompletedPreferredCountryRevision
+):
+    case_id = uuid4()
+    second_task_id = uuid4()
+    thread_id = uuid4()
+    message_id = uuid4()
+    candidate_id = uuid4()
+    verification_id = uuid4()
+    fact_id = uuid4()
+    source = resolve_canonical_demo_source_contract()
+    revised_countries = ["australia", "japan"]
+
+    def request_hash(label: str) -> str:
+        return hashlib.sha256(f"{label}:{case_id}".encode()).hexdigest()
+
+    migrator = create_async_engine(
+        os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"]
+    )
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker_engine = create_async_engine(
+        os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"]
+    )
+    api_sessions = async_sessionmaker(api, expire_on_commit=False)
+    worker_sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(DEMO_ORG)},
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.publish_case_revision(:org,:case,NULL,1,"
+                    "CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "student": PLANNING_FIXTURE.case.student.model_dump_json(),
+                    "family": PLANNING_FIXTURE.case.family.model_dump_json(),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_case_participants("
+                    ":org,:case,:advisor,:student,:parent)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                    "student": STUDENT,
+                    "parent": PARENT,
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_demo_collaboration("
+                    ":org,:case,:thread,:advisor,NULL,NULL,NULL,NULL,'primary')"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "thread": thread_id,
+                    "advisor": ADVISOR,
+                },
+            )
+
+        worker_factory = postgres_worker_repository_factory(worker_sessions)
+
+        async with api.begin() as connection:
+            for name, value in (
+                ("night_voyager.organization_id", str(DEMO_ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await connection.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            initial_authority = (
+                await connection.execute(
+                    text(
+                        "SELECT c.state,c.current_revision,"
+                        "count(run.id)::integer AS run_count "
+                        "FROM app.student_cases c LEFT JOIN app.planning_runs run "
+                        "ON run.organization_id=c.organization_id "
+                        "AND run.case_id=c.id "
+                        "WHERE c.organization_id=:org AND c.id=:case "
+                        "GROUP BY c.state,c.current_revision"
+                    ),
+                    {"org": DEMO_ORG, "case": case_id},
+                )
+            ).mappings().one()
+            assert initial_authority == {
+                "state": "intake",
+                "current_revision": 1,
+                "run_count": 0,
+            }
+            await set_connection_role(connection, ActorRole.STUDENT)
+            body = "Synthetic revised preferred countries."
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.append_collaboration_message("
+                    ":org,:actor,'student',:thread,:message,:body,:content_hash,"
+                    ":request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": STUDENT,
+                    "thread": thread_id,
+                    "message": message_id,
+                    "body": body,
+                    "content_hash": hashlib.sha256(body.encode()).hexdigest(),
+                    "request_hash": request_hash("preferred-message"),
+                    "key_hash": request_hash("preferred-message-key"),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.propose_memory_candidate("
+                    ":org,:actor,'student',:message,:candidate,1,"
+                    "'student.preferred_countries',CAST(:value AS jsonb),"
+                    ":value_hash,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": STUDENT,
+                    "message": message_id,
+                    "candidate": candidate_id,
+                    "value": json.dumps(revised_countries),
+                    "value_hash": canonical_sha256(revised_countries),
+                    "request_hash": request_hash("preferred-candidate"),
+                    "key_hash": request_hash("preferred-candidate-key"),
+                },
+            )
+            await set_connection_role(connection, ActorRole.ADVISOR)
+            await connection.execute(
+                text(
+                    "SELECT * FROM app.verify_memory_candidate("
+                    ":org,:actor,:candidate,1,'confirm',:reason,:verification,"
+                    ":fact,:request_hash,:key_hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "actor": ADVISOR,
+                    "candidate": candidate_id,
+                    "reason": "Confirmed preferred countries revision.",
+                    "verification": verification_id,
+                    "fact": fact_id,
+                    "request_hash": request_hash("preferred-verify"),
+                    "key_hash": request_hash("preferred-verify-key"),
+                },
+            )
+            async with AsyncSession(bind=connection) as session:
+                repository = PostgresConnectedDemoRepository(session)
+                task_ready_ledger = await repository.advisor_ledger_v2(
+                    context(), case_id, source
+                )
+                task_ready_status = await repository.journey_status(
+                    context(), case_id
+                )
+            assert task_ready_ledger is not None
+            assert task_ready_ledger.phase is DemoPhaseV2.TASK_READY
+            assert task_ready_ledger.comparison is None
+            assert task_ready_status is not None
+            assert task_ready_status.phase is DemoPhaseV2.TASK_READY
+
+        async with api_sessions() as session, session.begin():
+            await set_context(session)
+            await TaskService(
+                PostgresTaskRepository(session),
+                registry=SkillRuntimeRegistry.load_packaged(),
+                id_factory=lambda: second_task_id,
+            ).create(
+                context(),
+                CreateTaskCommand(
+                    case_id=case_id,
+                    expected_case_revision=2,
+                    source_pack_id=source.source_pack_id,
+                    source_pack_version=source.source_pack_version,
+                    policy_version=source.policy_version,
+                ),
+                f"preferred-second-{second_task_id}",
+            )
+            repository = PostgresConnectedDemoRepository(session)
+            active_ledger = await repository.advisor_ledger_v2(
+                context(), case_id, source
+            )
+            active_status = await repository.journey_status(context(), case_id)
+            assert active_ledger is not None
+            assert active_ledger.phase is DemoPhaseV2.ACTIVE_TASK
+            assert active_ledger.comparison is None
+            assert active_status is not None
+            assert active_status.phase is DemoPhaseV2.ACTIVE_TASK
+        second_worker = TaskWorker(
+            worker_factory,
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(worker_sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(worker_sessions)
+                ),
+            ),
+            SkillRuntimeRegistry.load_packaged(),
+            worker_id=f"preferred-second-{case_id}",
+        )
+        assert await second_worker.run_once() is True
+
+        async with AsyncSession(api) as session, session.begin():
+            await set_context(session)
+            lineage = (
+                await session.execute(
+                    text(
+                        "SELECT c.current_revision,revision.superseded_planning_run_id,"
+                        "task.predecessor_planning_run_id,"
+                        "task.result_planning_run_id,current_run.supersedes_run_id,"
+                        "current_run.case_revision,current_run.state,"
+                        "current_run.is_current "
+                        "FROM app.student_cases c "
+                        "JOIN app.student_case_revisions revision "
+                        "ON revision.organization_id=c.organization_id "
+                        "AND revision.case_id=c.id "
+                        "AND revision.revision=c.current_revision "
+                        "JOIN app.agent_tasks task "
+                        "ON task.organization_id=c.organization_id "
+                        "AND task.case_id=c.id "
+                        "AND task.case_revision=c.current_revision "
+                        "JOIN app.planning_runs current_run "
+                        "ON current_run.organization_id=task.organization_id "
+                        "AND current_run.id=task.result_planning_run_id "
+                        "WHERE c.organization_id=:org AND c.id=:case "
+                        "AND task.id=:task"
+                    ),
+                    {
+                        "org": DEMO_ORG,
+                        "case": case_id,
+                        "task": second_task_id,
+                    },
+                )
+            ).mappings().one()
+        current_run_id = lineage["result_planning_run_id"]
+        assert lineage == {
+            "current_revision": 2,
+            "superseded_planning_run_id": None,
+            "predecessor_planning_run_id": None,
+            "result_planning_run_id": current_run_id,
+            "supersedes_run_id": None,
+            "case_revision": 2,
+            "state": "review_required",
+            "is_current": True,
+        }
+        assert isinstance(current_run_id, UUID)
+        return CompletedPreferredCountryRevision(
+            case_id=case_id,
+            predecessor_run_id=None,
+            current_run_id=current_run_id,
+            task_id=second_task_id,
+        )
+    finally:
+        await migrator.dispose()
+        await api.dispose()
+        await worker_engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_preferred_country_fact_revision_projects_initial_completed_plan() -> None:
+    completed = await create_completed_preferred_country_revision()
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with AsyncSession(engine) as session, session.begin():
+            await set_context(session)
+            repository = PostgresConnectedDemoRepository(session)
+            journey = await repository.journey_status(context(), completed.case_id)
+            assert journey is not None
+            assert journey.phase is DemoPhaseV2.REVIEW_REQUIRED
+            projection = await repository.advisor_ledger_v2(
+                context(),
+                completed.case_id,
+                resolve_canonical_demo_source_contract(),
+            )
+
+        assert journey.phase is DemoPhaseV2.REVIEW_REQUIRED
+        assert projection is not None
+        assert projection.phase is DemoPhaseV2.REVIEW_REQUIRED
+        assert projection.task is not None
+        assert projection.task.task_id == completed.task_id
+        assert projection.planning_run is not None
+        assert projection.planning_run.planning_run_id == completed.current_run_id
+        assert completed.predecessor_run_id is None
+        assert projection.comparison is None
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.asyncio
 async def test_task_ready_projection_uses_canonical_server_inputs_under_api_role() -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
@@ -180,8 +485,13 @@ def test_journey_phase_projects_terminal_tasks_as_failure(
         "decision_id": None,
         "revision_requested": False,
         "revision_fact_pending": False,
+        "revision_predecessor_run_id": None,
+        "task_id": UUID("61000000-0000-0000-0000-000000000099"),
+        "task_predecessor_run_id": None,
+        "result_planning_run_id": None,
         "run_state": None,
-        "supersedes_run_id": None,
+        "run_supersedes_run_id": None,
+        "run_is_current": None,
         "task_state": task_state,
     }
     assert (
@@ -219,8 +529,13 @@ def test_journey_phase_rejects_brief_without_matching_decision() -> None:
         "decision_id": None,
         "revision_requested": False,
         "revision_fact_pending": False,
+        "revision_predecessor_run_id": None,
+        "task_id": None,
+        "task_predecessor_run_id": None,
+        "result_planning_run_id": None,
         "run_state": None,
-        "supersedes_run_id": None,
+        "run_supersedes_run_id": None,
+        "run_is_current": None,
         "task_state": None,
     }
 

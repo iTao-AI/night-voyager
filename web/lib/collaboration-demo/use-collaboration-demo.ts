@@ -531,18 +531,22 @@ export function useCollaborationDemo() {
           requireHandoff(ledger.canonical_task_inputs.expected_case_revision === ledger.case_revision, "stale");
         }
 
-        let taskId: string | null;
         if (["active_task", "review_required", "terminal_task_failure"].includes(ledger.phase)) {
           requireHandoff(ledger.task?.task_id, "stale");
-          taskId = ledger.task.task_id;
-        } else if (["task_ready", "family_review", "plan_ready"].includes(ledger.phase)) {
-          taskId = null;
+        } else if (ledger.phase === "task_ready") {
+          requireHandoff(ledger.task === null, "stale");
         } else {
           throw new HandoffValidationError("stale");
         }
 
         await refreshHandoffInspector(api.planningSkillInspector(stored.caseId));
-        const converted = continueCollaborationAsAdvisorFamily(stored, taskId);
+        const converted = continueCollaborationAsAdvisorFamily(stored, {
+          phase: ledger.phase,
+          currentRevision: ledger.case_revision,
+          currentTaskId: ledger.task?.task_id ?? null,
+          predecessorRunId: ledger.comparison?.previous_planning_run_id ?? null,
+          currentRunId: ledger.planning_run?.planning_run_id ?? null,
+        });
         saveRecoveryMetadata(converted);
         retryAction.current = null;
         collaborationNavigation.toPlanning();
