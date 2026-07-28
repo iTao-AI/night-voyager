@@ -5,6 +5,7 @@ import {
   formatCnyRange,
 } from "../../lib/presentation/format";
 import {
+  presentComparisonDelta,
   presentRouteOutcome,
   presentRouteReason,
   presentTradeOff,
@@ -56,6 +57,21 @@ describe("connected demo presentation contract", () => {
     ["direct_program_fit_evidence_absent", "Program-fit evidence is missing"],
   ])("presents route reason %s", (code, copy) => {
     expect(presentRouteReason("en", code)).toBe(copy);
+  });
+
+  it.each([
+    ["added", "Added to the revised plan"],
+    ["removed", "Removed from the revised plan"],
+    ["changed", "Result changed"],
+    ["unchanged", "No result change"],
+  ])("presents comparison delta %s", (code, copy) => {
+    expect(presentComparisonDelta("en", code)).toBe(copy);
+  });
+
+  it("presents the deterministic blocked budget reason", () => {
+    expect(presentRouteReason("en", "budget_hard_ceiling_or_elasticity_exceeded")).toBe(
+      "Above the family hard ceiling or flexibility boundary",
+    );
   });
 
   it("presents the approved trade-off", () => {

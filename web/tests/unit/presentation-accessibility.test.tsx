@@ -38,6 +38,9 @@ describe("presentation accessibility contract", () => {
     expect(css).toMatch(/text-decoration:\s*underline/);
     expect(css).toMatch(/overflow-wrap:\s*anywhere/);
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    expect(css).toMatch(/\.revision-comparison[\s\S]*overflow-wrap:\s*anywhere/);
+    expect(css).toMatch(/\.revision-route-removed[\s\S]*color:/);
+    expect(css).toMatch(/@media\s*\(max-width:\s*767px\)[\s\S]*\.revision-comparison-table/);
     expect(css).not.toMatch(/-webkit-line-clamp|line-clamp/);
   });
 });

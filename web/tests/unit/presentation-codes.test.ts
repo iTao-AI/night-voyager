@@ -39,4 +39,25 @@ describe("closed presentation code maps", () => {
     expect(presentRouteReason("zh-CN", "direct_program_fit_evidence_absent")).toBe("缺少直接的项目匹配证据");
     expect(presentTradeOff("en", "budget_elasticity")).toBe("Budget flexibility");
   });
+
+  it("covers only the V2 snake-case revision phases", () => {
+    expect(PRESENTATION_CODE_VALUES.demoPhase).toEqual([
+      "task_ready",
+      "active_task",
+      "review_required",
+      "revision_requested",
+      "revision_fact_pending",
+      "replan_required",
+      "revision_task_active",
+      "revision_review_required",
+      "revision_blocked",
+      "family_review",
+      "plan_ready",
+      "terminal_task_failure",
+    ]);
+    expect(presentCode("en", "demoPhase", "revision_review_required")).toBe(
+      "Revised plan needs advisor approval",
+    );
+    expect(presentCode("en", "demoPhase", "review-required")).toBe("Status unavailable");
+  });
 });

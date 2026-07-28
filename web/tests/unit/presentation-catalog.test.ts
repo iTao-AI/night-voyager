@@ -49,4 +49,17 @@ describe("presentation catalog contract", () => {
     expect(getPresentationCopy("zh-CN", "statusUnavailable")).toBe("状态暂不可用");
     expect(getPresentationCopy("en", "statusUnavailable")).toBe("Status unavailable");
   });
+
+  it("freezes the bilingual revision journey vocabulary", () => {
+    expect(zhCN.requestRevisionAction).toBe("请求修订");
+    expect(zhCN.submitRevisionProposalAction).toBe("提交变更提案");
+    expect(zhCN.previousPlanLabel).toBe("保留的上一版计划");
+    expect(zhCN.currentRevisedPlanLabel).toBe("当前修订计划");
+    expect(zhCN.continueFamilyDecisionAction).toBe("继续家庭决定");
+    expect(en.requestRevisionAction).toBe("Request revision");
+    expect(en.submitRevisionProposalAction).toBe("Submit change proposal");
+    expect(en.previousPlanLabel).toBe("Previous plan retained for history");
+    expect(en.currentRevisedPlanLabel).toBe("Current revised plan");
+    expect(en.continueFamilyDecisionAction).toBe("Continue family decision");
+  });
 });

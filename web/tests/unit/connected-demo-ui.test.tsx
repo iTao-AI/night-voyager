@@ -5,7 +5,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
 import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
+import { PlanningRevisionComparison } from "../../components/connected-demo/PlanningRevisionComparison";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
+import { RevisionFactEditor } from "../../components/connected-demo/RevisionFactEditor";
 import { JourneyConflictNotice } from "../../components/demo-session/JourneyConflictNotice";
 import type {
   ConfirmedFactAdvisor,
@@ -14,7 +16,7 @@ import type {
 } from "../../lib/collaboration-demo/contracts";
 import type { CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
 import { PresentationProvider } from "../../lib/presentation/context";
-import { brief as briefFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "./connected-demo-test-data";
+import { brief as briefFixture, comparison as comparisonFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "./connected-demo-test-data";
 
 function renderPresentation(ui: ReactElement) {
   return render(ui, { wrapper: PresentationProvider });
@@ -170,8 +172,142 @@ it("renders the same route authority in explicit English", async () => {
     <AdvisorLedger ledger={ledgerFixture("review-required")} onPrimaryAction={() => undefined} />,
   );
   await waitFor(() => expect(screen.getAllByText("Recommended with budget condition").length).toBeGreaterThan(0));
-  expect(screen.getByRole("button", { name: "Approve Australia for family review" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Approve current plan" })).toBeEnabled();
   expect(container).not.toHaveTextContent(/review-required|needs_advisor_review/);
+});
+
+it("renders a bilingual server-owned revision comparison without identifiers", async () => {
+  const comparison = comparisonFixture();
+  const { container } = renderPresentation(
+    <PlanningRevisionComparison comparison={comparison} />,
+  );
+  expect(screen.getByRole("heading", { name: "规划修订比较" })).toBeVisible();
+  expect(screen.getByText("保留的上一版计划")).toBeVisible();
+  expect(screen.getByText("当前修订计划")).toBeVisible();
+  expect(screen.getAllByText("已从修订计划中移除").length).toBeGreaterThan(0);
+  expect(screen.getByRole("table", { name: "规划修订比较" })).toBeVisible();
+  expect(screen.getByRole("group", { name: "选择要比较的国家" })).toBeInTheDocument();
+  expect(container.querySelector(".revision-country-card dl")).toBeInTheDocument();
+  expect(container.querySelector("tr.revision-route-removed")).toHaveTextContent("马来西亚");
+  expect(container).not.toHaveTextContent(
+    /40000000|70000000|previous_planning_run_id|current_planning_run_id|student\.preferred_countries/,
+  );
+
+  cleanup();
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  renderPresentation(<PlanningRevisionComparison comparison={comparison} />);
+  await waitFor(() => expect(screen.getByRole("heading", { name: "Planning revision comparison" })).toBeVisible());
+  expect(screen.getByText("Previous plan retained for history")).toBeVisible();
+  expect(screen.getByText("Current revised plan")).toBeVisible();
+  expect(screen.getAllByText("Removed from the revised plan").length).toBeGreaterThan(0);
+  expect(document.body).not.toHaveTextContent(/规划|修订|上一版|当前/);
+});
+
+it("submits only the approved preferred-country revision and fails closed otherwise", () => {
+  const submit = vi.fn();
+  const preferred = confirmedFact(
+    "student.preferred_countries",
+    ["australia", "japan", "malaysia"],
+    1,
+  );
+  const projection = { caseId: "40000000-0000-0000-0000-000000000002", caseRevision: 1, facts: [preferred] };
+  const { rerender } = renderPresentation(
+    <RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />,
+  );
+  expect(screen.getByRole("group", { name: "修改意向国家" })).toBeInTheDocument();
+  expect(screen.getByText("澳大利亚、日本、马来西亚")).toBeVisible();
+  expect(screen.getByText("澳大利亚、日本")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "提交变更提案" }));
+  expect(submit).toHaveBeenCalledOnce();
+
+  rerender(
+    <RevisionFactEditor
+      currentFacts={{ ...projection, facts: [{ ...preferred, value: ["japan", "australia", "malaysia"] }] }}
+      expectedCaseRevision={1}
+      onSubmit={submit}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "提交变更提案" })).toBeDisabled();
+  expect(screen.getByText("当前服务器事实不符合此合成修订的安全基线。")).toBeVisible();
+});
+
+it("shows renewed server authorization in the family-safe revised brief", () => {
+  const revised = briefFixture("family-review");
+  revised.revision_context = {
+    schema: "night-voyager.family-revision-context.v1",
+    current_case_revision: 2,
+    planning_version: "revised",
+    advisor_authorization: "renewed_for_current_revision",
+  };
+  renderPresentation(
+    <FamilyDecisionBrief brief={revised} confirmed onConfirm={() => undefined} onSubmit={() => undefined} />,
+  );
+  expect(screen.getByText("当前 Case revision 2")).toBeVisible();
+  expect(screen.getByText("顾问已为当前修订重新授权")).toBeVisible();
+  expect(screen.getByRole("button", { name: "继续家庭决定" })).toBeEnabled();
+});
+
+it("offers revision only on the initial review and no business action when blocked", () => {
+  const approve = vi.fn();
+  const revise = vi.fn();
+  const { rerender } = renderPresentation(
+    <AdvisorLedger
+      ledger={ledgerFixture("review_required")}
+      onPrimaryAction={approve}
+      onSecondaryAction={revise}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "批准当前计划" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "请求修订" })).toBeEnabled();
+
+  rerender(
+    <AdvisorLedger
+      ledger={ledgerFixture("revision_review_required")}
+      onPrimaryAction={approve}
+      onSecondaryAction={revise}
+    />,
+  );
+  expect(screen.getByRole("button", { name: "批准修订计划" })).toBeEnabled();
+  expect(screen.queryByRole("button", { name: "请求修订" })).toBeNull();
+
+  rerender(
+    <AdvisorLedger
+      ledger={ledgerFixture("revision_blocked")}
+      onPrimaryAction={approve}
+      onSecondaryAction={revise}
+    />,
+  );
+  expect(screen.getByText("此修订已被确定性规则阻止")).toBeVisible();
+  expect(screen.queryByRole("button", { name: /批准|请求|创建/ })).toBeNull();
+  expect(screen.getByRole("link", { name: "返回产品概览" })).toHaveAttribute("href", "/");
+});
+
+it.each([
+  ["task_ready", "创建规划任务"],
+  ["active_task", null],
+  ["revision_fact_pending", "确认意向国家变更"],
+  ["replan_required", "创建修订规划任务"],
+  ["revision_task_active", null],
+  ["revision_review_required", "批准修订计划"],
+  ["revision_blocked", null],
+  ["terminal_task_failure", null],
+] as const)("binds advisor phase %s to exactly one or zero business actions", (phase, action) => {
+  renderPresentation(
+    <AdvisorLedger
+      ledger={ledgerFixture(phase)}
+      onPrimaryAction={() => undefined}
+      onSecondaryAction={() => undefined}
+    />,
+  );
+  const business = screen.queryAllByRole("button").filter((button) =>
+    /创建|确认意向|批准|请求修订/.test(button.textContent ?? ""),
+  );
+  if (action) {
+    expect(business).toHaveLength(1);
+    expect(business[0]).toHaveAccessibleName(action);
+  } else {
+    expect(business).toHaveLength(0);
+  }
 });
 
 it.each([
@@ -202,8 +338,8 @@ it("renders only server-derived family constraints before provenance", () => {
   expect(screen.getByText("¥305,500")).toBeVisible();
   expect(screen.getByText("¥400,000")).toBeVisible();
   expect(screen.getAllByText("预算弹性").length).toBeGreaterThan(0);
-  expect(screen.getByRole("button", { name: "确认澳大利亚路线" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "确认澳大利亚路线" }).closest("details")).toBeNull();
+  expect(screen.getByRole("button", { name: "继续家庭决定" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "继续家庭决定" }).closest("details")).toBeNull();
   expect(container).not.toHaveTextContent(/budget_elasticity|30,550,000|40,000,000/);
 });
 
