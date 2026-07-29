@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { createPlanExecutionApi, type PlanExecutionApi } from "./api";
+import {
+  createPlanExecutionApi,
+  isPlanExecutionSessionLoss,
+  isPlanExecutionStaleAuthority,
+  type PlanExecutionApi,
+} from "./api";
 import type { PlanExecutionRole, TimelineMutationReceipt } from "./contracts";
 import { idempotencyFor, type PlanExecutionIdempotencyRecord } from "./idempotency";
 import {
@@ -87,6 +92,44 @@ export function usePlanExecution(
 
   useEffect(() => () => controller.current?.abort(), []);
 
+  const finishGeneration = useCallback((expectedGeneration: number) => {
+    if (expectedGeneration !== generation.current) return;
+    locked.current = false;
+    setBusy(false);
+  }, []);
+
+  const closeSessionChanged = useCallback((
+    error: unknown,
+    clearAuthority = false,
+  ) => {
+    csrf.current = null;
+    pendingMutation.current = null;
+    if (clearAuthority) clearPlanExecutionEnvelope();
+    setState((previous) => clearAuthority
+      ? {
+          ...loadingPlanExecutionState,
+          value: "session_changed",
+          error: error instanceof Error ? error.message : "session_changed",
+        }
+      : {
+          ...previous,
+          value: "session_changed",
+          error: error instanceof Error ? error.message : "session_changed",
+          operation: null,
+          safeDisplayState: previous.value === "mutation_in_flight"
+            ? previous.safeDisplayState
+            : previous.value,
+        });
+  }, []);
+
+  const clearMutationSlot = useCallback((operation: Operation) => {
+    const stored = loadPlanExecutionEnvelope();
+    if (!stored) return;
+    const mutations = { ...stored.mutations };
+    delete mutations[operation];
+    savePlanExecutionEnvelope({ ...stored, mutations });
+  }, []);
+
   const loadAuthority = useCallback(async (
     role: PlanExecutionRole,
     receipt: TimelineMutationReceipt | null = null,
@@ -95,17 +138,27 @@ export function usePlanExecution(
     const context = await api.context();
     if (expectedGeneration !== generation.current) return;
     if (context.active_role !== role) {
-      setState({ value: "session_changed", context, view: null, receipt, error: "role authority changed", operation: null, safeDisplayState: null });
+      closeSessionChanged(new Error("session_changed"));
       return;
     }
     const view = context.execution_id === null ? null : await api.read(context.case_id);
     if (expectedGeneration !== generation.current) return;
-    const next = derivePlanExecutionState(context, view, receipt);
+    const confirmed = view === null ? context : await api.context();
+    if (expectedGeneration !== generation.current) return;
+    const crossCase = confirmed.case_id !== context.case_id
+      || confirmed.timeline_plan_id !== context.timeline_plan_id
+      || confirmed.execution_id !== context.execution_id;
+    if (crossCase || confirmed.active_role !== role) {
+      closeSessionChanged(new Error("session_changed"), crossCase);
+      return;
+    }
+    const next = derivePlanExecutionState(confirmed, view, receipt);
     setState(next);
     savePlanExecutionEnvelope(envelopeFor(next, role, scenario, loadPlanExecutionEnvelope()));
-  }, [api, scenario]);
+  }, [api, closeSessionChanged, scenario]);
 
   const connect = useCallback(async (role: PlanExecutionRole) => {
+    if (locked.current) return;
     const expectedGeneration = beginGeneration();
     locked.current = true;
     setBusy(true);
@@ -120,20 +173,57 @@ export function usePlanExecution(
         setState({ value: "recoverable_error", context: null, view: null, receipt: null, error: error instanceof Error ? error.message : "request_failed", operation: null, safeDisplayState: null });
       }
     } finally {
-      if (expectedGeneration === generation.current) {
-        locked.current = false;
-        setBusy(false);
-      }
+      finishGeneration(expectedGeneration);
     }
-  }, [api, beginGeneration, loadAuthority, scenario]);
+  }, [api, beginGeneration, finishGeneration, loadAuthority, scenario]);
 
   const switchRole = useCallback(async (role: PlanExecutionRole) => {
-    beginGeneration();
-    locked.current = false;
-    if (csrf.current) await api.revoke(csrf.current);
-    csrf.current = null;
-    await connect(role);
-  }, [api, beginGeneration, connect]);
+    if (locked.current || !csrf.current || !state.context
+      || state.context.active_role === role) return;
+    const expectedGeneration = beginGeneration();
+    const priorCsrf = csrf.current;
+    const priorContext = state.context;
+    locked.current = true;
+    setBusy(true);
+    try {
+      const session = await api.mint(role, priorCsrf, scenario);
+      if (expectedGeneration !== generation.current) return;
+      csrf.current = session.csrf_token;
+      const context = await api.context();
+      if (expectedGeneration !== generation.current) return;
+      const crossCase = context.case_id !== priorContext.case_id
+        || context.timeline_plan_id !== priorContext.timeline_plan_id
+        || context.execution_id !== priorContext.execution_id;
+      if (crossCase || context.active_role !== role) {
+        closeSessionChanged(new Error("session_changed"), crossCase);
+        return;
+      }
+      await loadAuthority(role, null, expectedGeneration);
+    } catch (error) {
+      if (expectedGeneration === generation.current) {
+        if (isPlanExecutionSessionLoss(error)) {
+          closeSessionChanged(error);
+        } else {
+          setState((previous) => ({
+            ...previous,
+            value: "recoverable_error",
+            error: error instanceof Error ? error.message : "request_failed",
+            operation: null,
+          }));
+        }
+      }
+    } finally {
+      finishGeneration(expectedGeneration);
+    }
+  }, [
+    api,
+    beginGeneration,
+    closeSessionChanged,
+    finishGeneration,
+    loadAuthority,
+    scenario,
+    state.context,
+  ]);
 
   const runMutation = useCallback(async (
     operation: Operation,
@@ -146,7 +236,10 @@ export function usePlanExecution(
     const expectedGeneration = generation.current;
     try {
       const stored = loadPlanExecutionEnvelope();
-      if (stored && stored.scenario !== scenario) {
+      if (stored && (stored.scenario !== scenario
+        || stored.caseId !== state.context.case_id
+        || stored.timelinePlanId !== state.context.timeline_plan_id
+        || stored.role !== state.context.active_role)) {
         clearPlanExecutionEnvelope();
         throw new Error("session_changed");
       }
@@ -166,33 +259,63 @@ export function usePlanExecution(
         call,
       };
       setState(beginPlanExecutionMutation(state, operation));
-      const receipt = await call(csrf.current, record.idempotencyKey);
+      const sessionCsrf = csrf.current;
+      if (!sessionCsrf) throw new Error("session_changed");
+      const receipt = await call(sessionCsrf, record.idempotencyKey);
       if (expectedGeneration !== generation.current) return;
       const withReceipt = { ...pending, lastReceiptId: receipt.receipt_id };
       savePlanExecutionEnvelope(withReceipt);
       const view = await api.read(state.context.case_id);
       if (expectedGeneration !== generation.current) return;
-      const next = derivePlanExecutionState(state.context, view, receipt);
+      const context = await api.context();
+      if (expectedGeneration !== generation.current) return;
+      const crossCase = context.case_id !== state.context.case_id
+        || context.timeline_plan_id !== state.context.timeline_plan_id
+        || context.execution_id !== view.execution.execution_id;
+      if (crossCase || context.active_role !== state.context.active_role) {
+        pendingMutation.current = null;
+        savePlanExecutionEnvelope({ ...withReceipt, mutations: {} });
+        closeSessionChanged(new Error("session_changed"), crossCase);
+        return;
+      }
+      const next = derivePlanExecutionState(context, view, receipt);
       setState(next);
-      savePlanExecutionEnvelope(envelopeFor(next, state.context.active_role, scenario, { ...withReceipt, mutations: {} }));
+      savePlanExecutionEnvelope(envelopeFor(next, context.active_role, scenario, { ...withReceipt, mutations: {} }));
       pendingMutation.current = null;
     } catch (error) {
       if (expectedGeneration === generation.current) {
-        setState({
-          ...state,
-          value: "recoverable_error",
-          error: error instanceof Error ? error.message : "request_failed",
-          operation,
-          safeDisplayState: state.value === "mutation_in_flight"
-            ? state.safeDisplayState
-            : state.value,
-        });
+        if (isPlanExecutionSessionLoss(error)) {
+          pendingMutation.current = null;
+          clearMutationSlot(operation);
+          closeSessionChanged(error);
+        } else if (isPlanExecutionStaleAuthority(error)) {
+          pendingMutation.current = null;
+          clearMutationSlot(operation);
+          await loadAuthority(state.context.active_role, null, expectedGeneration);
+        } else {
+          setState({
+            ...state,
+            value: "recoverable_error",
+            error: error instanceof Error ? error.message : "request_failed",
+            operation,
+            safeDisplayState: state.value === "mutation_in_flight"
+              ? state.safeDisplayState
+              : state.value,
+          });
+        }
       }
     } finally {
-      locked.current = false;
-      setBusy(false);
+      finishGeneration(expectedGeneration);
     }
-  }, [api, scenario, state]);
+  }, [
+    api,
+    clearMutationSlot,
+    closeSessionChanged,
+    finishGeneration,
+    loadAuthority,
+    scenario,
+    state,
+  ]);
 
   const start = useCallback(async () => {
     if (!state.context) return;
@@ -358,7 +481,16 @@ export function usePlanExecution(
       }
       const view = context.execution_id === null ? null : await api.read(context.case_id);
       if (expectedGeneration !== generation.current) return;
-      const next = derivePlanExecutionState(context, view);
+      const confirmed = view === null ? context : await api.context();
+      if (expectedGeneration !== generation.current) return;
+      const crossCase = confirmed.case_id !== context.case_id
+        || confirmed.timeline_plan_id !== context.timeline_plan_id
+        || confirmed.execution_id !== context.execution_id;
+      if (crossCase || confirmed.active_role !== stored.role) {
+        closeSessionChanged(new Error("session_changed"), crossCase);
+        return;
+      }
+      const next = derivePlanExecutionState(confirmed, view);
       setState(next);
       savePlanExecutionEnvelope(envelopeFor(next, stored.role, scenario, stored));
     } catch (error) {
@@ -377,7 +509,7 @@ export function usePlanExecution(
         setBusy(false);
       }
     }
-  }, [api, beginGeneration, scenario]);
+  }, [api, beginGeneration, closeSessionChanged, scenario]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;

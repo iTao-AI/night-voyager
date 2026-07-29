@@ -5,7 +5,14 @@ export function ReassessmentHandoff({
   labels,
 }: {
   reassessment: TimelineReassessment;
-  labels: { title: string; stop: string; pending: string; whoNext: string };
+  labels: {
+    title: string;
+    stop: string;
+    pending: string;
+    whoNext: string;
+    blockedTrigger: string;
+    deadlineTrigger: string;
+  };
 }) {
   return (
     <section aria-labelledby="reassessment-handoff-title">
@@ -14,8 +21,8 @@ export function ReassessmentHandoff({
       <p>{labels.pending}</p>
       <p>{labels.whoNext}</p>
       <p>{reassessment.trigger === "blocked_attestation"
-        ? "blocked_attestation"
-        : "deadline_elapsed"}</p>
+        ? labels.blockedTrigger
+        : labels.deadlineTrigger}</p>
     </section>
   );
 }

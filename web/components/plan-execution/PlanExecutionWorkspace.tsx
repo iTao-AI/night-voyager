@@ -117,6 +117,8 @@ export function PlanExecutionWorkspace({
               stop: copy("planExecutionReassessmentStop"),
               pending: copy("planExecutionHandoffPending"),
               whoNext: copy("planExecutionWhoNext"),
+              blockedTrigger: copy("planExecutionBlockedTrigger"),
+              deadlineTrigger: copy("planExecutionDeadlineTrigger"),
             }}
           />
         )}

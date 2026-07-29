@@ -23,12 +23,46 @@ export interface PlanExecutionApi {
   verify(executionId: string, body: unknown, csrf: string, key: string): Promise<TimelineMutationReceipt>;
   reassess(executionId: string, body: unknown, csrf: string, key: string): Promise<TimelineMutationReceipt>;
 }
+
+export class PlanExecutionApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+  ) {
+    super(code);
+  }
+}
+
+const SESSION_LOSS_CODES = new Set([
+  "authentication_failed",
+  "bff_session_recovery_required",
+  "session_changed",
+]);
+const STALE_AUTHORITY_CODES = new Set([
+  "stale_execution_version",
+  "stale_checkpoint_version",
+  "checkpoint_not_current",
+  "execution_completed",
+]);
+
+export function isPlanExecutionSessionLoss(error: unknown): boolean {
+  return (error instanceof PlanExecutionApiError && error.status === 401)
+    || (error instanceof Error && SESSION_LOSS_CODES.has(error.message));
+}
+
+export function isPlanExecutionStaleAuthority(error: unknown): boolean {
+  return error instanceof Error && STALE_AUTHORITY_CODES.has(error.message);
+}
+
 async function json(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(path, { ...init, cache: "no-store" });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(
-    body && typeof body === "object" && "code" in body ? String(body.code) : "request_failed",
-  );
+  if (!response.ok) {
+    const code = body && typeof body === "object" && "code" in body
+      ? String(body.code)
+      : "request_failed";
+    throw new PlanExecutionApiError(response.status, code);
+  }
   return body;
 }
 function headers(csrf: string, key?: string): Headers {
@@ -61,8 +95,10 @@ export function createPlanExecutionApi(): PlanExecutionApi {
       }));
     },
     async revoke(csrf) {
-      const response = await fetch("/api/demo/session", { method: "DELETE", headers: headers(csrf), cache: "no-store" });
-      if (!response.ok) throw new Error("session_revoke_failed");
+      await json("/api/demo/session", {
+        method: "DELETE",
+        headers: headers(csrf),
+      });
     },
     async context() {
       return parsePlanExecutionContext(await json("/api/demo/plan-execution-context"));

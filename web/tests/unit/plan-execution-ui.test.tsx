@@ -150,4 +150,47 @@ it("renders terminal handoff without any resume or mutation action", () => {
   expect(screen.getByText(/等待未来单独授权/)).toBeInTheDocument();
   expect(screen.queryByText(/恢复执行/)).not.toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "请求重新评估并停止执行" })).not.toBeInTheDocument();
+  expect(screen.getByText("阻塞状态已由顾问接受为重新评估触发条件。")).toBeInTheDocument();
+  expect(screen.queryByText("blocked_attestation")).not.toBeInTheDocument();
+});
+
+it("renders the deadline trigger through the English catalog without raw codes", async () => {
+  window.localStorage.setItem(PRESENTATION_LOCALE_STORAGE_KEY, "en");
+  const controller = controllerFor("advisor", "blocked");
+  controller.state.value = "reassessment_required";
+  controller.state.view!.execution.state = "reassessment_required";
+  controller.state.view!.reassessment = {
+    schema_version: 1,
+    reassessment_id: "10000000-0000-0000-0000-000000000020",
+    execution_id: controller.state.view!.execution.execution_id,
+    checkpoint_id: controller.state.view!.current_checkpoint!.checkpoint_id,
+    advisor_actor_id: "10000000-0000-0000-0000-000000000021",
+    trigger: "deadline_elapsed",
+    trigger_reference_id: null,
+    accepted_database_date: "2026-07-29",
+    accepted_trigger_projection_sha256: "a".repeat(64),
+    handoff_schema_version: 1,
+    predecessor_case_id: contextFixture.case_id,
+    predecessor_case_revision: 1,
+    predecessor_decision_id: contextFixture.decision_id,
+    predecessor_decision_receipt_id: contextFixture.decision_receipt_id,
+    predecessor_timeline_plan_id: contextFixture.timeline_plan_id,
+    predecessor_execution_id: controller.state.view!.execution.execution_id,
+    predecessor_checkpoint_id: controller.state.view!.current_checkpoint!.checkpoint_id,
+    owner_role: "advisor",
+    successor_status: "pending_future_authorization",
+    created_at: "2026-07-29T00:00:00Z",
+  };
+  render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={controller} />
+    </PresentationProvider>,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByText(
+      "The server-owned deadline condition was accepted as the reassessment trigger.",
+    )).toBeInTheDocument();
+  });
+  expect(screen.queryByText("deadline_elapsed")).not.toBeInTheDocument();
 });

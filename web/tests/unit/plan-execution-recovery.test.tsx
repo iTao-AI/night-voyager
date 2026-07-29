@@ -9,6 +9,14 @@ import {
 import { usePlanExecution } from "../../lib/plan-execution/use-plan-execution";
 import { contextFixture, viewFixture } from "./plan-execution-contracts.test";
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((accept) => {
+    resolve = accept;
+  });
+  return { promise, resolve };
+}
+
 afterEach(() => {
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -52,14 +60,19 @@ it("fails closed and clears a cross-scenario recovery envelope", async () => {
 it("persists the operation, captures its receipt, then performs a fresh GET", async () => {
   const calls: string[] = [];
   const view = viewFixture();
+  let started = false;
   const api = {
     bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
     mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
     revoke: vi.fn(async () => undefined),
-    context: vi.fn(async () => contextFixture),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: started ? view.execution.execution_id : null,
+    })),
     read: vi.fn(async () => { calls.push("GET"); return view; }),
     start: vi.fn(async () => {
       calls.push("POST");
+      started = true;
       expect(loadPlanExecutionEnvelope()?.mutations.start).toBeDefined();
       return {
         schema_version: 1 as const, receipt_id: contextFixture.case_id,
@@ -167,12 +180,14 @@ it("revalidates a stored Case before closing a residual session and minting fres
   const { result } = renderHook(() => usePlanExecution(api));
 
   await waitFor(() => expect(result.current.state.value).toBe("execution_completed"));
-  expect(order).toEqual(["context", "bootstrap", "bootstrap", "mint", "context"]);
+  expect(order).toEqual([
+    "context", "bootstrap", "bootstrap", "mint", "context", "context",
+  ]);
   expect(api.mint).toHaveBeenCalledWith("student", "fresh-bootstrap", "happy");
   expect(loadPlanExecutionEnvelope()?.executionId).toBe(completed.execution.execution_id);
 });
 
-it("ignores a delayed response from an aborted controller generation", async () => {
+it("does not rotate while the initial authority read holds the generation lock", async () => {
   let resolveRead!: (value: ReturnType<typeof viewFixture>) => void;
   const delayedRead = new Promise<ReturnType<typeof viewFixture>>((resolve) => {
     resolveRead = resolve;
@@ -202,5 +217,149 @@ it("ignores a delayed response from an aborted controller generation", async () 
     await Promise.all([first, second]);
   });
 
+  expect(result.current.state.context?.active_role).toBe("student");
+  expect(api.mint).toHaveBeenCalledTimes(1);
+});
+
+it("holds one atomic role rotation lock and emits no stale mutation", async () => {
+  const rotation = deferred<{ role: "advisor"; csrf_token: string }>();
+  let activeRole: "student" | "advisor" = "student";
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async (role: "student" | "advisor" | "parent") => {
+      if (role === "student") return { role, csrf_token: "csrf-student" };
+      return rotation.promise;
+    }),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({ ...contextFixture, active_role: activeRole })),
+    read: vi.fn(async () => viewFixture()),
+    start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+
+  let first!: Promise<void>;
+  await act(async () => {
+    first = result.current.switchRole("advisor");
+    await Promise.resolve();
+  });
+  expect(result.current.busy).toBe(true);
+  await act(async () => {
+    await Promise.all([
+      result.current.switchRole("parent"),
+      result.current.start(),
+    ]);
+  });
+  expect(api.mint).toHaveBeenCalledTimes(2);
+  expect(api.revoke).not.toHaveBeenCalled();
+  expect(api.start).not.toHaveBeenCalled();
+  expect(result.current.busy).toBe(true);
+
+  activeRole = "advisor";
+  rotation.resolve({ role: "advisor", csrf_token: "csrf-advisor" });
+  await act(async () => first);
+  expect(result.current.busy).toBe(false);
   expect(result.current.state.context?.active_role).toBe("advisor");
+  expect(api.mint).toHaveBeenLastCalledWith("advisor", "csrf-student", "happy");
+});
+
+it("closes a revoked mutation as session_changed without a later read", async () => {
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => contextFixture),
+    read: vi.fn(async () => viewFixture()),
+    start: vi.fn(async () => { throw new Error("authentication_failed"); }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(api.read).not.toHaveBeenCalled();
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+});
+
+it("closes an in-flight revoked rotation without destroying prior authority", async () => {
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn()
+      .mockResolvedValueOnce({ role: "student" as const, csrf_token: "csrf" })
+      .mockRejectedValueOnce(new Error("authentication_failed")),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => contextFixture),
+    read: vi.fn(async () => viewFixture()),
+    start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.switchRole("advisor"));
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(api.revoke).not.toHaveBeenCalled();
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+  expect(result.current.busy).toBe(false);
+});
+
+it("refreshes rejected stale versions instead of replaying a known rejection", async () => {
+  const fresh = viewFixture();
+  fresh.execution.row_version = 2;
+  fresh.current_checkpoint!.row_version = 2;
+  fresh.checkpoints[0].row_version = 2;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({ ...contextFixture, execution_id: fresh.execution.execution_id })),
+    read: vi.fn(async () => fresh),
+    start: vi.fn(async () => { throw new Error("stale_execution_version"); }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+
+  expect(api.start).toHaveBeenCalledTimes(1);
+  expect(api.read).toHaveBeenCalledTimes(2);
+  expect(result.current.state.value).toBe("checkpoint_active");
+  expect(result.current.state.view?.execution.row_version).toBe(2);
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+});
+
+it("closes recovery when the shared session rotates while its read is in flight", async () => {
+  const delayed = deferred<ReturnType<typeof viewFixture>>();
+  const view = viewFixture();
+  const restoredContext = {
+    ...contextFixture,
+    execution_id: view.execution.execution_id,
+  };
+  savePlanExecutionEnvelope({
+    ...envelope,
+    executionId: view.execution.execution_id,
+  });
+  let contextReads = 0;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => {
+      contextReads += 1;
+      return {
+        ...restoredContext,
+        active_role: contextReads >= 3 ? "advisor" as const : "student" as const,
+      };
+    }),
+    read: vi.fn(async () => delayed.promise),
+    start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await waitFor(() => expect(api.read).toHaveBeenCalledTimes(1));
+  delayed.resolve(view);
+
+  await waitFor(() => expect(result.current.state.value).toBe("session_changed"));
+  expect(contextReads).toBe(3);
+  expect(result.current.state.view).toBeNull();
+  expect(api.start).not.toHaveBeenCalled();
 });
