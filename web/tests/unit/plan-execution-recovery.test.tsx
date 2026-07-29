@@ -1,4 +1,4 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import {
@@ -79,8 +79,8 @@ it("persists the operation, captures its receipt, then performs a fresh GET", as
   expect(loadPlanExecutionEnvelope()?.lastReceiptId).toBe(contextFixture.case_id);
 });
 
-it("recovers a lost acknowledgement with the exact body and stable key", async () => {
-  const calls: Array<{ body: unknown; key: string }> = [];
+it("recovers a lost acknowledgement with the exact body, key, and live session", async () => {
+  const calls: Array<{ body: unknown; csrf: string; key: string }> = [];
   let attempt = 0;
   const view = viewFixture();
   const receipt = {
@@ -97,8 +97,8 @@ it("recovers a lost acknowledgement with the exact body and stable key", async (
     revoke: vi.fn(async () => undefined),
     context: vi.fn(async () => contextFixture),
     read: vi.fn(async () => view),
-    start: vi.fn(async (_id: string, body: unknown, _csrf: string, key: string) => {
-      calls.push({ body, key });
+    start: vi.fn(async (_id: string, body: unknown, csrf: string, key: string) => {
+      calls.push({ body, csrf, key });
       attempt += 1;
       if (attempt === 1) throw new Error("request_failed");
       return receipt;
@@ -113,7 +113,63 @@ it("recovers a lost acknowledgement with the exact body and stable key", async (
 
   expect(calls).toHaveLength(2);
   expect(calls[1]).toEqual(calls[0]);
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+  expect(api.mint).toHaveBeenCalledTimes(1);
   expect(result.current.state.receipt).toEqual(receipt);
+});
+
+it("revalidates a stored Case before closing a residual session and minting fresh CSRF", async () => {
+  const completed = viewFixture();
+  completed.execution.state = "completed";
+  completed.checkpoints = completed.checkpoints.map((checkpoint) => ({
+    ...checkpoint,
+    state: "verified",
+  }));
+  completed.current_checkpoint = null;
+  completed.current_action = {
+    schema_version: 1,
+    code: "execution_completed",
+    owner_role: "none",
+    checkpoint_id: null,
+    execution_version: completed.execution.row_version,
+    checkpoint_version: null,
+  };
+  const restoredContext = {
+    ...contextFixture,
+    execution_id: completed.execution.execution_id,
+  };
+  savePlanExecutionEnvelope({
+    ...envelope,
+    executionId: completed.execution.execution_id,
+  });
+  const order: string[] = [];
+  let bootstrapAttempt = 0;
+  const api = {
+    bootstrap: vi.fn(async () => {
+      order.push("bootstrap");
+      bootstrapAttempt += 1;
+      if (bootstrapAttempt === 1) throw new Error("bff_session_recovery_required");
+      return { csrf_token: "fresh-bootstrap" };
+    }),
+    mint: vi.fn(async () => {
+      order.push("mint");
+      return { role: "student" as const, csrf_token: "fresh-csrf" };
+    }),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => {
+      order.push("context");
+      return restoredContext;
+    }),
+    read: vi.fn(async () => completed),
+    start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+
+  const { result } = renderHook(() => usePlanExecution(api));
+
+  await waitFor(() => expect(result.current.state.value).toBe("execution_completed"));
+  expect(order).toEqual(["context", "bootstrap", "bootstrap", "mint", "context"]);
+  expect(api.mint).toHaveBeenCalledWith("student", "fresh-bootstrap", "happy");
+  expect(loadPlanExecutionEnvelope()?.executionId).toBe(completed.execution.execution_id);
 });
 
 it("ignores a delayed response from an aborted controller generation", async () => {

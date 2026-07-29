@@ -76,6 +76,7 @@ export function usePlanExecution(
   const generation = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const pendingMutation = useRef<PendingMutation | null>(null);
+  const recoveryStarted = useRef(false);
 
   const beginGeneration = useCallback(() => {
     controller.current?.abort();
@@ -274,17 +275,15 @@ export function usePlanExecution(
       locked.current = true;
       setBusy(true);
       try {
-        const bootstrap = await api.bootstrap();
-        const session = await api.mint(pending.role, bootstrap.csrf_token, scenario);
-        if (expectedGeneration !== generation.current) return;
-        csrf.current = session.csrf_token;
+        const sessionCsrf = csrf.current;
+        if (!sessionCsrf) throw new Error("session_changed");
         const context = await api.context();
         if (expectedGeneration !== generation.current
           || context.active_role !== pending.role
           || context.case_id !== pending.caseId) {
           throw new Error("session_changed");
         }
-        const receipt = await pending.call(session.csrf_token, pending.record.idempotencyKey);
+        const receipt = await pending.call(sessionCsrf, pending.record.idempotencyKey);
         if (expectedGeneration !== generation.current) return;
         const view = await api.read(context.case_id);
         if (expectedGeneration !== generation.current) return;
@@ -322,8 +321,71 @@ export function usePlanExecution(
       });
       return;
     }
-    await switchRole(stored.role);
-  }, [api, beginGeneration, scenario, switchRole]);
+    const expectedGeneration = beginGeneration();
+    locked.current = true;
+    setBusy(true);
+    try {
+      const priorContext = await api.context();
+      if (expectedGeneration !== generation.current) return;
+      if (priorContext.active_role !== stored.role
+        || priorContext.case_id !== stored.caseId
+        || priorContext.timeline_plan_id !== stored.timelinePlanId
+        || (stored.executionId !== null
+          && priorContext.execution_id !== stored.executionId)) {
+        clearPlanExecutionEnvelope();
+        throw new Error("session_changed");
+      }
+      let bootstrap: { csrf_token: string };
+      try {
+        bootstrap = await api.bootstrap();
+      } catch (error) {
+        if (!(error instanceof Error)
+          || error.message !== "bff_session_recovery_required") throw error;
+        bootstrap = await api.bootstrap();
+      }
+      const session = await api.mint(stored.role, bootstrap.csrf_token, scenario);
+      if (expectedGeneration !== generation.current) return;
+      csrf.current = session.csrf_token;
+      const context = await api.context();
+      if (expectedGeneration !== generation.current) return;
+      if (context.active_role !== stored.role
+        || context.case_id !== stored.caseId
+        || context.timeline_plan_id !== stored.timelinePlanId
+        || (stored.executionId !== null
+          && context.execution_id !== stored.executionId)) {
+        clearPlanExecutionEnvelope();
+        throw new Error("session_changed");
+      }
+      const view = context.execution_id === null ? null : await api.read(context.case_id);
+      if (expectedGeneration !== generation.current) return;
+      const next = derivePlanExecutionState(context, view);
+      setState(next);
+      savePlanExecutionEnvelope(envelopeFor(next, stored.role, scenario, stored));
+    } catch (error) {
+      if (expectedGeneration === generation.current) {
+        const sessionChanged = error instanceof Error
+          && error.message === "session_changed";
+        setState({
+          ...loadingPlanExecutionState,
+          value: sessionChanged ? "session_changed" : "recoverable_error",
+          error: error instanceof Error ? error.message : "request_failed",
+        });
+      }
+    } finally {
+      if (expectedGeneration === generation.current) {
+        locked.current = false;
+        setBusy(false);
+      }
+    }
+  }, [api, beginGeneration, scenario]);
+
+  useEffect(() => {
+    if (recoveryStarted.current) return;
+    recoveryStarted.current = true;
+    if (loadPlanExecutionEnvelope()) {
+      queueMicrotask(() => { void recover(); });
+    }
+  }, [recover]);
 
   return { state, busy, connect, switchRole, start, attest, verify, reassess, recover };
 }

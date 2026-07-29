@@ -111,5 +111,9 @@ it("blocks residual bootstrap cookies before upstream and forwards fixed Origin 
   const residual = await bootstrap(new NextRequest("http://127.0.0.1:3000/api/demo/session-bootstrap", { headers: { Cookie: "night_voyager_session=opaque" } }));
   expect(residual.status).toBe(409);
   expect((await residual.json()).code).toBe("bff_session_recovery_required");
+  expect(residual.headers.getSetCookie()).toEqual(expect.arrayContaining([
+    expect.stringContaining("night_voyager_session=;"),
+    expect.stringContaining("night_voyager_csrf_bootstrap=;"),
+  ]));
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });

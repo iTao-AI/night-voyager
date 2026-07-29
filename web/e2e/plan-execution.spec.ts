@@ -61,7 +61,9 @@ async function mutate(
 }
 
 async function rotate(page: Page, role: keyof typeof copy.en) {
-  await page.getByRole("button", { name: copy[locale][role], exact: true }).click();
+  const button = page.getByRole("button", { name: copy[locale][role], exact: true });
+  await button.click();
+  await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
 test("complete governed plan execution browser-to-database proof", async ({ page }) => {

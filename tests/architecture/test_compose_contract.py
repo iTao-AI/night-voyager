@@ -752,6 +752,12 @@ def test_full_compose_proof_runs_one_minimal_plan_execution_lane() -> None:
         assert forbidden not in browser
 
 
+def test_full_compose_proof_includes_the_governed_plan_execution_suite() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+
+    assert config.count('"plan-execution.spec.ts"') == 1
+
+
 def test_timeline_execution_verifier_has_closed_seed_and_completed_modes() -> None:
     verifier = Path("scripts/verify_timeline_execution.py").read_text(
         encoding="utf-8"

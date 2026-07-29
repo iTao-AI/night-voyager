@@ -55,3 +55,4 @@ def test_database_verifier_accepts_only_the_closed_private_proof_schema() -> Non
         assert key in source
     for forbidden in ("csrf_token", "session_token", "idempotency_key", "database_url"):
         assert forbidden not in source
+    assert '"SELECT receipt_id FROM app.timeline_mutation_receipts "' in source

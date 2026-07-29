@@ -7,11 +7,20 @@ export const dynamic = "force-dynamic";
 
 export function GET(request: NextRequest) {
   if (request.cookies.has("night_voyager_session")) {
-    return demoBffProblem(
+    const response = demoBffProblem(
       409,
       "bff_session_recovery_required",
       "session recovery required",
     );
+    response.headers.append(
+      "Set-Cookie",
+      "night_voyager_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    );
+    response.headers.append(
+      "Set-Cookie",
+      "night_voyager_csrf_bootstrap=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    );
+    return response;
   }
   return forwardDemoJson(request, {
     method: "GET",

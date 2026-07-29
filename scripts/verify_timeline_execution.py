@@ -389,7 +389,7 @@ async def _verify_proof(connection: AsyncConnection, proof: dict[str, Any]) -> N
                 "WHERE execution_id=:execution)=0 "
                 "AND (SELECT count(*) FROM app.idempotency_records i "
                 "WHERE i.response_id IN ("
-                "SELECT result_id FROM app.timeline_mutation_receipts "
+                "SELECT receipt_id FROM app.timeline_mutation_receipts "
                 "WHERE execution_id=:execution))="
                 "(SELECT count(*) FROM app.timeline_mutation_receipts "
                 "WHERE execution_id=:execution)"
