@@ -86,4 +86,7 @@ The browser supplies only the closed scenario key; the server maps it to an
 exact principal and the queryless BFF context validates the one assigned Case.
 Same-scenario role rotation is allowed. Generic-to-scenario, Happy-to-Blocked,
 unknown, ambiguous, or Case-selector attempts fail before the old session is
-revoked. Migration `0014` and all timeline transitions remain unchanged.
+revoked. The browser holds one generation-scoped lock across the atomic
+`POST /demo/sessions` rotation and the following context/read reconciliation;
+an older generation cannot unlock a newer operation. Migration `0014` and all
+timeline transitions remain unchanged.

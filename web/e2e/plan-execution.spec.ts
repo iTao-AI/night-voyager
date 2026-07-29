@@ -1,9 +1,16 @@
 import { writeFile } from "node:fs/promises";
-import { expect, test, type Page, type Response } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+  type Response,
+} from "@playwright/test";
 
 const proofFile = process.env.PLAN_EXECUTION_PROOF_FILE;
+const recoveryProofFile = process.env.PLAN_EXECUTION_RECOVERY_PROOF_FILE;
 const scenario = process.env.PLAN_EXECUTION_SCENARIO;
 const locale = process.env.PRESENTATION_LOCALE === "en" ? "en" : "zh-CN";
+const ORIGIN = "http://127.0.0.1:3000";
 
 type Receipt = {
   receipt_id: string;
@@ -13,10 +20,16 @@ type Receipt = {
 };
 
 type View = {
-  execution: { execution_id: string; state: string };
-  checkpoints: { checkpoint_id: string; milestone_key: string }[];
-  current_checkpoint: { checkpoint_id: string; milestone_key: string } | null;
+  execution: { execution_id: string; state: string; row_version: number };
+  checkpoints: { checkpoint_id: string; milestone_key: string; row_version: number }[];
+  current_checkpoint: {
+    checkpoint_id: string;
+    milestone_key: string;
+    row_version: number;
+  } | null;
   reassessment: { reassessment_id: string } | null;
+  activity: { durable_id: string }[];
+  activity_total: number;
 };
 
 const copy = {
@@ -26,7 +39,7 @@ const copy = {
     completion: "提交完成状态给顾问", requestUpdate: "请求更新",
     verify: "验证并继续", blocked: "记录阻塞并停止当前 checkpoint",
     reassess: "请求重新评估并停止执行", recover: "重新验证执行 authority",
-    completed: "行动计划已完成。", handoff: "重新评估交接",
+    completed: "行动计划已完成。", handoff: "重新评估交接", activity: "活动记录",
   },
   en: {
     student: "Student", parent: "Parent", advisor: "Advisor",
@@ -34,7 +47,7 @@ const copy = {
     completion: "Submit completion to advisor", requestUpdate: "Request update",
     verify: "Verify and continue", blocked: "Record blocker and stop the current checkpoint",
     reassess: "Request reassessment and stop execution", recover: "Revalidate execution authority",
-    completed: "The action plan is complete.", handoff: "Reassessment handoff",
+    completed: "The action plan is complete.", handoff: "Reassessment handoff", activity: "Activity",
   },
 } as const;
 
@@ -60,10 +73,56 @@ async function mutate(
   };
 }
 
-async function rotate(page: Page, role: keyof typeof copy.en) {
+async function rotate(page: Page, role: keyof typeof copy.en): Promise<string> {
+  const sessionResponse = page.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().endsWith("/api/demo/sessions"),
+  );
   const button = page.getByRole("button", { name: copy[locale][role], exact: true });
   await button.click();
+  const response = await sessionResponse;
+  expect(response.status()).toBe(201);
   await expect(button).toHaveAttribute("aria-pressed", "true");
+  return String((await response.json() as { csrf_token: string }).csrf_token);
+}
+
+async function progress(
+  page: Page,
+  context: { case_id: string },
+  view: View,
+  csrf: string,
+  key: string,
+): Promise<View> {
+  const checkpoint = view.current_checkpoint;
+  expect(checkpoint).not.toBeNull();
+  const response = await page.request.post(
+    `/api/demo/timeline-executions/${view.execution.execution_id}/checkpoint-attestations`,
+    {
+      headers: {
+        Origin: ORIGIN,
+        "Content-Type": "application/json",
+        "X-CSRF-Token": csrf,
+        "Idempotency-Key": key,
+      },
+      data: {
+        schema_version: 1,
+        case_id: context.case_id,
+        checkpoint_id: checkpoint!.checkpoint_id,
+        expected_execution_version: view.execution.row_version,
+        expected_checkpoint_version: checkpoint!.row_version,
+        attestation_kind: "progress",
+        status_code: "work_in_progress",
+        attestation_code: `${checkpoint!.milestone_key}_status_confirmed`,
+        reason_code: "not_applicable",
+      },
+    },
+  );
+  expect(response.status()).toBe(200);
+  const fresh = await page.request.get(
+    `/api/demo/cases/${context.case_id}/timeline-execution`,
+  );
+  expect(fresh.status()).toBe(200);
+  return await fresh.json() as View;
 }
 
 test("complete governed plan execution browser-to-database proof", async ({ page }) => {
@@ -191,5 +250,197 @@ test("complete governed plan execution browser-to-database proof", async ({ page
     accepted_receipt_ids: acceptedReceiptIds,
     checkpoint_ids: checkpointIds,
     reassessment_request_id: null,
+  })}\n`, { encoding: "utf8", mode: 0o600 });
+});
+
+test("prove stale tab, shared session, envelope, and bounded activity", async ({
+  browser,
+  page,
+}) => {
+  test.skip(
+    !recoveryProofFile,
+    "runs only in the isolated plan execution recovery proof lane",
+  );
+
+  await page.goto("/demo/plan?scenario=happy");
+  let primaryCsrf = await rotate(page, "student");
+  const initialContext = await page.request.get(
+    "/api/demo/plan-execution-context",
+  );
+  expect(initialContext.status()).toBe(200);
+  const context = await initialContext.json() as {
+    case_id: string;
+    timeline_plan_id: string;
+    execution_id: string | null;
+  };
+  expect(context.execution_id).toBeNull();
+
+  const staleContext = await browser.newContext({ baseURL: ORIGIN });
+  const stalePage = await staleContext.newPage();
+  await stalePage.goto("/demo/plan?scenario=happy");
+  await rotate(stalePage, "student");
+
+  const started = await mutate(page, copy["zh-CN"].start, "/executions");
+  context.execution_id = started.receipt.execution_id;
+  let current = started.view;
+
+  const staleRecoverySession = stalePage.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().endsWith("/api/demo/sessions"),
+  );
+  await stalePage.reload();
+  expect((await staleRecoverySession).status()).toBe(201);
+  await expect(stalePage.getByRole("button", {
+    name: copy["zh-CN"].progress,
+    exact: true,
+  })).toBeVisible();
+
+  const firstProgress = await mutate(
+    page,
+    copy["zh-CN"].progress,
+    "/checkpoint-attestations",
+  );
+  current = firstProgress.view;
+
+  // stale second tab: its old row versions are rejected, then it closes to a fresh read.
+  const staleRejection = stalePage.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().includes("/checkpoint-attestations"),
+  );
+  await stalePage.getByRole("button", {
+    name: copy["zh-CN"].progress,
+    exact: true,
+  }).click();
+  const staleResponse = await staleRejection;
+  expect(staleResponse.status()).toBe(409);
+  const staleProblem = await staleResponse.json() as { code: string };
+  expect(staleProblem.code).toBe("stale_execution_version");
+  await expect(stalePage.getByRole("button", {
+    name: copy["zh-CN"].progress,
+    exact: true,
+  })).toBeEnabled();
+
+  for (let index = 0; index < 32; index += 1) {
+    current = await progress(
+      page,
+      context,
+      current,
+      primaryCsrf,
+      `00000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+    );
+  }
+  expect(current.activity_total).toBe(67);
+  expect(current.activity).toHaveLength(64);
+
+  const activityRecoverySession = page.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().endsWith("/api/demo/sessions"),
+  );
+  await page.reload();
+  primaryCsrf = String(
+    (await (await activityRecoverySession).json() as { csrf_token: string })
+      .csrf_token,
+  );
+  const activity = page.getByRole("heading", {
+    name: copy["zh-CN"].activity,
+  }).locator("..");
+  await expect(activity.getByRole("listitem")).toHaveCount(64);
+  await expect(activity.getByText("显示 64 / 67", { exact: true })).toBeVisible();
+
+  const blockedContext = await browser.newContext({ baseURL: ORIGIN });
+  const blockedPage = await blockedContext.newPage();
+  await blockedPage.goto("/demo/plan?scenario=blocked");
+  await rotate(blockedPage, "student");
+  const blockedAuthority = await blockedPage.request.get(
+    "/api/demo/plan-execution-context",
+  );
+  expect(blockedAuthority.status()).toBe(200);
+  const blockedCaseId = String(
+    (await blockedAuthority.json() as { case_id: string }).case_id,
+  );
+  await blockedContext.close();
+
+  let crossCasePosts = 0;
+  stalePage.on("request", (request) => {
+    if (request.method() === "POST") crossCasePosts += 1;
+  });
+  await stalePage.evaluate((caseId) => {
+    const key = "night-voyager:plan-execution:v1";
+    const raw = sessionStorage.getItem(key);
+    if (!raw) throw new Error("missing recovery envelope");
+    const envelope = JSON.parse(raw) as Record<string, unknown>;
+    envelope.caseId = caseId;
+    sessionStorage.setItem(key, JSON.stringify(envelope));
+  }, blockedCaseId);
+  // cross-Case envelope: server context rejects the stored identity with zero mutation.
+  await stalePage.reload();
+  await expect(stalePage.getByText(
+    "角色或执行 authority 已变化，请重新连接。",
+    { exact: true },
+  )).toBeVisible();
+  expect(crossCasePosts).toBe(0);
+
+  let releaseRead!: () => void;
+  const readRelease = new Promise<void>((resolve) => {
+    releaseRead = resolve;
+  });
+  let readStarted!: () => void;
+  const readInFlight = new Promise<void>((resolve) => {
+    readStarted = resolve;
+  });
+  let holdRead = true;
+  await page.route("**/timeline-execution", async (route) => {
+    if (!holdRead) {
+      await route.continue();
+      return;
+    }
+    holdRead = false;
+    const response = await route.fetch();
+    readStarted();
+    await readRelease;
+    await route.fulfill({ response });
+  });
+  const inFlightSession = page.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().endsWith("/api/demo/sessions"),
+  );
+  const reload = page.reload();
+  const refreshed = await inFlightSession;
+  primaryCsrf = String(
+    (await refreshed.json() as { csrf_token: string }).csrf_token,
+  );
+  await readInFlight;
+
+  // shared session rotation while read is in flight must close to session_changed.
+  const rotation = await page.request.post("/api/demo/sessions", {
+    headers: {
+      Origin: ORIGIN,
+      "Content-Type": "application/json",
+      "X-CSRF-Token": primaryCsrf,
+    },
+    data: { demo_actor: "plan_execution_happy_advisor" },
+  });
+  expect(rotation.status()).toBe(201);
+  releaseRead();
+  await reload;
+  await page.unroute("**/timeline-execution");
+  await expect(page.getByText(
+    "角色或执行 authority 已变化，请重新连接。",
+    { exact: true },
+  )).toBeVisible();
+
+  await staleContext.close();
+  await writeFile(recoveryProofFile!, `${JSON.stringify({
+    schema_version: 1,
+    scenario: "happy",
+    case_id: context.case_id,
+    timeline_plan_id: context.timeline_plan_id,
+    execution_id: context.execution_id,
+    stale_rejection_code: staleProblem.code,
+    session_changed: true,
+    cross_case_zero_mutation: crossCasePosts === 0,
+    zero_mutation: true,
+    activity_total: 67,
+    activity_visible: 64,
   })}\n`, { encoding: "utf8", mode: 0o600 });
 });

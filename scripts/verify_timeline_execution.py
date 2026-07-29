@@ -117,6 +117,46 @@ def _load_proof(path: Path) -> dict[str, Any]:
     return cast(dict[str, Any], value)
 
 
+def _load_recovery_proof(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError("plan execution recovery proof must be a regular file")
+    raw_value = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    if not isinstance(raw_value, dict):
+        raise RuntimeError("invalid plan execution recovery proof")
+    value = cast(dict[str, object], raw_value)
+    expected = {
+        "schema_version",
+        "scenario",
+        "case_id",
+        "timeline_plan_id",
+        "execution_id",
+        "stale_rejection_code",
+        "session_changed",
+        "cross_case_zero_mutation",
+        "zero_mutation",
+        "activity_total",
+        "activity_visible",
+    }
+    if (
+        set(value) != expected
+        or value["schema_version"] != 1
+        or value["scenario"] != "happy"
+        or value["stale_rejection_code"] != "stale_execution_version"
+        or value["session_changed"] is not True
+        or value["cross_case_zero_mutation"] is not True
+        or value["zero_mutation"] is not True
+        or value["activity_total"] != 67
+        or value["activity_visible"] != 64
+    ):
+        raise RuntimeError("invalid plan execution recovery proof")
+    try:
+        for key in ("case_id", "timeline_plan_id", "execution_id"):
+            UUID(str(value[key]))
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("invalid plan execution recovery proof") from error
+    return cast(dict[str, Any], value)
+
+
 async def _verify_seed(connection: AsyncConnection) -> None:
     for (
         scenario,
@@ -433,6 +473,94 @@ async def _verify_proof(connection: AsyncConnection, proof: dict[str, Any]) -> N
     )
 
 
+async def _verify_recovery_proof(
+    connection: AsyncConnection,
+    proof: dict[str, Any],
+) -> None:
+    if (
+        proof["case_id"] != str(PLAN_EXECUTION_CASE_ID)
+        or proof["timeline_plan_id"] != str(PLAN_EXECUTION_TIMELINE_ID)
+    ):
+        raise RuntimeError("plan execution recovery proof anchor mismatch")
+    execution_id = UUID(str(proof["execution_id"]))
+    exact = await connection.scalar(
+        text(
+            "SELECT "
+            "(SELECT count(*)=1 FROM app.timeline_executions "
+            "WHERE organization_id=:org AND id=:execution AND case_id=:case "
+            "AND timeline_plan_id=:timeline AND state='active') "
+            "AND (SELECT count(*)=33 FROM app.timeline_checkpoint_attestations "
+            "WHERE organization_id=:org AND execution_id=:execution "
+            "AND attestation_kind='progress' "
+            "AND status_code='work_in_progress' "
+            "AND reason_code='not_applicable') "
+            "AND (SELECT count(*)=34 FROM app.timeline_mutation_receipts "
+            "WHERE organization_id=:org AND execution_id=:execution) "
+            "AND (SELECT count(*)=1 FROM app.timeline_mutation_receipts "
+            "WHERE organization_id=:org AND execution_id=:execution "
+            "AND operation='start') "
+            "AND (SELECT count(*)=33 FROM app.timeline_mutation_receipts "
+            "WHERE organization_id=:org AND execution_id=:execution "
+            "AND operation='attest') "
+            "AND (SELECT count(*)=0 FROM app.timeline_checkpoint_verifications "
+            "WHERE organization_id=:org AND execution_id=:execution) "
+            "AND (SELECT count(*)=0 FROM app.timeline_reassessment_requests "
+            "WHERE organization_id=:org AND execution_id=:execution) "
+            "AND (SELECT count(*)=0 FROM app.timeline_executions "
+            "WHERE organization_id=:org AND case_id=:blocked_case) "
+            "AND (SELECT count(*)=67 FROM ("
+            "SELECT attestation_id AS durable_id "
+            "FROM app.timeline_checkpoint_attestations "
+            "WHERE organization_id=:org AND execution_id=:execution "
+            "UNION ALL SELECT receipt_id "
+            "FROM app.timeline_mutation_receipts "
+            "WHERE organization_id=:org AND execution_id=:execution"
+            ") activity)"
+        ),
+        {
+            "org": DEMO_ORG,
+            "execution": execution_id,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "blocked_case": BLOCKED_PLAN_EXECUTION_CASE_ID,
+            "timeline": PLAN_EXECUTION_TIMELINE_ID,
+        },
+    )
+    projection_value = cast(
+        object,
+        await connection.scalar(
+            text(
+                "SELECT app.read_timeline_execution("
+                ":org,:actor,'student',:case)"
+            ),
+            {
+                "org": DEMO_ORG,
+                "actor": PLAN_EXECUTION_HAPPY_ACTORS[1][2],
+                "case": PLAN_EXECUTION_CASE_ID,
+            },
+        ),
+    )
+    projection = (
+        cast(dict[str, object], projection_value)
+        if isinstance(projection_value, dict)
+        else {}
+    )
+    activity = projection.get("activity")
+    activity_values = cast(list[object], activity) if isinstance(activity, list) else []
+    if (
+        exact is not True
+        or projection.get("activity_total") != 67
+        or projection.get("activity_truncated") is not True
+        or not isinstance(activity, list)
+        or len(activity_values) != 64
+    ):
+        raise RuntimeError("plan execution recovery proof mismatch")
+    print(
+        "timeline execution recovery proof verified "
+        "stale_rejection=session_changed=cross_case_zero_mutation "
+        "activity=64/67"
+    )
+
+
 async def verify(expectation: str = "seed") -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
@@ -469,12 +597,39 @@ async def verify_proof(path: Path) -> None:
         await engine.dispose()
 
 
+async def verify_recovery_proof(path: Path) -> None:
+    proof = _load_recovery_proof(path)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "SELECT set_config("
+                    "'night_voyager.organization_id',:organization_id,true),"
+                    "set_config('night_voyager.actor_id',:actor_id,true),"
+                    "set_config('night_voyager.role','student',true)"
+                ),
+                {
+                    "organization_id": str(DEMO_ORG),
+                    "actor_id": str(PLAN_EXECUTION_HAPPY_ACTORS[1][2]),
+                },
+            )
+            await _verify_recovery_proof(connection, proof)
+    finally:
+        await engine.dispose()
+
+
 if __name__ == "__main__":
     cli = argparse.ArgumentParser(allow_abbrev=False)
     cli.add_argument("--expect", choices=("seed", "completed"), default="seed")
     cli.add_argument("--proof-file", type=Path)
+    cli.add_argument("--recovery-proof-file", type=Path)
     arguments = cli.parse_args()
-    if arguments.proof_file is not None:
+    if arguments.proof_file is not None and arguments.recovery_proof_file is not None:
+        raise SystemExit("choose exactly one proof file")
+    if arguments.recovery_proof_file is not None:
+        asyncio.run(verify_recovery_proof(arguments.recovery_proof_file))
+    elif arguments.proof_file is not None:
         asyncio.run(verify_proof(arguments.proof_file))
     else:
         asyncio.run(verify(str(arguments.expect)))

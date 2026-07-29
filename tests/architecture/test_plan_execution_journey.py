@@ -23,8 +23,46 @@ def test_browser_proof_closes_bilingual_happy_blocked_and_recovery_contract() ->
         "responseOrder",
     ):
         assert marker in source
-    for forbidden in ("case_id=", "sessionStorage.setItem"):
+    for forbidden in ("case_id=",):
         assert forbidden not in source
+    assert source.count("sessionStorage.setItem(key, JSON.stringify(envelope));") == 1
+
+
+def test_browser_database_proof_binds_every_recovery_counterfactual() -> None:
+    source = SPEC.read_text(encoding="utf-8")
+    verifier = VERIFIER.read_text(encoding="utf-8")
+    compose = COMPOSE_PROOF.read_text(encoding="utf-8")
+
+    for marker in (
+        "stale second tab",
+        "stale_execution_version",
+        "shared session rotation while read is in flight",
+        "session_changed",
+        "cross-Case envelope",
+        "activity_total",
+        "toHaveLength(64)",
+        "64",
+        "67",
+        "zero_mutation",
+        "PLAN_EXECUTION_RECOVERY_PROOF_FILE",
+    ):
+        assert marker in source
+    for marker in (
+        "recovery proof",
+        "stale_rejection_code",
+        "session_changed",
+        "cross_case_zero_mutation",
+        "activity_total",
+        "activity_visible",
+        "count(*)=33",
+        "count(*)=34",
+        "count(*)=67",
+        "'night_voyager.actor_id'",
+        "'night_voyager.role'",
+    ):
+        assert marker in verifier
+    assert "run_plan_execution_recovery_lane" in compose
+    assert "PLAN_EXECUTION_RECOVERY_PROOF_FILE" in compose
 
 
 def test_english_browser_proof_bootstraps_locale_before_first_navigation() -> None:
@@ -51,6 +89,15 @@ def test_english_blocked_action_matches_the_product_catalog() -> None:
     assert f'planExecutionRecordBlocked: "{action}"' in catalog
     assert source.count(f'blocked: "{action}"') == 1
     assert "Record blocked and stop this checkpoint" not in source
+
+
+def test_recovery_proof_uses_the_exact_session_changed_catalog_copy() -> None:
+    source = SPEC.read_text(encoding="utf-8")
+    catalog = CATALOG.read_text(encoding="utf-8")
+    message = "角色或执行 authority 已变化，请重新连接。"
+
+    assert f'planExecutionSessionChanged: "{message}"' in catalog
+    assert source.count(f'"{message}"') == 2
 
 
 def test_compose_runs_four_isolated_browser_database_lanes_and_cleans_proofs() -> None:

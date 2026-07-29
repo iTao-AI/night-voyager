@@ -39,12 +39,23 @@ decision, timeline, execution, task, provider, or model action is created.
 ## Recovery boundaries
 
 - Stale versions require a fresh server read before a new user action.
-- Role rotation or revocation invalidates in-flight controller generations.
+- Same-scenario role rotation uses the existing atomic session endpoint while
+  holding the controller lock. A rejected rotation leaves the prior session
+  intact; a successful shared-cookie rotation invalidates older in-flight
+  generations and closes their later continuations to `session_changed`.
 - Reload mints fresh CSRF in memory; session and CSRF values are never stored.
-- Malformed or cross-scenario envelopes are cleared and enable zero mutation.
+- Malformed, cross-scenario, or cross-Case envelopes are cleared and enable
+  zero mutation.
 - Activity returns the latest 64 rows plus exact total and truncation status.
 - Overdue state comes only from PostgreSQL `CURRENT_DATE`; the browser does not
   calculate or submit an authority date.
+
+Public recovery classification is closed: HTTP 401,
+`authentication_failed`, `bff_session_recovery_required`, and explicit
+`session_changed` enter `session_changed`; stale execution/checkpoint versions,
+non-current checkpoints, and already-completed executions discard the rejected
+slot and refresh authority; transport failures remain recoverable only through
+the exact saved body/key replay.
 
 ## Verification and cleanup
 
