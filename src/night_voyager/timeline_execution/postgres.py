@@ -23,6 +23,7 @@ from night_voyager.timeline_execution.models import (
     TimelineExecutionViewV1,
     TimelineMutationReceiptV1,
 )
+from night_voyager.timeline_execution.policy import derive_current_action
 from night_voyager.timeline_execution.ports import (
     AttestTimelineCheckpointCommand,
     RequestTimelineReassessmentCommand,
@@ -65,7 +66,12 @@ class PostgresTimelineExecutionRepository:
                 "case": case_id,
             },
         )
-        return self._decode_optional(TimelineExecutionViewV1, raw)
+        view = self._decode_optional(TimelineExecutionViewV1, raw)
+        if view is not None and derive_current_action(view) != view.current_action:
+            raise TimelineExecutionProjectionError(
+                "timeline execution current action is contradictory"
+            )
+        return view
 
     async def start(
         self,
@@ -75,12 +81,15 @@ class PostgresTimelineExecutionRepository:
     ) -> TimelineMutationReceiptV1:
         raw = await self._call(
             "SELECT app.start_timeline_execution("
-            ":org,:actor,:role,:timeline,:execution,:receipt,:key_hash,:request_hash)",
+            ":org,:actor,:role,:timeline,:case,:case_revision,"
+            ":execution,:receipt,:key_hash,:request_hash)",
             {
                 "org": actor.organization_id,
                 "actor": actor.actor_id,
                 "role": actor.role,
                 "timeline": command.timeline_plan_id,
+                "case": command.case_id,
+                "case_revision": command.expected_case_revision,
                 "execution": command.execution_id,
                 "receipt": command.receipt_id,
                 "key_hash": self._key_hash(idempotency_key),
@@ -136,13 +145,14 @@ class PostgresTimelineExecutionRepository:
     ) -> TimelineMutationReceiptV1:
         raw = await self._call(
             "SELECT app.verify_timeline_checkpoint("
-            ":org,:actor,:role,:execution,:checkpoint,:attestation,"
+            ":org,:actor,:role,:case,:execution,:checkpoint,:attestation,"
             ":execution_version,:checkpoint_version,:action,:reason_code,"
             ":verification,:receipt,:key_hash,:request_hash)",
             {
                 "org": actor.organization_id,
                 "actor": actor.actor_id,
                 "role": actor.role,
+                "case": command.case_id,
                 "execution": command.execution_id,
                 "checkpoint": command.checkpoint_id,
                 "attestation": command.attestation_id,
@@ -170,13 +180,14 @@ class PostgresTimelineExecutionRepository:
     ) -> TimelineMutationReceiptV1:
         raw = await self._call(
             "SELECT app.request_timeline_reassessment("
-            ":org,:actor,:role,:execution,:checkpoint,:trigger_reference,"
+            ":org,:actor,:role,:case,:execution,:checkpoint,:trigger_reference,"
             ":execution_version,:checkpoint_version,:trigger,:reassessment,"
             ":receipt,:key_hash,:request_hash)",
             {
                 "org": actor.organization_id,
                 "actor": actor.actor_id,
                 "role": actor.role,
+                "case": command.case_id,
                 "execution": command.execution_id,
                 "checkpoint": command.checkpoint_id,
                 "trigger_reference": command.trigger_reference_id,
@@ -204,8 +215,21 @@ class PostgresTimelineExecutionRepository:
                 raise TimelineExecutionUnavailableError(
                     "execution authority unavailable"
                 ) from error
-            if sqlstate in {"NV006", "NV008", "23505", "40001"}:
-                raise TimelineExecutionConflictError(str(sqlstate)) from error
+            conflict_codes = {
+                "NV006": "checkpoint_not_current",
+                "NV008": "idempotency_conflict",
+                "NV020": "stale_execution_version",
+                "NV021": "stale_checkpoint_version",
+                "NV022": "execution_completed",
+                "NV023": "checkpoint_not_current",
+                "NV024": "checkpoint_attestation_conflict",
+                "NV025": "advisor_verification_required",
+                "NV026": "reassessment_required",
+                "23505": "checkpoint_not_current",
+                "40001": "stale_execution_version",
+            }
+            if sqlstate in conflict_codes:
+                raise TimelineExecutionConflictError(conflict_codes[str(sqlstate)]) from error
             raise
 
     @staticmethod

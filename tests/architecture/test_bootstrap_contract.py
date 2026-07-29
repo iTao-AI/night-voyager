@@ -274,6 +274,21 @@ def test_database_runner_distinguishes_current_head_from_historical_0013_lanes()
     assert script.count("uv run alembic current | grep '0013'") == 3
 
 
+def test_default_database_gate_runs_every_timeline_execution_lane() -> None:
+    script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    default_lanes = script.split('if [ -n "${1:-}" ]; then', 1)[1]
+    for suffix, inside in (
+        ("timeline-execution-migration", "inside-timeline-execution-migration"),
+        ("timeline-execution-authority", "inside-timeline-execution-authority"),
+        ("timeline-execution-http", "inside-timeline-execution-http"),
+        ("timeline-execution-seed", "inside-timeline-execution-seed"),
+    ):
+        assert (
+            f'run_lane "${{BASE_PROJECT_NAME}}-{suffix}" {inside}'
+            in default_lanes
+        )
+
+
 def test_planning_persistence_tests_separate_internal_writer_from_api_denial() -> None:
     source = (
         ROOT / "tests/integration/planning/test_postgres_planning.py"

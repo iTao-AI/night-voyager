@@ -161,7 +161,7 @@ TIMELINE_EXECUTION_FUNCTION_IDENTITIES = {
     ("read_timeline_execution", "uuid, uuid, text, uuid"),
     (
         "start_timeline_execution",
-        "uuid, uuid, text, uuid, uuid, uuid, text, text",
+        "uuid, uuid, text, uuid, uuid, integer, uuid, uuid, text, text",
     ),
     (
         "attest_timeline_checkpoint",
@@ -170,12 +170,12 @@ TIMELINE_EXECUTION_FUNCTION_IDENTITIES = {
     ),
     (
         "verify_timeline_checkpoint",
-        "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, text, "
+        "uuid, uuid, text, uuid, uuid, uuid, uuid, integer, integer, text, text, "
         "uuid, uuid, text, text",
     ),
     (
         "request_timeline_reassessment",
-        "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, uuid, "
+        "uuid, uuid, text, uuid, uuid, uuid, uuid, integer, integer, text, uuid, "
         "uuid, text, text",
     ),
 }
@@ -1210,10 +1210,20 @@ def verify_alembic_contract() -> None:
         "inside-planning-revision-seed-migration": 3,
         "tests/integration/planning/test_revision_seed_migration.py": 4,
         'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
-        "inside-timeline-execution-migration": 2,
-        "inside-timeline-execution-authority": 2,
-        "inside-timeline-execution-http": 2,
-        "inside-timeline-execution-seed": 2,
+        "inside-timeline-execution-migration": 3,
+        "inside-timeline-execution-authority": 3,
+        "inside-timeline-execution-http": 3,
+        "inside-timeline-execution-seed": 3,
+        (
+            'run_lane "${BASE_PROJECT_NAME}-timeline-execution-migration" '
+            "inside-timeline-execution-migration"
+        ): 1,
+        (
+            'run_lane "${BASE_PROJECT_NAME}-timeline-execution-authority" '
+            "inside-timeline-execution-authority"
+        ): 1,
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http': 1,
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed': 1,
         "tests/integration/timeline_execution/test_seed.py": 1,
         "tests/integration/planning/test_revision_migration.py": 1,
         "tests/integration/planning/test_revision_authority.py": 1,

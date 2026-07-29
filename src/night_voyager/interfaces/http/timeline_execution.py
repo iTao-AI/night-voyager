@@ -162,17 +162,7 @@ def create_timeline_execution_router(
                 "execution projection unavailable",
             )
         except TimelineExecutionConflictError as error:
-            code = (
-                "idempotency_conflict"
-                if error.code == "NV008"
-                else {
-                    "start": "checkpoint_not_current",
-                    "attest": "checkpoint_attestation_conflict",
-                    "verify": "advisor_verification_required",
-                    "reassess": "reassessment_required",
-                }[operation]
-            )
-            return problem(409, code, "request conflicts with current state")
+            return problem(409, error.code, "request conflicts with current state")
         return receipt.model_dump(mode="json")
 
     @router.get("/plan-execution-context", response_model=None)

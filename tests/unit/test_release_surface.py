@@ -483,6 +483,12 @@ def test_release_verifier_rejects_alembic_head_mutation(
         "inside-dra-live-migration",
         "tests/integration/dra/test_dra_live_migration.py",
         'run_lane "${BASE_PROJECT_NAME}-dra-live-migration"',
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-migration" '
+        "inside-timeline-execution-migration",
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-authority" '
+        "inside-timeline-execution-authority",
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http',
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed',
     ),
 )
 def test_release_verifier_rejects_missing_planning_start_gate_node(

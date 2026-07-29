@@ -1,12 +1,19 @@
 # ruff: noqa: E501
 from __future__ import annotations
 
+import asyncio
 import os
 from uuid import UUID
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
+
+from night_voyager.identity.demo_seed import (
+    PLAN_EXECUTION_CASE_ID,
+    PLAN_EXECUTION_TIMELINE_ID,
+)
 
 pytestmark = pytest.mark.database
 
@@ -26,6 +33,10 @@ ATTESTATION = UUID("95200000-0000-0000-0000-000000000001")
 ATTEST_RECEIPT = UUID("95300000-0000-0000-0000-000000000001")
 REASSESSMENT = UUID("95400000-0000-0000-0000-000000000001")
 REASSESS_RECEIPT = UUID("95500000-0000-0000-0000-000000000001")
+
+
+def sqlstate(error: DBAPIError) -> str | None:
+    return getattr(error.orig, "sqlstate", None)
 
 
 async def set_actor(
@@ -122,13 +133,14 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
             first = await connection.scalar(
                 text(
                     "SELECT app.start_timeline_execution("
-                    ":org,:actor,'student',:timeline,:execution,:receipt,"
+                    ":org,:actor,'student',:timeline,:case,1,:execution,:receipt,"
                     "repeat('a',64),repeat('b',64))"
                 ),
                 {
                     "org": ORG,
                     "actor": STUDENT,
                     "timeline": TIMELINE,
+                    "case": CASE,
                     "execution": EXECUTION,
                     "receipt": START_RECEIPT,
                 },
@@ -136,10 +148,11 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
             replay = await connection.scalar(
                 text(
                     "SELECT app.start_timeline_execution("
-                    ":org,:actor,'student',:timeline,gen_random_uuid(),gen_random_uuid(),"
+                    ":org,:actor,'student',:timeline,:case,1,"
+                    "gen_random_uuid(),gen_random_uuid(),"
                     "repeat('a',64),repeat('b',64))"
                 ),
-                {"org": ORG, "actor": STUDENT, "timeline": TIMELINE},
+                {"org": ORG, "actor": STUDENT, "timeline": TIMELINE, "case": CASE},
             )
             assert first == replay
             checkpoints = (
@@ -182,13 +195,14 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
             reassessed = await connection.scalar(
                 text(
                     "SELECT app.request_timeline_reassessment("
-                    ":org,:actor,'advisor',:execution,:checkpoint,:attestation,2,2,"
+                    ":org,:actor,'advisor',:case,:execution,:checkpoint,:attestation,2,2,"
                     "'blocked_attestation',:reassessment,:receipt,"
                     "repeat('e',64),repeat('f',64))"
                 ),
                 {
                     "org": ORG,
                     "actor": ADVISOR,
+                    "case": CASE,
                     "execution": EXECUTION,
                     "checkpoint": checkpoint_id,
                     "attestation": ATTESTATION,
@@ -225,3 +239,263 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
     finally:
         await api.dispose()
         await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_same_key_start_returns_the_original_receipt() -> None:
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    condition = asyncio.Condition()
+    ready = 0
+
+    async def start(execution: UUID, receipt: UUID) -> object:
+        nonlocal ready
+        async with api.begin() as connection:
+            await set_actor(connection, STUDENT, "student")
+            async with condition:
+                ready += 1
+                if ready == 2:
+                    condition.notify_all()
+                else:
+                    await condition.wait_for(lambda: ready == 2)
+            return await connection.scalar(
+                text(
+                    "SELECT app.start_timeline_execution("
+                    ":org,:actor,'student',:timeline,:case,1,:execution,:receipt,"
+                    "repeat('1',64),repeat('2',64))"
+                ),
+                {
+                    "org": ORG,
+                    "actor": STUDENT,
+                    "timeline": PLAN_EXECUTION_TIMELINE_ID,
+                    "case": PLAN_EXECUTION_CASE_ID,
+                    "execution": execution,
+                    "receipt": receipt,
+                },
+            )
+
+    try:
+        first, second = await asyncio.gather(
+            start(UUID(int=1001), UUID(int=1002)),
+            start(UUID(int=1003), UUID(int=1004)),
+        )
+        assert first == second
+        async with api.connect() as connection:
+            await set_actor(connection, STUDENT, "student")
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) FROM app.timeline_executions "
+                        "WHERE organization_id=:org AND timeline_plan_id=:timeline"
+                    ),
+                    {"org": ORG, "timeline": PLAN_EXECUTION_TIMELINE_ID},
+                )
+                == 1
+            )
+    finally:
+        await api.dispose()
+
+
+@pytest.mark.asyncio
+async def test_deadline_reassessment_rejects_an_overdue_future_checkpoint() -> None:
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await set_actor(connection, STUDENT, "student")
+            execution = await connection.scalar(
+                text(
+                    "SELECT id FROM app.timeline_executions "
+                    "WHERE organization_id=:org AND timeline_plan_id=:timeline"
+                ),
+                {"org": ORG, "timeline": PLAN_EXECUTION_TIMELINE_ID},
+            )
+            future = await connection.scalar(
+                text(
+                    "UPDATE app.timeline_checkpoints SET due_date=CURRENT_DATE-1 "
+                    "WHERE organization_id=:org AND execution_id=:execution "
+                    "AND ordinal=2 RETURNING id"
+                ),
+                {"org": ORG, "execution": execution},
+            )
+        async with api.begin() as connection:
+            await set_actor(connection, ADVISOR, "advisor")
+            with pytest.raises(DBAPIError) as failure:
+                await connection.scalar(
+                    text(
+                        "SELECT app.request_timeline_reassessment("
+                        ":org,:actor,'advisor',:case,:execution,:checkpoint,NULL,1,1,"
+                        "'deadline_elapsed',gen_random_uuid(),gen_random_uuid(),"
+                        "repeat('3',64),repeat('4',64))"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "case": PLAN_EXECUTION_CASE_ID,
+                        "execution": execution,
+                        "checkpoint": future,
+                    },
+                )
+            assert sqlstate(failure.value) == "NV023", str(failure.value)
+    finally:
+        await api.dispose()
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_read_rejects_two_executions_for_one_case() -> None:
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with migrator.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                await set_actor(connection, STUDENT, "student")
+                await connection.execute(
+                    text(
+                        "ALTER TABLE app.timeline_executions DROP CONSTRAINT "
+                        "timeline_executions_organization_id_timeline_plan_id_key"
+                    ),
+                )
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.timeline_executions("
+                        "organization_id,id,case_id,case_revision,family_decision_id,"
+                        "decision_receipt_id,timeline_plan_id,schema_version,state,row_version) "
+                        "SELECT organization_id,:execution,case_id,case_revision,"
+                        "family_decision_id,decision_receipt_id,timeline_plan_id,"
+                        "1,'active',1 "
+                        "FROM app.timeline_executions WHERE organization_id=:org "
+                        "AND timeline_plan_id=:source"
+                    ),
+                    {
+                        "org": ORG,
+                        "execution": UUID(int=1011),
+                        "source": PLAN_EXECUTION_TIMELINE_ID,
+                    },
+                )
+                with pytest.raises(DBAPIError) as failure:
+                    await connection.scalar(
+                        text(
+                            "SELECT app.read_timeline_execution("
+                            ":org,:actor,'student',:case)"
+                        ),
+                        {
+                            "org": ORG,
+                            "actor": STUDENT,
+                            "case": PLAN_EXECUTION_CASE_ID,
+                        },
+                    )
+                assert sqlstate(failure.value) == "NV006"
+            finally:
+                await transaction.rollback()
+    finally:
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_verification_rejects_an_attestation_from_another_checkpoint() -> None:
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with migrator.connect() as connection:
+            transaction = await connection.begin()
+            try:
+                await set_actor(connection, ADVISOR, "advisor")
+                second = await connection.scalar(
+                    text(
+                        "SELECT id FROM app.timeline_checkpoints "
+                        "WHERE organization_id=:org AND execution_id=:execution "
+                        "AND ordinal=2"
+                    ),
+                    {"org": ORG, "execution": EXECUTION},
+                )
+                with pytest.raises(DBAPIError) as failure:
+                    await connection.execute(
+                        text(
+                            "INSERT INTO app.timeline_checkpoint_verifications("
+                            "organization_id,verification_id,execution_id,checkpoint_id,"
+                            "attestation_id,advisor_actor_id,action,reason_code,"
+                            "observed_execution_version,observed_checkpoint_version,"
+                            "request_sha256) VALUES("
+                            ":org,gen_random_uuid(),:execution,:checkpoint,:attestation,"
+                            ":advisor,'verify','attestation_verified',2,1,repeat('5',64))"
+                        ),
+                        {
+                            "org": ORG,
+                            "execution": EXECUTION,
+                            "checkpoint": second,
+                            "attestation": ATTESTATION,
+                            "advisor": ADVISOR,
+                        },
+                    )
+                assert sqlstate(failure.value) == "23503"
+            finally:
+                await transaction.rollback()
+    finally:
+        await migrator.dispose()
+
+
+@pytest.mark.asyncio
+async def test_postgresql_binds_case_revision_and_multi_assignment_subject() -> None:
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    try:
+        for supplied_case, revision, expected in (
+            (CASE, 1, "NV003"),
+            (PLAN_EXECUTION_CASE_ID, 2, "NV020"),
+        ):
+            async with api.begin() as connection:
+                await set_actor(connection, STUDENT, "student")
+                with pytest.raises(DBAPIError) as failure:
+                    await connection.scalar(
+                        text(
+                            "SELECT app.start_timeline_execution("
+                            ":org,:actor,'student',:timeline,:case,:revision,"
+                            "gen_random_uuid(),gen_random_uuid(),"
+                            "repeat('6',64),repeat('7',64))"
+                        ),
+                        {
+                            "org": ORG,
+                            "actor": STUDENT,
+                            "timeline": PLAN_EXECUTION_TIMELINE_ID,
+                            "case": supplied_case,
+                            "revision": revision,
+                        },
+                    )
+                assert sqlstate(failure.value) == expected
+
+        async with api.begin() as connection:
+            await set_actor(connection, ADVISOR, "advisor")
+            assigned_cases = await connection.scalar(
+                text(
+                    "SELECT count(DISTINCT case_id) "
+                    "FROM app.student_case_participants "
+                    "WHERE organization_id=:org AND actor_id=:actor "
+                    "AND role='advisor' AND case_id IN (:case,:other_case)"
+                ),
+                {
+                    "org": ORG,
+                    "actor": ADVISOR,
+                    "case": CASE,
+                    "other_case": PLAN_EXECUTION_CASE_ID,
+                },
+            )
+            assert assigned_cases == 2
+            with pytest.raises(DBAPIError) as failure:
+                await connection.scalar(
+                    text(
+                        "SELECT app.request_timeline_reassessment("
+                        ":org,:actor,'advisor',:wrong_case,:execution,:checkpoint,"
+                        ":attestation,2,2,'blocked_attestation',"
+                        "gen_random_uuid(),gen_random_uuid(),"
+                        "repeat('8',64),repeat('9',64))"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "wrong_case": PLAN_EXECUTION_CASE_ID,
+                        "execution": EXECUTION,
+                        "checkpoint": UUID(int=1),
+                        "attestation": ATTESTATION,
+                    },
+                )
+            assert sqlstate(failure.value) == "NV003"
+    finally:
+        await api.dispose()

@@ -252,6 +252,7 @@ class TimelineExecutionViewV1(FrozenModel):
     latest_attestation: TimelineCheckpointAttestationV1 | None
     latest_verification: TimelineCheckpointVerificationV1 | None
     reassessment: TimelineReassessmentRequestV1 | None
+    current_action: TimelineCurrentActionV1
     observed_date: date
     activity: tuple[TimelineActivityItemV1, ...]
     activity_total: int

@@ -63,10 +63,19 @@ export interface TimelineActivity {
   kind: "attestation_recorded" | "verification_recorded" | "reassessment_recorded" | "mutation_receipt_recorded";
   durable_id: string; execution_id: string; checkpoint_id: string | null; created_at: string;
 }
+export interface TimelineCurrentAction {
+  schema_version: 1;
+  code: "checkpoint_attestation_required" | "advisor_verification_required" | "execution_completed" | "reassessment_handoff_required";
+  owner_role: "advisor" | "student" | "parent" | "none";
+  checkpoint_id: string | null;
+  execution_version: number;
+  checkpoint_version: number | null;
+}
 export interface TimelineExecutionView {
   schema_version: 1; execution: TimelineExecution; checkpoints: TimelineCheckpoint[];
   current_checkpoint: TimelineCheckpoint | null; latest_attestation: TimelineAttestation | null;
   latest_verification: TimelineVerification | null; reassessment: TimelineReassessment | null;
+  current_action: TimelineCurrentAction;
   observed_date: string; activity: TimelineActivity[]; activity_total: number;
   activity_truncated: boolean;
 }
@@ -146,6 +155,14 @@ function reassessment(value: unknown): value is TimelineReassessment {
     && value.owner_role === "advisor" && value.successor_status === "pending_future_authorization"
     && timestamp(value.created_at);
 }
+function currentAction(value: unknown): value is TimelineCurrentAction {
+  if (!object(value) || !exact(value, ["schema_version", "code", "owner_role", "checkpoint_id", "execution_version", "checkpoint_version"])) return false;
+  return value.schema_version === 1
+    && oneOf(value.code, ["checkpoint_attestation_required", "advisor_verification_required", "execution_completed", "reassessment_handoff_required"])
+    && oneOf(value.owner_role, ["advisor", "student", "parent", "none"])
+    && nullableUuid(value.checkpoint_id) && positive(value.execution_version)
+    && (value.checkpoint_version === null || positive(value.checkpoint_version));
+}
 
 export function parsePlanExecutionContext(value: unknown): PlanExecutionContext {
   if (!object(value) || !exact(value, ["schema_version", "scenario", "case_id", "case_revision", "decision_id", "decision_receipt_id", "timeline_plan_id", "execution_id", "active_role", "assignment_status"])
@@ -158,7 +175,7 @@ export function parsePlanExecutionContext(value: unknown): PlanExecutionContext 
 }
 
 export function parseTimelineExecutionView(value: unknown): TimelineExecutionView {
-  if (!object(value) || !exact(value, ["schema_version", "execution", "checkpoints", "current_checkpoint", "latest_attestation", "latest_verification", "reassessment", "observed_date", "activity", "activity_total", "activity_truncated"]) || value.schema_version !== 1) throw new Error("invalid timeline execution view");
+  if (!object(value) || !exact(value, ["schema_version", "execution", "checkpoints", "current_checkpoint", "latest_attestation", "latest_verification", "reassessment", "current_action", "observed_date", "activity", "activity_total", "activity_truncated"]) || value.schema_version !== 1) throw new Error("invalid timeline execution view");
   const execution = value.execution;
   if (!object(execution) || !exact(execution, ["schema_version", "execution_id", "case_id", "case_revision", "decision_id", "decision_receipt_id", "timeline_plan_id", "state", "row_version", "created_at", "updated_at"])
     || execution.schema_version !== 1 || !uuid(execution.execution_id) || !uuid(execution.case_id)
@@ -171,6 +188,7 @@ export function parseTimelineExecutionView(value: unknown): TimelineExecutionVie
     || (value.latest_attestation !== null && !attestation(value.latest_attestation))
     || (value.latest_verification !== null && !verification(value.latest_verification))
     || (value.reassessment !== null && !reassessment(value.reassessment))
+    || !currentAction(value.current_action)
     || !date(value.observed_date) || !Array.isArray(value.activity)
     || !value.activity.every((item) => object(item)
       && exact(item, ["schema_version", "kind", "durable_id", "execution_id", "checkpoint_id", "created_at"])
@@ -178,10 +196,57 @@ export function parseTimelineExecutionView(value: unknown): TimelineExecutionVie
       && oneOf(item.kind, ["attestation_recorded", "verification_recorded", "reassessment_recorded", "mutation_receipt_recorded"])
       && uuid(item.durable_id) && uuid(item.execution_id) && nullableUuid(item.checkpoint_id)
       && timestamp(item.created_at))
+    || value.activity.length > 64
     || !nonnegative(value.activity_total) || typeof value.activity_truncated !== "boolean"
     || Number(value.activity_total) < value.activity.length
     || value.activity_truncated !== (Number(value.activity_total) > value.activity.length)) throw new Error("invalid timeline execution view");
-  return value as unknown as TimelineExecutionView;
+  const view = value as unknown as TimelineExecutionView;
+  const milestones = ["documents", "application", "visa", "arrival"] as const;
+  const roles = ["student", "student", "student", "parent"] as const;
+  if (view.checkpoints.length !== 4 || view.checkpoints.some((item, index) =>
+    item.execution_id !== view.execution.execution_id
+    || item.ordinal !== index + 1
+    || item.milestone_key !== milestones[index]
+    || item.accountable_role !== roles[index]
+  )) throw new Error("invalid timeline execution view");
+  const checkpointIds = new Set(view.checkpoints.map((item) => item.checkpoint_id));
+  const current = view.checkpoints.filter((item) => !["pending", "verified"].includes(item.state));
+  if ((view.current_checkpoint !== null
+      && (!checkpointIds.has(view.current_checkpoint.checkpoint_id)
+        || JSON.stringify(view.current_checkpoint) !== JSON.stringify(
+          view.checkpoints.find((item) => item.checkpoint_id === view.current_checkpoint?.checkpoint_id),
+        )))
+    || (view.execution.state === "active" && (current.length !== 1 || view.current_checkpoint?.checkpoint_id !== current[0]?.checkpoint_id))
+    || (view.execution.state === "completed" && (current.length !== 0 || view.current_checkpoint !== null || view.checkpoints.some((item) => item.state !== "verified")))
+    || (view.execution.state === "reassessment_required" && view.reassessment === null)
+  ) throw new Error("invalid timeline execution view");
+  if ((view.latest_attestation !== null
+      && (view.latest_attestation.execution_id !== view.execution.execution_id
+        || !checkpointIds.has(view.latest_attestation.checkpoint_id)))
+    || (view.latest_verification !== null
+      && (view.latest_verification.execution_id !== view.execution.execution_id
+        || !checkpointIds.has(view.latest_verification.checkpoint_id)))
+    || (view.reassessment !== null
+      && (view.reassessment.execution_id !== view.execution.execution_id
+        || !checkpointIds.has(view.reassessment.checkpoint_id)
+        || view.reassessment.predecessor_execution_id !== view.execution.execution_id
+        || view.reassessment.predecessor_checkpoint_id !== view.reassessment.checkpoint_id))
+    || view.activity.some((item) =>
+      item.execution_id !== view.execution.execution_id
+      || (item.checkpoint_id !== null && !checkpointIds.has(item.checkpoint_id)))
+  ) throw new Error("invalid timeline execution view");
+  const sortedActivity = [...view.activity].sort((left, right) =>
+    right.created_at.localeCompare(left.created_at) || right.durable_id.localeCompare(left.durable_id));
+  if (view.activity.some((item, index) => item !== sortedActivity[index])) throw new Error("invalid timeline execution view");
+  const expectedAction: TimelineCurrentAction = view.execution.state === "completed"
+    ? { schema_version: 1, code: "execution_completed", owner_role: "none", checkpoint_id: null, execution_version: view.execution.row_version, checkpoint_version: null }
+    : view.execution.state === "reassessment_required" || view.current_checkpoint?.state === "blocked"
+      ? { schema_version: 1, code: "reassessment_handoff_required", owner_role: "advisor", checkpoint_id: view.current_checkpoint?.checkpoint_id ?? null, execution_version: view.execution.row_version, checkpoint_version: view.current_checkpoint?.row_version ?? null }
+      : view.current_checkpoint?.state === "awaiting_advisor"
+        ? { schema_version: 1, code: "advisor_verification_required", owner_role: "advisor", checkpoint_id: view.current_checkpoint.checkpoint_id, execution_version: view.execution.row_version, checkpoint_version: view.current_checkpoint.row_version }
+        : { schema_version: 1, code: "checkpoint_attestation_required", owner_role: view.current_checkpoint?.accountable_role ?? "none", checkpoint_id: view.current_checkpoint?.checkpoint_id ?? null, execution_version: view.execution.row_version, checkpoint_version: view.current_checkpoint?.row_version ?? null };
+  if (JSON.stringify(view.current_action) !== JSON.stringify(expectedAction)) throw new Error("invalid timeline execution view");
+  return view;
 }
 
 export function parseTimelineMutationReceipt(value: unknown): TimelineMutationReceipt {

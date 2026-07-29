@@ -24,10 +24,10 @@ TABLES = (
 FUNCTION_SIGNATURES = (
     "app.read_plan_execution_context(uuid,uuid,text,text)",
     "app.read_timeline_execution(uuid,uuid,text,uuid)",
-    "app.start_timeline_execution(uuid,uuid,text,uuid,uuid,uuid,text,text)",
+    "app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text)",
     "app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text)",
-    "app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text)",
-    "app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text)",
+    "app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text)",
+    "app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text)",
 )
 
 UPGRADE_SQL = r"""
@@ -100,6 +100,7 @@ CREATE TABLE app.timeline_checkpoint_attestations (
   request_sha256 text NOT NULL CHECK (request_sha256 ~ '^[0-9a-f]{64}$'),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (organization_id,attestation_id),
+  UNIQUE (organization_id,execution_id,checkpoint_id,attestation_id),
   FOREIGN KEY (organization_id,execution_id,checkpoint_id)
     REFERENCES app.timeline_checkpoints(organization_id,execution_id,id),
   FOREIGN KEY (organization_id,reporter_actor_id,reporter_role)
@@ -122,8 +123,10 @@ CREATE TABLE app.timeline_checkpoint_verifications (
   PRIMARY KEY (organization_id,verification_id),
   FOREIGN KEY (organization_id,execution_id,checkpoint_id)
     REFERENCES app.timeline_checkpoints(organization_id,execution_id,id),
-  FOREIGN KEY (organization_id,attestation_id)
-    REFERENCES app.timeline_checkpoint_attestations(organization_id,attestation_id),
+  FOREIGN KEY (organization_id,execution_id,checkpoint_id,attestation_id)
+    REFERENCES app.timeline_checkpoint_attestations(
+      organization_id,execution_id,checkpoint_id,attestation_id
+    ),
   FOREIGN KEY (organization_id,advisor_actor_id)
     REFERENCES app.actors(organization_id,id)
 );
@@ -259,31 +262,31 @@ BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution projecti
 CREATE FUNCTION app.read_timeline_execution(p_org uuid,p_actor uuid,p_role text,p_case uuid)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution projection unavailable'; END; $$;
-CREATE FUNCTION app.start_timeline_execution(p_org uuid,p_actor uuid,p_role text,p_timeline uuid,p_execution uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE FUNCTION app.start_timeline_execution(p_org uuid,p_actor uuid,p_role text,p_timeline uuid,p_case uuid,p_expected_case_revision integer,p_execution uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation unavailable'; END; $$;
 CREATE FUNCTION app.attest_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_kind text,p_status text,p_attestation_code text,p_reason_code text,p_attestation uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation unavailable'; END; $$;
-CREATE FUNCTION app.verify_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_attestation uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_action text,p_reason_code text,p_verification uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE FUNCTION app.verify_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_attestation uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_action text,p_reason_code text,p_verification uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation unavailable'; END; $$;
-CREATE FUNCTION app.request_timeline_reassessment(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_trigger_reference uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_trigger text,p_reassessment uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE FUNCTION app.request_timeline_reassessment(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_trigger_reference uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_trigger text,p_reassessment uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation unavailable'; END; $$;
 
 REVOKE ALL ON FUNCTION app.read_plan_execution_context(uuid,uuid,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.read_timeline_execution(uuid,uuid,text,uuid) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.start_timeline_execution(uuid,uuid,text,uuid,uuid,uuid,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.read_plan_execution_context(uuid,uuid,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.read_timeline_execution(uuid,uuid,text,uuid) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION app.start_timeline_execution(uuid,uuid,text,uuid,uuid,uuid,text,text) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text) TO night_voyager_api;
 GRANT SELECT ON app.timeline_executions,app.timeline_checkpoints,
   app.timeline_checkpoint_attestations,app.timeline_checkpoint_verifications,
   app.timeline_reassessment_requests,app.timeline_mutation_receipts
@@ -337,7 +340,7 @@ BEGIN
   RETURN v_result;
 END; $$;
 
-CREATE OR REPLACE FUNCTION app.start_timeline_execution(p_org uuid,p_actor uuid,p_role text,p_timeline uuid,p_execution uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE OR REPLACE FUNCTION app.start_timeline_execution(p_org uuid,p_actor uuid,p_role text,p_timeline uuid,p_case uuid,p_expected_case_revision integer,p_execution uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   v_anchor record;
@@ -346,31 +349,17 @@ DECLARE
   v_now timestamptz := clock_timestamp();
   v_result jsonb;
 BEGIN
-  IF p_role NOT IN ('student','parent') OR p_timeline IS NULL
+  IF p_role NOT IN ('student','parent') OR p_timeline IS NULL OR p_case IS NULL
+     OR p_expected_case_revision<=0
      OR p_execution IS NULL OR p_receipt IS NULL
      OR p_key_hash !~ '^[0-9a-f]{64}$'
      OR p_request_hash !~ '^[0-9a-f]{64}$' THEN
     RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='invalid timeline execution start';
   END IF;
   PERFORM app.assert_m3b_context(p_org,p_actor,p_role);
-  SELECT t.id AS timeline_id,t.milestones,d.id AS decision_id,d.receipt_id,
-         d.case_id,c.current_revision
-    INTO v_anchor
-    FROM app.timeline_plans t
-    JOIN app.family_decisions d
-      ON (d.organization_id,d.id)=(t.organization_id,t.family_decision_id)
-    JOIN app.student_cases c
-      ON (c.organization_id,c.id)=(d.organization_id,d.case_id)
-    JOIN app.student_case_participants participant
-      ON participant.organization_id=d.organization_id
-     AND participant.case_id=d.case_id
-     AND participant.actor_id=p_actor
-     AND participant.role=p_role
-   WHERE t.organization_id=p_org AND t.id=p_timeline
-   FOR SHARE OF t,d,c;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution target unavailable';
-  END IF;
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    p_org::text||':'||p_actor::text||':timeline_execution_start:'||p_key_hash,0
+  ));
   SELECT * INTO v_prior FROM app.idempotency_records
    WHERE organization_id=p_org AND actor_id=p_actor
      AND operation='timeline_execution_start' AND key_sha256=p_key_hash;
@@ -394,6 +383,30 @@ BEGIN
     END IF;
     RETURN v_result;
   END IF;
+  SELECT t.id AS timeline_id,t.milestones,d.id AS decision_id,d.receipt_id,
+         d.case_id,c.current_revision
+    INTO v_anchor
+    FROM app.timeline_plans t
+    JOIN app.family_decisions d
+      ON (d.organization_id,d.id)=(t.organization_id,t.family_decision_id)
+    JOIN app.student_cases c
+      ON (c.organization_id,c.id)=(d.organization_id,d.case_id)
+    JOIN app.student_case_participants participant
+      ON participant.organization_id=d.organization_id
+     AND participant.case_id=d.case_id
+     AND participant.actor_id=p_actor
+     AND participant.role=p_role
+   WHERE t.organization_id=p_org AND t.id=p_timeline
+   FOR SHARE OF t,d,c;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution target unavailable';
+  END IF;
+  IF v_anchor.case_id IS DISTINCT FROM p_case THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution target unavailable';
+  END IF;
+  IF v_anchor.current_revision IS DISTINCT FROM p_expected_case_revision THEN
+    RAISE EXCEPTION USING ERRCODE='NV020',MESSAGE='case revision is stale';
+  END IF;
   v_milestones := v_anchor.milestones;
   IF jsonb_typeof(v_milestones)<>'array' OR jsonb_array_length(v_milestones)<>4
      OR v_milestones->0->>'key'<>'documents'
@@ -412,7 +425,7 @@ BEGIN
     SELECT 1 FROM app.timeline_executions
      WHERE organization_id=p_org AND timeline_plan_id=p_timeline
   ) THEN
-    RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='timeline execution already exists';
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='timeline execution already exists';
   END IF;
   INSERT INTO app.timeline_executions(
     organization_id,id,case_id,case_revision,family_decision_id,
@@ -466,6 +479,7 @@ RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg
 DECLARE
   v_execution app.timeline_executions%ROWTYPE;
   v_checkpoint app.timeline_checkpoints%ROWTYPE;
+  v_current_count integer;
   v_prior app.idempotency_records%ROWTYPE;
   v_now timestamptz := clock_timestamp();
   v_target_state text;
@@ -484,12 +498,6 @@ BEGIN
    WHERE organization_id=p_org AND id=p_execution FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
-  END IF;
-  SELECT * INTO v_checkpoint FROM app.timeline_checkpoints
-   WHERE organization_id=p_org AND execution_id=p_execution AND id=p_checkpoint
-   FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline checkpoint unavailable';
   END IF;
   SELECT * INTO v_prior FROM app.idempotency_records
    WHERE organization_id=p_org AND actor_id=p_actor
@@ -511,17 +519,39 @@ BEGIN
      WHERE organization_id=p_org AND receipt_id=v_prior.response_id;
     RETURN v_result;
   END IF;
-  IF v_execution.state<>'active' OR v_checkpoint.state<>'in_progress'
-     OR v_execution.row_version<>p_expected_execution_version
-     OR v_checkpoint.row_version<>p_expected_checkpoint_version
-     OR v_checkpoint.accountable_role<>p_role
+  IF v_execution.state='completed' THEN
+    RAISE EXCEPTION USING ERRCODE='NV022',MESSAGE='timeline execution is completed';
+  END IF;
+  IF v_execution.state<>'active' THEN
+    RAISE EXCEPTION USING ERRCODE='NV026',MESSAGE='timeline reassessment is required';
+  END IF;
+  SELECT count(*) INTO v_current_count FROM app.timeline_checkpoints
+   WHERE organization_id=p_org AND execution_id=p_execution
+     AND state NOT IN ('pending','verified');
+  IF v_current_count<>1 THEN
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='current checkpoint unavailable';
+  END IF;
+  SELECT * INTO STRICT v_checkpoint FROM app.timeline_checkpoints
+   WHERE organization_id=p_org AND execution_id=p_execution
+     AND state NOT IN ('pending','verified')
+   FOR UPDATE;
+  IF v_checkpoint.id IS DISTINCT FROM p_checkpoint THEN
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='checkpoint is not current';
+  END IF;
+  IF v_execution.row_version<>p_expected_execution_version THEN
+    RAISE EXCEPTION USING ERRCODE='NV020',MESSAGE='execution version is stale';
+  END IF;
+  IF v_checkpoint.row_version<>p_expected_checkpoint_version THEN
+    RAISE EXCEPTION USING ERRCODE='NV021',MESSAGE='checkpoint version is stale';
+  END IF;
+  IF v_checkpoint.state<>'in_progress' OR v_checkpoint.accountable_role<>p_role
      OR NOT EXISTS (
        SELECT 1 FROM app.student_case_participants participant
         WHERE participant.organization_id=p_org
           AND participant.case_id=v_execution.case_id
           AND participant.actor_id=p_actor AND participant.role=p_role
      ) THEN
-    RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='checkpoint attestation conflict';
+    RAISE EXCEPTION USING ERRCODE='NV024',MESSAGE='checkpoint attestation conflict';
   END IF;
   v_expected_code := v_checkpoint.milestone_key||'_status_confirmed';
   IF p_attestation_code<>v_expected_code
@@ -529,7 +559,7 @@ BEGIN
      OR (p_kind='completion' AND (p_status<>'ready_for_advisor' OR p_reason_code<>'not_applicable'))
      OR (p_kind='blocked' AND (p_status<>'work_blocked' OR p_reason_code NOT IN ('missing_required_input','external_dependency_unavailable','deadline_at_risk')))
      OR p_kind NOT IN ('progress','completion','blocked') THEN
-    RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='invalid checkpoint attestation codes';
+    RAISE EXCEPTION USING ERRCODE='NV024',MESSAGE='invalid checkpoint attestation codes';
   END IF;
   v_target_state := CASE p_kind WHEN 'progress' THEN 'in_progress'
     WHEN 'completion' THEN 'awaiting_advisor' ELSE 'blocked' END;
@@ -579,17 +609,18 @@ BEGIN
   RETURN v_result;
 END; $$;
 
-CREATE OR REPLACE FUNCTION app.verify_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_attestation uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_action text,p_reason_code text,p_verification uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE OR REPLACE FUNCTION app.verify_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_attestation uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_action text,p_reason_code text,p_verification uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   v_execution app.timeline_executions%ROWTYPE;
   v_checkpoint app.timeline_checkpoints%ROWTYPE;
+  v_current_count integer;
   v_prior app.idempotency_records%ROWTYPE;
   v_latest uuid;
   v_now timestamptz := clock_timestamp();
   v_result jsonb;
 BEGIN
-  IF p_role<>'advisor' OR p_execution IS NULL OR p_checkpoint IS NULL
+  IF p_role<>'advisor' OR p_case IS NULL OR p_execution IS NULL OR p_checkpoint IS NULL
      OR p_attestation IS NULL OR p_verification IS NULL OR p_receipt IS NULL
      OR p_expected_execution_version<=0 OR p_expected_checkpoint_version<=0
      OR p_key_hash !~ '^[0-9a-f]{64}$'
@@ -602,11 +633,8 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
-  SELECT * INTO v_checkpoint FROM app.timeline_checkpoints
-   WHERE organization_id=p_org AND execution_id=p_execution AND id=p_checkpoint
-   FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline checkpoint unavailable';
+  IF v_execution.case_id IS DISTINCT FROM p_case THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
   SELECT * INTO v_prior FROM app.idempotency_records
    WHERE organization_id=p_org AND actor_id=p_actor
@@ -628,14 +656,37 @@ BEGIN
      WHERE organization_id=p_org AND receipt_id=v_prior.response_id;
     RETURN v_result;
   END IF;
+  IF v_execution.state='completed' THEN
+    RAISE EXCEPTION USING ERRCODE='NV022',MESSAGE='timeline execution is completed';
+  END IF;
+  IF v_execution.state<>'active' THEN
+    RAISE EXCEPTION USING ERRCODE='NV026',MESSAGE='timeline reassessment is required';
+  END IF;
+  SELECT count(*) INTO v_current_count FROM app.timeline_checkpoints
+   WHERE organization_id=p_org AND execution_id=p_execution
+     AND state NOT IN ('pending','verified');
+  IF v_current_count<>1 THEN
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='current checkpoint unavailable';
+  END IF;
+  SELECT * INTO STRICT v_checkpoint FROM app.timeline_checkpoints
+   WHERE organization_id=p_org AND execution_id=p_execution
+     AND state NOT IN ('pending','verified')
+   FOR UPDATE;
+  IF v_checkpoint.id IS DISTINCT FROM p_checkpoint THEN
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='checkpoint is not current';
+  END IF;
   SELECT attestation_id INTO v_latest
     FROM app.timeline_checkpoint_attestations
    WHERE organization_id=p_org AND execution_id=p_execution
      AND checkpoint_id=p_checkpoint AND attestation_kind='completion'
    ORDER BY created_at DESC,attestation_id DESC LIMIT 1;
-  IF v_execution.state<>'active' OR v_checkpoint.state<>'awaiting_advisor'
-     OR v_execution.row_version<>p_expected_execution_version
-     OR v_checkpoint.row_version<>p_expected_checkpoint_version
+  IF v_execution.row_version<>p_expected_execution_version THEN
+    RAISE EXCEPTION USING ERRCODE='NV020',MESSAGE='execution version is stale';
+  END IF;
+  IF v_checkpoint.row_version<>p_expected_checkpoint_version THEN
+    RAISE EXCEPTION USING ERRCODE='NV021',MESSAGE='checkpoint version is stale';
+  END IF;
+  IF v_checkpoint.state<>'awaiting_advisor'
      OR v_latest IS DISTINCT FROM p_attestation
      OR NOT EXISTS (
        SELECT 1 FROM app.student_case_participants participant
@@ -646,7 +697,7 @@ BEGIN
      OR (p_action='verify' AND p_reason_code<>'attestation_verified')
      OR (p_action='request_update' AND p_reason_code NOT IN ('status_update_required','status_inconsistent'))
      OR p_action NOT IN ('verify','request_update') THEN
-    RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='checkpoint verification conflict';
+    RAISE EXCEPTION USING ERRCODE='NV025',MESSAGE='advisor verification is required';
   END IF;
   INSERT INTO app.timeline_checkpoint_verifications(
     organization_id,verification_id,execution_id,checkpoint_id,attestation_id,
@@ -713,18 +764,19 @@ BEGIN
   RETURN v_result;
 END; $$;
 
-CREATE OR REPLACE FUNCTION app.request_timeline_reassessment(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_trigger_reference uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_trigger text,p_reassessment uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE OR REPLACE FUNCTION app.request_timeline_reassessment(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_trigger_reference uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_trigger text,p_reassessment uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   v_execution app.timeline_executions%ROWTYPE;
   v_checkpoint app.timeline_checkpoints%ROWTYPE;
+  v_current_count integer;
   v_prior app.idempotency_records%ROWTYPE;
   v_now timestamptz := clock_timestamp();
   v_observed_date date := CURRENT_DATE;
   v_projection_hash text;
   v_result jsonb;
 BEGIN
-  IF p_role<>'advisor' OR p_execution IS NULL OR p_checkpoint IS NULL
+  IF p_role<>'advisor' OR p_case IS NULL OR p_execution IS NULL OR p_checkpoint IS NULL
      OR p_reassessment IS NULL OR p_receipt IS NULL
      OR p_expected_execution_version<=0 OR p_expected_checkpoint_version<=0
      OR p_trigger NOT IN ('blocked_attestation','deadline_elapsed')
@@ -738,11 +790,8 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
-  SELECT * INTO v_checkpoint FROM app.timeline_checkpoints
-   WHERE organization_id=p_org AND execution_id=p_execution AND id=p_checkpoint
-   FOR UPDATE;
-  IF NOT FOUND THEN
-    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline checkpoint unavailable';
+  IF v_execution.case_id IS DISTINCT FROM p_case THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
   SELECT * INTO v_prior FROM app.idempotency_records
    WHERE organization_id=p_org AND actor_id=p_actor
@@ -764,16 +813,38 @@ BEGIN
      WHERE organization_id=p_org AND receipt_id=v_prior.response_id;
     RETURN v_result;
   END IF;
-  IF v_execution.state<>'active'
-     OR v_execution.row_version<>p_expected_execution_version
-     OR v_checkpoint.row_version<>p_expected_checkpoint_version
-     OR NOT EXISTS (
+  IF v_execution.state='completed' THEN
+    RAISE EXCEPTION USING ERRCODE='NV022',MESSAGE='timeline execution is completed';
+  END IF;
+  IF v_execution.state<>'active' THEN
+    RAISE EXCEPTION USING ERRCODE='NV026',MESSAGE='timeline reassessment is required';
+  END IF;
+  SELECT count(*) INTO v_current_count FROM app.timeline_checkpoints
+   WHERE organization_id=p_org AND execution_id=p_execution
+     AND state NOT IN ('pending','verified');
+  IF v_current_count<>1 THEN
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='current checkpoint unavailable';
+  END IF;
+  SELECT * INTO STRICT v_checkpoint FROM app.timeline_checkpoints
+   WHERE organization_id=p_org AND execution_id=p_execution
+     AND state NOT IN ('pending','verified')
+   FOR UPDATE;
+  IF v_checkpoint.id IS DISTINCT FROM p_checkpoint THEN
+    RAISE EXCEPTION USING ERRCODE='NV023',MESSAGE='checkpoint is not current';
+  END IF;
+  IF v_execution.row_version<>p_expected_execution_version THEN
+    RAISE EXCEPTION USING ERRCODE='NV020',MESSAGE='execution version is stale';
+  END IF;
+  IF v_checkpoint.row_version<>p_expected_checkpoint_version THEN
+    RAISE EXCEPTION USING ERRCODE='NV021',MESSAGE='checkpoint version is stale';
+  END IF;
+  IF NOT EXISTS (
        SELECT 1 FROM app.student_case_participants participant
         WHERE participant.organization_id=p_org
           AND participant.case_id=v_execution.case_id
           AND participant.actor_id=p_actor AND participant.role='advisor'
      ) THEN
-    RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='timeline reassessment conflict';
+    RAISE EXCEPTION USING ERRCODE='NV026',MESSAGE='timeline reassessment is required';
   END IF;
   IF p_trigger='blocked_attestation' THEN
     IF v_checkpoint.state<>'blocked' OR p_trigger_reference IS NULL
@@ -791,12 +862,12 @@ BEGIN
                ORDER BY latest.created_at DESC,latest.attestation_id DESC LIMIT 1
             )
        ) THEN
-      RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='blocked reassessment proof unavailable';
+      RAISE EXCEPTION USING ERRCODE='NV026',MESSAGE='blocked reassessment proof unavailable';
     END IF;
   ELSE
     IF p_trigger_reference IS NOT NULL OR v_checkpoint.state='verified'
        OR v_observed_date<=v_checkpoint.due_date THEN
-      RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='deadline reassessment proof unavailable';
+      RAISE EXCEPTION USING ERRCODE='NV026',MESSAGE='deadline reassessment proof unavailable';
     END IF;
   END IF;
   v_projection_hash := encode(sha256(convert_to(jsonb_build_object(
@@ -860,9 +931,11 @@ CREATE OR REPLACE FUNCTION app.read_timeline_execution(p_org uuid,p_actor uuid,p
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   v_execution app.timeline_executions%ROWTYPE;
+  v_execution_count integer;
   v_observed_date date := CURRENT_DATE;
   v_current_count integer;
   v_current jsonb;
+  v_current_action jsonb;
   v_activity jsonb;
   v_activity_count integer;
   v_result jsonb;
@@ -871,14 +944,28 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
   PERFORM app.assert_m3b_context(p_org,p_actor,p_role);
-  SELECT e.* INTO v_execution
+  SELECT count(*) INTO v_execution_count
     FROM app.timeline_executions e
-    JOIN app.student_case_participants participant
-      ON participant.organization_id=e.organization_id
-     AND participant.case_id=e.case_id
-     AND participant.actor_id=p_actor AND participant.role=p_role
-   WHERE e.organization_id=p_org AND e.case_id=p_case;
-  IF NOT FOUND THEN RETURN NULL; END IF;
+   WHERE e.organization_id=p_org AND e.case_id=p_case
+     AND EXISTS (
+       SELECT 1 FROM app.student_case_participants participant
+        WHERE participant.organization_id=e.organization_id
+          AND participant.case_id=e.case_id
+          AND participant.actor_id=p_actor AND participant.role=p_role
+     );
+  IF v_execution_count=0 THEN RETURN NULL; END IF;
+  IF v_execution_count>1 THEN
+    RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='timeline projection contradictory';
+  END IF;
+  SELECT e.* INTO STRICT v_execution
+    FROM app.timeline_executions e
+   WHERE e.organization_id=p_org AND e.case_id=p_case
+     AND EXISTS (
+       SELECT 1 FROM app.student_case_participants participant
+        WHERE participant.organization_id=e.organization_id
+          AND participant.case_id=e.case_id
+          AND participant.actor_id=p_actor AND participant.role=p_role
+     );
   SELECT count(*),(array_agg(jsonb_build_object(
     'schema_version',1,'checkpoint_id',c.id,'execution_id',c.execution_id,
     'ordinal',c.ordinal,'milestone_key',c.milestone_key,'due_date',c.due_date,
@@ -892,9 +979,43 @@ BEGIN
   FROM app.timeline_checkpoints c
   WHERE c.organization_id=p_org AND c.execution_id=v_execution.id
     AND c.state NOT IN ('pending','verified');
-  IF v_current_count>1 THEN
+  IF (v_execution.state='active' AND v_current_count<>1)
+     OR (v_execution.state='completed' AND v_current_count<>0)
+     OR (v_execution.state='reassessment_required' AND v_current_count>1) THEN
     RAISE EXCEPTION USING ERRCODE='NV006',MESSAGE='timeline projection contradictory';
   END IF;
+  v_current_action := CASE
+    WHEN v_execution.state='completed' THEN jsonb_build_object(
+      'schema_version',1,'code','execution_completed','owner_role','none',
+      'checkpoint_id',NULL,'execution_version',v_execution.row_version,
+      'checkpoint_version',NULL
+    )
+    WHEN v_execution.state='reassessment_required' THEN jsonb_build_object(
+      'schema_version',1,'code','reassessment_handoff_required',
+      'owner_role','advisor','checkpoint_id',v_current->>'checkpoint_id',
+      'execution_version',v_execution.row_version,
+      'checkpoint_version',(v_current->>'row_version')::integer
+    )
+    WHEN v_current->>'state'='awaiting_advisor' THEN jsonb_build_object(
+      'schema_version',1,'code','advisor_verification_required',
+      'owner_role','advisor','checkpoint_id',v_current->>'checkpoint_id',
+      'execution_version',v_execution.row_version,
+      'checkpoint_version',(v_current->>'row_version')::integer
+    )
+    WHEN v_current->>'state'='blocked' THEN jsonb_build_object(
+      'schema_version',1,'code','reassessment_handoff_required',
+      'owner_role','advisor','checkpoint_id',v_current->>'checkpoint_id',
+      'execution_version',v_execution.row_version,
+      'checkpoint_version',(v_current->>'row_version')::integer
+    )
+    ELSE jsonb_build_object(
+      'schema_version',1,'code','checkpoint_attestation_required',
+      'owner_role',v_current->>'accountable_role',
+      'checkpoint_id',v_current->>'checkpoint_id',
+      'execution_version',v_execution.row_version,
+      'checkpoint_version',(v_current->>'row_version')::integer
+    )
+  END;
   WITH activity_rows AS (
     (SELECT 'attestation_recorded'::text kind,attestation_id durable_id,
             execution_id,checkpoint_id,created_at
@@ -1003,6 +1124,7 @@ BEGIN
       ) FROM app.timeline_reassessment_requests r
       WHERE r.organization_id=p_org AND r.execution_id=v_execution.id
     ),
+    'current_action',v_current_action,
     'observed_date',v_observed_date,'activity',v_activity,
     'activity_total',v_activity_count,
     'activity_truncated',v_activity_count>jsonb_array_length(v_activity)

@@ -8,8 +8,17 @@ import pytest
 
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.timeline_execution.errors import TimelineExecutionProjectionError
-from night_voyager.timeline_execution.models import TimelineMutationReceiptV1
-from night_voyager.timeline_execution.ports import StartTimelineExecutionCommand
+from night_voyager.timeline_execution.models import (
+    CheckpointVerificationAction,
+    CheckpointVerificationReasonCode,
+    ReassessmentTrigger,
+    TimelineMutationReceiptV1,
+)
+from night_voyager.timeline_execution.ports import (
+    RequestTimelineReassessmentCommand,
+    StartTimelineExecutionCommand,
+    VerifyTimelineCheckpointCommand,
+)
 from night_voyager.timeline_execution.postgres import PostgresTimelineExecutionRepository
 
 ORG = UUID("10000000-0000-0000-0000-000000000001")
@@ -108,8 +117,65 @@ async def test_start_hash_excludes_generated_ids_and_decodes_exact_receipt() -> 
     assert "app.start_timeline_execution" in sql
     assert parameters["execution"] == EXECUTION
     assert parameters["receipt"] == RECEIPT
+    assert parameters["case"] == CASE
+    assert parameters["case_revision"] == 1
     assert len(str(parameters["key_hash"])) == 64
     assert len(str(parameters["request_hash"])) == 64
+
+
+@pytest.mark.asyncio
+async def test_advisor_mutations_bind_case_inside_postgresql_call() -> None:
+    verification_payload = {
+        **receipt_payload(),
+        "operation": "verify",
+        "result_kind": "timeline_checkpoint_verified",
+    }
+    reassessment_payload = {
+        **receipt_payload(),
+        "operation": "reassess",
+        "result_kind": "timeline_reassessment_requested",
+    }
+    session = RecordingSession([verification_payload, reassessment_payload])
+    repository = PostgresTimelineExecutionRepository(session)  # type: ignore[arg-type]
+    advisor = ActorContext(
+        organization_id=ORG,
+        actor_id=ACTOR,
+        role=ActorRole.ADVISOR,
+        session_id=SESSION,
+    )
+    await repository.verify(
+        advisor,
+        VerifyTimelineCheckpointCommand(
+            case_id=CASE,
+            execution_id=EXECUTION,
+            checkpoint_id=RECEIPT,
+            attestation_id=TIMELINE,
+            expected_execution_version=1,
+            expected_checkpoint_version=1,
+            action=CheckpointVerificationAction.VERIFY,
+            reason_code=CheckpointVerificationReasonCode.ATTESTATION_VERIFIED,
+            verification_id=UUID(int=20),
+            receipt_id=UUID(int=21),
+        ),
+        "verify-key",
+    )
+    await repository.reassess(
+        advisor,
+        RequestTimelineReassessmentCommand(
+            case_id=CASE,
+            execution_id=EXECUTION,
+            checkpoint_id=RECEIPT,
+            expected_execution_version=1,
+            expected_checkpoint_version=1,
+            trigger=ReassessmentTrigger.DEADLINE_ELAPSED,
+            trigger_reference_id=None,
+            reassessment_id=UUID(int=22),
+            receipt_id=UUID(int=23),
+        ),
+        "reassess-key",
+    )
+    assert session.calls[0][1]["case"] == CASE
+    assert session.calls[1][1]["case"] == CASE
 
 
 @pytest.mark.asyncio
@@ -145,6 +211,14 @@ async def test_read_rejects_contradictory_activity_total() -> None:
         "latest_attestation": None,
         "latest_verification": None,
         "reassessment": None,
+        "current_action": {
+            "schema_version": 1,
+            "code": "checkpoint_attestation_required",
+            "owner_role": "student",
+            "checkpoint_id": None,
+            "execution_version": 1,
+            "checkpoint_version": None,
+        },
         "observed_date": date(2026, 7, 29).isoformat(),
         "activity": [],
         "activity_total": -1,

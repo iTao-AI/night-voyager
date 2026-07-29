@@ -10,10 +10,7 @@ from night_voyager.timeline_execution.models import (
     TimelineExecutionViewV1,
     TimelineMutationReceiptV1,
 )
-from night_voyager.timeline_execution.policy import (
-    validate_attestation_codes,
-    validate_verification_codes,
-)
+from night_voyager.timeline_execution.policy import validate_verification_codes
 from night_voyager.timeline_execution.ports import (
     AttestTimelineCheckpointCommand,
     RequestTimelineReassessmentCommand,
@@ -57,22 +54,6 @@ class TimelineExecutionService:
         idempotency_key: str,
     ) -> TimelineMutationReceiptV1:
         self._require_family(actor)
-        view = await self._repository.read(actor, command.case_id)
-        checkpoint = view.current_checkpoint if view else None
-        if (
-            checkpoint is None
-            or checkpoint.execution_id != command.execution_id
-            or checkpoint.checkpoint_id != command.checkpoint_id
-            or checkpoint.accountable_role != actor.role.value
-        ):
-            raise TimelineExecutionUnavailableError("execution authority unavailable")
-        validate_attestation_codes(
-            milestone_key=checkpoint.milestone_key,
-            kind=command.attestation_kind,
-            status_code=command.status_code,
-            attestation_code=command.attestation_code,
-            reason_code=command.reason_code,
-        )
         return await self._repository.attest(actor, command, idempotency_key)
 
     async def verify(

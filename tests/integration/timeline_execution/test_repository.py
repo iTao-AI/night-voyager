@@ -39,10 +39,6 @@ async def test_repository_decodes_context_and_execution_view() -> None:
                 {"org": str(ORG), "actor": str(STUDENT)},
             )
             repository = PostgresTimelineExecutionRepository(session)
-            context = await repository.context(
-                actor, "governed-plan-execution-v1"
-            )
-            assert context is not None and context.case_id == CASE
             view = await repository.read(actor, CASE)
             assert view is not None
             assert view.execution.case_id == CASE

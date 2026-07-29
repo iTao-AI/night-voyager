@@ -92,7 +92,7 @@ def test_release_verifier_freezes_the_exact_0014_timeline_catalog() -> None:
         ("read_timeline_execution", "uuid, uuid, text, uuid"),
         (
             "start_timeline_execution",
-            "uuid, uuid, text, uuid, uuid, uuid, text, text",
+            "uuid, uuid, text, uuid, uuid, integer, uuid, uuid, text, text",
         ),
         (
             "attest_timeline_checkpoint",
@@ -101,12 +101,12 @@ def test_release_verifier_freezes_the_exact_0014_timeline_catalog() -> None:
         ),
         (
             "verify_timeline_checkpoint",
-            "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, text, "
+            "uuid, uuid, text, uuid, uuid, uuid, uuid, integer, integer, text, text, "
             "uuid, uuid, text, text",
         ),
         (
             "request_timeline_reassessment",
-            "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, uuid, "
+            "uuid, uuid, text, uuid, uuid, uuid, uuid, integer, integer, text, uuid, "
             "uuid, text, text",
         ),
     }

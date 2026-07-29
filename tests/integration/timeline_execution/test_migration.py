@@ -21,10 +21,10 @@ TABLES = (
 SIGNATURES = (
     "app.read_plan_execution_context(uuid,uuid,text,text)",
     "app.read_timeline_execution(uuid,uuid,text,uuid)",
-    "app.start_timeline_execution(uuid,uuid,text,uuid,uuid,uuid,text,text)",
+    "app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text)",
     "app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text)",
-    "app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text)",
-    "app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text)",
+    "app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text)",
+    "app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text)",
 )
 
 
@@ -99,5 +99,31 @@ async def test_runtime_roles_have_read_only_table_matrix() -> None:
                     "worker_read": False,
                     "worker_write": False,
                 }
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_verification_attestation_foreign_key_is_composite_bound() -> None:
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.connect() as connection:
+            definitions = (
+                await connection.execute(
+                    text(
+                        "SELECT pg_get_constraintdef(oid) "
+                        "FROM pg_constraint "
+                        "WHERE conrelid='app.timeline_checkpoint_verifications'::regclass "
+                        "AND contype='f'"
+                    )
+                )
+            ).scalars().all()
+            assert any(
+                "FOREIGN KEY (organization_id, execution_id, checkpoint_id, attestation_id)"
+                in definition
+                and "REFERENCES app.timeline_checkpoint_attestations"
+                in definition
+                for definition in definitions
+            )
     finally:
         await engine.dispose()

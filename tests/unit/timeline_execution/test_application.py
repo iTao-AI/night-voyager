@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import Literal
 from uuid import UUID
 
 import pytest
@@ -21,6 +22,8 @@ from night_voyager.timeline_execution.models import (
     ReassessmentTrigger,
     TimelineCheckpointState,
     TimelineCheckpointV1,
+    TimelineCurrentActionCode,
+    TimelineCurrentActionV1,
     TimelineExecutionState,
     TimelineExecutionV1,
     TimelineExecutionViewV1,
@@ -69,7 +72,9 @@ def receipt(operation: str) -> TimelineMutationReceiptV1:
     )
 
 
-def view(accountable_role: str = "student") -> TimelineExecutionViewV1:
+def view(
+    accountable_role: Literal["student", "parent"] = "student",
+) -> TimelineExecutionViewV1:
     execution = TimelineExecutionV1(
         schema_version=1,
         execution_id=U1,
@@ -107,6 +112,14 @@ def view(accountable_role: str = "student") -> TimelineExecutionViewV1:
         latest_attestation=None,
         latest_verification=None,
         reassessment=None,
+        current_action=TimelineCurrentActionV1(
+            schema_version=1,
+            code=TimelineCurrentActionCode.CHECKPOINT_ATTESTATION_REQUIRED,
+            owner_role=accountable_role,
+            checkpoint_id=checkpoint.checkpoint_id,
+            execution_version=1,
+            checkpoint_version=1,
+        ),
         observed_date=date(2026, 7, 29),
         activity=(),
         activity_total=0,
@@ -162,7 +175,7 @@ async def test_start_requires_assigned_family_role_and_passes_receipt_through() 
 
 
 @pytest.mark.asyncio
-async def test_attestation_requires_current_checkpoint_accountable_role() -> None:
+async def test_attestation_defers_locked_operation_conflicts_to_repository() -> None:
     command = AttestTimelineCheckpointCommand(
         case_id=U2,
         execution_id=U1,
@@ -178,10 +191,58 @@ async def test_attestation_requires_current_checkpoint_accountable_role() -> Non
     )
     repo = repository()
     service = TimelineExecutionService(repo)
-    with pytest.raises(TimelineExecutionUnavailableError):
-        await service.attest(actor(ActorRole.PARENT), command, "key")
+    delegated = await service.attest(actor(ActorRole.PARENT), command, "key")
+    assert delegated is repo.receipts["attest"]
+    assert repo.calls[-1][0] == "attest"
     accepted = await service.attest(actor(ActorRole.STUDENT), command, "key")
     assert accepted is repo.receipts["attest"]
+
+
+@pytest.mark.asyncio
+async def test_attestation_does_not_classify_non_current_checkpoint_codes() -> None:
+    future_checkpoint_id = UUID(int=4)
+    repo = repository()
+    current_view = repo.view_result
+    assert current_view is not None
+    future_checkpoint = TimelineCheckpointV1.model_validate(
+        {
+            "schema_version": 1,
+            "checkpoint_id": future_checkpoint_id,
+            "execution_id": U1,
+            "ordinal": 2,
+            "milestone_key": "application",
+            "due_date": date(2026, 10, 1),
+            "accountable_role": "parent",
+            "state": TimelineCheckpointState.PENDING,
+            "risk_state": TimelineRiskState.ON_TRACK,
+            "row_version": 1,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+    )
+    repo.view_result = current_view.model_copy(
+        update={"checkpoints": (*current_view.checkpoints, future_checkpoint)}
+    )
+    command = AttestTimelineCheckpointCommand(
+        case_id=U2,
+        execution_id=U1,
+        checkpoint_id=future_checkpoint_id,
+        expected_execution_version=1,
+        expected_checkpoint_version=1,
+        attestation_kind=CheckpointAttestationKind.COMPLETION,
+        status_code=CheckpointStatusCode.READY_FOR_ADVISOR,
+        attestation_code=CheckpointAttestationCode.DOCUMENTS_STATUS_CONFIRMED,
+        reason_code=CheckpointAttestationReasonCode.NOT_APPLICABLE,
+        attestation_id=U3,
+        receipt_id=U1,
+    )
+
+    accepted = await TimelineExecutionService(repo).attest(
+        actor(ActorRole.STUDENT), command, "key"
+    )
+
+    assert accepted is repo.receipts["attest"]
+    assert repo.calls[-1][0] == "attest"
 
 
 @pytest.mark.asyncio

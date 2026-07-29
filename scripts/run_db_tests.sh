@@ -258,6 +258,7 @@ fi
 if [ "${1:-}" = "inside-timeline-execution-http" ]; then
     uv run alembic upgrade head
     uv run alembic current | grep '0014'
+    uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_http.py
     exit 0
@@ -382,5 +383,9 @@ run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" \
     inside-planning-revision-seed-migration
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
+run_lane "${BASE_PROJECT_NAME}-timeline-execution-migration" inside-timeline-execution-migration
+run_lane "${BASE_PROJECT_NAME}-timeline-execution-authority" inside-timeline-execution-authority
+run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http
+run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed
 run_lane "${BASE_PROJECT_NAME}-main" inside
 run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade

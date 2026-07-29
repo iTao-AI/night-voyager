@@ -132,7 +132,7 @@ test("minimal governed plan execution reaches completed through one bilingual jo
     await expectCheckpoint(page, milestone, dueDate, role);
     await clickMutationAndRead(
       page,
-      "提交完成状态给顾问",
+      "Submit completion to advisor",
       "/checkpoint-attestations",
       "attestation",
     );
@@ -143,7 +143,7 @@ test("minimal governed plan execution reaches completed through one bilingual jo
     await page.getByRole("button", { name: "Advisor", exact: true }).click();
     const view = await clickMutationAndRead(
       page,
-      "验证并继续",
+      "Verify and continue",
       "/checkpoint-verifications",
       "verification",
     );
@@ -155,5 +155,5 @@ test("minimal governed plan execution reaches completed through one bilingual jo
   }
 
   await expect(page.getByText("The action plan is complete.")).toBeVisible();
-  await expect(page.getByText("当前没有待处理的 checkpoint。")).toBeVisible();
+  await expect(page.getByText("There is no current checkpoint.")).toBeVisible();
 });

@@ -21,14 +21,13 @@ export function derivePlanExecutionState(
   if (view === null || (context.execution_id !== null && context.execution_id !== view.execution.execution_id)) {
     return { value: "session_changed", context, view, receipt, error: "execution authority changed" };
   }
-  if (view.execution.state === "completed") return { value: "execution_completed", context, view, receipt, error: null };
-  if (view.execution.state === "reassessment_required" || view.current_checkpoint?.state === "blocked") {
-    return { value: "reassessment_required", context, view, receipt, error: null };
-  }
-  if (view.current_checkpoint?.state === "awaiting_advisor") {
-    return { value: "awaiting_advisor", context, view, receipt, error: null };
-  }
-  return { value: "checkpoint_active", context, view, receipt, error: null };
+  const stateByAction: Record<TimelineExecutionView["current_action"]["code"], PlanExecutionStateValue> = {
+    checkpoint_attestation_required: "checkpoint_active",
+    advisor_verification_required: "awaiting_advisor",
+    execution_completed: "execution_completed",
+    reassessment_handoff_required: "reassessment_required",
+  };
+  return { value: stateByAction[view.current_action.code], context, view, receipt, error: null };
 }
 export const loadingPlanExecutionState: PlanExecutionState = {
   value: "loading", context: null, view: null, receipt: null, error: null,

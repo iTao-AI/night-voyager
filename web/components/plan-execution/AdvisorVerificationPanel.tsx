@@ -2,15 +2,17 @@ export function AdvisorVerificationPanel({
   disabled,
   onVerify,
   onRequestUpdate,
+  labels,
 }: {
   disabled: boolean;
   onVerify(): void;
   onRequestUpdate(): void;
+  labels: { group: string; verify: string; requestUpdate: string };
 }) {
   return (
-    <div aria-label="advisor verification">
-      <button disabled={disabled} onClick={onVerify}>验证并继续</button>
-      <button disabled={disabled} onClick={onRequestUpdate}>请求更新</button>
+    <div aria-label={labels.group}>
+      <button disabled={disabled} onClick={onVerify}>{labels.verify}</button>
+      <button disabled={disabled} onClick={onRequestUpdate}>{labels.requestUpdate}</button>
     </div>
   );
 }

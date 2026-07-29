@@ -14,5 +14,13 @@ it("derives every PR A action from fresh server authority", () => {
   const completed = viewFixture();
   completed.execution.state = "completed";
   completed.current_checkpoint = null;
+  completed.current_action = {
+    schema_version: 1,
+    code: "execution_completed",
+    owner_role: "none",
+    checkpoint_id: null,
+    execution_version: completed.execution.row_version,
+    checkpoint_version: null,
+  };
   expect(derivePlanExecutionState(contextFixture, completed).value).toBe("execution_completed");
 });
