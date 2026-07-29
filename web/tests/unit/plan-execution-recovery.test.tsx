@@ -61,3 +61,73 @@ it("persists the operation, captures its receipt, then performs a fresh GET", as
   expect(calls).toEqual(["POST", "GET"]);
   expect(loadPlanExecutionEnvelope()?.lastReceiptId).toBe(contextFixture.case_id);
 });
+
+it("recovers a lost acknowledgement with the exact body and stable key", async () => {
+  const calls: Array<{ body: unknown; key: string }> = [];
+  let attempt = 0;
+  const view = viewFixture();
+  const receipt = {
+    schema_version: 1 as const, receipt_id: contextFixture.case_id,
+    operation: "start" as const, result_kind: "timeline_execution_started" as const,
+    result_id: contextFixture.case_id, execution_id: contextFixture.case_id,
+    checkpoint_id: null, before_execution_version: null, after_execution_version: 1,
+    before_checkpoint_version: null, after_checkpoint_version: null,
+    created_at: "2026-07-29T00:00:00Z",
+  };
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => contextFixture),
+    read: vi.fn(async () => view),
+    start: vi.fn(async (_id: string, body: unknown, _csrf: string, key: string) => {
+      calls.push({ body, key });
+      attempt += 1;
+      if (attempt === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+  expect(result.current.state.value).toBe("recoverable_error");
+  await act(async () => result.current.recover());
+
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(result.current.state.receipt).toEqual(receipt);
+});
+
+it("ignores a delayed response from an aborted controller generation", async () => {
+  let resolveRead!: (value: ReturnType<typeof viewFixture>) => void;
+  const delayedRead = new Promise<ReturnType<typeof viewFixture>>((resolve) => {
+    resolveRead = resolve;
+  });
+  let reads = 0;
+  let activeRole: "student" | "advisor" = "student";
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async (role: "student" | "advisor") => {
+      activeRole = role;
+      return { role, csrf_token: `csrf-${role}` };
+    }),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({ ...contextFixture, active_role: activeRole })),
+    read: vi.fn(async () => {
+      reads += 1;
+      return reads === 1 ? delayedRead : viewFixture();
+    }),
+    start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => {
+    const first = result.current.connect("student");
+    await Promise.resolve();
+    const second = result.current.switchRole("advisor");
+    resolveRead(viewFixture());
+    await Promise.all([first, second]);
+  });
+
+  expect(result.current.state.context?.active_role).toBe("advisor");
+});

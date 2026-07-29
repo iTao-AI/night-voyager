@@ -19,6 +19,8 @@ function activeController() {
       view: viewFixture(),
       receipt: null,
       error: null,
+      operation: null,
+      safeDisplayState: null,
     },
     busy: false,
     connect: async () => undefined,
@@ -26,6 +28,7 @@ function activeController() {
     start: async () => undefined,
     attest: async () => undefined,
     verify: async () => undefined,
+    reassess: async () => undefined,
     recover: async () => undefined,
   };
 }
