@@ -191,6 +191,144 @@ async function capturePublicScreenshot(page: Page, filename: string) {
   await page.screenshot({ path: `/workspace/docs/assets/${filename}`, fullPage: true });
 }
 
+interface FactToPlanAuthoritySnapshot {
+  ready: boolean;
+  phase: unknown;
+  taskStatus: unknown;
+  ledgerPhase: unknown;
+  problemCode: unknown;
+  taskPlanningRunId: unknown;
+  ledgerPlanningRunId: unknown;
+}
+
+async function readFactToPlanReviewAuthority(
+  page: Page,
+  caseId: string,
+  taskId: string,
+): Promise<FactToPlanAuthoritySnapshot> {
+  return page.evaluate(async ({ caseId, taskId }) => {
+    const read = async (path: string) => {
+      const response = await fetch(path, { cache: "no-store" });
+      const value: unknown = await response.json().catch(() => null);
+      const payload = typeof value === "object" && value !== null && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : {};
+      return {
+        status: response.status,
+        payload,
+        problemCode: payload.code,
+      };
+    };
+    const [journeyRead, taskRead, ledgerRead] = await Promise.all([
+      read(`/api/demo/cases/${caseId}/journey-status`),
+      read(`/api/demo/tasks/${taskId}`),
+      read(`/api/demo/cases/${caseId}/advisor-ledger`),
+    ]);
+    const journey = journeyRead.payload;
+    const task = taskRead.payload;
+    const ledger = ledgerRead.payload;
+    const ledgerTask = typeof ledger.task === "object" && ledger.task !== null && !Array.isArray(ledger.task)
+      ? ledger.task as Record<string, unknown>
+      : {};
+    const ledgerRun = typeof ledger.planning_run === "object" && ledger.planning_run !== null && !Array.isArray(ledger.planning_run)
+      ? ledger.planning_run as Record<string, unknown>
+      : {};
+    const reviewInputs = typeof ledger.review_inputs === "object" && ledger.review_inputs !== null && !Array.isArray(ledger.review_inputs)
+      ? ledger.review_inputs as Record<string, unknown>
+      : {};
+    const problemCode = [journeyRead, taskRead, ledgerRead]
+      .find((projection) => projection.status !== 200)?.problemCode ?? null;
+    const planningRunId = task.planning_run_id;
+    return {
+      ready:
+        journeyRead.status === 200
+        && taskRead.status === 200
+        && ledgerRead.status === 200
+        && journey.case_id === caseId
+        && journey.phase === "review_required"
+        && journey.active_role === "advisor"
+        && task.task_id === taskId
+        && task.status === "needs_advisor_review"
+        && typeof planningRunId === "string"
+        && ledger.case_id === caseId
+        && ledger.phase === "review_required"
+        && ledgerTask.task_id === taskId
+        && ledgerTask.status === "needs_advisor_review"
+        && ledgerTask.planning_run_id === planningRunId
+        && ledgerRun.planning_run_id === planningRunId
+        && reviewInputs.planning_run_id === planningRunId,
+      phase: journey.phase,
+      taskStatus: task.status,
+      ledgerPhase: ledger.phase,
+      problemCode,
+      taskPlanningRunId: planningRunId,
+      ledgerPlanningRunId: ledgerRun.planning_run_id,
+    };
+  }, { caseId, taskId });
+}
+
+async function waitForFactToPlanReviewAuthority(
+  page: Page,
+  caseId: string,
+  taskId: string,
+): Promise<void> {
+  let latest: FactToPlanAuthoritySnapshot | null = null;
+  try {
+    await expect.poll(async () => {
+      latest = await readFactToPlanReviewAuthority(page, caseId, taskId);
+      return latest.ready;
+    }, {
+      intervals: [250, 500, 1_000],
+      timeout: 120_000,
+    }).toBe(true);
+  } catch (error) {
+    console.error("fact-to-plan approval convergence diagnostic", JSON.stringify(latest));
+    throw error;
+  }
+}
+
+async function captureFactToPlanApprovalDiagnostic(
+  page: Page,
+  caseId: string,
+  taskId: string,
+): Promise<void> {
+  const [authority, ui] = await Promise.all([
+    readFactToPlanReviewAuthority(page, caseId, taskId),
+    page.evaluate(() => {
+      const stored: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+      const envelope = typeof stored === "object" && stored !== null && !Array.isArray(stored)
+        ? stored as Record<string, unknown>
+        : {};
+      return {
+        pathname: window.location.pathname,
+        headings: Array.from(document.querySelectorAll("h1, h2, h3"))
+          .filter((node) => (node as HTMLElement).offsetParent !== null)
+          .map((node) => node.textContent?.trim() ?? "")
+          .filter(Boolean),
+        actions: Array.from(document.querySelectorAll("button, a"))
+          .filter((node) => (node as HTMLElement).offsetParent !== null)
+          .map((node) => node.textContent?.trim() ?? "")
+          .filter(Boolean),
+        envelope: {
+          schemaVersion: envelope.schema_version,
+          journey: envelope.journey,
+          role: envelope.role,
+          caseId: envelope.caseId,
+          currentRevision: envelope.currentRevision,
+          currentTaskId: envelope.currentTaskId,
+          currentRunId: envelope.currentRunId,
+          cursor: envelope.cursor,
+          phase: envelope.phase,
+        },
+      };
+    }),
+  ]);
+  console.error(
+    "fact-to-plan approval convergence diagnostic",
+    JSON.stringify({ authority, ui }),
+  );
+}
+
 test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database journey", async ({ page }) => {
   test.skip(!proofFile || !workerReadyFile || !workerReadySentinel, "runs only in the isolated fact-to-plan Compose lane");
   const storageReplacements: Array<{
@@ -433,7 +571,13 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   });
   expect(beforeReload.caseId).toBe(caseId);
   expect(beforeReload.taskId).toBeTruthy();
-  await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled({ timeout: 60_000 });
+  await waitForFactToPlanReviewAuthority(page, beforeReload.caseId, beforeReload.taskId);
+  try {
+    await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled({ timeout: 15_000 });
+  } catch (error) {
+    await captureFactToPlanApprovalDiagnostic(page, beforeReload.caseId, beforeReload.taskId);
+    throw error;
+  }
   await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
   const reloadEventStart = eventRequests.length;
   await page.reload();

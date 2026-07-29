@@ -433,6 +433,25 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
     assert "FACT_TO_PLAN_WORKER_READY_FILE" in browser
     assert "await firstStream" in browser
     assert browser.index("await firstStream") < browser.index("writeFile(workerReadyFile")
+    assert "waitForFactToPlanReviewAuthority" in browser
+    assert "`/api/demo/cases/${caseId}/journey-status`" in browser
+    assert "`/api/demo/tasks/${taskId}`" in browser
+    assert "`/api/demo/cases/${caseId}/advisor-ledger`" in browser
+    assert 'phase: journey.phase' in browser
+    assert 'taskStatus: task.status' in browser
+    assert 'ledgerPhase: ledger.phase' in browser
+    assert 'problemCode: payload.code' in browser
+    assert "timeout: 120_000" in browser
+    assert "fact-to-plan approval convergence diagnostic" in browser
+    cursor_wait = browser.index(
+        'Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0'
+    )
+    authority_wait = browser.index("await waitForFactToPlanReviewAuthority")
+    approval_wait = browser.index(
+        'page.getByRole("button", { name: presentationCopy.approve })'
+    )
+    assert cursor_wait < authority_wait < approval_wait
+    assert "waitForTimeout" not in browser
     assert "requiredVisible: readonly Locator[]" in browser
     assert "for (const required of requiredVisible)" in browser
     for content in (
