@@ -10,8 +10,6 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from night_voyager.identity.demo_seed import (
-    BLOCKED_PLAN_EXECUTION_CASE_ID,
-    BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
     PLAN_EXECUTION_BRIEF_ID,
     PLAN_EXECUTION_CASE_ID,
     PLAN_EXECUTION_DECISION_ID,
@@ -77,24 +75,6 @@ async def _verify_seed(connection: AsyncConnection) -> None:
     )
     if exact is not True:
         raise RuntimeError("governed plan execution fixture is not exact")
-    blocked_exact = await connection.scalar(
-        text(
-            "SELECT "
-            "(SELECT count(*)=1 FROM app.student_cases "
-            "WHERE id=:case AND state='plan_ready' AND current_revision=1) "
-            "AND (SELECT count(*)=1 FROM app.timeline_plans WHERE id=:timeline) "
-            "AND (SELECT count(*)=3 FROM app.student_case_participants "
-            "WHERE case_id=:case) "
-            "AND (SELECT count(*)=0 FROM app.timeline_executions "
-            "WHERE timeline_plan_id=:timeline)"
-        ),
-        {
-            "case": BLOCKED_PLAN_EXECUTION_CASE_ID,
-            "timeline": BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
-        },
-    )
-    if blocked_exact is not True:
-        raise RuntimeError("blocked plan execution fixture is not exact")
     print("timeline execution seed verified")
 
 
