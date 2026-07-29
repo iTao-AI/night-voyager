@@ -50,7 +50,10 @@ is not durable work.
 ## Mutation and recovery contract
 
 Every mutation uses the existing `app.idempotency_records` authority and returns
-an immutable `TimelineMutationReceiptV1`. The required client order is:
+an immutable `TimelineMutationReceiptV1`. Case identity is part of each stable
+mutation request and PostgreSQL revalidates it against the locked execution.
+After an execution is resolved, same-key replay or conflict is decided before
+new-request Case validation. The required client order is:
 
 ```text
 persist operation fingerprint and key
@@ -70,6 +73,8 @@ body.
 
 Migration `0014` implements reassessment authority for blocked attestations and
 database-observed elapsed deadlines. It records predecessor identities and
-`pending_future_authorization`; it creates no successor business row. PR A renders
-the stop safely but exposes no reassessment action. PR B owns that UI and recovery
-proof.
+`pending_future_authorization`; one composite foreign key binds the predecessor
+Case, revision, decision, decision receipt, timeline, and execution, while the
+checkpoint remains bound to that execution. It creates no successor business
+row. PR A renders the stop safely but exposes no reassessment action. PR B owns
+that UI and recovery proof.

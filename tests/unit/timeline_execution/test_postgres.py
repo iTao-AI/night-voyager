@@ -9,12 +9,17 @@ import pytest
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.timeline_execution.errors import TimelineExecutionProjectionError
 from night_voyager.timeline_execution.models import (
+    CheckpointAttestationCode,
+    CheckpointAttestationKind,
+    CheckpointAttestationReasonCode,
+    CheckpointStatusCode,
     CheckpointVerificationAction,
     CheckpointVerificationReasonCode,
     ReassessmentTrigger,
     TimelineMutationReceiptV1,
 )
 from night_voyager.timeline_execution.ports import (
+    AttestTimelineCheckpointCommand,
     RequestTimelineReassessmentCommand,
     StartTimelineExecutionCommand,
     VerifyTimelineCheckpointCommand,
@@ -124,7 +129,12 @@ async def test_start_hash_excludes_generated_ids_and_decodes_exact_receipt() -> 
 
 
 @pytest.mark.asyncio
-async def test_advisor_mutations_bind_case_inside_postgresql_call() -> None:
+async def test_mutations_bind_case_inside_postgresql_call() -> None:
+    attestation_payload = {
+        **receipt_payload(),
+        "operation": "attest",
+        "result_kind": "timeline_checkpoint_attested",
+    }
     verification_payload = {
         **receipt_payload(),
         "operation": "verify",
@@ -135,8 +145,27 @@ async def test_advisor_mutations_bind_case_inside_postgresql_call() -> None:
         "operation": "reassess",
         "result_kind": "timeline_reassessment_requested",
     }
-    session = RecordingSession([verification_payload, reassessment_payload])
+    session = RecordingSession(
+        [attestation_payload, verification_payload, reassessment_payload]
+    )
     repository = PostgresTimelineExecutionRepository(session)  # type: ignore[arg-type]
+    await repository.attest(
+        actor(),
+        AttestTimelineCheckpointCommand(
+            case_id=CASE,
+            execution_id=EXECUTION,
+            checkpoint_id=RECEIPT,
+            expected_execution_version=1,
+            expected_checkpoint_version=1,
+            attestation_kind=CheckpointAttestationKind.COMPLETION,
+            status_code=CheckpointStatusCode.READY_FOR_ADVISOR,
+            attestation_code=CheckpointAttestationCode.DOCUMENTS_STATUS_CONFIRMED,
+            reason_code=CheckpointAttestationReasonCode.NOT_APPLICABLE,
+            attestation_id=UUID(int=18),
+            receipt_id=UUID(int=19),
+        ),
+        "attest-key",
+    )
     advisor = ActorContext(
         organization_id=ORG,
         actor_id=ACTOR,
@@ -176,6 +205,7 @@ async def test_advisor_mutations_bind_case_inside_postgresql_call() -> None:
     )
     assert session.calls[0][1]["case"] == CASE
     assert session.calls[1][1]["case"] == CASE
+    assert session.calls[2][1]["case"] == CASE
 
 
 @pytest.mark.asyncio

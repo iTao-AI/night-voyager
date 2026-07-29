@@ -449,7 +449,7 @@ The migration file also declares exact function signatures for Task 4:
 app.read_plan_execution_context(uuid,uuid,text,text)
 app.read_timeline_execution(uuid,uuid,text,uuid)
 app.start_timeline_execution(uuid,uuid,text,uuid,uuid,uuid,text,text)
-app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text)
+app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text)
 app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text)
 app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text)
 ```
@@ -860,16 +860,12 @@ git status --short
 
 The normal Compose proof must keep all prior journeys green and add a provider-free execution authority/minimal-browser lane. Record exact teardown and retained shared state.
 
-Local verification used a truthful split gate. The full default `make db-check`
-passed on the unchanged database scope, and the non-database phases reached by
-`make check` passed, but `make check` itself is not claimed GREEN because its
-repeated embedded database lane stopped during external package-index transport.
-Independent `make proof`, the development release verifier, and the normal
-task-scoped `make compose-proof` passed. The Compose proof covered the complete
-existing journey set and the minimal bilingual execution journey through terminal
-completion, followed by exact task-resource teardown. Exact-final-HEAD hosted
-`python`, `frontend`, and normal `compose` checks remain mandatory before
-publication or merge.
+Local follow-up verification passed the full default `make db-check`, authoritative
+`make check`, independent `make proof`, development release verifier, and one normal
+task-scoped `make compose-proof`. The Compose proof covered the complete existing
+journey set and the minimal bilingual execution journey through terminal completion,
+followed by exact task-resource teardown. Exact-final-HEAD hosted `python`,
+`frontend`, and normal `compose` checks remain mandatory before publication or merge.
 
 - [x] **Step 4: Commit documentation**
 

@@ -239,6 +239,23 @@ async def test_authenticated_http_races_replays_and_terminal_refusal() -> None:
                     "reason_code": "not_applicable",
                 }
                 if ordinal == 1:
+                    cross_case_attestation = await client.post(
+                        attest_url,
+                        headers={
+                            "Origin": ORIGIN,
+                            "X-CSRF-Token": actor.raw_csrf_token,
+                            "Idempotency-Key": "cross-case-attestation",
+                        },
+                        json={
+                            **attest_body,
+                            "case_id": "40000000-0000-0000-0000-000000000001",
+                        },
+                    )
+                    assert cross_case_attestation.status_code == 404
+                    assert (
+                        cross_case_attestation.json()["code"]
+                        == "resource_unavailable"
+                    )
                     stale = await client.post(
                         attest_url,
                         headers={
@@ -290,6 +307,16 @@ async def test_authenticated_http_races_replays_and_terminal_refusal() -> None:
                     attest_url, headers=attest_headers, json=attest_body
                 )
                 assert attestation_replay.json() == attestation_receipt
+                case_drift = await client.post(
+                    attest_url,
+                    headers=attest_headers,
+                    json={
+                        **attest_body,
+                        "case_id": "40000000-0000-0000-0000-000000000001",
+                    },
+                )
+                assert case_drift.status_code == 409
+                assert case_drift.json()["code"] == "idempotency_conflict"
 
                 client.cookies.set(SESSION_COOKIE, advisor.raw_session_token)
                 verify_url = (
@@ -349,6 +376,20 @@ async def test_authenticated_http_races_replays_and_terminal_refusal() -> None:
                 )
                 assert verified.status_code == 200, verified.text
                 last_verification = verified.json()
+                verify_case_drift = await client.post(
+                    verify_url,
+                    headers={
+                        "Origin": ORIGIN,
+                        "X-CSRF-Token": advisor.raw_csrf_token,
+                        "Idempotency-Key": f"verify-{ordinal}",
+                    },
+                    json={
+                        **verify_body,
+                        "case_id": "40000000-0000-0000-0000-000000000001",
+                    },
+                )
+                assert verify_case_drift.status_code == 409
+                assert verify_case_drift.json()["code"] == "idempotency_conflict"
 
             completed = await client.get(read_url)
             assert completed.status_code == 200

@@ -165,7 +165,7 @@ TIMELINE_EXECUTION_FUNCTION_IDENTITIES = {
     ),
     (
         "attest_timeline_checkpoint",
-        "uuid, uuid, text, uuid, uuid, integer, integer, text, text, text, "
+        "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, text, text, "
         "text, uuid, uuid, text, text",
     ),
     (

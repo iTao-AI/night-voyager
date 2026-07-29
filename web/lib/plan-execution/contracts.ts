@@ -230,7 +230,12 @@ export function parseTimelineExecutionView(value: unknown): TimelineExecutionVie
       && (view.reassessment.execution_id !== view.execution.execution_id
         || !checkpointIds.has(view.reassessment.checkpoint_id)
         || view.reassessment.predecessor_execution_id !== view.execution.execution_id
-        || view.reassessment.predecessor_checkpoint_id !== view.reassessment.checkpoint_id))
+        || view.reassessment.predecessor_checkpoint_id !== view.reassessment.checkpoint_id
+        || view.reassessment.predecessor_case_id !== view.execution.case_id
+        || view.reassessment.predecessor_case_revision !== view.execution.case_revision
+        || view.reassessment.predecessor_decision_id !== view.execution.decision_id
+        || view.reassessment.predecessor_decision_receipt_id !== view.execution.decision_receipt_id
+        || view.reassessment.predecessor_timeline_plan_id !== view.execution.timeline_plan_id))
     || view.activity.some((item) =>
       item.execution_id !== view.execution.execution_id
       || (item.checkpoint_id !== null && !checkpointIds.has(item.checkpoint_id)))

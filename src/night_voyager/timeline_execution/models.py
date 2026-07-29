@@ -260,6 +260,23 @@ class TimelineExecutionViewV1(FrozenModel):
 
     @model_validator(mode="after")
     def bounded_activity(self) -> Self:
+        if self.reassessment is not None and (
+            self.reassessment.execution_id != self.execution.execution_id
+            or self.reassessment.predecessor_execution_id
+            != self.execution.execution_id
+            or self.reassessment.predecessor_checkpoint_id
+            != self.reassessment.checkpoint_id
+            or self.reassessment.predecessor_case_id != self.execution.case_id
+            or self.reassessment.predecessor_case_revision
+            != self.execution.case_revision
+            or self.reassessment.predecessor_decision_id
+            != self.execution.decision_id
+            or self.reassessment.predecessor_decision_receipt_id
+            != self.execution.decision_receipt_id
+            or self.reassessment.predecessor_timeline_plan_id
+            != self.execution.timeline_plan_id
+        ):
+            raise ValueError("reassessment predecessor must match execution lineage")
         if self.activity_total < 0 or self.activity_total < len(self.activity):
             raise ValueError("activity_total must cover the returned activity")
         if len(self.activity) > 64:

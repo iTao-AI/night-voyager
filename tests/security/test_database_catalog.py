@@ -96,7 +96,7 @@ def test_release_verifier_freezes_the_exact_0014_timeline_catalog() -> None:
         ),
         (
             "attest_timeline_checkpoint",
-            "uuid, uuid, text, uuid, uuid, integer, integer, text, text, text, "
+            "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, text, text, "
             "text, uuid, uuid, text, text",
         ),
         (

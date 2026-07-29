@@ -11,6 +11,7 @@ from night_voyager.timeline_execution.models import (
     CheckpointAttestationReasonCode,
     CheckpointStatusCode,
     PlanExecutionContextV1,
+    ReassessmentTrigger,
     TimelineActivityItemV1,
     TimelineCheckpointAttestationV1,
     TimelineCurrentActionCode,
@@ -19,6 +20,7 @@ from night_voyager.timeline_execution.models import (
     TimelineExecutionV1,
     TimelineExecutionViewV1,
     TimelineMutationReceiptV1,
+    TimelineReassessmentRequestV1,
 )
 
 U1 = UUID("00000000-0000-0000-0000-000000000001")
@@ -180,4 +182,71 @@ def test_activity_view_enforces_latest_64_and_exact_truncation_flag() -> None:
         TimelineExecutionViewV1(
             **view.model_dump(exclude={"activity_truncated"}),
             activity_truncated=False,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("predecessor_case_id", U1),
+        ("predecessor_case_revision", 2),
+        ("predecessor_decision_id", U2),
+        ("predecessor_decision_receipt_id", U1),
+        ("predecessor_timeline_plan_id", U2),
+    ],
+)
+def test_reassessment_predecessor_lineage_matches_enclosing_execution(
+    field: str, value: object
+) -> None:
+    item = TimelineReassessmentRequestV1(
+        schema_version=1,
+        reassessment_id=U1,
+        execution_id=U1,
+        checkpoint_id=U2,
+        advisor_actor_id=U1,
+        trigger=ReassessmentTrigger.DEADLINE_ELAPSED,
+        trigger_reference_id=None,
+        accepted_database_date=date(2026, 7, 29),
+        accepted_trigger_projection_sha256="a" * 64,
+        handoff_schema_version=1,
+        predecessor_case_id=U2,
+        predecessor_case_revision=1,
+        predecessor_decision_id=U1,
+        predecessor_decision_receipt_id=U2,
+        predecessor_timeline_plan_id=U1,
+        predecessor_execution_id=U1,
+        predecessor_checkpoint_id=U2,
+        owner_role="advisor",
+        successor_status="pending_future_authorization",
+        created_at=NOW,
+    )
+    current_action = TimelineCurrentActionV1(
+        schema_version=1,
+        code=TimelineCurrentActionCode.REASSESSMENT_HANDOFF_REQUIRED,
+        owner_role="advisor",
+        checkpoint_id=U2,
+        execution_version=1,
+        checkpoint_version=1,
+    )
+    valid = TimelineExecutionViewV1(
+        schema_version=1,
+        execution=execution(),
+        checkpoints=(),
+        current_checkpoint=None,
+        latest_attestation=None,
+        latest_verification=None,
+        reassessment=item,
+        current_action=current_action,
+        observed_date=date(2026, 7, 29),
+        activity=(),
+        activity_total=0,
+        activity_truncated=False,
+    )
+    assert valid.reassessment == item
+    invalid = item.model_dump()
+    invalid[field] = value
+    with pytest.raises(ValidationError, match="reassessment predecessor"):
+        TimelineExecutionViewV1(
+            **valid.model_dump(exclude={"reassessment"}),
+            reassessment=TimelineReassessmentRequestV1.model_validate(invalid),
         )

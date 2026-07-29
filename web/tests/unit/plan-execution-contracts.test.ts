@@ -170,6 +170,48 @@ it("accepts independently projected latest records from different checkpoints", 
   expect(() => parseTimelineExecutionView(foreignCheckpoint)).toThrow();
 });
 
+it("binds every reassessment predecessor identity to the enclosing execution", () => {
+  const view = viewFixture("blocked");
+  view.execution.state = "reassessment_required";
+  view.reassessment = {
+    schema_version: 1,
+    reassessment_id: id(20),
+    execution_id: EXECUTION_ID,
+    checkpoint_id: CHECKPOINT_IDS[0],
+    advisor_actor_id: id(21),
+    trigger: "deadline_elapsed",
+    trigger_reference_id: null,
+    accepted_database_date: "2026-07-29",
+    accepted_trigger_projection_sha256: "a".repeat(64),
+    handoff_schema_version: 1,
+    predecessor_case_id: CASE_ID,
+    predecessor_case_revision: 1,
+    predecessor_decision_id: id(7),
+    predecessor_decision_receipt_id: id(8),
+    predecessor_timeline_plan_id: id(9),
+    predecessor_execution_id: EXECUTION_ID,
+    predecessor_checkpoint_id: CHECKPOINT_IDS[0],
+    owner_role: "advisor",
+    successor_status: "pending_future_authorization",
+    created_at: AT,
+  };
+  expect(parseTimelineExecutionView(view)).toEqual(view);
+
+  for (const field of [
+    "predecessor_case_id",
+    "predecessor_decision_id",
+    "predecessor_decision_receipt_id",
+    "predecessor_timeline_plan_id",
+  ] as const) {
+    const invalid = structuredClone(view);
+    invalid.reassessment![field] = id(99);
+    expect(() => parseTimelineExecutionView(invalid)).toThrow();
+  }
+  const invalidRevision = structuredClone(view);
+  invalidRevision.reassessment!.predecessor_case_revision = 2;
+  expect(() => parseTimelineExecutionView(invalidRevision)).toThrow();
+});
+
 it("rejects non-canonical checkpoint graphs and contradictory current action", () => {
   const duplicate = viewFixture();
   duplicate.checkpoints[1] = {

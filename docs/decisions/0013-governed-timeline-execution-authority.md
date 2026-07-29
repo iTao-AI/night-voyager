@@ -20,6 +20,9 @@ Reusing planning revision authority after a final decision would erase that boun
 2. PostgreSQL owns Case selection, assignments, current date, row locks,
    transitions, idempotency, append-only history, and read-time risk. API and
    browser requests cannot supply `as_of`, tenant, actor, or role authority.
+   Every mutation binds its public Case identity to the locked execution; an
+   existing idempotency key resolves replay or request conflict before later
+   new-request Case validation.
 3. Family input is a structured attestation, not source `Evidence`. Only assigned
    advisor verification upgrades trust.
 4. Every mutation returns a receipt. Clients must perform a separate fresh GET
@@ -27,7 +30,9 @@ Reusing planning revision authority after a final decision would erase that boun
 5. Current-action guidance is a synchronous deterministic projection. It creates
    no `AgentTask`, Skill, worker job, queue, scheduler, or SSE stream.
 6. Reassessment records a future-successor-safe handoff but creates no successor
-   Case, decision, timeline, execution, or other business row.
+   Case, decision, timeline, execution, or other business row. A composite
+   database anchor binds its predecessor Case, revision, decision, receipt,
+   timeline, and execution identities, and the checkpoint remains execution-bound.
 7. `0014 -> 0013` is allowed only with no execution history. Otherwise downgrade
    refuses before mutation.
 

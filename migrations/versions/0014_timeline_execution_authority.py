@@ -25,7 +25,7 @@ FUNCTION_SIGNATURES = (
     "app.read_plan_execution_context(uuid,uuid,text,text)",
     "app.read_timeline_execution(uuid,uuid,text,uuid)",
     "app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text)",
-    "app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text)",
+    "app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text)",
     "app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text)",
     "app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text)",
 )
@@ -54,6 +54,10 @@ CREATE TABLE app.timeline_executions (
   PRIMARY KEY (organization_id,id),
   UNIQUE (organization_id,timeline_plan_id),
   UNIQUE (organization_id,id,case_id,case_revision),
+  UNIQUE (
+    organization_id,id,case_id,case_revision,family_decision_id,
+    decision_receipt_id,timeline_plan_id
+  ),
   FOREIGN KEY (organization_id,case_id,case_revision)
     REFERENCES app.student_case_revisions(organization_id,case_id,revision),
   FOREIGN KEY (organization_id,family_decision_id,decision_receipt_id,case_id)
@@ -163,6 +167,14 @@ CREATE TABLE app.timeline_reassessment_requests (
     REFERENCES app.actors(organization_id,id),
   FOREIGN KEY (organization_id,predecessor_case_id,predecessor_case_revision)
     REFERENCES app.student_case_revisions(organization_id,case_id,revision),
+  FOREIGN KEY (
+    organization_id,predecessor_execution_id,predecessor_case_id,
+    predecessor_case_revision,predecessor_decision_id,
+    predecessor_decision_receipt_id,predecessor_timeline_plan_id
+  ) REFERENCES app.timeline_executions(
+    organization_id,id,case_id,case_revision,family_decision_id,
+    decision_receipt_id,timeline_plan_id
+  ),
   FOREIGN KEY (organization_id,predecessor_execution_id,predecessor_checkpoint_id)
     REFERENCES app.timeline_checkpoints(organization_id,execution_id,id)
 );
@@ -265,7 +277,7 @@ BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution projecti
 CREATE FUNCTION app.start_timeline_execution(p_org uuid,p_actor uuid,p_role text,p_timeline uuid,p_case uuid,p_expected_case_revision integer,p_execution uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation unavailable'; END; $$;
-CREATE FUNCTION app.attest_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_kind text,p_status text,p_attestation_code text,p_reason_code text,p_attestation uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE FUNCTION app.attest_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_kind text,p_status text,p_attestation_code text,p_reason_code text,p_attestation uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation unavailable'; END; $$;
 CREATE FUNCTION app.verify_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_attestation uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_action text,p_reason_code text,p_verification uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
@@ -278,13 +290,13 @@ BEGIN RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution mutation
 REVOKE ALL ON FUNCTION app.read_plan_execution_context(uuid,uuid,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.read_timeline_execution(uuid,uuid,text,uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION app.read_plan_execution_context(uuid,uuid,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.read_timeline_execution(uuid,uuid,text,uuid) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.start_timeline_execution(uuid,uuid,text,uuid,uuid,integer,uuid,uuid,text,text) TO night_voyager_api;
-GRANT EXECUTE ON FUNCTION app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text) TO night_voyager_api;
+GRANT EXECUTE ON FUNCTION app.attest_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,integer,integer,text,text,text,text,uuid,uuid,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.verify_timeline_checkpoint(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,text,uuid,uuid,text,text) TO night_voyager_api;
 GRANT EXECUTE ON FUNCTION app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,uuid,integer,integer,text,uuid,uuid,text,text) TO night_voyager_api;
 GRANT SELECT ON app.timeline_executions,app.timeline_checkpoints,
@@ -474,7 +486,7 @@ BEGIN
   RETURN v_result;
 END; $$;
 
-CREATE OR REPLACE FUNCTION app.attest_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_execution uuid,p_checkpoint uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_kind text,p_status text,p_attestation_code text,p_reason_code text,p_attestation uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
+CREATE OR REPLACE FUNCTION app.attest_timeline_checkpoint(p_org uuid,p_actor uuid,p_role text,p_case uuid,p_execution uuid,p_checkpoint uuid,p_expected_execution_version integer,p_expected_checkpoint_version integer,p_kind text,p_status text,p_attestation_code text,p_reason_code text,p_attestation uuid,p_receipt uuid,p_key_hash text,p_request_hash text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS $$
 DECLARE
   v_execution app.timeline_executions%ROWTYPE;
@@ -486,7 +498,8 @@ DECLARE
   v_expected_code text;
   v_result jsonb;
 BEGIN
-  IF p_role NOT IN ('student','parent') OR p_execution IS NULL OR p_checkpoint IS NULL
+  IF p_role NOT IN ('student','parent') OR p_case IS NULL
+     OR p_execution IS NULL OR p_checkpoint IS NULL
      OR p_attestation IS NULL OR p_receipt IS NULL
      OR p_expected_execution_version<=0 OR p_expected_checkpoint_version<=0
      OR p_key_hash !~ '^[0-9a-f]{64}$'
@@ -518,6 +531,9 @@ BEGIN
     ) INTO v_result FROM app.timeline_mutation_receipts
      WHERE organization_id=p_org AND receipt_id=v_prior.response_id;
     RETURN v_result;
+  END IF;
+  IF v_execution.case_id IS DISTINCT FROM p_case THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
   IF v_execution.state='completed' THEN
     RAISE EXCEPTION USING ERRCODE='NV022',MESSAGE='timeline execution is completed';
@@ -633,9 +649,6 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
-  IF v_execution.case_id IS DISTINCT FROM p_case THEN
-    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
-  END IF;
   SELECT * INTO v_prior FROM app.idempotency_records
    WHERE organization_id=p_org AND actor_id=p_actor
      AND operation='timeline_checkpoint_verify' AND key_sha256=p_key_hash;
@@ -655,6 +668,9 @@ BEGIN
     ) INTO v_result FROM app.timeline_mutation_receipts
      WHERE organization_id=p_org AND receipt_id=v_prior.response_id;
     RETURN v_result;
+  END IF;
+  IF v_execution.case_id IS DISTINCT FROM p_case THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
   IF v_execution.state='completed' THEN
     RAISE EXCEPTION USING ERRCODE='NV022',MESSAGE='timeline execution is completed';
@@ -790,9 +806,6 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
-  IF v_execution.case_id IS DISTINCT FROM p_case THEN
-    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
-  END IF;
   SELECT * INTO v_prior FROM app.idempotency_records
    WHERE organization_id=p_org AND actor_id=p_actor
      AND operation='timeline_reassessment_request' AND key_sha256=p_key_hash;
@@ -812,6 +825,9 @@ BEGIN
     ) INTO v_result FROM app.timeline_mutation_receipts
      WHERE organization_id=p_org AND receipt_id=v_prior.response_id;
     RETURN v_result;
+  END IF;
+  IF v_execution.case_id IS DISTINCT FROM p_case THEN
+    RAISE EXCEPTION USING ERRCODE='NV003',MESSAGE='timeline execution unavailable';
   END IF;
   IF v_execution.state='completed' THEN
     RAISE EXCEPTION USING ERRCODE='NV022',MESSAGE='timeline execution is completed';

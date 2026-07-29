@@ -110,13 +110,14 @@ class PostgresTimelineExecutionRepository:
     ) -> TimelineMutationReceiptV1:
         raw = await self._call(
             "SELECT app.attest_timeline_checkpoint("
-            ":org,:actor,:role,:execution,:checkpoint,:execution_version,"
+            ":org,:actor,:role,:case,:execution,:checkpoint,:execution_version,"
             ":checkpoint_version,:kind,:status,:attestation_code,:reason_code,"
             ":attestation,:receipt,:key_hash,:request_hash)",
             {
                 "org": actor.organization_id,
                 "actor": actor.actor_id,
                 "role": actor.role,
+                "case": command.case_id,
                 "execution": command.execution_id,
                 "checkpoint": command.checkpoint_id,
                 "execution_version": command.expected_execution_version,

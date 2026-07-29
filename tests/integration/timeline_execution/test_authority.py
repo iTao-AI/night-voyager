@@ -172,16 +172,37 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
                 ("arrival", "parent", "pending"),
             ]
             checkpoint_id = checkpoints[0].id
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError) as failure:
+                await connection.scalar(
+                    text(
+                        "SELECT app.attest_timeline_checkpoint("
+                        ":org,:actor,'student',:wrong_case,:execution,:checkpoint,1,1,"
+                        "'blocked','work_blocked','documents_status_confirmed',"
+                        "'deadline_at_risk',gen_random_uuid(),gen_random_uuid(),"
+                        "repeat('0',64),repeat('1',64))"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": STUDENT,
+                        "wrong_case": PLAN_EXECUTION_CASE_ID,
+                        "execution": EXECUTION,
+                        "checkpoint": checkpoint_id,
+                    },
+                )
+            assert sqlstate(failure.value) == "NV003"
+            await savepoint.rollback()
             blocked = await connection.scalar(
                 text(
                     "SELECT app.attest_timeline_checkpoint("
-                    ":org,:actor,'student',:execution,:checkpoint,1,1,"
+                    ":org,:actor,'student',:case,:execution,:checkpoint,1,1,"
                     "'blocked','work_blocked','documents_status_confirmed',"
                     "'deadline_at_risk',:attestation,:receipt,repeat('c',64),repeat('d',64))"
                 ),
                 {
                     "org": ORG,
                     "actor": STUDENT,
+                    "case": CASE,
                     "execution": EXECUTION,
                     "checkpoint": checkpoint_id,
                     "attestation": ATTESTATION,
@@ -189,6 +210,43 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
                 },
             )
             assert blocked["result_kind"] == "timeline_checkpoint_attested"
+
+        async with migrator.begin() as connection:
+            await set_actor(connection, ADVISOR, "advisor")
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError) as failure:
+                await connection.execute(
+                    text(
+                        "INSERT INTO app.timeline_reassessment_requests("
+                        "organization_id,reassessment_id,execution_id,checkpoint_id,"
+                        "advisor_actor_id,trigger,trigger_reference_id,"
+                        "observed_execution_version,observed_checkpoint_version,"
+                        "request_sha256,accepted_database_date,"
+                        "accepted_trigger_projection_sha256,handoff_schema_version,"
+                        "predecessor_case_id,predecessor_case_revision,"
+                        "predecessor_decision_id,predecessor_decision_receipt_id,"
+                        "predecessor_timeline_plan_id,predecessor_execution_id,"
+                        "predecessor_checkpoint_id,owner_role,successor_status) "
+                        "VALUES(:org,gen_random_uuid(),:execution,:checkpoint,:advisor,"
+                        "'blocked_attestation',:attestation,2,2,repeat('2',64),"
+                        "CURRENT_DATE,repeat('3',64),1,:wrong_case,1,:decision,"
+                        ":decision_receipt,:timeline,:execution,:checkpoint,'advisor',"
+                        "'pending_future_authorization')"
+                    ),
+                    {
+                        "org": ORG,
+                        "execution": EXECUTION,
+                        "checkpoint": checkpoint_id,
+                        "advisor": ADVISOR,
+                        "attestation": ATTESTATION,
+                        "wrong_case": PLAN_EXECUTION_CASE_ID,
+                        "decision": DECISION,
+                        "decision_receipt": DECISION_RECEIPT,
+                        "timeline": TIMELINE,
+                    },
+                )
+            assert sqlstate(failure.value) == "23503"
+            await savepoint.rollback()
 
         async with api.begin() as connection:
             await set_actor(connection, ADVISOR, "advisor")
@@ -211,6 +269,26 @@ async def test_start_blocked_reassessment_and_exact_receipt_replay() -> None:
                 },
             )
             assert reassessed["result_kind"] == "timeline_reassessment_requested"
+            savepoint = await connection.begin_nested()
+            with pytest.raises(DBAPIError) as failure:
+                await connection.scalar(
+                    text(
+                        "SELECT app.request_timeline_reassessment("
+                        ":org,:actor,'advisor',:wrong_case,:execution,:checkpoint,"
+                        ":attestation,2,2,'blocked_attestation',gen_random_uuid(),"
+                        "gen_random_uuid(),repeat('e',64),repeat('0',64))"
+                    ),
+                    {
+                        "org": ORG,
+                        "actor": ADVISOR,
+                        "wrong_case": PLAN_EXECUTION_CASE_ID,
+                        "execution": EXECUTION,
+                        "checkpoint": checkpoint_id,
+                        "attestation": ATTESTATION,
+                    },
+                )
+            assert sqlstate(failure.value) == "NV008"
+            await savepoint.rollback()
 
         async with migrator.connect() as connection:
             await set_actor(connection, ADVISOR, "advisor")
