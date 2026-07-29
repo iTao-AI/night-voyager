@@ -8,7 +8,9 @@
 
 **Tech Stack:** Python 3.12, Pydantic v2, FastAPI, SQLAlchemy async sessions, PostgreSQL 18, Alembic, Next.js 16, React 19, TypeScript, Vitest, Playwright 1.58, pytest, Ruff, Pyright, Docker Compose.
 
-**Plan status:** Approved; implementation has not started.
+**Plan status:** Implemented and locally verified; Career authority review complete;
+awaiting separate publication authorization. No push, PR, merge, publication, or
+release has occurred.
 
 ## Global Constraints
 
@@ -300,11 +302,11 @@ Risk is exact:
 
 `derive_current_action` fails on contradictory authority rows. It maps `active/in_progress` to `checkpoint_attestation_required`, `active/awaiting_advisor` to `advisor_verification_required`, `completed` to `execution_completed`, and `reassessment_required` to `reassessment_handoff_required`.
 
-- [ ] **Step 1: Write strict model, code-union, policy, and canonical-byte tests**
+- [x] **Step 1: Write strict model, code-union, policy, and canonical-byte tests**
 
 Test unknown/extra fields, naive timestamps, non-positive versions, malformed UUIDs, every forbidden narrative/URL/file key, invalid code combinations, reordered/duplicate/missing milestones, browser-supplied role drift, due-soon boundaries at 14/15 days, overdue boundary, contradictory current checkpoints, and byte-identical receipt round-trip.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 uv run pytest -q tests/unit/timeline_execution
@@ -312,11 +314,11 @@ uv run pytest -q tests/unit/timeline_execution
 
 Expected: collection succeeds and fails because the package and contracts do not exist.
 
-- [ ] **Step 3: Implement the minimal frozen models, canonical hashing, and pure policy**
+- [x] **Step 3: Implement the minimal frozen models, canonical hashing, and pure policy**
 
 Use aware UTC timestamps. Do not read the wall clock inside models or policy. Do not import FastAPI, SQLAlchemy, web/session code, Agent tasks, or provider code.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 ```bash
 uv run pytest -q tests/unit/timeline_execution
@@ -324,7 +326,7 @@ uv run ruff check src/night_voyager/timeline_execution tests/unit/timeline_execu
 uv run pyright src/night_voyager/timeline_execution tests/unit/timeline_execution
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/night_voyager/timeline_execution tests/unit/timeline_execution
@@ -376,21 +378,21 @@ TimelineExecutionConflictError(code: str)
 TimelineExecutionProjectionError
 ```
 
-- [ ] **Step 1: Add RED service tests**
+- [x] **Step 1: Add RED service tests**
 
 Cover scenario-key closure, assigned family start, wrong-role precheck, accountable-role attestation, advisor-only verification/reassessment, forbidden client authority fields, repository unavailable/conflict/projection mapping, and exact receipt passthrough without a synthesized mutable view.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 uv run pytest -q tests/unit/timeline_execution/test_application.py
 ```
 
-- [ ] **Step 3: Implement ports, service, and deterministic fakes**
+- [x] **Step 3: Implement ports, service, and deterministic fakes**
 
 Fakes record call count and exact command bytes for provider-free unit proof. They do not contain production fallback state.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 uv run pytest -q tests/unit/timeline_execution
@@ -455,26 +457,26 @@ app.request_timeline_reassessment(uuid,uuid,text,uuid,uuid,uuid,integer,integer,
 
 The exact parameter names and order are frozen by migration architecture tests. Server-generated UUID arguments are execution/attestation/verification/reassessment/receipt identities; the browser never supplies them.
 
-- [ ] **Step 1: Add migration, catalog, RLS, query-plan, and downgrade RED**
+- [x] **Step 1: Add migration, catalog, RLS, query-plan, and downgrade RED**
 
 Cover fresh upgrade, `0013 -> 0014`, exact current head, owners/search paths/grants, forced RLS, direct-DML denial, runtime role matrix, all constraints, append-only triggers, empty downgrade parity, history refusal before mutation, re-upgrade, 0/1/64/65-plus mixed activity, equal-timestamp tie order, exact total, and JSON `EXPLAIN` index use.
 
-- [ ] **Step 2: Add a closed isolated database lane**
+- [x] **Step 2: Add a closed isolated database lane**
 
 `scripts/run_db_tests.sh timeline-execution migration` runs only the new migration/catalog/query-plan tests in a disposable project. Unknown or missing submodes exit `2` before Docker mutation. Historical migration lanes remain isolated and unchanged.
 
-- [ ] **Step 3: Run RED**
+- [x] **Step 3: Run RED**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-migration-red-$$" \
   scripts/run_db_tests.sh timeline-execution migration
 ```
 
-- [ ] **Step 4: Implement DDL, RLS, indexes, immutable triggers, function declarations, and downgrade**
+- [x] **Step 4: Implement DDL, RLS, indexes, immutable triggers, function declarations, and downgrade**
 
 `0014 -> 0013` takes the documented locks, checks all six history tables while RLS is safely controlled, refuses before mutation when any history exists, and restores exact `0013` catalog/grants when empty.
 
-- [ ] **Step 5: Run GREEN and commit**
+- [x] **Step 5: Run GREEN and commit**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-migration-green-$$" \
@@ -542,11 +544,11 @@ Read projections use PostgreSQL `CURRENT_DATE` once per statement, expose it as 
 
 `PostgresTimelineExecutionRepository` calls only the frozen functions, decodes exact DTOs, rejects malformed/duplicate/contradictory rows, maps approved SQLSTATEs to closed errors, and never repairs state in Python.
 
-- [ ] **Step 1: Add transition, receipt, concurrency, repository, and negative RED**
+- [x] **Step 1: Add transition, receipt, concurrency, repository, and negative RED**
 
 Cover all roles, multiple actors sharing one role, cross-tenant and cross-Case attempts, snapshot mismatch, duplicate start, all code combinations, latest-attestation binding, row-version conflicts, two-tab races, same-key replay after later transitions, lost acknowledgement, different-body conflict, fixed lock order, final completion, both reassessment triggers, database-owned date, exact handoff, no successor rows, pool rollback, and strict projection decode.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 uv run pytest -q tests/unit/timeline_execution/test_postgres.py
@@ -554,11 +556,11 @@ COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-authority-red-$$" \
   scripts/run_db_tests.sh timeline-execution authority
 ```
 
-- [ ] **Step 3: Implement SQL bodies and repository**
+- [x] **Step 3: Implement SQL bodies and repository**
 
 Use one `CURRENT_DATE` observation per read or reassessment statement. The stable client request hash excludes that date and all generated IDs; the accepted reassessment row separately stores `accepted_database_date` and the authoritative trigger projection hash.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
 ```bash
 uv run pytest -q tests/unit/timeline_execution
@@ -571,7 +573,7 @@ uv run pyright src/night_voyager/timeline_execution \
   tests/unit/timeline_execution tests/integration/timeline_execution
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add migrations/versions/0014_timeline_execution_authority.py \
@@ -634,11 +636,11 @@ request_validation_failed
 
 Add every route to the API path classifier so framework validation also emits Problem JSON. Authorization failures remain 404/non-enumerating. BFF handlers forward only Cookie and, for mutations, Content-Type, Origin, CSRF, and Idempotency-Key through the existing bounded transport.
 
-- [ ] **Step 1: Add FastAPI and BFF RED**
+- [x] **Step 1: Add FastAPI and BFF RED**
 
 Cover exact routes, scenario closure, strict body shape, UUIDs, authentication, Origin, CSRF, idempotency, wrong role, cross-Case, stale versions, replay bytes, response cap, upstream timeout/unavailable, no authority derivation in BFF, and no task/SSE route.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-http-red-$$" \
@@ -649,11 +651,11 @@ npm --prefix web run test -- --run \
   web/tests/unit/plan-execution-bff.test.ts
 ```
 
-- [ ] **Step 3: Implement router, app wiring, BFF handlers, and exact error mapping**
+- [x] **Step 3: Implement router, app wiring, BFF handlers, and exact error mapping**
 
 Do not duplicate identity/session helpers. Do not return a mutable execution view from mutations.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-http-green-$$" \
@@ -756,11 +758,11 @@ fresh GET
 render authoritative state
 ```
 
-- [ ] **Step 1: Add deterministic seed, strict parser, reducer, recovery, and semantic UI RED**
+- [x] **Step 1: Add deterministic seed, strict parser, reducer, recovery, and semantic UI RED**
 
 Test zero/ambiguous scenario, seed replay, malformed/extra client fields, storage replacement count, no CSRF persistence, start-to-completion role matrix, receipt-before-GET ordering, duplicate click, reload, wrong role, optional guidance fallback, exact `zh-CN`/`en` catalog, current action first in DOM, and no raw hashes/row versions by default.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-seed-red-$$" \
@@ -772,11 +774,11 @@ npm --prefix web run test -- --run \
   web/tests/unit/plan-execution-ui.test.tsx
 ```
 
-- [ ] **Step 3: Implement the seed, verifier, strict client, and minimal semantic workspace**
+- [x] **Step 3: Implement the seed, verifier, strict client, and minimal semantic workspace**
 
 Use existing `PresentationShell` and catalog infrastructure. Keep API orchestration in the hook and pure display in components. Do not add route-level tabs or a generic dashboard.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-seed-green-$$" \
@@ -818,7 +820,7 @@ git commit -m "feat: add the minimal governed execution journey"
 
 Documentation must distinguish immutable planning from execution authority, family attestation from Evidence, advisor verification from attestation, synchronous guidance from AgentTask, PostgreSQL date authority, receipt-then-GET reconciliation, reassessment backend availability versus PR B UI/proof deferral, migration `0014`, released `v0.1.4@0013`, and all non-claims.
 
-- [ ] **Step 1: Add documentation/release RED**
+- [x] **Step 1: Add documentation/release RED**
 
 ```bash
 uv run pytest -q \
@@ -828,11 +830,11 @@ uv run pytest -q \
 uv run python scripts/verify_release.py --tree-mode development
 ```
 
-- [ ] **Step 2: Update current-development documentation and run a targeted documentation coverage audit**
+- [x] **Step 2: Update current-development documentation and run a targeted documentation coverage audit**
 
 Close only confirmed reference, how-to/operations, explanation/ADR, and index gaps. Published release notes and verification guides remain byte-identical.
 
-- [ ] **Step 3: Run final PR A gates**
+- [x] **Step 3: Run final PR A gates**
 
 ```bash
 uv lock --check
@@ -859,7 +861,7 @@ git status --short
 
 The normal Compose proof must keep all prior journeys green and add a provider-free execution authority/minimal-browser lane. Record exact teardown and retained shared state.
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
 ```bash
 git add docs README.md README_CN.md scripts/verify_release.py
@@ -867,7 +869,7 @@ git add docs README.md README_CN.md scripts/verify_release.py
 git commit -m "docs: publish governed timeline execution authority"
 ```
 
-- [ ] **Step 5: Freeze PR A exit evidence**
+- [x] **Step 5: Freeze PR A exit evidence**
 
 Return exact commit list, changed files/stat, RED→GREEN commands, migration/grant/RLS/query-plan proof, normal Compose proof, Docker inventories, documentation impact, rollback boundary, remaining PR B/C work, and non-claims. Worktree, staging, and untracked state must be clean.
 

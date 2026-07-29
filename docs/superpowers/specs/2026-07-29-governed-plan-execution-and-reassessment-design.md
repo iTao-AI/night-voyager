@@ -1,6 +1,7 @@
 # Governed Plan Execution and Reassessment
 
-**Status:** Approved design; implementation has not started.
+**Status:** Approved design; PR A is implemented locally. PR B/C, publication,
+and release have not started.
 
 ## Summary
 
