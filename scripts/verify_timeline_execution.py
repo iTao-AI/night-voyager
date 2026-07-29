@@ -10,21 +10,53 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from night_voyager.identity.demo_seed import (
+    BLOCKED_PLAN_EXECUTION_BRIEF_ID,
     BLOCKED_PLAN_EXECUTION_CASE_ID,
+    BLOCKED_PLAN_EXECUTION_DECISION_ID,
+    BLOCKED_PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    BLOCKED_PLAN_EXECUTION_REVIEW_ID,
+    BLOCKED_PLAN_EXECUTION_RUN_ID,
     BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
+    PLAN_EXECUTION_BLOCKED_ACTORS,
     PLAN_EXECUTION_BRIEF_ID,
     PLAN_EXECUTION_CASE_ID,
     PLAN_EXECUTION_DECISION_ID,
     PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    PLAN_EXECUTION_HAPPY_ACTORS,
     PLAN_EXECUTION_REVIEW_ID,
     PLAN_EXECUTION_RUN_ID,
     PLAN_EXECUTION_TIMELINE_ID,
 )
 
 DEMO_ORG = UUID("10000000-0000-0000-0000-000000000001")
-DEMO_ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
-DEMO_STUDENT = UUID("20000000-0000-0000-0000-000000000002")
-DEMO_PARENT = UUID("20000000-0000-0000-0000-000000000003")
+DEMO_ADVISOR = PLAN_EXECUTION_HAPPY_ACTORS[0][2]
+DEMO_STUDENT = PLAN_EXECUTION_HAPPY_ACTORS[1][2]
+DEMO_PARENT = PLAN_EXECUTION_HAPPY_ACTORS[2][2]
+
+SEED_SCENARIOS = (
+    (
+        "happy",
+        PLAN_EXECUTION_CASE_ID,
+        PLAN_EXECUTION_RUN_ID,
+        PLAN_EXECUTION_REVIEW_ID,
+        PLAN_EXECUTION_BRIEF_ID,
+        PLAN_EXECUTION_DECISION_ID,
+        PLAN_EXECUTION_DECISION_RECEIPT_ID,
+        PLAN_EXECUTION_TIMELINE_ID,
+        PLAN_EXECUTION_HAPPY_ACTORS,
+    ),
+    (
+        "blocked",
+        BLOCKED_PLAN_EXECUTION_CASE_ID,
+        BLOCKED_PLAN_EXECUTION_RUN_ID,
+        BLOCKED_PLAN_EXECUTION_REVIEW_ID,
+        BLOCKED_PLAN_EXECUTION_BRIEF_ID,
+        BLOCKED_PLAN_EXECUTION_DECISION_ID,
+        BLOCKED_PLAN_EXECUTION_DECISION_RECEIPT_ID,
+        BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
+        PLAN_EXECUTION_BLOCKED_ACTORS,
+    ),
+)
 
 
 def parse_expectation(argv: Sequence[str] | None = None) -> str:
@@ -38,63 +70,71 @@ def parse_expectation(argv: Sequence[str] | None = None) -> str:
 
 
 async def _verify_seed(connection: AsyncConnection) -> None:
-    exact = await connection.scalar(
-        text(
-            "SELECT "
-            "(SELECT count(*)=1 FROM app.student_cases "
-            "WHERE id=:case AND state='plan_ready' "
-            "AND current_revision=1) "
-            "AND (SELECT count(*)=1 FROM app.student_case_revisions "
-            "WHERE case_id=:case AND revision=1) "
-            "AND (SELECT count(*)=1 FROM app.planning_runs "
-            "WHERE case_id=:case AND id=:run "
-            "AND state='review_required' AND is_current) "
-            "AND (SELECT count(*)=1 FROM app.advisor_reviews "
-            "WHERE case_id=:case AND id=:review "
-            "AND planning_run_id=:run) "
-            "AND (SELECT count(*)=1 FROM app.decision_briefs "
-            "WHERE case_id=:case AND id=:brief "
-            "AND advisor_review_id=:review AND NOT is_current) "
-            "AND (SELECT count(*)=1 FROM app.family_decisions "
-            "WHERE case_id=:case AND id=:decision "
-            "AND receipt_id=:receipt AND decision_brief_id=:brief) "
-            "AND (SELECT count(*)=1 FROM app.timeline_plans "
-            "WHERE id=:timeline AND family_decision_id=:decision) "
-            "AND (SELECT count(*)=3 AND count(DISTINCT actor_id)=3 "
-            "FROM app.student_case_participants WHERE case_id=:case) "
-            "AND (SELECT count(*)=0 FROM app.timeline_executions "
-            "WHERE timeline_plan_id=:timeline)"
-        ),
-        {
-            "case": PLAN_EXECUTION_CASE_ID,
-            "run": PLAN_EXECUTION_RUN_ID,
-            "review": PLAN_EXECUTION_REVIEW_ID,
-            "brief": PLAN_EXECUTION_BRIEF_ID,
-            "decision": PLAN_EXECUTION_DECISION_ID,
-            "receipt": PLAN_EXECUTION_DECISION_RECEIPT_ID,
-            "timeline": PLAN_EXECUTION_TIMELINE_ID,
-        },
-    )
-    if exact is not True:
-        raise RuntimeError("governed plan execution fixture is not exact")
-    blocked_exact = await connection.scalar(
-        text(
-            "SELECT "
-            "(SELECT count(*)=1 FROM app.student_cases "
-            "WHERE id=:case AND state='plan_ready' AND current_revision=1) "
-            "AND (SELECT count(*)=1 FROM app.timeline_plans WHERE id=:timeline) "
-            "AND (SELECT count(*)=3 FROM app.student_case_participants "
-            "WHERE case_id=:case) "
-            "AND (SELECT count(*)=0 FROM app.timeline_executions "
-            "WHERE timeline_plan_id=:timeline)"
-        ),
-        {
-            "case": BLOCKED_PLAN_EXECUTION_CASE_ID,
-            "timeline": BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
-        },
-    )
-    if blocked_exact is not True:
-        raise RuntimeError("blocked plan execution fixture is not exact")
+    for (
+        scenario,
+        case_id,
+        run_id,
+        review_id,
+        brief_id,
+        decision_id,
+        receipt_id,
+        timeline_id,
+        actors,
+    ) in SEED_SCENARIOS:
+        exact = await connection.scalar(
+            text(
+                "SELECT "
+                "(SELECT count(*)=1 FROM app.student_cases "
+                "WHERE id=:case AND state='plan_ready' AND current_revision=1) "
+                "AND (SELECT count(*)=1 FROM app.student_case_revisions "
+                "WHERE case_id=:case AND revision=1) "
+                "AND (SELECT count(*)=1 FROM app.planning_runs "
+                "WHERE case_id=:case AND id=:run "
+                "AND state='review_required' AND is_current) "
+                "AND (SELECT count(*)=1 FROM app.advisor_reviews "
+                "WHERE case_id=:case AND id=:review "
+                "AND planning_run_id=:run AND advisor_actor_id=:advisor) "
+                "AND (SELECT count(*)=1 FROM app.decision_briefs "
+                "WHERE case_id=:case AND id=:brief "
+                "AND advisor_review_id=:review AND NOT is_current) "
+                "AND (SELECT count(*)=1 FROM app.family_decisions "
+                "WHERE case_id=:case AND id=:decision "
+                "AND receipt_id=:receipt AND decision_brief_id=:brief "
+                "AND decision_made_by_actor_id=:parent) "
+                "AND (SELECT count(*)=1 FROM app.timeline_plans "
+                "WHERE id=:timeline AND family_decision_id=:decision) "
+                "AND (SELECT count(*)=3 AND count(DISTINCT actor_id)=3 "
+                "FROM app.student_case_participants WHERE case_id=:case) "
+                "AND (SELECT count(*)=3 FROM auth.demo_principals "
+                "WHERE actor_id IN (:advisor,:student,:parent)) "
+                "AND (SELECT count(*)=0 FROM app.timeline_executions "
+                "WHERE timeline_plan_id=:timeline) "
+                "AND (SELECT count(*)=0 FROM app.agent_tasks WHERE case_id=:case)"
+            ),
+            {
+                "case": case_id,
+                "run": run_id,
+                "review": review_id,
+                "brief": brief_id,
+                "decision": decision_id,
+                "receipt": receipt_id,
+                "timeline": timeline_id,
+                "advisor": actors[0][2],
+                "student": actors[1][2],
+                "parent": actors[2][2],
+            },
+        )
+        if exact is not True:
+            raise RuntimeError(f"{scenario} plan execution fixture is not exact")
+    for table in (
+        "timeline_checkpoint_attestations",
+        "timeline_checkpoint_verifications",
+        "timeline_mutation_receipts",
+        "timeline_reassessment_requests",
+    ):
+        count = await connection.scalar(text(f"SELECT count(*) FROM app.{table}"))
+        if count != 0:
+            raise RuntimeError(f"seed contains unexpected {table}")
     print("timeline execution seed verified")
 
 

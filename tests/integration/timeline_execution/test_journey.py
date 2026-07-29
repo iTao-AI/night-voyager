@@ -66,5 +66,33 @@ async def test_happy_and_blocked_journey_anchors_are_exact_and_empty() -> None:
                 "timeline_reassessment_requests",
             ):
                 assert await connection.scalar(text(f"SELECT count(*) FROM app.{table}")) == 0
+            for case_id in (
+                PLAN_EXECUTION_CASE_ID,
+                BLOCKED_PLAN_EXECUTION_CASE_ID,
+            ):
+                exact_predecessor_rows = await connection.scalar(
+                    text(
+                        "SELECT "
+                        "(SELECT count(*) FROM app.student_case_revisions "
+                        "WHERE case_id=:case)=1 "
+                        "AND (SELECT count(*) FROM app.planning_runs "
+                        "WHERE case_id=:case)=1 "
+                        "AND (SELECT count(*) FROM app.advisor_reviews "
+                        "WHERE case_id=:case)=1 "
+                        "AND (SELECT count(*) FROM app.decision_briefs "
+                        "WHERE case_id=:case)=1 "
+                        "AND (SELECT count(*) FROM app.family_decisions "
+                        "WHERE case_id=:case)=1 "
+                        "AND (SELECT count(*) FROM app.timeline_plans plan "
+                        "JOIN app.family_decisions decision "
+                        "ON (decision.organization_id,decision.id)="
+                        "(plan.organization_id,plan.family_decision_id) "
+                        "WHERE decision.case_id=:case)=1 "
+                        "AND (SELECT count(*) FROM app.agent_tasks "
+                        "WHERE case_id=:case)=0"
+                    ),
+                    {"case": case_id},
+                )
+                assert exact_predecessor_rows is True
     finally:
         await engine.dispose()
