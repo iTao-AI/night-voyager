@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -102,9 +104,25 @@ def test_skills_database_runner_freezes_the_approved_suite_map() -> None:
 
 
 def test_required_db_gate_runs_fresh_head_seed_replay_regressions() -> None:
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    compose_job = workflow.split("  compose:", maxsplit=1)[1]
-    assert "make db-check" in compose_job
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    jobs = workflow["jobs"]
+    db_command = "make db-check"
+    db_runs = [
+        step["run"] for step in jobs["compose_db"]["steps"] if "run" in step
+    ]
+    compose_runs = [
+        step["run"] for step in jobs["compose"]["steps"] if "run" in step
+    ]
+
+    assert db_runs == [db_command, "make down"]
+    assert jobs["compose"]["needs"] == [
+        "compose_db",
+        "compose_collaboration_authority",
+        "compose_proof",
+    ]
+    assert db_command not in compose_runs
 
     runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     assert "inside-skill-seed-replay" in runner

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -82,6 +84,24 @@ def test_required_local_and_hosted_gates_execute_the_authority_suite() -> None:
     check_target = makefile.split("\ncheck:", maxsplit=1)[1].split("\n\n", maxsplit=1)[0]
     assert "$(MAKE) collaboration-db-check SUITE=authority" in check_target
 
-    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    compose_job = workflow.split("  compose:", maxsplit=1)[1]
-    assert "make collaboration-db-check SUITE=authority" in compose_job
+    workflow = yaml.safe_load(
+        (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    jobs = workflow["jobs"]
+    authority_command = "make collaboration-db-check SUITE=authority"
+    authority_runs = [
+        step["run"]
+        for step in jobs["compose_collaboration_authority"]["steps"]
+        if "run" in step
+    ]
+    compose_runs = [
+        step["run"] for step in jobs["compose"]["steps"] if "run" in step
+    ]
+
+    assert authority_runs == [authority_command, "make down"]
+    assert jobs["compose"]["needs"] == [
+        "compose_db",
+        "compose_collaboration_authority",
+        "compose_proof",
+    ]
+    assert authority_command not in compose_runs
