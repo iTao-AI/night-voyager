@@ -42,6 +42,40 @@ function startReceipt(
   };
 }
 
+function attestationReceipt(
+  overrides: Partial<TimelineMutationReceipt> = {},
+): TimelineMutationReceipt {
+  const view = viewFixture();
+  return {
+    schema_version: 1,
+    receipt_id: contextFixture.case_id,
+    operation: "attest",
+    result_kind: "timeline_checkpoint_attested",
+    result_id: contextFixture.decision_receipt_id,
+    execution_id: view.execution.execution_id,
+    checkpoint_id: view.checkpoints[0].checkpoint_id,
+    before_execution_version: 1,
+    after_execution_version: 2,
+    before_checkpoint_version: 1,
+    after_checkpoint_version: 2,
+    created_at: "2026-07-29T00:00:00Z",
+    ...overrides,
+  };
+}
+
+function laterAttestationView() {
+  const view = viewFixture("awaiting_advisor");
+  view.execution = { ...view.execution, row_version: 3 };
+  view.checkpoints[0] = { ...view.checkpoints[0], row_version: 3 };
+  view.current_checkpoint = view.checkpoints[0];
+  view.current_action = {
+    ...view.current_action,
+    execution_version: 3,
+    checkpoint_version: 3,
+  };
+  return view;
+}
+
 afterEach(() => {
   sessionStorage.clear();
   vi.restoreAllMocks();
@@ -194,6 +228,96 @@ it("retains the exact pending replay across a post-receipt GET transport failure
   expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
 });
 
+it("reconciles an exact pending receipt with a newer same-execution GET", async () => {
+  const initial = viewFixture();
+  const authoritative = laterAttestationView();
+  const receipt = attestationReceipt();
+  const calls: Array<{ body: unknown; key: string }> = [];
+  let readAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: initial.execution.execution_id,
+    })),
+    read: vi.fn(async () => {
+      readAttempts += 1;
+      return readAttempts === 1 ? initial : authoritative;
+    }),
+    start: vi.fn(),
+    attest: vi.fn(async (
+      _id: string,
+      body: unknown,
+      _csrf: string,
+      key: string,
+    ) => {
+      calls.push({ body, key });
+      if (calls.length === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.attest());
+  const exactSlot = loadPlanExecutionEnvelope()?.mutations.attest;
+
+  await act(async () => result.current.recover());
+
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(result.current.state.value).toBe("awaiting_advisor");
+  expect(result.current.state.receipt).toEqual(receipt);
+  expect(result.current.state.view).toEqual(authoritative);
+  expect(loadPlanExecutionEnvelope()?.lastReceiptId).toBe(receipt.receipt_id);
+  expect(loadPlanExecutionEnvelope()?.mutations.attest).toBeUndefined();
+  expect(exactSlot).toBeDefined();
+});
+
+it("reconciles a normal mutation receipt with a newer same-execution GET", async () => {
+  const initial = viewFixture();
+  const authoritative = laterAttestationView();
+  const receipt = attestationReceipt();
+  const keys: string[] = [];
+  let readAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: initial.execution.execution_id,
+    })),
+    read: vi.fn(async () => {
+      readAttempts += 1;
+      return readAttempts === 1 ? initial : authoritative;
+    }),
+    start: vi.fn(),
+    attest: vi.fn(async (
+      _id: string,
+      _body: unknown,
+      _csrf: string,
+      key: string,
+    ) => {
+      keys.push(key);
+      return receipt;
+    }),
+    verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+
+  await act(async () => result.current.attest());
+
+  expect(keys).toHaveLength(1);
+  expect(result.current.state.value).toBe("awaiting_advisor");
+  expect(result.current.state.receipt).toEqual(receipt);
+  expect(result.current.state.view).toEqual(authoritative);
+  expect(loadPlanExecutionEnvelope()?.mutations.attest).toBeUndefined();
+});
+
 it.each([
   {
     name: "operation and result kind",
@@ -247,6 +371,66 @@ it.each([
 
   await act(async () => result.current.recover());
   expect(api.start).toHaveBeenCalledTimes(2);
+});
+
+it.each([
+  {
+    name: "non-increasing execution version",
+    overrides: { after_execution_version: 1 },
+  },
+  {
+    name: "future execution version",
+    overrides: { after_execution_version: 4 },
+  },
+  {
+    name: "non-increasing checkpoint version",
+    overrides: { after_checkpoint_version: 1 },
+  },
+  {
+    name: "future checkpoint version",
+    overrides: { after_checkpoint_version: 4 },
+  },
+])("fails closed on a pending replay receipt with $name", async ({
+  overrides,
+}) => {
+  const initial = viewFixture();
+  const authoritative = laterAttestationView();
+  const receipt = attestationReceipt({
+    result_id: authoritative.latest_attestation!.attestation_id,
+    ...overrides,
+  });
+  let readAttempts = 0;
+  let attestAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: initial.execution.execution_id,
+    })),
+    read: vi.fn(async () => {
+      readAttempts += 1;
+      return readAttempts === 1 ? initial : authoritative;
+    }),
+    start: vi.fn(),
+    attest: vi.fn(async () => {
+      attestAttempts += 1;
+      if (attestAttempts === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.attest());
+
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(result.current.state.receipt).toBeNull();
+  expect(result.current.state.view).toEqual(initial);
+  expect(loadPlanExecutionEnvelope()?.mutations.attest).toBeUndefined();
 });
 
 it("fails closed when a checkpoint replay receipt does not bind its body and fresh result", async () => {

@@ -83,16 +83,36 @@ function receiptReconciles(
         checkpoint_id === bodyCheckpoint))) return false;
 
   if (pending.operation === "start") {
-    return receipt.result_id === view.execution.execution_id;
+    return receipt.result_id === view.execution.execution_id
+      && receipt.before_execution_version === null
+      && receipt.after_execution_version === 1
+      && receipt.before_checkpoint_version === null
+      && receipt.after_checkpoint_version === null
+      && view.execution.row_version >= receipt.after_execution_version;
   }
-  if (pending.operation === "attest") {
-    return view.latest_attestation?.attestation_id === receipt.result_id
-      && view.latest_attestation.checkpoint_id === bodyCheckpoint;
+
+  const expectedExecutionVersion = pending.body.expected_execution_version;
+  const expectedCheckpointVersion = pending.body.expected_checkpoint_version;
+  const checkpoint = view.checkpoints.find(({ checkpoint_id }) =>
+    checkpoint_id === bodyCheckpoint);
+  if (typeof expectedExecutionVersion !== "number"
+    || typeof expectedCheckpointVersion !== "number"
+    || receipt.before_execution_version !== expectedExecutionVersion
+    || receipt.after_execution_version !== expectedExecutionVersion + 1
+    || receipt.before_checkpoint_version !== expectedCheckpointVersion
+    || receipt.after_checkpoint_version === null
+    || view.execution.row_version < receipt.after_execution_version
+    || !checkpoint
+    || checkpoint.row_version < receipt.after_checkpoint_version) return false;
+
+  const expectedAfterCheckpointVersion = pending.operation === "reassess"
+    ? expectedCheckpointVersion
+    : expectedCheckpointVersion + 1;
+  if (receipt.after_checkpoint_version !== expectedAfterCheckpointVersion) {
+    return false;
   }
-  if (pending.operation === "verify") {
-    return view.latest_verification?.verification_id === receipt.result_id
-      && view.latest_verification.checkpoint_id === bodyCheckpoint;
-  }
+
+  if (pending.operation !== "reassess") return true;
   return view.reassessment?.reassessment_id === receipt.result_id
     && view.reassessment.checkpoint_id === bodyCheckpoint;
 }
