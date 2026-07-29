@@ -13,7 +13,7 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "next": "16.2.11",
+    "next": "16.2.12",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
@@ -25,12 +25,12 @@
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.5",
-    "eslint-config-next": "16.2.11",
+    "eslint-config-next": "16.2.12",
     "jsdom": "27.2.0",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   },
   "overrides": {
-    "postcss": "8.5.10"
+    "postcss": "8.5.18"
   }
 }
