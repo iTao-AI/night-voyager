@@ -16,6 +16,8 @@ from night_voyager.identity.demo_seed import (
     COLLABORATION_EXPIRED_CASE_ID,
     COLLABORATION_STALE_CASE_ID,
     CONNECTED_DEMO_CASE_ID,
+    PLAN_EXECUTION_CASE_ID,
+    PLAN_EXECUTION_RUN_ID,
 )
 from night_voyager.planning.fixtures import validate_planning_fixture
 
@@ -39,9 +41,10 @@ DEMO_CASE_IDS = {
     COLLABORATION_ACTIVE_CASE_ID,
     COLLABORATION_STALE_CASE_ID,
     COLLABORATION_EXPIRED_CASE_ID,
+    PLAN_EXECUTION_CASE_ID,
     *PLANNING_REVISION_CASE_IDS,
 }
-DEMO_PLANNING_RUN_IDS = {RUN_ID, *PLANNING_REVISION_RUN_IDS}
+DEMO_PLANNING_RUN_IDS = {RUN_ID, PLAN_EXECUTION_RUN_ID, *PLANNING_REVISION_RUN_IDS}
 
 
 async def set_context(connection: object, organization_id: UUID) -> None:

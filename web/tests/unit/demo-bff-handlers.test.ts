@@ -21,6 +21,7 @@ import { GET as candidates } from "../../app/api/demo/cases/[caseId]/memory-cand
 import { POST as verifyCandidate } from "../../app/api/demo/memory-candidates/[candidateId]/verification-decisions/route";
 import { GET as confirmedFacts } from "../../app/api/demo/cases/[caseId]/confirmed-facts/route";
 import { GET as skillInspector } from "../../app/api/demo/cases/[caseId]/planning-skill-inspector/route";
+import { GET as planExecutionContext } from "../../app/api/demo/plan-execution-context/route";
 
 const ID = "40000000-0000-0000-0000-000000000002";
 const original = { ...process.env };
@@ -49,6 +50,7 @@ const cases = [
   ["verify-candidate", "POST", verifyCandidate, `/api/v1/memory-candidates/${ID}/verification-decisions`, { candidateId: ID }],
   ["confirmed-facts", "GET", confirmedFacts, `/api/v1/cases/${ID}/confirmed-facts`, { caseId: ID }],
   ["skill-inspector", "GET", skillInspector, `/api/v1/cases/${ID}/planning-skill-inspector`, { caseId: ID }],
+  ["plan-execution-context", "GET", planExecutionContext, "/api/v1/plan-execution-context?scenario=governed-plan-execution-v1", undefined],
 ] as const;
 
 it.each(cases)("maps explicit %s handler to fixed method/path", async (_name, method, handler, upstreamPath, params) => {

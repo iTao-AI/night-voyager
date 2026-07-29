@@ -22,6 +22,30 @@ bootstrap and mint again. Unexpected persistence and connectivity failures are
 not normalized as authentication failures. M2 does not enable CORS; M5 connects
 `/demo` through same-origin explicit BFF handlers without changing this identity authority.
 
+## Governed timeline execution endpoints
+
+Migration `0014` adds six strict, `no-store` routes:
+
+| Method and path | Assigned actor | Result |
+| --- | --- | --- |
+| `GET /api/v1/plan-execution-context?scenario=governed-plan-execution-v1` | advisor/student/parent | server-selected Case, decision receipt, timeline, execution, and verified active role |
+| `GET /api/v1/cases/{case_id}/timeline-execution` | advisor/student/parent | bounded authoritative execution projection |
+| `POST /api/v1/timeline-plans/{timeline_plan_id}/executions` | student/parent | immutable start receipt |
+| `POST /api/v1/timeline-executions/{execution_id}/checkpoint-attestations` | accountable student/parent | structured attestation receipt |
+| `POST /api/v1/timeline-executions/{execution_id}/checkpoint-verifications` | advisor | verify/request-update receipt |
+| `POST /api/v1/timeline-executions/{execution_id}/reassessments` | advisor | successor-safe reassessment handoff receipt |
+
+Mutations require exact Origin, session CSRF, and `Idempotency-Key`. Bodies use
+closed schema/version/code unions and expected execution/checkpoint versions.
+They accept no tenant, actor, role, `as_of`, URL, upload, free-form attestation,
+provider, successor, or scheduling field. PostgreSQL owns dates, assignment,
+locks, transitions, and idempotency.
+
+Mutation responses are receipts, not mutable current state. Clients must issue a
+fresh execution GET after receipt capture. The synchronous current-action
+projection creates no `AgentTask`, worker task, queue, or SSE stream. See the
+[timeline execution contract](timeline-execution-contract.md).
+
 ## M3B advisor and family decision endpoints
 
 M3B adds four backend-only endpoints for the local synthetic proof. Responses

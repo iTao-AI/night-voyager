@@ -45,15 +45,19 @@ def test_skills_database_runner_is_registered_and_isolated() -> None:
     legacy = runner.index("uv run alembic downgrade 0007")
     legacy_seed = runner.index(
         "uv run --no-editable python scripts/seed_demo.py \\\n"
-        "            --without-skills --without-planning-revision"
+        "            --without-skills --without-planning-revision "
+        "--without-plan-execution"
     )
     head = runner.index("uv run alembic upgrade head")
     assert legacy < legacy_seed < head
     assert (
         "uv run --no-editable python scripts/seed_demo.py \\\n"
         "            --without-skills --without-collaboration "
-        "--without-planning-revision"
+        "--without-planning-revision --without-plan-execution"
     ) in runner
+    assert runner.count("--without-plan-execution") == 2
+    head = runner.index("uv run alembic upgrade head")
+    assert "--without-plan-execution" not in runner[head:]
 
 
 def test_skills_database_runner_freezes_the_approved_suite_map() -> None:

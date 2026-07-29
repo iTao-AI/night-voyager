@@ -16,7 +16,7 @@ Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family
 
 ## 工程证据
 
-- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；current development graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013`，已发布的 v0.1.3 identity 仍固定在 migration `0009`。
+- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；current development graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014`，已发布的 v0.1.4 identity 仍固定在 migration `0013`。
 - **Durable task 与 SSE：** `AgentTask` 可跨 worker/API restart 保持，使用 bounded lease 与 generation fencing，并恢复授权 event stream。
 - **Human gates：** deterministic evidence policy、advisor review 与显式 family confirmation 相互分离；模型或 adapter 输出不能自行获得 promotion authority。
 - **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。当前 provider-free prerequisite 将 strict new work 固定到 exact post-release commit `01ba21f2996769e68cbc88f4bb0596740df27f6b` 与 `generic-strict-citation@1`；它不属于 DRA v0.1.6 release。
@@ -25,6 +25,7 @@ Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family
 - **Explicit fact-to-plan authority：** v0.1.3 migration `0009` 把 first deterministic task creation 固定为 atomic `intake -> planning` authority，并在同一 transaction 写入 pinned task、dispatch、first event 与 idempotency result；legacy runtime transition authority 继续被撤回。
 - **Browser to database：** v0.1.3 `/demo/collaboration` 现在可在不创建 task 的情况下，把已确认的同一 Case 交给 `/demo`；advisor 随后显式启动真实 pinned task、SSE、review、parent decision、receipt 与 timeline 路径。整条 provider-free chain 在真实 Chromium 与 PostgreSQL 上运行，同时两个 route 仍可独立使用。
 - **Planning revision journey：** v0.1.4 发布 provider-free `request revision`、controlled student preferred-country change、retained predecessor lineage、successor PlanningRun、deterministic old/new comparison、fresh advisor authorization，以及 only the current family decision。blocked budget counterfactual 不会到达 approval 或 decision。
+- **Governed timeline execution：** current development PR A 新增 provider-free `/demo/plan` vertical、structured family attestation、assigned-advisor verification、immutable receipt、PostgreSQL-owned risk/date authority 与 reassessment stop；不创建新 `AgentTask`、provider call、successor business row、release 或 deployment。
 - **Portfolio 与 dependency boundary：** v0.1.4 包含 React / Next.js / PostCSS maintenance。Dependabot #8 与 #9 已修复；optional/transitive `sharp` Dependabot #7 仍以 `GHSA-f88m-g3jw-g9cj` 保持 open，full development audit 仍包含 dev-only `brace-expansion` / `minimatch` -> ESLint chain，因此不能声称 audit-zero。
 
 ## 验证 release
@@ -52,6 +53,10 @@ make down
 `UPDATE_PLANNING_REVISION_SCREENSHOT` 只能更新
 `night-voyager-planning-revision.png`。
 
+当前 governed execution development path 位于 `/demo/plan`，操作步骤见
+[timeline execution runbook](docs/operations/timeline-execution.md)。该 PR A
+surface 已在本地实现，但尚未进入 v0.1.4 release。
+
 `make doctor` 检查 Docker、Compose capability、本地端口、host project filesystem 至少 5 GiB，以及 Docker VM filesystem 至少 8 GiB。运维人员只能通过 `NIGHT_VOYAGER_DOCKER_MINIMUM_KB` 调整 Docker VM 门槛；检查会 fail closed，且绝不会自动删除 Docker 资源。`make demo` 迁移并 seed fresh synthetic stack。`make proof` 验证配置、public hygiene 与隔离 installed wheel，不要求 host Python、uv、Node.js 或 npm。`make compose-proof` 还会在真实 Chromium 中执行 browser-to-database flow。
 
 ## 合成与本地边界
@@ -63,6 +68,7 @@ make down
 - Planning-revision PR 1、PR 2、PR 3 已在 v0.1.4 作为 controlled provider-free evidence 发布。它保留 25 and 83 row 失败尝试为 zero cited rows；strict live acceptance remains incomplete，且 no third provider attempt。
 - Governed collaboration PR A、versioned Skill governance PR B 与 browser walkthrough/inspector PR C 已在 v0.1.2 作为 local synthetic capability 发布。`/demo/collaboration` 本身不创建 `AgentTask`；只有 same-Case handoff 后在 `/demo` 执行显式 action，才会启动既有 governed planning path。
 - v0.1.4 不新增 live provider、production deployment、distributed HA、SLA、真实学生数据、真实学校覆盖、顾问团队采用或录取结果。
+- Governed timeline-execution PR A 仅属于 current local development。PR B recovery/reassessment presentation、PR C presentation/DX/release closure、publication 与 release 均不在本次 claim 中。
 
 ## Milestone 与历史
 

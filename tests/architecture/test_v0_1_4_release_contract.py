@@ -245,9 +245,9 @@ def test_gate_d_reads_back_exact_public_github_release_state() -> None:
         assert token in how_to
 
 
-def test_current_release_keeps_exact_0013_migration_head() -> None:
-    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert 'heads != {"0013"}' in verifier
+def test_published_v0_1_4_release_keeps_exact_0013_migration_identity() -> None:
+    release = (ROOT / "docs/releases/v0.1.4.md").read_text(encoding="utf-8")
+    assert "当前 development 与 release identity 使用 migration `0013`；" in release
     assert (ROOT / "migrations/versions/0013_planning_revision_demo_seed.py").is_file()
 
 

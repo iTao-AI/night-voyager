@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
+from types import ModuleType
 from typing import Any, cast
 
 import pytest
@@ -29,6 +31,16 @@ from night_voyager.skills.models import SkillKey
 from night_voyager.skills.registry import SkillRuntimeRegistry
 
 ROOT = Path(__file__).resolve().parents[3]
+
+
+def _load_seed_script() -> ModuleType:
+    path = ROOT / "scripts/seed_demo.py"
+    spec = importlib.util.spec_from_file_location("night_voyager_seed_demo", path)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_demo_seed_fails_closed_without_nonproduction_demo_mode() -> None:
@@ -151,3 +163,101 @@ def test_planning_revision_snapshot_replay_is_create_once_and_exact() -> None:
     assert clone.index("if inserted_run_id is None:") < clone.index(
         "for table, columns, projection in clone_specs:"
     )
+
+
+@pytest.mark.asyncio
+async def test_plan_execution_seed_requires_explicit_historical_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_script = _load_seed_script()
+
+    class Connection:
+        async def execute(self, *_args: object, **_kwargs: object) -> None:
+            return None
+
+    class Transaction:
+        async def __aenter__(self) -> Connection:
+            return Connection()
+
+        async def __aexit__(self, *_args: object) -> None:
+            return None
+
+    class Engine:
+        def begin(self) -> Transaction:
+            return Transaction()
+
+        async def dispose(self) -> None:
+            return None
+
+    async def no_op(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    plan_execution_calls = 0
+
+    async def record_plan_execution(*_args: object, **_kwargs: object) -> None:
+        nonlocal plan_execution_calls
+        plan_execution_calls += 1
+
+    def create_engine(_url: str) -> Engine:
+        return Engine()
+
+    monkeypatch.setattr(seed_script, "create_async_engine", create_engine)
+    monkeypatch.setattr(seed_script, "validate_planning_fixture", object)
+    monkeypatch.setattr(seed_script, "_seed_identity", no_op)
+    monkeypatch.setattr(seed_script, "_seed_planning", no_op)
+    monkeypatch.setattr(seed_script, "_seed_task_case", no_op)
+    monkeypatch.setattr(
+        seed_script,
+        "_seed_plan_execution_scenario",
+        record_plan_execution,
+    )
+
+    common = {
+        "include_collaboration": False,
+        "include_planning_revision": False,
+        "include_skills": False,
+    }
+    await seed_script.seed_demo(
+        "postgresql+asyncpg://unused",
+        include_plan_execution=False,
+        **common,
+    )
+    assert plan_execution_calls == 0
+
+    await seed_script.seed_demo("postgresql+asyncpg://unused", **common)
+    assert plan_execution_calls == 1
+
+
+def test_plan_execution_cli_defaults_strict_and_forwards_explicit_opt_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_script = _load_seed_script()
+    forwarded: list[bool] = []
+
+    async def record_seed(
+        _database_url: str,
+        *,
+        include_planning: bool = True,
+        include_collaboration: bool = True,
+        include_planning_revision: bool = True,
+        include_skills: bool = True,
+        include_plan_execution: bool = True,
+    ) -> None:
+        assert include_planning is True
+        assert include_collaboration is True
+        assert include_planning_revision is True
+        assert include_skills is True
+        forwarded.append(include_plan_execution)
+
+    monkeypatch.setattr(seed_script, "seed_demo", record_seed)
+    monkeypatch.setenv("NIGHT_VOYAGER_ENVIRONMENT", "test")
+    monkeypatch.setenv("NIGHT_VOYAGER_DEMO_MODE", "true")
+    monkeypatch.setenv(
+        "NIGHT_VOYAGER_MIGRATION_DATABASE_URL",
+        "postgresql+asyncpg://unused",
+    )
+
+    seed_script.main([])
+    seed_script.main(["--without-plan-execution"])
+
+    assert forwarded == [True, False]

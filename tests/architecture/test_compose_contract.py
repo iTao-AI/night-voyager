@@ -44,14 +44,14 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 4
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 5
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     assert script.count("docker compose --profile browser-proof build") == 1
-    assert script.count("docker compose up --no-build --wait") == 5
+    assert script.count("docker compose up --no-build --wait") == 6
     assert "docker compose up --build --wait" not in script
     assert "run --rm --build" not in script
 
@@ -406,6 +406,7 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     sentinel = 'FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"'
     watcher = 'grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"'
     browser_run = "browser-proof npx playwright test"
+    lane = script.split("run_fact_to_plan_lane() {", 1)[1].split("\n}", 1)[0]
 
     assert reset_prepare in script
     assert permission in script
@@ -414,7 +415,7 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     assert 'test -f "$FACT_TO_PLAN_WORKER_READY_FILE"' not in script
     assert 'test -s "$FACT_TO_PLAN_PROOF_FILE"' in script
     assert script.index(reset_prepare) < script.index(permission) < script.index(watcher)
-    assert script.index(watcher) < script.index(browser_run)
+    assert lane.index(watcher) < lane.index(browser_run)
     assert 'chmod 0666 docs/assets' not in script
 
     proof_target = tmp_path / "proof-target"
@@ -641,3 +642,68 @@ def test_planning_revision_ipc_resets_symlinks_and_prepares_only_owned_files(
         for viewport in ("1440", "390"):
             for state in ("happy", "blocked"):
                 assert f"planning-revision-{locale}-{viewport}-{state}.png" in script
+
+
+def test_full_compose_proof_runs_one_minimal_plan_execution_lane() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    browser_path = Path("web/e2e/plan-execution-minimal.spec.ts")
+
+    assert browser_path.is_file()
+    browser = browser_path.read_text(encoding="utf-8")
+    assert config.count('"plan-execution-minimal.spec.ts"') == 1
+    assert script.count("run_plan_execution_minimal_lane") == 2
+    lane = script.split("run_plan_execution_minimal_lane() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    assert "docker compose down --volumes --remove-orphans" in lane
+    assert "docker compose up --no-build --wait" in lane
+    assert "plan-execution-minimal.spec.ts" in lane
+    assert "verify_timeline_execution.py --expect completed" in lane
+    assert "governed plan execution minimal browser and database proof passed" in lane
+    assert "governed-plan-execution-v1" in browser
+    assert "当前行动" in browser
+    assert "Start the action plan" in browser
+    assert "开始执行行动计划" in browser
+    assert "The action plan is complete." in browser
+    assert 'getByRole("button", { name: "English"' in browser
+    assert "request_update" not in browser
+    for forbidden in (
+        "reassess",
+        "blocked",
+        "EventSource",
+        "worker",
+        "restart",
+        "reload",
+        "stale",
+        "lost-ack",
+    ):
+        assert forbidden not in lane
+        assert forbidden not in browser
+
+
+def test_timeline_execution_verifier_has_closed_seed_and_completed_modes() -> None:
+    verifier = Path("scripts/verify_timeline_execution.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'choices=("seed", "completed")' in verifier
+    assert 'default="seed"' in verifier
+    assert 'if expectation == "completed":' in verifier
+    assert "timeline execution seed verified" in verifier
+    assert "timeline execution completed verified" in verifier
+    for required in (
+        "execution AS (SELECT e.* FROM app.timeline_executions e",
+        "count(*)=1 FROM execution",
+        "state='completed'",
+        "count(*)=4 FROM app.timeline_checkpoints",
+        "count(*)=4 FROM app.timeline_checkpoint_attestations",
+        "a.attestation_kind<>'completion'",
+        "count(*)=4 FROM app.timeline_checkpoint_verifications",
+        "v.action<>'verify'",
+        "count(*)=0 FROM app.timeline_reassessment_requests r",
+        "operation='start'",
+        "operation='attest'",
+        "operation='verify'",
+    ):
+        assert required in verifier

@@ -80,6 +80,14 @@ SKILL_TABLES = {
     "skill_evaluation_results",
     "skill_activation_events",
 }
+TIMELINE_EXECUTION_TABLES = {
+    "timeline_executions",
+    "timeline_checkpoints",
+    "timeline_checkpoint_attestations",
+    "timeline_checkpoint_verifications",
+    "timeline_reassessment_requests",
+    "timeline_mutation_receipts",
+}
 SKILL_API_FUNCTIONS = {
     "create_skill_change_candidate",
     "record_skill_candidate_evaluation",
@@ -148,6 +156,33 @@ DRA_HISTORICAL_DATABASE_FUNCTION_IDENTITIES = {
 }
 DRA_API_FUNCTION_IDENTITIES = DRA_DATABASE_FUNCTION_IDENTITIES
 DRA_WORKER_FUNCTION_IDENTITIES: set[tuple[str, str]] = set()
+TIMELINE_EXECUTION_FUNCTION_IDENTITIES = {
+    ("read_plan_execution_context", "uuid, uuid, text, text"),
+    ("read_timeline_execution", "uuid, uuid, text, uuid"),
+    (
+        "start_timeline_execution",
+        "uuid, uuid, text, uuid, uuid, integer, uuid, uuid, text, text",
+    ),
+    (
+        "attest_timeline_checkpoint",
+        "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, text, text, "
+        "text, uuid, uuid, text, text",
+    ),
+    (
+        "verify_timeline_checkpoint",
+        "uuid, uuid, text, uuid, uuid, uuid, uuid, integer, integer, text, text, "
+        "uuid, uuid, text, text",
+    ),
+    (
+        "request_timeline_reassessment",
+        "uuid, uuid, text, uuid, uuid, uuid, uuid, integer, integer, text, uuid, "
+        "uuid, text, text",
+    ),
+}
+TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES = TIMELINE_EXECUTION_FUNCTION_IDENTITIES
+TIMELINE_EXECUTION_WORKER_FUNCTION_IDENTITIES: set[tuple[str, str]] = set()
+PLANNING_REVISION_PENDING_REVISIONS = {"0012", "0013", "0014"}
+PLANNING_REVISION_SEED_REVISIONS = {"0013", "0014"}
 PLANNING_REVISION_PENDING_IDENTITY = (
     "read_connected_journey_fact_pending",
     "uuid, uuid, text, uuid",
@@ -157,6 +192,20 @@ PLANNING_REVISION_SEED_IDENTITY = (
     "uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, jsonb, "
     "text, text, text, text",
 )
+
+
+def expected_app_policy_count(alembic_revision: str) -> int:
+    return 44 if alembic_revision == "0014" else 38
+
+
+def timeline_execution_function_identities(
+    alembic_revision: str,
+) -> set[tuple[str, str]]:
+    return (
+        set(TIMELINE_EXECUTION_FUNCTION_IDENTITIES)
+        if alembic_revision == "0014"
+        else set()
+    )
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -1143,8 +1192,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0013"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0013")
+    if heads != {"0014"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0014")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -1161,6 +1210,21 @@ def verify_alembic_contract() -> None:
         "inside-planning-revision-seed-migration": 3,
         "tests/integration/planning/test_revision_seed_migration.py": 4,
         'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
+        "inside-timeline-execution-migration": 3,
+        "inside-timeline-execution-authority": 3,
+        "inside-timeline-execution-http": 3,
+        "inside-timeline-execution-seed": 3,
+        (
+            'run_lane "${BASE_PROJECT_NAME}-timeline-execution-migration" '
+            "inside-timeline-execution-migration"
+        ): 1,
+        (
+            'run_lane "${BASE_PROJECT_NAME}-timeline-execution-authority" '
+            "inside-timeline-execution-authority"
+        ): 1,
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http': 1,
+        'run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed': 1,
+        "tests/integration/timeline_execution/test_seed.py": 1,
         "tests/integration/planning/test_revision_migration.py": 1,
         "tests/integration/planning/test_revision_authority.py": 1,
         "tests/integration/connected_demo/test_postgres_read_models.py": 2,
@@ -1170,9 +1234,9 @@ def verify_alembic_contract() -> None:
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0013 with planning-start, "
-        "DRA live, strict parity, planning-revision, and migrator-only "
-        "revision-seed lanes confirmed"
+        "proof migrations: exact Alembic head 0014 with planning-start, "
+        "DRA live, strict parity, planning-revision, migrator-only "
+        "revision-seed, and governed timeline-execution lanes confirmed"
     )
 
 
@@ -1343,6 +1407,14 @@ async def verify_database_catalog(database_url: str) -> None:
             ):
                 raise SystemExit("database roles violate least-privilege attributes")
 
+            alembic_revision = await connection.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            timeline_execution_tables = (
+                TIMELINE_EXECUTION_TABLES
+                if alembic_revision == "0014"
+                else set[str]()
+            )
             tenant_tables = (
                 (
                     await connection.execute(
@@ -1371,6 +1443,7 @@ async def verify_database_catalog(database_url: str) -> None:
                 | DRA_TABLES
                 | COLLABORATION_TABLES
                 | SKILL_TABLES
+                | timeline_execution_tables
             )
             if {row["relname"] for row in tenant_tables} != expected_tenant_tables or any(
                 not row["relrowsecurity"]
@@ -1385,7 +1458,7 @@ async def verify_database_catalog(database_url: str) -> None:
                     text("SELECT count(*) FROM pg_policies WHERE schemaname = 'app'")
                 )
             ).scalar_one()
-            if policy_count != 38:
+            if policy_count != expected_app_policy_count(alembic_revision):
                 raise SystemExit("every app tenant table requires one explicit policy")
 
             runtime_writes = (
@@ -1404,6 +1477,7 @@ async def verify_database_catalog(database_url: str) -> None:
                             | DRA_TABLES
                             | COLLABORATION_TABLES
                             | SKILL_TABLES
+                            | timeline_execution_tables
                         )
                     },
                 )
@@ -1480,7 +1554,12 @@ async def verify_database_catalog(database_url: str) -> None:
                            'load_agent_task_skill_pin',
                            'load_persisted_synthetic_planning_snapshot',
                            'seed_demo_skill_registry',
-                           'seed_demo_pinned_collaboration_task'))
+                           'seed_demo_pinned_collaboration_task')
+                           OR p.proname IN
+                          ('read_plan_execution_context','read_timeline_execution',
+                           'start_timeline_execution','attest_timeline_checkpoint',
+                           'verify_timeline_checkpoint',
+                           'request_timeline_reassessment'))
                         """)
                     )
                 )
@@ -1514,14 +1593,14 @@ async def verify_database_catalog(database_url: str) -> None:
             app_function_identities = {
                 (row["proname"], row["identity_arguments"]) for row in app_functions
             }
-            alembic_revision = await connection.scalar(
-                text("SELECT version_num FROM alembic_version")
+            expected_timeline_function_identities = (
+                timeline_execution_function_identities(alembic_revision)
             )
-            if alembic_revision in {"0012", "0013"}:
+            if alembic_revision in PLANNING_REVISION_PENDING_REVISIONS:
                 expected_app_functions.add(
                     PLANNING_REVISION_PENDING_IDENTITY[0]
                 )
-                if alembic_revision == "0013":
+                if alembic_revision in PLANNING_REVISION_SEED_REVISIONS:
                     expected_app_functions.add(
                         PLANNING_REVISION_SEED_IDENTITY[0]
                     )
@@ -1539,14 +1618,32 @@ async def verify_database_catalog(database_url: str) -> None:
                 for row in app_functions
                 if (row["proname"], row["identity_arguments"])
                 not in DRA_DATABASE_FUNCTION_IDENTITIES
+                and row["proname"]
+                not in {
+                    identity[0]
+                    for identity in TIMELINE_EXECUTION_FUNCTION_IDENTITIES
+                }
+            }
+            actual_timeline_function_identities = {
+                (row["proname"], row["identity_arguments"])
+                for row in app_functions
+                if row["proname"]
+                in {
+                    identity[0]
+                    for identity in TIMELINE_EXECUTION_FUNCTION_IDENTITIES
+                }
             }
             if (
                 non_dra_app_functions != expected_app_functions
                 or not expected_dra_function_identities.issubset(
                     app_function_identities
                 )
+                or actual_timeline_function_identities
+                != expected_timeline_function_identities
                 or len(app_function_identities)
-                != len(expected_app_functions) + len(expected_dra_function_identities)
+                != len(expected_app_functions)
+                + len(expected_dra_function_identities)
+                + len(expected_timeline_function_identities)
                 or any(
                     not row["prosecdef"]
                     or row["proconfig"] != ["search_path=pg_catalog, pg_temp"]
@@ -1574,9 +1671,14 @@ async def verify_database_catalog(database_url: str) -> None:
                 | COLLABORATION_API_FUNCTIONS
                 | SKILL_API_FUNCTIONS
             )
-            if alembic_revision in {"0012", "0013"}:
+            if alembic_revision in PLANNING_REVISION_PENDING_REVISIONS:
                 api_functions.remove("persist_planning_result")
                 api_functions.add(PLANNING_REVISION_PENDING_IDENTITY[0])
+            if alembic_revision == "0014":
+                api_functions |= {
+                    identity[0]
+                    for identity in TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES
+                }
             worker_functions = {
                 "claim_agent_task",
                 "start_agent_task",
@@ -1615,6 +1717,31 @@ async def verify_database_catalog(database_url: str) -> None:
                 for identity, (api_execute, worker_execute) in dra_function_grants.items()
             ):
                 raise SystemExit("DRA function grants violate API/worker separation")
+            timeline_function_grants = {
+                (row["proname"], row["identity_arguments"]): (
+                    row["api_execute"],
+                    row["worker_execute"],
+                )
+                for row in app_functions
+                if row["proname"]
+                in {
+                    identity[0]
+                    for identity in TIMELINE_EXECUTION_FUNCTION_IDENTITIES
+                }
+            }
+            if set(timeline_function_grants) != expected_timeline_function_identities or any(
+                api_execute
+                != (identity in TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES)
+                or worker_execute
+                != (identity in TIMELINE_EXECUTION_WORKER_FUNCTION_IDENTITIES)
+                for identity, (
+                    api_execute,
+                    worker_execute,
+                ) in timeline_function_grants.items()
+            ):
+                raise SystemExit(
+                    "timeline execution function grants violate API/worker separation"
+                )
             create_signature = next(
                 row["identity_arguments"]
                 for row in app_functions
@@ -1660,7 +1787,7 @@ async def verify_database_catalog(database_url: str) -> None:
             }
             expected_planning_revision_function = (
                 {PLANNING_REVISION_PENDING_IDENTITY: (True, False)}
-                if alembic_revision in {"0012", "0013"}
+                if alembic_revision in PLANNING_REVISION_PENDING_REVISIONS
                 else {}
             )
             if (
@@ -1680,7 +1807,7 @@ async def verify_database_catalog(database_url: str) -> None:
             }
             expected_planning_revision_seed_function = (
                 {PLANNING_REVISION_SEED_IDENTITY: (False, False)}
-                if alembic_revision == "0013"
+                if alembic_revision in PLANNING_REVISION_SEED_REVISIONS
                 else {}
             )
             if (

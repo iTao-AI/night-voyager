@@ -30,10 +30,10 @@ if [ "$mode" = "inside" ]; then
     uv run alembic downgrade 0007
     if [ "$suite" = "worker" ]; then
         uv run --no-editable python scripts/seed_demo.py \
-            --without-skills --without-collaboration --without-planning-revision
+            --without-skills --without-collaboration --without-planning-revision --without-plan-execution
     else
         uv run --no-editable python scripts/seed_demo.py \
-            --without-skills --without-planning-revision
+            --without-skills --without-planning-revision --without-plan-execution
     fi
     uv run alembic upgrade head
     case "$suite" in
