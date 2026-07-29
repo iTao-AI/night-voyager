@@ -8,7 +8,12 @@ import {
   isPlanExecutionStaleAuthority,
   type PlanExecutionApi,
 } from "./api";
-import type { PlanExecutionRole, TimelineMutationReceipt } from "./contracts";
+import type {
+  PlanExecutionContext,
+  PlanExecutionRole,
+  TimelineExecutionView,
+  TimelineMutationReceipt,
+} from "./contracts";
 import { idempotencyFor, type PlanExecutionIdempotencyRecord } from "./idempotency";
 import {
   beginPlanExecutionMutation,
@@ -44,6 +49,52 @@ interface PendingMutation {
   role: PlanExecutionRole;
   caseId: string;
   call(csrfToken: string, key: string): Promise<TimelineMutationReceipt>;
+}
+
+const RESULT_KIND_BY_OPERATION = {
+  start: "timeline_execution_started",
+  attest: "timeline_checkpoint_attested",
+  verify: "timeline_checkpoint_verified",
+  reassess: "timeline_reassessment_requested",
+} as const;
+
+function receiptReconciles(
+  pending: PendingMutation,
+  receipt: TimelineMutationReceipt,
+  context: PlanExecutionContext,
+  view: TimelineExecutionView,
+): boolean {
+  if (receipt.operation !== pending.operation
+    || receipt.result_kind !== RESULT_KIND_BY_OPERATION[pending.operation]
+    || receipt.execution_id !== view.execution.execution_id
+    || receipt.execution_id !== context.execution_id
+    || view.execution.case_id !== context.case_id
+    || view.execution.timeline_plan_id !== context.timeline_plan_id) return false;
+
+  const bodyCheckpoint = pending.operation === "start"
+    ? null
+    : typeof pending.body.checkpoint_id === "string"
+      ? pending.body.checkpoint_id
+      : undefined;
+  if (bodyCheckpoint === undefined
+    || receipt.checkpoint_id !== bodyCheckpoint
+    || (bodyCheckpoint !== null
+      && !view.checkpoints.some(({ checkpoint_id }) =>
+        checkpoint_id === bodyCheckpoint))) return false;
+
+  if (pending.operation === "start") {
+    return receipt.result_id === view.execution.execution_id;
+  }
+  if (pending.operation === "attest") {
+    return view.latest_attestation?.attestation_id === receipt.result_id
+      && view.latest_attestation.checkpoint_id === bodyCheckpoint;
+  }
+  if (pending.operation === "verify") {
+    return view.latest_verification?.verification_id === receipt.result_id
+      && view.latest_verification.checkpoint_id === bodyCheckpoint;
+  }
+  return view.reassessment?.reassessment_id === receipt.result_id
+    && view.reassessment.checkpoint_id === bodyCheckpoint;
 }
 
 function envelopeFor(
@@ -264,7 +315,6 @@ export function usePlanExecution(
       const receipt = await call(sessionCsrf, record.idempotencyKey);
       if (expectedGeneration !== generation.current) return;
       const withReceipt = { ...pending, lastReceiptId: receipt.receipt_id };
-      savePlanExecutionEnvelope(withReceipt);
       const view = await api.read(state.context.case_id);
       if (expectedGeneration !== generation.current) return;
       const context = await api.context();
@@ -274,8 +324,16 @@ export function usePlanExecution(
         || context.execution_id !== view.execution.execution_id;
       if (crossCase || context.active_role !== state.context.active_role) {
         pendingMutation.current = null;
-        savePlanExecutionEnvelope({ ...withReceipt, mutations: {} });
+        clearMutationSlot(operation);
         closeSessionChanged(new Error("session_changed"), crossCase);
+        return;
+      }
+      const activePending = pendingMutation.current;
+      if (!activePending
+        || !receiptReconciles(activePending, receipt, context, view)) {
+        pendingMutation.current = null;
+        clearMutationSlot(operation);
+        closeSessionChanged(new Error("session_changed"));
         return;
       }
       const next = derivePlanExecutionState(context, view, receipt);
@@ -425,6 +483,25 @@ export function usePlanExecution(
         }
         const receipt = await pending.call(sessionCsrf, pending.record.idempotencyKey);
         if (expectedGeneration !== generation.current) return;
+        const view = await api.read(context.case_id);
+        if (expectedGeneration !== generation.current) return;
+        const confirmed = await api.context();
+        if (expectedGeneration !== generation.current) return;
+        const crossCase = confirmed.case_id !== context.case_id
+          || confirmed.timeline_plan_id !== context.timeline_plan_id
+          || confirmed.execution_id !== view.execution.execution_id;
+        if (crossCase || confirmed.active_role !== pending.role) {
+          pendingMutation.current = null;
+          clearMutationSlot(pending.operation);
+          closeSessionChanged(new Error("session_changed"), crossCase);
+          return;
+        }
+        if (!receiptReconciles(pending, receipt, confirmed, view)) {
+          pendingMutation.current = null;
+          clearMutationSlot(pending.operation);
+          closeSessionChanged(new Error("session_changed"));
+          return;
+        }
         const withReceipt = {
           ...(loadPlanExecutionEnvelope() ?? envelopeFor(
             state,
@@ -434,19 +511,6 @@ export function usePlanExecution(
           mutations: {},
           lastReceiptId: receipt.receipt_id,
         };
-        savePlanExecutionEnvelope(withReceipt);
-        pendingMutation.current = null;
-        const view = await api.read(context.case_id);
-        if (expectedGeneration !== generation.current) return;
-        const confirmed = await api.context();
-        if (expectedGeneration !== generation.current) return;
-        const crossCase = confirmed.case_id !== context.case_id
-          || confirmed.timeline_plan_id !== context.timeline_plan_id
-          || confirmed.execution_id !== view.execution.execution_id;
-        if (crossCase || confirmed.active_role !== pending.role) {
-          closeSessionChanged(new Error("session_changed"), crossCase);
-          return;
-        }
         const next = derivePlanExecutionState(confirmed, view, receipt);
         setState(next);
         savePlanExecutionEnvelope(envelopeFor(
@@ -455,6 +519,7 @@ export function usePlanExecution(
           scenario,
           withReceipt,
         ));
+        pendingMutation.current = null;
       } catch (error) {
         if (expectedGeneration === generation.current) {
           if (isPlanExecutionSessionLoss(error)) {

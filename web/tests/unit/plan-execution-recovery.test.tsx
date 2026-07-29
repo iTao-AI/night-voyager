@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   PlanExecutionApiError,
 } from "../../lib/plan-execution/api";
+import type { TimelineMutationReceipt } from "../../lib/plan-execution/contracts";
 import {
   loadPlanExecutionEnvelope,
   savePlanExecutionEnvelope,
@@ -18,6 +19,27 @@ function deferred<T>() {
     resolve = accept;
   });
   return { promise, resolve };
+}
+
+function startReceipt(
+  overrides: Partial<TimelineMutationReceipt> = {},
+): TimelineMutationReceipt {
+  const view = viewFixture();
+  return {
+    schema_version: 1,
+    receipt_id: contextFixture.case_id,
+    operation: "start",
+    result_kind: "timeline_execution_started",
+    result_id: view.execution.execution_id,
+    execution_id: view.execution.execution_id,
+    checkpoint_id: null,
+    before_execution_version: null,
+    after_execution_version: 1,
+    before_checkpoint_version: null,
+    after_checkpoint_version: null,
+    created_at: "2026-07-29T00:00:00Z",
+    ...overrides,
+  };
 }
 
 afterEach(() => {
@@ -77,14 +99,7 @@ it("persists the operation, captures its receipt, then performs a fresh GET", as
       calls.push("POST");
       started = true;
       expect(loadPlanExecutionEnvelope()?.mutations.start).toBeDefined();
-      return {
-        schema_version: 1 as const, receipt_id: contextFixture.case_id,
-        operation: "start" as const, result_kind: "timeline_execution_started" as const,
-        result_id: contextFixture.case_id, execution_id: contextFixture.case_id,
-        checkpoint_id: null, before_execution_version: null, after_execution_version: 1,
-        before_checkpoint_version: null, after_checkpoint_version: null,
-        created_at: "2026-07-29T00:00:00Z",
-      };
+      return startReceipt();
     }),
     attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
   };
@@ -99,14 +114,7 @@ it("recovers a lost acknowledgement with the exact body, key, and live session",
   const calls: Array<{ body: unknown; csrf: string; key: string }> = [];
   let attempt = 0;
   const view = viewFixture();
-  const receipt = {
-    schema_version: 1 as const, receipt_id: contextFixture.case_id,
-    operation: "start" as const, result_kind: "timeline_execution_started" as const,
-    result_id: contextFixture.case_id, execution_id: contextFixture.case_id,
-    checkpoint_id: null, before_execution_version: null, after_execution_version: 1,
-    before_checkpoint_version: null, after_checkpoint_version: null,
-    created_at: "2026-07-29T00:00:00Z",
-  };
+  const receipt = startReceipt();
   const api = {
     bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
     mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
@@ -135,6 +143,169 @@ it("recovers a lost acknowledgement with the exact body, key, and live session",
   expect(api.bootstrap).toHaveBeenCalledTimes(1);
   expect(api.mint).toHaveBeenCalledTimes(1);
   expect(result.current.state.receipt).toEqual(receipt);
+});
+
+it("retains the exact pending replay across a post-receipt GET transport failure", async () => {
+  const calls: Array<{ body: unknown; csrf: string; key: string }> = [];
+  const view = viewFixture();
+  const receipt = startReceipt();
+  let startAttempts = 0;
+  let readAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: startAttempts === 0 ? null : view.execution.execution_id,
+    })),
+    read: vi.fn(async () => {
+      readAttempts += 1;
+      if (readAttempts === 1) {
+        throw new PlanExecutionApiError(503, "bff_upstream_unavailable");
+      }
+      return view;
+    }),
+    start: vi.fn(async (_id: string, body: unknown, csrf: string, key: string) => {
+      calls.push({ body, csrf, key });
+      startAttempts += 1;
+      if (startAttempts === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+  const exactSlot = loadPlanExecutionEnvelope()?.mutations.start;
+
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(calls).toHaveLength(2);
+  expect(calls[1]).toEqual(calls[0]);
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toEqual(exactSlot);
+
+  await act(async () => result.current.recover());
+
+  expect(calls).toHaveLength(3);
+  expect(calls[2]).toEqual(calls[0]);
+  expect(result.current.state.receipt).toEqual(receipt);
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+});
+
+it.each([
+  {
+    name: "operation and result kind",
+    overrides: {
+      operation: "attest" as const,
+      result_kind: "timeline_checkpoint_attested" as const,
+    },
+  },
+  {
+    name: "execution",
+    overrides: { execution_id: contextFixture.case_id },
+  },
+  {
+    name: "start checkpoint",
+    overrides: { checkpoint_id: viewFixture().checkpoints[0].checkpoint_id },
+  },
+])("fails closed on a pending replay receipt with mismatched $name identity", async ({
+  overrides,
+}) => {
+  const view = viewFixture();
+  const receipt = startReceipt(overrides);
+  let startAttempts = 0;
+  const keys: string[] = [];
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: startAttempts === 0 ? null : view.execution.execution_id,
+    })),
+    read: vi.fn(async () => view),
+    start: vi.fn(async (_id: string, _body: unknown, _csrf: string, key: string) => {
+      keys.push(key);
+      startAttempts += 1;
+      if (startAttempts === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(result.current.state.receipt).toBeNull();
+  expect(result.current.state.view).toBeNull();
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+  expect(keys).toEqual([keys[0], keys[0]]);
+
+  await act(async () => result.current.recover());
+  expect(api.start).toHaveBeenCalledTimes(2);
+});
+
+it("fails closed when a checkpoint replay receipt does not bind its body and fresh result", async () => {
+  const initial = viewFixture();
+  const authoritative = viewFixture("awaiting_advisor");
+  const receipt: TimelineMutationReceipt = {
+    schema_version: 1,
+    receipt_id: contextFixture.case_id,
+    operation: "attest",
+    result_kind: "timeline_checkpoint_attested",
+    result_id: authoritative.latest_attestation!.attestation_id,
+    execution_id: authoritative.execution.execution_id,
+    checkpoint_id: authoritative.checkpoints[1].checkpoint_id,
+    before_execution_version: 1,
+    after_execution_version: 2,
+    before_checkpoint_version: 1,
+    after_checkpoint_version: 2,
+    created_at: "2026-07-29T00:00:00Z",
+  };
+  let readAttempts = 0;
+  let attestAttempts = 0;
+  const keys: string[] = [];
+  const liveContext = {
+    ...contextFixture,
+    execution_id: initial.execution.execution_id,
+  };
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => liveContext),
+    read: vi.fn(async () => {
+      readAttempts += 1;
+      return readAttempts === 1 ? initial : authoritative;
+    }),
+    start: vi.fn(),
+    attest: vi.fn(async (
+      _id: string,
+      _body: unknown,
+      _csrf: string,
+      key: string,
+    ) => {
+      keys.push(key);
+      attestAttempts += 1;
+      if (attestAttempts === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.attest());
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(result.current.state.receipt).toBeNull();
+  expect(result.current.state.view).toEqual(initial);
+  expect(loadPlanExecutionEnvelope()?.mutations.attest).toBeUndefined();
+  expect(keys).toEqual([keys[0], keys[0]]);
 });
 
 it("closes a pending replay when the shared session rotates during its read", async () => {
@@ -188,7 +359,7 @@ it("closes a pending replay when the shared session rotates during its read", as
   expect(result.current.state.value).toBe("session_changed");
   expect(result.current.state.view).toBeNull();
   expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
-  expect(loadPlanExecutionEnvelope()?.lastReceiptId).toBe(receipt.receipt_id);
+  expect(loadPlanExecutionEnvelope()?.lastReceiptId).toBeNull();
   await act(async () => result.current.start());
   expect(api.start).toHaveBeenCalledTimes(2);
 });
