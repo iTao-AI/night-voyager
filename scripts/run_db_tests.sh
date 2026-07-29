@@ -242,6 +242,19 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-timeline-execution-authority" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0014'
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/timeline_execution/test_authority.py \
+        tests/integration/timeline_execution/test_repository.py \
+        tests/integration/timeline_execution/test_query_plan.py \
+        tests/security/test_timeline_execution_catalog.py
+    uv run alembic current | grep '0014'
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -317,6 +330,10 @@ if [ "${1:-}" = "timeline-execution" ]; then
         migration)
             run_lane "${BASE_PROJECT_NAME}-migration" \
                 inside-timeline-execution-migration
+            ;;
+        authority)
+            run_lane "${BASE_PROJECT_NAME}-authority" \
+                inside-timeline-execution-authority
             ;;
         *)
             echo "unknown timeline execution suite: ${suite:-<missing>}" >&2
