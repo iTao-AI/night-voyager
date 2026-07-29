@@ -13,7 +13,7 @@ it("derives every PR A action from fresh server authority", () => {
     { ...contextFixture, active_role: "advisor" },
     viewFixture("awaiting_advisor"),
   ).value).toBe("awaiting_advisor");
-  expect(derivePlanExecutionState(contextFixture, viewFixture("blocked")).value).toBe("reassessment_required");
+  expect(derivePlanExecutionState(contextFixture, viewFixture("blocked")).value).toBe("checkpoint_active");
   const completed = viewFixture();
   completed.execution.state = "completed";
   completed.current_checkpoint = null;

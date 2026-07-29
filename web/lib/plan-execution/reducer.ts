@@ -29,7 +29,11 @@ export function derivePlanExecutionState(
     execution_completed: "execution_completed",
     reassessment_handoff_required: "reassessment_required",
   };
-  return { value: stateByAction[view.current_action.code], context, view, receipt, error: null, operation: null, safeDisplayState: null };
+  const value = view.execution.state === "active"
+    && view.current_checkpoint?.state === "blocked"
+    ? "checkpoint_active"
+    : stateByAction[view.current_action.code];
+  return { value, context, view, receipt, error: null, operation: null, safeDisplayState: null };
 }
 export function beginPlanExecutionMutation(
   prior: PlanExecutionState,
