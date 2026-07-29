@@ -57,7 +57,7 @@ jobs:
 
   compose:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       COMPOSE_PROJECT_NAME: night-voyager-ci-${{ github.run_id }}-${{ github.run_attempt }}
     steps:

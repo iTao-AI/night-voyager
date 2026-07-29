@@ -4,11 +4,32 @@ import stat
 import subprocess
 from pathlib import Path
 
+import yaml
+
 
 def test_web_healthcheck_uses_ipv4_loopback() -> None:
     compose = Path("compose.yaml").read_text(encoding="utf-8")
 
     assert '"http://127.0.0.1:3000"' in compose
+
+
+def test_hosted_compose_job_has_budget_and_preserves_required_order() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    compose_job = workflow["jobs"]["compose"]
+    steps = compose_job["steps"]
+    runs = [step["run"] for step in steps if "run" in step]
+    required_runs = [
+        "make db-check",
+        "make collaboration-db-check SUITE=authority",
+        "make compose-proof",
+        "make down",
+    ]
+
+    assert compose_job["timeout-minutes"] == 30
+    assert runs[-4:] == required_runs
+    assert steps[-1] == {"if": "always()", "run": "make down"}
 
 
 def test_compose_proof_executes_m3b_golden_flow_and_teardown() -> None:
