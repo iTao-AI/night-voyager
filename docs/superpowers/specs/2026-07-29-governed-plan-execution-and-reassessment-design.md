@@ -195,15 +195,16 @@ receives the same non-enumerating unavailable response as an unknown resource.
 - `due_soon`
 - `overdue`
 
-Reads derive risk from the immutable due date and a trusted server clock without
-creating events or mutating state. Tests may inject a clock into the pure
-projection.
+The role-safe database read projection derives risk from the immutable due date
+and a PostgreSQL-owned observed date without creating events or mutating state.
+The application pure projector consumes that observed database date; tests may
+inject the observed value. The API and browser cannot supply or override an
+authoritative `as_of` value.
 
-An accepted `deadline_elapsed` reassessment is different: its authoritative
-date and trigger proof are derived inside the PostgreSQL mutation function from
-database-owned time. The API and browser cannot supply an authoritative
-`as_of` value. Server time is not included in the stable client request hash;
-the accepted trigger projection is persisted separately.
+An accepted `deadline_elapsed` reassessment derives its authoritative date and
+trigger proof inside the PostgreSQL mutation function from the same
+database-owned time boundary. The accepted date is not included in the stable
+client request hash; the accepted trigger projection is persisted separately.
 
 ### Structured attestations
 
@@ -639,7 +640,7 @@ The complete state matrix includes:
 | --- | --- | --- | --- |
 | not started | approved plan and milestones | start execution | assigned family role |
 | checkpoint active | current checkpoint and verified history | submit attestation | accountable family role |
-| awaiting advisor | submitted attestation and receipt | none; explain waiting | advisor |
+| awaiting advisor | submitted attestation and receipt | advisor: verify or request update; family: explain waiting | assigned advisor |
 | update requested | history and advisor reason | revise attestation | accountable family role |
 | completed | verified history and final receipt | review activity | none |
 | reassessment required | trigger, stop impact, predecessor handoff | view handoff context | advisor/future workflow |
