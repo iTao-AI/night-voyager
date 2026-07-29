@@ -2,6 +2,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import {
+  PlanExecutionApiError,
+} from "../../lib/plan-execution/api";
+import {
   loadPlanExecutionEnvelope,
   savePlanExecutionEnvelope,
   type PlanExecutionEnvelopeV1,
@@ -108,7 +111,10 @@ it("recovers a lost acknowledgement with the exact body, key, and live session",
     bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
     mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
     revoke: vi.fn(async () => undefined),
-    context: vi.fn(async () => contextFixture),
+    context: vi.fn(async () => ({
+      ...contextFixture,
+      execution_id: attempt === 0 ? null : view.execution.execution_id,
+    })),
     read: vi.fn(async () => view),
     start: vi.fn(async (_id: string, body: unknown, csrf: string, key: string) => {
       calls.push({ body, csrf, key });
@@ -129,6 +135,89 @@ it("recovers a lost acknowledgement with the exact body, key, and live session",
   expect(api.bootstrap).toHaveBeenCalledTimes(1);
   expect(api.mint).toHaveBeenCalledTimes(1);
   expect(result.current.state.receipt).toEqual(receipt);
+});
+
+it("closes a pending replay when the shared session rotates during its read", async () => {
+  const delayedRead = deferred<ReturnType<typeof viewFixture>>();
+  const view = viewFixture();
+  const receipt = {
+    schema_version: 1 as const, receipt_id: contextFixture.case_id,
+    operation: "start" as const, result_kind: "timeline_execution_started" as const,
+    result_id: contextFixture.case_id, execution_id: view.execution.execution_id,
+    checkpoint_id: null, before_execution_version: null, after_execution_version: 1,
+    before_checkpoint_version: null, after_checkpoint_version: null,
+    created_at: "2026-07-29T00:00:00Z",
+  };
+  let startAttempts = 0;
+  let contextReads = 0;
+  let activeRole: "student" | "advisor" = "student";
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => {
+      contextReads += 1;
+      return {
+        ...contextFixture,
+        execution_id: contextReads === 1 ? null : view.execution.execution_id,
+        active_role: activeRole,
+      };
+    }),
+    read: vi.fn(async () => delayedRead.promise),
+    start: vi.fn(async () => {
+      startAttempts += 1;
+      if (startAttempts === 1) throw new Error("request_failed");
+      return receipt;
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+
+  let recovery!: Promise<void>;
+  await act(async () => {
+    recovery = result.current.recover();
+    await Promise.resolve();
+  });
+  await waitFor(() => expect(api.read).toHaveBeenCalledTimes(1));
+  activeRole = "advisor";
+  delayedRead.resolve(view);
+  await act(async () => recovery);
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(result.current.state.view).toBeNull();
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+  expect(loadPlanExecutionEnvelope()?.lastReceiptId).toBe(receipt.receipt_id);
+  await act(async () => result.current.start());
+  expect(api.start).toHaveBeenCalledTimes(2);
+});
+
+it("closes a pending replay 401 and never continues to its read", async () => {
+  let startAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => contextFixture),
+    read: vi.fn(async () => viewFixture()),
+    start: vi.fn(async () => {
+      startAttempts += 1;
+      if (startAttempts === 1) throw new Error("request_failed");
+      throw new PlanExecutionApiError(401, "request_failed");
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+  await act(async () => result.current.start());
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("session_changed");
+  expect(api.read).not.toHaveBeenCalled();
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+  await act(async () => result.current.recover());
+  expect(api.start).toHaveBeenCalledTimes(2);
 });
 
 it("revalidates a stored Case before closing a residual session and minting fresh CSRF", async () => {
@@ -185,6 +274,34 @@ it("revalidates a stored Case before closing a residual session and minting fres
   ]);
   expect(api.mint).toHaveBeenCalledWith("student", "fresh-bootstrap", "happy");
   expect(loadPlanExecutionEnvelope()?.executionId).toBe(completed.execution.execution_id);
+});
+
+it("closes a stored-envelope post-mint read 401 as session_changed", async () => {
+  const view = viewFixture();
+  const restoredContext = {
+    ...contextFixture,
+    execution_id: view.execution.execution_id,
+  };
+  savePlanExecutionEnvelope({
+    ...envelope,
+    executionId: view.execution.execution_id,
+  });
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => restoredContext),
+    read: vi.fn(async () => {
+      throw new PlanExecutionApiError(401, "request_failed");
+    }),
+    start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+
+  await waitFor(() => expect(result.current.state.value).toBe("session_changed"));
+  expect(api.bootstrap).toHaveBeenCalledTimes(1);
+  expect(api.mint).toHaveBeenCalledTimes(1);
+  expect(api.start).not.toHaveBeenCalled();
 });
 
 it("does not rotate while the initial authority read holds the generation lock", async () => {
@@ -326,6 +443,64 @@ it("refreshes rejected stale versions instead of replaying a known rejection", a
   expect(result.current.state.value).toBe("checkpoint_active");
   expect(result.current.state.view?.execution.row_version).toBe(2);
   expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+});
+
+it("closes a stale-authority refresh 401 without replaying the rejected mutation", async () => {
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn()
+      .mockResolvedValueOnce(contextFixture)
+      .mockRejectedValueOnce(new PlanExecutionApiError(401, "request_failed")),
+    read: vi.fn(async () => viewFixture()),
+    start: vi.fn(async () => {
+      throw new PlanExecutionApiError(409, "stale_execution_version");
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+
+  const escaped = await act(async () =>
+    result.current.start().then(() => null, (error: unknown) => error));
+
+  expect(escaped).toBeNull();
+  expect(result.current.state.value).toBe("session_changed");
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+  expect(api.start).toHaveBeenCalledTimes(1);
+  expect(api.read).not.toHaveBeenCalled();
+});
+
+it("keeps a stale-authority refresh transport failure recoverable", async () => {
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn()
+      .mockResolvedValueOnce(contextFixture)
+      .mockRejectedValueOnce(new PlanExecutionApiError(
+        503,
+        "bff_upstream_unavailable",
+      )),
+    read: vi.fn(async () => viewFixture()),
+    start: vi.fn(async () => {
+      throw new PlanExecutionApiError(409, "stale_execution_version");
+    }),
+    attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api));
+  await act(async () => result.current.connect("student"));
+
+  const escaped = await act(async () =>
+    result.current.start().then(() => null, (error: unknown) => error));
+
+  expect(escaped).toBeNull();
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(result.current.state.error).toBe("bff_upstream_unavailable");
+  expect(result.current.state.operation).toBeNull();
+  expect(loadPlanExecutionEnvelope()?.mutations.start).toBeUndefined();
+  expect(api.start).toHaveBeenCalledTimes(1);
 });
 
 it("closes recovery when the shared session rotates while its read is in flight", async () => {

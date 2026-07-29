@@ -291,7 +291,24 @@ export function usePlanExecution(
         } else if (isPlanExecutionStaleAuthority(error)) {
           pendingMutation.current = null;
           clearMutationSlot(operation);
-          await loadAuthority(state.context.active_role, null, expectedGeneration);
+          try {
+            await loadAuthority(state.context.active_role, null, expectedGeneration);
+          } catch (refreshError) {
+            if (expectedGeneration === generation.current) {
+              if (isPlanExecutionSessionLoss(refreshError)) {
+                closeSessionChanged(refreshError);
+              } else {
+                setState((previous) => ({
+                  ...previous,
+                  value: "recoverable_error",
+                  error: refreshError instanceof Error
+                    ? refreshError.message
+                    : "request_failed",
+                  operation: null,
+                }));
+              }
+            }
+          }
         } else {
           setState({
             ...state,
@@ -408,25 +425,73 @@ export function usePlanExecution(
         }
         const receipt = await pending.call(sessionCsrf, pending.record.idempotencyKey);
         if (expectedGeneration !== generation.current) return;
-        const view = await api.read(context.case_id);
-        if (expectedGeneration !== generation.current) return;
-        const next = derivePlanExecutionState(context, view, receipt);
-        setState(next);
-        savePlanExecutionEnvelope(envelopeFor(next, pending.role, scenario, {
-          ...(loadPlanExecutionEnvelope() ?? envelopeFor(next, pending.role, scenario)),
+        const withReceipt = {
+          ...(loadPlanExecutionEnvelope() ?? envelopeFor(
+            state,
+            pending.role,
+            scenario,
+          )),
           mutations: {},
           lastReceiptId: receipt.receipt_id,
-        }));
+        };
+        savePlanExecutionEnvelope(withReceipt);
         pendingMutation.current = null;
+        const view = await api.read(context.case_id);
+        if (expectedGeneration !== generation.current) return;
+        const confirmed = await api.context();
+        if (expectedGeneration !== generation.current) return;
+        const crossCase = confirmed.case_id !== context.case_id
+          || confirmed.timeline_plan_id !== context.timeline_plan_id
+          || confirmed.execution_id !== view.execution.execution_id;
+        if (crossCase || confirmed.active_role !== pending.role) {
+          closeSessionChanged(new Error("session_changed"), crossCase);
+          return;
+        }
+        const next = derivePlanExecutionState(confirmed, view, receipt);
+        setState(next);
+        savePlanExecutionEnvelope(envelopeFor(
+          next,
+          pending.role,
+          scenario,
+          withReceipt,
+        ));
       } catch (error) {
         if (expectedGeneration === generation.current) {
-          setState((previous) => ({ ...previous, value: error instanceof Error && error.message === "session_changed" ? "session_changed" : "recoverable_error", error: error instanceof Error ? error.message : "request_failed" }));
+          if (isPlanExecutionSessionLoss(error)) {
+            pendingMutation.current = null;
+            clearMutationSlot(pending.operation);
+            closeSessionChanged(error);
+          } else if (isPlanExecutionStaleAuthority(error)) {
+            pendingMutation.current = null;
+            clearMutationSlot(pending.operation);
+            try {
+              await loadAuthority(pending.role, null, expectedGeneration);
+            } catch (refreshError) {
+              if (expectedGeneration === generation.current) {
+                if (isPlanExecutionSessionLoss(refreshError)) {
+                  closeSessionChanged(refreshError);
+                } else {
+                  setState((previous) => ({
+                    ...previous,
+                    value: "recoverable_error",
+                    error: refreshError instanceof Error
+                      ? refreshError.message
+                      : "request_failed",
+                    operation: null,
+                  }));
+                }
+              }
+            }
+          } else {
+            setState((previous) => ({
+              ...previous,
+              value: "recoverable_error",
+              error: error instanceof Error ? error.message : "request_failed",
+            }));
+          }
         }
       } finally {
-        if (expectedGeneration === generation.current) {
-          locked.current = false;
-          setBusy(false);
-        }
+        finishGeneration(expectedGeneration);
       }
       return;
     }
@@ -495,21 +560,29 @@ export function usePlanExecution(
       savePlanExecutionEnvelope(envelopeFor(next, stored.role, scenario, stored));
     } catch (error) {
       if (expectedGeneration === generation.current) {
-        const sessionChanged = error instanceof Error
-          && error.message === "session_changed";
-        setState({
-          ...loadingPlanExecutionState,
-          value: sessionChanged ? "session_changed" : "recoverable_error",
-          error: error instanceof Error ? error.message : "request_failed",
-        });
+        if (isPlanExecutionSessionLoss(error)) {
+          closeSessionChanged(error);
+        } else {
+          setState({
+            ...loadingPlanExecutionState,
+            value: "recoverable_error",
+            error: error instanceof Error ? error.message : "request_failed",
+          });
+        }
       }
     } finally {
-      if (expectedGeneration === generation.current) {
-        locked.current = false;
-        setBusy(false);
-      }
+      finishGeneration(expectedGeneration);
     }
-  }, [api, beginGeneration, closeSessionChanged, scenario]);
+  }, [
+    api,
+    beginGeneration,
+    clearMutationSlot,
+    closeSessionChanged,
+    finishGeneration,
+    loadAuthority,
+    scenario,
+    state,
+  ]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
