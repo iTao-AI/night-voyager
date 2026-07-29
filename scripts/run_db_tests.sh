@@ -9,23 +9,23 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
@@ -34,7 +34,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run --no-editable python scripts/seed_demo.py \
         --without-skills --without-planning-revision --without-plan-execution
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -56,24 +56,25 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/decision/test_postgres_decision.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_http_decision.py
-    if uv run alembic downgrade 0011 >"$downgrade_output" 2>&1; then
-        echo "expected planning revision authority downgrade refusal" >&2
+    if uv run alembic downgrade 0014 >"$downgrade_output" 2>&1; then
+        echo "expected plan execution identity downgrade refusal" >&2
         exit 1
     fi
-    grep -q 'refusing downgrade: planning revision lineage exists' "$downgrade_output"
-    uv run alembic current | grep '0014'
+    grep -q '0015 plan execution demo identity exists' "$downgrade_output"
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/seed_demo.py \
-        --without-collaboration --without-planning-revision
+        --without-collaboration --without-planning-revision \
+        --without-plan-execution
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     exit 0
 fi
 
@@ -205,19 +206,19 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
                 tests/integration/planning/test_revision_query_plan.py
             ;;
     esac
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-planning-revision-journey" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/connected_demo/test_postgres_read_models.py \
         tests/integration/connected_demo/test_http_read_models.py \
         tests/integration/connected_demo/test_planning_revision_flow.py
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     exit 0
 fi
 
@@ -226,7 +227,7 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
     uv run alembic upgrade 0013
     uv run alembic current | grep '0013'
     uv run --no-editable python scripts/seed_demo.py --without-plan-execution
-    uv run alembic upgrade head
+    uv run alembic upgrade 0014
     uv run alembic current | grep '0014'
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/security/test_timeline_execution_catalog.py \
@@ -235,29 +236,31 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
     NIGHT_VOYAGER_TIMELINE_MIGRATION_PHASE=empty \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_downgrade.py
-    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py --without-plan-execution
     NIGHT_VOYAGER_TIMELINE_MIGRATION_PHASE=history \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_downgrade.py
+    uv run alembic upgrade head
+    uv run alembic current | grep '0015'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-timeline-execution-authority" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_authority.py \
         tests/integration/timeline_execution/test_repository.py \
         tests/integration/timeline_execution/test_query_plan.py \
         tests/security/test_timeline_execution_catalog.py
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-timeline-execution-http" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_http.py
@@ -266,12 +269,43 @@ fi
 
 if [ "${1:-}" = "inside-timeline-execution-seed" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0014'
+    uv run alembic current | grep '0015'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_timeline_execution.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_seed.py
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-plan-execution-identity-migration" ]; then
+    uv run alembic downgrade base
+    uv run alembic upgrade 0014
+    uv run alembic current | grep '0014'
+    uv run alembic upgrade head
+    uv run alembic current | grep '0015'
+    NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE=empty \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/identity/test_plan_execution_migration.py
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE=seeded \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/identity/test_plan_execution_migration.py \
+        tests/integration/timeline_execution/test_http.py::test_closed_demo_principals_resolve_exactly_one_assigned_scenario \
+        tests/integration/timeline_execution/test_http.py::test_demo_session_rotation_stays_within_one_closed_scenario
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-timeline-execution-journey" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0015'
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/verify_timeline_execution.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/timeline_execution/test_seed.py \
+        tests/integration/timeline_execution/test_journey.py
     exit 0
 fi
 
@@ -363,11 +397,21 @@ if [ "${1:-}" = "timeline-execution" ]; then
             run_lane "${BASE_PROJECT_NAME}-seed" \
                 inside-timeline-execution-seed
             ;;
+        journey)
+            run_lane "${BASE_PROJECT_NAME}-journey" \
+                inside-timeline-execution-journey
+            ;;
         *)
             echo "unknown timeline execution suite: ${suite:-<missing>}" >&2
             exit 2
             ;;
     esac
+    exit 0
+fi
+
+if [ "${1:-}" = "plan-execution-identity-migration" ]; then
+    run_lane "${BASE_PROJECT_NAME}-plan-execution-identity-migration" \
+        inside-plan-execution-identity-migration
     exit 0
 fi
 
@@ -383,6 +427,7 @@ run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" \
     inside-planning-revision-seed-migration
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
+run_lane "${BASE_PROJECT_NAME}-plan-execution-identity-migration" inside-plan-execution-identity-migration
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-migration" inside-timeline-execution-migration
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-authority" inside-timeline-execution-authority
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http

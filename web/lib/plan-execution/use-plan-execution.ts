@@ -13,9 +13,11 @@ import {
 } from "./reducer";
 import {
   loadPlanExecutionEnvelope,
+  clearPlanExecutionEnvelope,
   savePlanExecutionEnvelope,
   type PlanExecutionEnvelopeV1,
 } from "./session-storage";
+import type { PlanExecutionDemoScenario } from "./scenario";
 
 export interface PlanExecutionController {
   state: PlanExecutionState;
@@ -42,12 +44,14 @@ interface PendingMutation {
 function envelopeFor(
   state: PlanExecutionState,
   role: PlanExecutionRole,
+  scenario: PlanExecutionDemoScenario,
   previous?: PlanExecutionEnvelopeV1 | null,
 ): PlanExecutionEnvelopeV1 {
   const checkpoint = state.view?.current_checkpoint ?? null;
   return {
     schema_version: 1,
     journey: "plan-execution",
+    scenario,
     role,
     caseId: state.context?.case_id ?? previous?.caseId ?? "",
     timelinePlanId: state.context?.timeline_plan_id ?? previous?.timelinePlanId ?? "",
@@ -62,6 +66,7 @@ function envelopeFor(
 
 export function usePlanExecution(
   suppliedApi?: PlanExecutionApi,
+  scenario: PlanExecutionDemoScenario = "happy",
 ): PlanExecutionController {
   const api = suppliedApi ?? createPlanExecutionApi();
   const [state, setState] = useState<PlanExecutionState>(loadingPlanExecutionState);
@@ -96,8 +101,8 @@ export function usePlanExecution(
     if (expectedGeneration !== generation.current) return;
     const next = derivePlanExecutionState(context, view, receipt);
     setState(next);
-    savePlanExecutionEnvelope(envelopeFor(next, role, loadPlanExecutionEnvelope()));
-  }, [api]);
+    savePlanExecutionEnvelope(envelopeFor(next, role, scenario, loadPlanExecutionEnvelope()));
+  }, [api, scenario]);
 
   const connect = useCallback(async (role: PlanExecutionRole) => {
     const expectedGeneration = beginGeneration();
@@ -105,7 +110,7 @@ export function usePlanExecution(
     setBusy(true);
     try {
       const bootstrap = await api.bootstrap();
-      const session = await api.mint(role, bootstrap.csrf_token);
+      const session = await api.mint(role, bootstrap.csrf_token, scenario);
       if (expectedGeneration !== generation.current) return;
       csrf.current = session.csrf_token;
       await loadAuthority(role, null, expectedGeneration);
@@ -119,7 +124,7 @@ export function usePlanExecution(
         setBusy(false);
       }
     }
-  }, [api, beginGeneration, loadAuthority]);
+  }, [api, beginGeneration, loadAuthority, scenario]);
 
   const switchRole = useCallback(async (role: PlanExecutionRole) => {
     beginGeneration();
@@ -139,7 +144,12 @@ export function usePlanExecution(
     setBusy(true);
     const expectedGeneration = generation.current;
     try {
-      const previous = loadPlanExecutionEnvelope() ?? envelopeFor(state, state.context.active_role);
+      const stored = loadPlanExecutionEnvelope();
+      if (stored && stored.scenario !== scenario) {
+        clearPlanExecutionEnvelope();
+        throw new Error("session_changed");
+      }
+      const previous = stored ?? envelopeFor(state, state.context.active_role, scenario);
       const record = await idempotencyFor(body, previous.mutations[operation]);
       const pending = {
         ...previous,
@@ -163,7 +173,7 @@ export function usePlanExecution(
       if (expectedGeneration !== generation.current) return;
       const next = derivePlanExecutionState(state.context, view, receipt);
       setState(next);
-      savePlanExecutionEnvelope(envelopeFor(next, state.context.active_role, { ...withReceipt, mutations: {} }));
+      savePlanExecutionEnvelope(envelopeFor(next, state.context.active_role, scenario, { ...withReceipt, mutations: {} }));
       pendingMutation.current = null;
     } catch (error) {
       if (expectedGeneration === generation.current) {
@@ -181,7 +191,7 @@ export function usePlanExecution(
       locked.current = false;
       setBusy(false);
     }
-  }, [api, state]);
+  }, [api, scenario, state]);
 
   const start = useCallback(async () => {
     if (!state.context) return;
@@ -265,7 +275,7 @@ export function usePlanExecution(
       setBusy(true);
       try {
         const bootstrap = await api.bootstrap();
-        const session = await api.mint(pending.role, bootstrap.csrf_token);
+        const session = await api.mint(pending.role, bootstrap.csrf_token, scenario);
         if (expectedGeneration !== generation.current) return;
         csrf.current = session.csrf_token;
         const context = await api.context();
@@ -280,8 +290,8 @@ export function usePlanExecution(
         if (expectedGeneration !== generation.current) return;
         const next = derivePlanExecutionState(context, view, receipt);
         setState(next);
-        savePlanExecutionEnvelope(envelopeFor(next, pending.role, {
-          ...(loadPlanExecutionEnvelope() ?? envelopeFor(next, pending.role)),
+        savePlanExecutionEnvelope(envelopeFor(next, pending.role, scenario, {
+          ...(loadPlanExecutionEnvelope() ?? envelopeFor(next, pending.role, scenario)),
           mutations: {},
           lastReceiptId: receipt.receipt_id,
         }));
@@ -303,8 +313,17 @@ export function usePlanExecution(
       setState({ ...loadingPlanExecutionState, value: "recoverable_error", error: "recovery metadata unavailable" });
       return;
     }
+    if (stored.scenario !== scenario) {
+      clearPlanExecutionEnvelope();
+      setState({
+        ...loadingPlanExecutionState,
+        value: "recoverable_error",
+        error: "recovery metadata unavailable",
+      });
+      return;
+    }
     await switchRole(stored.role);
-  }, [api, beginGeneration, switchRole]);
+  }, [api, beginGeneration, scenario, switchRole]);
 
   return { state, busy, connect, switchRole, start, attest, verify, reassess, recover };
 }

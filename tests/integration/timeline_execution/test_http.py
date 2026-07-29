@@ -13,6 +13,7 @@ from night_voyager.api import create_app
 from night_voyager.config import Settings
 from night_voyager.database import create_engine, create_session_factory
 from night_voyager.identity.demo_seed import (
+    BLOCKED_PLAN_EXECUTION_CASE_ID,
     PLAN_EXECUTION_CASE_ID,
     PLAN_EXECUTION_TIMELINE_ID,
 )
@@ -83,6 +84,155 @@ async def test_http_contract_closes_scenario_authentication_and_body_shape() -> 
 
 
 @pytest.mark.asyncio
+async def test_closed_demo_principals_resolve_exactly_one_assigned_scenario() -> None:
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": [ORIGIN],
+            "secret_key": "test-session-secret",
+        }
+    )
+    app = create_app(settings=settings, session_factory=sessions)
+    try:
+        for choice, expected_case in (
+            (DemoActorChoice.PLAN_EXECUTION_HAPPY_ADVISOR, PLAN_EXECUTION_CASE_ID),
+            (DemoActorChoice.PLAN_EXECUTION_HAPPY_STUDENT, PLAN_EXECUTION_CASE_ID),
+            (DemoActorChoice.PLAN_EXECUTION_HAPPY_PARENT, PLAN_EXECUTION_CASE_ID),
+            (
+                DemoActorChoice.PLAN_EXECUTION_BLOCKED_ADVISOR,
+                BLOCKED_PLAN_EXECUTION_CASE_ID,
+            ),
+            (
+                DemoActorChoice.PLAN_EXECUTION_BLOCKED_STUDENT,
+                BLOCKED_PLAN_EXECUTION_CASE_ID,
+            ),
+            (
+                DemoActorChoice.PLAN_EXECUTION_BLOCKED_PARENT,
+                BLOCKED_PLAN_EXECUTION_CASE_ID,
+            ),
+        ):
+            issued = await mint(sessions, choice)
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url=ORIGIN
+            ) as client:
+                client.cookies.set(SESSION_COOKIE, issued.raw_session_token)
+                response = await client.get(
+                    "/api/v1/plan-execution-context"
+                    "?scenario=governed-plan-execution-v1"
+                )
+            assert response.status_code == 200, response.text
+            assert response.json()["case_id"] == str(expected_case)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_demo_session_rotation_stays_within_one_closed_scenario() -> None:
+    url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
+    engine = create_async_engine(url)
+    sessions = async_sessionmaker(engine, expire_on_commit=False)
+    settings = Settings.model_validate(
+        {
+            "environment": "test",
+            "database_url": url,
+            "demo_mode": True,
+            "demo_allow_insecure_cookie": True,
+            "allowed_origins": [ORIGIN],
+            "secret_key": "test-session-secret",
+        }
+    )
+    app = create_app(settings=settings, session_factory=sessions)
+    try:
+        for advisor_choice, student_key, cross_key, expected_case in (
+            (
+                DemoActorChoice.PLAN_EXECUTION_HAPPY_ADVISOR,
+                "plan_execution_happy_student",
+                "plan_execution_blocked_parent",
+                PLAN_EXECUTION_CASE_ID,
+            ),
+            (
+                DemoActorChoice.PLAN_EXECUTION_BLOCKED_ADVISOR,
+                "plan_execution_blocked_student",
+                "plan_execution_happy_parent",
+                BLOCKED_PLAN_EXECUTION_CASE_ID,
+            ),
+        ):
+            advisor = await mint(sessions, advisor_choice)
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url=ORIGIN
+            ) as client:
+                client.cookies.set(SESSION_COOKIE, advisor.raw_session_token)
+                rotated = await client.post(
+                    "/api/v1/demo/sessions",
+                    headers={
+                        "Origin": ORIGIN,
+                        "X-CSRF-Token": advisor.raw_csrf_token,
+                    },
+                    json={"demo_actor": student_key},
+                )
+                assert rotated.status_code == 201, rotated.text
+                assert rotated.json()["role"] == "student"
+                context = await client.get(
+                    "/api/v1/plan-execution-context"
+                    "?scenario=governed-plan-execution-v1"
+                )
+                assert context.status_code == 200, context.text
+                assert context.json()["case_id"] == str(expected_case)
+                assert context.json()["active_role"] == "student"
+
+                refused = await client.post(
+                    "/api/v1/demo/sessions",
+                    headers={
+                        "Origin": ORIGIN,
+                        "X-CSRF-Token": rotated.json()["csrf_token"],
+                    },
+                    json={"demo_actor": cross_key},
+                )
+                assert refused.status_code == 401
+                assert refused.json() == {"detail": "authentication failed"}
+                assert "night_voyager_session=" not in refused.headers.get(
+                    "set-cookie", ""
+                )
+                unchanged = await client.get(
+                    "/api/v1/plan-execution-context"
+                    "?scenario=governed-plan-execution-v1"
+                )
+                assert unchanged.status_code == 200, unchanged.text
+                assert unchanged.json()["case_id"] == str(expected_case)
+                assert unchanged.json()["active_role"] == "student"
+
+        generic = await mint(sessions, DemoActorChoice.ADVISOR)
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url=ORIGIN
+        ) as client:
+            client.cookies.set(SESSION_COOKIE, generic.raw_session_token)
+            refused = await client.post(
+                "/api/v1/demo/sessions",
+                headers={
+                    "Origin": ORIGIN,
+                    "X-CSRF-Token": generic.raw_csrf_token,
+                },
+                json={"demo_actor": "plan_execution_happy_advisor"},
+            )
+            assert refused.status_code == 401
+            assert refused.json() == {"detail": "authentication failed"}
+        async with sessions() as session, session.begin():
+            resolved = await IdentityService(
+                IdentityRepository(session), "test-session-secret"
+            ).resolve(generic.raw_session_token)
+            assert resolved is not None
+            assert resolved.role.value == "advisor"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_authenticated_http_races_replays_and_terminal_refusal() -> None:
     url = os.environ["NIGHT_VOYAGER_API_DATABASE_URL"]
     engine = create_async_engine(url)
@@ -98,9 +248,15 @@ async def test_authenticated_http_races_replays_and_terminal_refusal() -> None:
         }
     )
     try:
-        student = await mint(sessions, DemoActorChoice.STUDENT)
-        parent = await mint(sessions, DemoActorChoice.PARENT)
-        advisor = await mint(sessions, DemoActorChoice.ADVISOR)
+        student = await mint(
+            sessions, DemoActorChoice.PLAN_EXECUTION_HAPPY_STUDENT
+        )
+        parent = await mint(
+            sessions, DemoActorChoice.PLAN_EXECUTION_HAPPY_PARENT
+        )
+        advisor = await mint(
+            sessions, DemoActorChoice.PLAN_EXECUTION_HAPPY_ADVISOR
+        )
         app = create_app(settings=settings, session_factory=sessions)
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url=ORIGIN

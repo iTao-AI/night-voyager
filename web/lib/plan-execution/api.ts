@@ -7,10 +7,14 @@ import {
   type TimelineExecutionView,
   type TimelineMutationReceipt,
 } from "./contracts";
+import {
+  planExecutionPrincipal,
+  type PlanExecutionDemoScenario,
+} from "./scenario";
 
 export interface PlanExecutionApi {
   bootstrap(): Promise<{ csrf_token: string }>;
-  mint(role: PlanExecutionRole, csrf: string): Promise<{ role: PlanExecutionRole; csrf_token: string }>;
+  mint(role: PlanExecutionRole, csrf: string, scenario: PlanExecutionDemoScenario): Promise<{ role: PlanExecutionRole; csrf_token: string }>;
   revoke(csrf: string): Promise<void>;
   context(): Promise<PlanExecutionContext>;
   read(caseId: string): Promise<TimelineExecutionView>;
@@ -49,9 +53,11 @@ export function createPlanExecutionApi(): PlanExecutionApi {
       if (typeof value !== "object" || value === null || !("csrf_token" in value) || typeof value.csrf_token !== "string") throw new Error("invalid bootstrap");
       return { csrf_token: value.csrf_token };
     },
-    async mint(role, csrf) {
+    async mint(role, csrf, scenario) {
       return session(await json("/api/demo/sessions", {
-        method: "POST", headers: headers(csrf), body: JSON.stringify({ demo_actor: role }),
+        method: "POST",
+        headers: headers(csrf),
+        body: JSON.stringify({ demo_actor: planExecutionPrincipal(scenario, role) }),
       }));
     },
     async revoke(csrf) {

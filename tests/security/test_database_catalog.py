@@ -123,6 +123,7 @@ def test_release_verifier_freezes_the_exact_0014_timeline_catalog() -> None:
     assert verifier["TIMELINE_EXECUTION_WORKER_FUNCTION_IDENTITIES"] == set()
     assert verifier["expected_app_policy_count"]("0013") == 38
     assert verifier["expected_app_policy_count"]("0014") == 44
+    assert verifier["expected_app_policy_count"]("0015") == 44
 
 
 def test_0014_inherits_planning_revision_and_api_only_timeline_authority() -> None:
@@ -132,10 +133,18 @@ def test_0014_inherits_planning_revision_and_api_only_timeline_authority() -> No
         "0012",
         "0013",
         "0014",
+        "0015",
     }
-    assert verifier["PLANNING_REVISION_SEED_REVISIONS"] == {"0013", "0014"}
+    assert verifier["PLANNING_REVISION_SEED_REVISIONS"] == {
+        "0013",
+        "0014",
+        "0015",
+    }
     assert verifier["timeline_execution_function_identities"]("0013") == set()
     assert verifier["timeline_execution_function_identities"]("0014") == verifier[
+        "TIMELINE_EXECUTION_FUNCTION_IDENTITIES"
+    ]
+    assert verifier["timeline_execution_function_identities"]("0015") == verifier[
         "TIMELINE_EXECUTION_FUNCTION_IDENTITIES"
     ]
 

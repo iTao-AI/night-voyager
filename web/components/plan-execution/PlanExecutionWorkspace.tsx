@@ -12,13 +12,16 @@ import { CurrentCheckpoint } from "./CurrentCheckpoint";
 import { ExecutionActivity } from "./ExecutionActivity";
 import { ExecutionRecoveryNotice } from "./ExecutionRecoveryNotice";
 import { ReassessmentHandoff } from "./ReassessmentHandoff";
+import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
 
 export function PlanExecutionWorkspace({
   controller: suppliedController,
+  scenario = "happy",
 }: {
   controller?: PlanExecutionController;
+  scenario?: PlanExecutionDemoScenario;
 }) {
-  const liveController = usePlanExecution();
+  const liveController = usePlanExecution(undefined, scenario);
   const controller = suppliedController ?? liveController;
   const { state, busy } = controller;
   const { copy } = usePresentation();

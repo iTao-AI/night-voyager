@@ -80,6 +80,7 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0012_versioned_planning_revision.py",
         "0013_planning_revision_demo_seed.py",
         "0014_timeline_execution_authority.py",
+        "0015_plan_execution_demo_identity.py",
     ]
     for relative in (
         "0005_dra_candidate_promotion.py",

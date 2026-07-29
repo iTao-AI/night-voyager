@@ -16,6 +16,7 @@ afterEach(() => {
 
 const envelope: PlanExecutionEnvelopeV1 = {
   schema_version: 1, journey: "plan-execution", role: "student",
+  scenario: "happy",
   caseId: contextFixture.case_id, timelinePlanId: contextFixture.timeline_plan_id,
   executionId: null, executionVersion: null, checkpointId: null,
   checkpointVersion: null, lastReceiptId: null, mutations: {},
@@ -30,6 +31,22 @@ it("replaces one bounded envelope and never persists session authority", () => {
   expect(raw).not.toContain("csrf");
   expect(raw).not.toContain("attestation_body");
   expect(raw).not.toContain("due_date");
+});
+
+it("fails closed and clears a cross-scenario recovery envelope", async () => {
+  savePlanExecutionEnvelope({ ...envelope, scenario: "blocked" });
+  const api = {
+    bootstrap: vi.fn(), mint: vi.fn(), revoke: vi.fn(), context: vi.fn(),
+    read: vi.fn(), start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api, "happy"));
+
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(loadPlanExecutionEnvelope()).toBeNull();
+  expect(api.bootstrap).not.toHaveBeenCalled();
+  expect(api.start).not.toHaveBeenCalled();
 });
 
 it("persists the operation, captures its receipt, then performs a fresh GET", async () => {

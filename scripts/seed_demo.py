@@ -15,6 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from night_voyager.collaboration.hashing import canonical_sha256
 from night_voyager.identity.demo_seed import (
+    BLOCKED_PLAN_EXECUTION_BRIEF_ID,
+    BLOCKED_PLAN_EXECUTION_CASE_ID,
+    BLOCKED_PLAN_EXECUTION_DECISION_ID,
+    BLOCKED_PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    BLOCKED_PLAN_EXECUTION_REVIEW_ID,
+    BLOCKED_PLAN_EXECUTION_RUN_ID,
+    BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
     COLLABORATION_ACTIVE_CASE_ID,
     COLLABORATION_ACTIVE_TASK_ID,
     COLLABORATION_CASE_ID,
@@ -26,10 +33,12 @@ from night_voyager.identity.demo_seed import (
     COLLABORATION_STALE_MESSAGE_ID,
     COLLABORATION_THREAD_IDS,
     CONNECTED_DEMO_CASE_ID,
+    PLAN_EXECUTION_BLOCKED_ACTORS,
     PLAN_EXECUTION_BRIEF_ID,
     PLAN_EXECUTION_CASE_ID,
     PLAN_EXECUTION_DECISION_ID,
     PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    PLAN_EXECUTION_HAPPY_ACTORS,
     PLAN_EXECUTION_REVIEW_ID,
     PLAN_EXECUTION_RUN_ID,
     PLAN_EXECUTION_TIMELINE_ID,
@@ -110,7 +119,10 @@ async def seed_demo(
                 text("SELECT set_config('night_voyager.organization_id', :value, true)"),
                 {"value": str(DEMO_ORG)},
             )
-            await _seed_identity(connection)
+            await _seed_identity(
+                connection,
+                include_plan_execution=include_plan_execution,
+            )
             if include_planning:
                 active_task_pin: dict[str, object] | None = None
                 if include_skills:
@@ -162,7 +174,11 @@ async def _seed_skills(
     return projection, build_demo_active_task_pin(registry)
 
 
-async def _seed_identity(connection: AsyncConnection) -> None:
+async def _seed_identity(
+    connection: AsyncConnection,
+    *,
+    include_plan_execution: bool,
+) -> None:
     await connection.execute(
         text(
             "INSERT INTO app.organizations (id,name,is_synthetic) VALUES (:id,'Night Voyager synthetic demo',true) ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name"
@@ -193,6 +209,55 @@ async def _seed_identity(connection: AsyncConnection) -> None:
             ),
             {"org": DEMO_ORG, "actor": actor_id, "role": role},
         )
+    scenario_actor_groups = (
+        (PLAN_EXECUTION_HAPPY_ACTORS, PLAN_EXECUTION_BLOCKED_ACTORS)
+        if include_plan_execution
+        else ()
+    )
+    for group_index, actors in enumerate(scenario_actor_groups, start=1):
+        for actor_index, (demo_key, role, actor_id, display_name) in enumerate(
+            actors,
+            start=1,
+        ):
+            await connection.execute(
+                text(
+                    "INSERT INTO app.actors "
+                    "(id,organization_id,display_name,is_synthetic) "
+                    "VALUES (:id,:org,:name,true) ON CONFLICT (id) DO UPDATE "
+                    "SET display_name=EXCLUDED.display_name"
+                ),
+                {"id": actor_id, "org": DEMO_ORG, "name": display_name},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.memberships "
+                    "(id,organization_id,actor_id,role) "
+                    "VALUES (:id,:org,:actor,:role) "
+                    "ON CONFLICT (organization_id,actor_id,role) DO NOTHING"
+                ),
+                {
+                    "id": f"3{group_index}000000-0000-0000-0000-{actor_index:012d}",
+                    "org": DEMO_ORG,
+                    "actor": actor_id,
+                    "role": role,
+                },
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO auth.demo_principals "
+                    "(demo_key,organization_id,actor_id,role) "
+                    "VALUES (:key,:org,:actor,:role) "
+                    "ON CONFLICT (demo_key) DO UPDATE SET "
+                    "organization_id=EXCLUDED.organization_id,"
+                    "actor_id=EXCLUDED.actor_id,role=EXCLUDED.role"
+                ),
+                {
+                    "key": demo_key,
+                    "org": DEMO_ORG,
+                    "actor": actor_id,
+                    "role": role,
+                },
+            )
 
 
 async def _seed_planning(connection: AsyncConnection, fixture: ValidatedPlanningFixture) -> None:
@@ -442,6 +507,45 @@ async def _seed_task_case(connection: AsyncConnection, fixture: ValidatedPlannin
 async def _seed_plan_execution_scenario(
     connection: AsyncConnection, fixture: ValidatedPlanningFixture
 ) -> None:
+    await _seed_plan_execution_fixture(
+        connection,
+        fixture,
+        case_id=PLAN_EXECUTION_CASE_ID,
+        run_id=PLAN_EXECUTION_RUN_ID,
+        review_id=PLAN_EXECUTION_REVIEW_ID,
+        brief_id=PLAN_EXECUTION_BRIEF_ID,
+        decision_id=PLAN_EXECUTION_DECISION_ID,
+        decision_receipt_id=PLAN_EXECUTION_DECISION_RECEIPT_ID,
+        timeline_id=PLAN_EXECUTION_TIMELINE_ID,
+        actors=PLAN_EXECUTION_HAPPY_ACTORS,
+    )
+    await _seed_plan_execution_fixture(
+        connection,
+        fixture,
+        case_id=BLOCKED_PLAN_EXECUTION_CASE_ID,
+        run_id=BLOCKED_PLAN_EXECUTION_RUN_ID,
+        review_id=BLOCKED_PLAN_EXECUTION_REVIEW_ID,
+        brief_id=BLOCKED_PLAN_EXECUTION_BRIEF_ID,
+        decision_id=BLOCKED_PLAN_EXECUTION_DECISION_ID,
+        decision_receipt_id=BLOCKED_PLAN_EXECUTION_DECISION_RECEIPT_ID,
+        timeline_id=BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
+        actors=PLAN_EXECUTION_BLOCKED_ACTORS,
+    )
+
+
+async def _seed_plan_execution_fixture(
+    connection: AsyncConnection,
+    fixture: ValidatedPlanningFixture,
+    *,
+    case_id: UUID,
+    run_id: UUID,
+    review_id: UUID,
+    brief_id: UUID,
+    decision_id: UUID,
+    decision_receipt_id: UUID,
+    timeline_id: UUID,
+    actors: tuple[tuple[str, str, UUID, str], ...],
+) -> None:
     source_case = fixture.planning_input.case
     inserted = (
         await connection.execute(
@@ -451,11 +555,21 @@ async def _seed_plan_execution_scenario(
                 "timestamptz '2026-07-29 00:00:00+00') "
                 "ON CONFLICT DO NOTHING RETURNING id"
             ),
-            {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+            {"org": DEMO_ORG, "case": case_id},
         )
     ).scalar_one_or_none()
     if inserted is None:
-        await _assert_exact_plan_execution_fixture(connection)
+        await _assert_exact_plan_execution_fixture(
+            connection,
+            case_id=case_id,
+            run_id=run_id,
+            review_id=review_id,
+            brief_id=brief_id,
+            decision_id=decision_id,
+            decision_receipt_id=decision_receipt_id,
+            timeline_id=timeline_id,
+            actors=actors,
+        )
         return
     await connection.execute(
         text(
@@ -467,7 +581,7 @@ async def _seed_plan_execution_scenario(
         ),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
+            "case": case_id,
             "student": json.dumps(source_case.student.model_dump(mode="json")),
             "family": json.dumps(source_case.family.model_dump(mode="json")),
         },
@@ -477,22 +591,22 @@ async def _seed_plan_execution_scenario(
             "UPDATE app.student_cases SET current_revision=1 "
             "WHERE organization_id=:org AND id=:case"
         ),
-        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+        {"org": DEMO_ORG, "case": case_id},
     )
     await connection.execute(
         text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
-            "advisor": ACTORS[0][1],
-            "student": ACTORS[1][1],
-            "parent": ACTORS[2][1],
+            "case": case_id,
+            "advisor": actors[0][2],
+            "student": actors[1][2],
+            "parent": actors[2][2],
         },
     )
     await _clone_planning_snapshot(
         connection,
-        case_id=PLAN_EXECUTION_CASE_ID,
-        run_id=PLAN_EXECUTION_RUN_ID,
+        case_id=case_id,
+        run_id=run_id,
     )
     await connection.execute(
         text(
@@ -501,7 +615,7 @@ async def _seed_plan_execution_scenario(
             "FROM app.planning_runs source WHERE target.organization_id=:org "
             "AND target.id=:run AND source.organization_id=:org AND source.id=:source"
         ),
-        {"org": DEMO_ORG, "run": PLAN_EXECUTION_RUN_ID, "source": RUN_ID},
+        {"org": DEMO_ORG, "run": run_id, "source": RUN_ID},
     )
     await connection.execute(
         text(
@@ -518,10 +632,10 @@ async def _seed_plan_execution_scenario(
         ),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
-            "run": PLAN_EXECUTION_RUN_ID,
-            "review": PLAN_EXECUTION_REVIEW_ID,
-            "advisor": ACTORS[0][1],
+            "case": case_id,
+            "run": run_id,
+            "review": review_id,
+            "advisor": actors[0][2],
         },
     )
     await connection.execute(
@@ -539,10 +653,10 @@ async def _seed_plan_execution_scenario(
         ),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
-            "run": PLAN_EXECUTION_RUN_ID,
-            "review": PLAN_EXECUTION_REVIEW_ID,
-            "brief": PLAN_EXECUTION_BRIEF_ID,
+            "case": case_id,
+            "run": run_id,
+            "review": review_id,
+            "brief": brief_id,
         },
     )
     moved_to_family = await connection.execute(
@@ -551,7 +665,7 @@ async def _seed_plan_execution_scenario(
             "WHERE organization_id=:org AND id=:case "
             "AND state='advisor_review' AND current_revision=1"
         ),
-        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+        {"org": DEMO_ORG, "case": case_id},
     )
     if moved_to_family.rowcount != 1:
         raise RuntimeError("demo timeline execution advisor handoff failed")
@@ -570,12 +684,12 @@ async def _seed_plan_execution_scenario(
         ),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
-            "run": PLAN_EXECUTION_RUN_ID,
-            "brief": PLAN_EXECUTION_BRIEF_ID,
-            "decision": PLAN_EXECUTION_DECISION_ID,
-            "receipt": PLAN_EXECUTION_DECISION_RECEIPT_ID,
-            "parent": ACTORS[2][1],
+            "case": case_id,
+            "run": run_id,
+            "brief": brief_id,
+            "decision": decision_id,
+            "receipt": decision_receipt_id,
+            "parent": actors[2][2],
         },
     )
     moved_to_decided = await connection.execute(
@@ -584,7 +698,7 @@ async def _seed_plan_execution_scenario(
             "WHERE organization_id=:org AND id=:case "
             "AND state='family_review' AND current_revision=1"
         ),
-        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+        {"org": DEMO_ORG, "case": case_id},
     )
     if moved_to_decided.rowcount != 1:
         raise RuntimeError("demo timeline execution family handoff failed")
@@ -601,8 +715,8 @@ async def _seed_plan_execution_scenario(
         ),
         {
             "org": DEMO_ORG,
-            "timeline": PLAN_EXECUTION_TIMELINE_ID,
-            "decision": PLAN_EXECUTION_DECISION_ID,
+            "timeline": timeline_id,
+            "decision": decision_id,
         },
     )
     moved_to_plan_ready = await connection.execute(
@@ -611,7 +725,7 @@ async def _seed_plan_execution_scenario(
             "WHERE organization_id=:org AND id=:case "
             "AND state='decided' AND current_revision=1"
         ),
-        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+        {"org": DEMO_ORG, "case": case_id},
     )
     if moved_to_plan_ready.rowcount != 1:
         raise RuntimeError("demo timeline execution timeline handoff failed")
@@ -620,20 +734,39 @@ async def _seed_plan_execution_scenario(
             "UPDATE app.decision_briefs SET is_current=false "
             "WHERE organization_id=:org AND id=:brief AND is_current"
         ),
-        {"org": DEMO_ORG, "brief": PLAN_EXECUTION_BRIEF_ID},
+        {"org": DEMO_ORG, "brief": brief_id},
     )
     if retired_brief.rowcount != 1:
         raise RuntimeError("demo timeline execution brief retirement failed")
-    await _assert_exact_plan_execution_fixture(connection)
+    await _assert_exact_plan_execution_fixture(
+        connection,
+        case_id=case_id,
+        run_id=run_id,
+        review_id=review_id,
+        brief_id=brief_id,
+        decision_id=decision_id,
+        decision_receipt_id=decision_receipt_id,
+        timeline_id=timeline_id,
+        actors=actors,
+    )
 
 
 async def _assert_exact_plan_execution_fixture(
     connection: AsyncConnection,
+    *,
+    case_id: UUID,
+    run_id: UUID,
+    review_id: UUID,
+    brief_id: UUID,
+    decision_id: UUID,
+    decision_receipt_id: UUID,
+    timeline_id: UUID,
+    actors: tuple[tuple[str, str, UUID, str], ...],
 ) -> None:
     await _assert_exact_planning_snapshot(
         connection,
-        case_id=PLAN_EXECUTION_CASE_ID,
-        run_id=PLAN_EXECUTION_RUN_ID,
+        case_id=case_id,
+        run_id=run_id,
         clone_tables=(
             "planning_routes",
             "comparison_dimensions",
@@ -680,15 +813,15 @@ async def _assert_exact_plan_execution_fixture(
         ),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
-            "run": PLAN_EXECUTION_RUN_ID,
-            "review": PLAN_EXECUTION_REVIEW_ID,
-            "advisor": ACTORS[0][1],
-            "brief": PLAN_EXECUTION_BRIEF_ID,
-            "decision": PLAN_EXECUTION_DECISION_ID,
-            "decision_receipt": PLAN_EXECUTION_DECISION_RECEIPT_ID,
-            "parent": ACTORS[2][1],
-            "timeline": PLAN_EXECUTION_TIMELINE_ID,
+            "case": case_id,
+            "run": run_id,
+            "review": review_id,
+            "advisor": actors[0][2],
+            "brief": brief_id,
+            "decision": decision_id,
+            "decision_receipt": decision_receipt_id,
+            "parent": actors[2][2],
+            "timeline": timeline_id,
         },
     )
     exact_roles = await connection.scalar(
@@ -702,10 +835,10 @@ async def _assert_exact_plan_execution_fixture(
         ),
         {
             "org": DEMO_ORG,
-            "case": PLAN_EXECUTION_CASE_ID,
-            "advisor": ACTORS[0][1],
-            "student": ACTORS[1][1],
-            "parent": ACTORS[2][1],
+            "case": case_id,
+            "advisor": actors[0][2],
+            "student": actors[1][2],
+            "parent": actors[2][2],
         },
     )
     if exact is not True or exact_roles is not True:

@@ -26,7 +26,7 @@ async def test_empty_0014_downgrade_and_reupgrade_are_exact() -> None:
     result = _alembic("downgrade", "0013")
     assert result.returncode == 0, result.stderr
     assert _alembic("current").stdout.strip().startswith("0013")
-    result = _alembic("upgrade", "head")
+    result = _alembic("upgrade", "0014")
     assert result.returncode == 0, result.stderr
     assert _alembic("current").stdout.strip().startswith("0014")
 
