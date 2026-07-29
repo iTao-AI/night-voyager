@@ -81,6 +81,7 @@ def test_migration_graph_extends_0003_with_exact_m4a_storage() -> None:
         "0012_versioned_planning_revision.py",
         "0013_planning_revision_demo_seed.py",
         "0014_timeline_execution_authority.py",
+        "0015_plan_execution_demo_identity.py",
     ]
     migration = migrations[3]
     tree = ast.parse(migration.read_text(encoding="utf-8"))

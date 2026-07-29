@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from night_voyager.identity.demo_seed import (
     PLAN_EXECUTION_CASE_ID,
+    PLAN_EXECUTION_HAPPY_ACTORS,
     PLAN_EXECUTION_TIMELINE_ID,
 )
 
@@ -20,6 +21,8 @@ pytestmark = pytest.mark.database
 ORG = UUID("10000000-0000-0000-0000-000000000001")
 ADVISOR = UUID("20000000-0000-0000-0000-000000000001")
 STUDENT = UUID("20000000-0000-0000-0000-000000000002")
+HAPPY_ADVISOR = PLAN_EXECUTION_HAPPY_ACTORS[0][2]
+HAPPY_STUDENT = PLAN_EXECUTION_HAPPY_ACTORS[1][2]
 CASE = UUID("40000000-0000-0000-0000-000000000001")
 RUN = UUID("70000000-0000-0000-0000-000000000001")
 REVIEW = UUID("91000000-0000-0000-0000-000000000001")
@@ -328,7 +331,7 @@ async def test_concurrent_same_key_start_returns_the_original_receipt() -> None:
     async def start(execution: UUID, receipt: UUID) -> object:
         nonlocal ready
         async with api.begin() as connection:
-            await set_actor(connection, STUDENT, "student")
+            await set_actor(connection, HAPPY_STUDENT, "student")
             async with condition:
                 ready += 1
                 if ready == 2:
@@ -343,7 +346,7 @@ async def test_concurrent_same_key_start_returns_the_original_receipt() -> None:
                 ),
                 {
                     "org": ORG,
-                    "actor": STUDENT,
+                    "actor": HAPPY_STUDENT,
                     "timeline": PLAN_EXECUTION_TIMELINE_ID,
                     "case": PLAN_EXECUTION_CASE_ID,
                     "execution": execution,
@@ -358,7 +361,7 @@ async def test_concurrent_same_key_start_returns_the_original_receipt() -> None:
         )
         assert first == second
         async with api.connect() as connection:
-            await set_actor(connection, STUDENT, "student")
+            await set_actor(connection, HAPPY_STUDENT, "student")
             assert (
                 await connection.scalar(
                     text(
@@ -396,7 +399,7 @@ async def test_deadline_reassessment_rejects_an_overdue_future_checkpoint() -> N
                 {"org": ORG, "execution": execution},
             )
         async with api.begin() as connection:
-            await set_actor(connection, ADVISOR, "advisor")
+            await set_actor(connection, HAPPY_ADVISOR, "advisor")
             with pytest.raises(DBAPIError) as failure:
                 await connection.scalar(
                     text(
@@ -407,7 +410,7 @@ async def test_deadline_reassessment_rejects_an_overdue_future_checkpoint() -> N
                     ),
                     {
                         "org": ORG,
-                        "actor": ADVISOR,
+                        "actor": HAPPY_ADVISOR,
                         "case": PLAN_EXECUTION_CASE_ID,
                         "execution": execution,
                         "checkpoint": future,
@@ -426,7 +429,7 @@ async def test_read_rejects_two_executions_for_one_case() -> None:
         async with migrator.connect() as connection:
             transaction = await connection.begin()
             try:
-                await set_actor(connection, STUDENT, "student")
+                await set_actor(connection, HAPPY_STUDENT, "student")
                 await connection.execute(
                     text(
                         "ALTER TABLE app.timeline_executions DROP CONSTRAINT "
@@ -458,7 +461,7 @@ async def test_read_rejects_two_executions_for_one_case() -> None:
                         ),
                         {
                             "org": ORG,
-                            "actor": STUDENT,
+                            "actor": HAPPY_STUDENT,
                             "case": PLAN_EXECUTION_CASE_ID,
                         },
                     )
@@ -515,12 +518,12 @@ async def test_verification_rejects_an_attestation_from_another_checkpoint() -> 
 async def test_postgresql_binds_case_revision_and_multi_assignment_subject() -> None:
     api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
     try:
-        for supplied_case, revision, expected in (
-            (CASE, 1, "NV003"),
-            (PLAN_EXECUTION_CASE_ID, 2, "NV020"),
+        for actor, supplied_case, revision, expected in (
+            (STUDENT, CASE, 1, "NV003"),
+            (HAPPY_STUDENT, PLAN_EXECUTION_CASE_ID, 2, "NV020"),
         ):
             async with api.begin() as connection:
-                await set_actor(connection, STUDENT, "student")
+                await set_actor(connection, actor, "student")
                 with pytest.raises(DBAPIError) as failure:
                     await connection.scalar(
                         text(
@@ -531,7 +534,7 @@ async def test_postgresql_binds_case_revision_and_multi_assignment_subject() -> 
                         ),
                         {
                             "org": ORG,
-                            "actor": STUDENT,
+                            "actor": actor,
                             "timeline": PLAN_EXECUTION_TIMELINE_ID,
                             "case": supplied_case,
                             "revision": revision,
@@ -555,7 +558,7 @@ async def test_postgresql_binds_case_revision_and_multi_assignment_subject() -> 
                     "other_case": PLAN_EXECUTION_CASE_ID,
                 },
             )
-            assert assigned_cases == 2
+            assert assigned_cases == 1
             with pytest.raises(DBAPIError) as failure:
                 await connection.scalar(
                     text(

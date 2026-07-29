@@ -31,20 +31,21 @@ async def test_0015_catalog_is_closed_and_runtime_roles_keep_function_only_autho
             assert await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             ) == "0015"
-            constraints = dict(
-                (
-                    await connection.execute(
-                        text(
-                            "SELECT conname,pg_get_constraintdef(oid) "
-                            "FROM pg_constraint "
-                            "WHERE conrelid='auth.demo_principals'::regclass "
-                            "AND conname IN ("
-                            "'demo_principals_demo_key_check',"
-                            "'demo_principals_identity_unique')"
-                        )
+            constraint_rows = (
+                await connection.execute(
+                    text(
+                        "SELECT conname,pg_get_constraintdef(oid) AS definition "
+                        "FROM pg_constraint "
+                        "WHERE conrelid='auth.demo_principals'::regclass "
+                        "AND conname IN ("
+                        "'demo_principals_demo_key_check',"
+                        "'demo_principals_identity_unique')"
                     )
-                ).all()
-            )
+                )
+            ).mappings().all()
+            constraints = {
+                str(row["conname"]): str(row["definition"]) for row in constraint_rows
+            }
             assert set(constraints) == {
                 "demo_principals_demo_key_check",
                 "demo_principals_identity_unique",

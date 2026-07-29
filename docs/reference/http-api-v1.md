@@ -5,7 +5,8 @@ requires an exact configured `Origin` and CSRF proof.
 
 - `GET /api/v1/demo/session-bootstrap` returns a five-minute pre-session CSRF
   token and matching `night_voyager_csrf_bootstrap` cookie.
-- `POST /api/v1/demo/sessions` accepts only `advisor`, `student`, or `parent`.
+- `POST /api/v1/demo/sessions` accepts the three generic demo principals or the
+  six exact `plan_execution_{happy|blocked}_{advisor|student|parent}` principals.
   It creates or rotates a 30-minute `night_voyager_session` cookie and returns
   public role/proof-mode data plus the session-bound CSRF token.
 - `DELETE /api/v1/demo/session` revokes the current session and expires both
@@ -21,6 +22,9 @@ public error while expiring both identity cookies, after which the client may
 bootstrap and mint again. Unexpected persistence and connectivity failures are
 not normalized as authentication failures. M2 does not enable CORS; M5 connects
 `/demo` through same-origin explicit BFF handlers without changing this identity authority.
+The plan-execution page accepts only `scenario=happy|blocked` and maps scenario
+plus role to one server-owned principal. It never sends a `case_id` selector.
+Rotation is allowed only within generic, Happy, or Blocked scope.
 
 ## Governed timeline execution endpoints
 

@@ -28,7 +28,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run alembic current | grep '0015'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
-    uv run python scripts/seed_demo.py --identity-only
+    uv run python scripts/seed_demo.py --identity-only --without-plan-execution
     uv run alembic upgrade 0007
     uv run alembic current | grep '0007'
     uv run --no-editable python scripts/seed_demo.py \

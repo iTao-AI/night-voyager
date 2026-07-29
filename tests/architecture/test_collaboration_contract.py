@@ -202,7 +202,8 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         "uv run alembic downgrade 0001", full_graph_reupgrade
     )
     identity_seed = runner.index(
-        "uv run python scripts/seed_demo.py --identity-only", seeded_graph_downgrade
+        "uv run python scripts/seed_demo.py --identity-only --without-plan-execution",
+        seeded_graph_downgrade,
     )
     legacy_upgrade = runner.index("uv run alembic upgrade 0007", identity_seed)
     legacy_seed = runner.index(
@@ -215,7 +216,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
     full_seed = runner.index(
         "uv run --no-editable python scripts/seed_demo.py\n", final_upgrade
     )
-    refusal = runner.index("uv run alembic downgrade 0011", full_seed)
+    refusal = runner.index("uv run alembic downgrade 0014", full_seed)
     assert (
         upgrade_0008
         < skill_empty_downgrade
@@ -232,7 +233,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         < full_seed
         < refusal
     )
-    assert "refusing downgrade: planning revision lineage exists" in runner
+    assert "0015 plan execution demo identity exists" in runner
 
 
 def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_history() -> None:
@@ -336,10 +337,10 @@ def test_database_runner_explicitly_bounds_plan_execution_seed_capability() -> N
     ) in migration_lane
     assert (
         migration_lane.index("--without-plan-execution")
-        < migration_lane.index("uv run alembic upgrade head")
         < migration_lane.rindex("uv run --no-editable python scripts/seed_demo.py")
+        < migration_lane.index("uv run alembic upgrade head")
     )
-    assert runner.count("--without-plan-execution") == 6
+    assert runner.count("--without-plan-execution") == 9
 
     head_seed_lanes = (
         "inside-skill-seed-replay",

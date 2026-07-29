@@ -11,6 +11,8 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from night_voyager.identity.demo_seed import (
+    BLOCKED_PLAN_EXECUTION_CASE_ID,
+    BLOCKED_PLAN_EXECUTION_RUN_ID,
     COLLABORATION_ACTIVE_CASE_ID,
     COLLABORATION_CASE_ID,
     COLLABORATION_EXPIRED_CASE_ID,
@@ -42,9 +44,15 @@ DEMO_CASE_IDS = {
     COLLABORATION_STALE_CASE_ID,
     COLLABORATION_EXPIRED_CASE_ID,
     PLAN_EXECUTION_CASE_ID,
+    BLOCKED_PLAN_EXECUTION_CASE_ID,
     *PLANNING_REVISION_CASE_IDS,
 }
-DEMO_PLANNING_RUN_IDS = {RUN_ID, PLAN_EXECUTION_RUN_ID, *PLANNING_REVISION_RUN_IDS}
+DEMO_PLANNING_RUN_IDS = {
+    RUN_ID,
+    PLAN_EXECUTION_RUN_ID,
+    BLOCKED_PLAN_EXECUTION_RUN_ID,
+    *PLANNING_REVISION_RUN_IDS,
+}
 
 
 async def set_context(connection: object, organization_id: UUID) -> None:

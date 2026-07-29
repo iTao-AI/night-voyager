@@ -4,16 +4,16 @@
 
 **Goal:** Expose and prove the blocked/reassessment terminal path, lost-acknowledgement reconciliation, stale-tab and role/session recovery, and complete `zh-CN`/`en` browser-to-database governed execution journeys.
 
-**Architecture:** Build only on the complete merged PR A `0014` authority. No schema or backend transition is added here: PR B expands the strict browser state machine, recovery controller, blocked/reassessment presentation, deterministic fixture/proof, and operations documentation over the existing receipt-then-GET API. PostgreSQL remains the only state authority; browser storage holds revalidated identities and stable idempotency slots only.
+**Architecture:** Build on the complete merged PR A `0014` authority. PR B adds only the authority-approved identity migration `0015`; it does not change the `0014` timeline schema or backend transitions. PR B expands the strict browser state machine, recovery controller, blocked/reassessment presentation, deterministic fixture/proof, and operations documentation over the existing receipt-then-GET API. PostgreSQL remains the only state authority; browser storage holds revalidated identities and stable idempotency slots only.
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Playwright 1.58, existing FastAPI/PostgreSQL timeline-execution contracts, pytest, Ruff, Pyright, Docker Compose.
 
-**Plan status:** Approved; implementation has not started.
+**Plan status:** Implemented locally; authority review, publication, PR C, and release remain pending.
 
 ## Global Constraints
 
 - Base is the reviewed and merged PR A at migration head `0014`.
-- Migration `0014` is immutable after PR A merge. Do not add `0015`, edit `0014`, or change backend transition semantics.
+- Migration `0014` is immutable after PR A merge. The approved identity-only `0015` extends the exact demo principal allowlist and same-scenario session rotation; it does not change timeline transition semantics.
 - No `AgentTask`, Skill, worker, event, SSE, provider, model, queue, scheduler, successor business row, or second idempotency ledger.
 - The existing synchronous current-action projection remains provider-free and non-authoritative.
 - A blocked or PostgreSQL-overdue checkpoint may reach exactly one durable `reassessment_required` request and then stops.
@@ -53,7 +53,7 @@ Bounded compatibility paths are authorized only for fresh mechanical RED:
 - `scripts/run_db_tests.sh` only when the new read-only verifier lane must be enumerated;
 - seed replay/parity and historical-head calls only to pass the existing `--without-planning-revision`/new scenario exclusions without weakening historical authority.
 
-A need to edit `migrations/**`, `src/night_voyager/timeline_execution/**`, FastAPI route semantics, dependency manifests, Dockerfiles, or Compose files is a substantive blocker requiring authority review.
+A need to edit migrations other than approved new `0015`, `src/night_voyager/timeline_execution/**`, FastAPI route semantics, dependency manifests, Dockerfiles, or Compose policy is a substantive blocker requiring authority review.
 
 ## Execution Preflight and Commit Protocol
 
@@ -65,7 +65,7 @@ test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
 make doctor MODE=dev
 uv sync --locked
 npm --prefix web ci
-test "$(uv run alembic heads | awk '{print $1}')" = "0014"
+test "$(uv run alembic heads | awk '{print $1}')" = "0015"
 ```
 
 Record `BASE_SHA`. Use the same RED, GREEN, diff, commit, Docker inventory, exact teardown, and no-prune contract as PR A.
@@ -124,11 +124,11 @@ Session generation rules:
 - same-Case role rotation may retain revalidated Case/execution identity;
 - cross-Case or ambiguous context clears the envelope and exposes no mutation.
 
-- [ ] **Step 1: Add RED for lost acknowledgement, exact replay, two tabs, session change, and abort generation**
+- [x] **Step 1: Add RED for lost acknowledgement, exact replay, two tabs, session change, and abort generation**
 
 Cover stable key reuse, different-body conflict, absent exact body, receipt-before-GET order, later state change after accepted mutation, double click, stale execution/checkpoint versions, role rotation during request, revoked cookie, delayed old-generation response, malformed storage, cross-Case storage, and exactly one active recovery envelope.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 npm --prefix web run test -- --run \
@@ -138,11 +138,11 @@ npm --prefix web run test -- --run \
   web/tests/unit/plan-execution-recovery.test.tsx
 ```
 
-- [ ] **Step 3: Implement the minimal final controller state machine**
+- [x] **Step 3: Implement the minimal final controller state machine**
 
 Use `AbortController` and an integer in-memory generation. Do not use `BroadcastChannel`, localStorage authority, timers as state authority, background retry, or EventSource.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 npm --prefix web run lint
@@ -195,11 +195,11 @@ Every state has:
 
 Attestation forms expose only closed radio/select values. No text area, file input, URL input, or arbitrary string field exists.
 
-- [ ] **Step 1: Add semantic, role, focus, and bilingual RED**
+- [x] **Step 1: Add semantic, role, focus, and bilingual RED**
 
 Cover all matrix rows, wrong-role absence, exact closed form values, advisor verify/request-update, blocked and overdue confirmation, receipt focus destination, deduplicated live-region announcements, terminal later-mutation absence, no fake resume CTA, long Chinese/English copy, and no raw UUID/hash/row-version default content.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 npm --prefix web run test -- --run \
@@ -207,11 +207,11 @@ npm --prefix web run test -- --run \
   web/tests/unit/plan-execution-presentation.test.ts
 ```
 
-- [ ] **Step 3: Implement the complete functional state presentation**
+- [x] **Step 3: Implement the complete functional state presentation**
 
 Keep data fetching and mutation orchestration in the hook. Components receive strict DTOs and callbacks only.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 npm --prefix web run lint
@@ -272,20 +272,20 @@ The database verifier proves:
 - no later mutation after reassessment;
 - zero successor planning/decision/timeline/execution/task rows.
 
-- [ ] **Step 1: Add seed replay, verifier, and counterfactual RED**
+- [x] **Step 1: Add seed replay, verifier, and counterfactual RED**
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-b-db-red-$$" \
   scripts/run_db_tests.sh timeline-execution journey
 ```
 
-- [ ] **Step 3: Implement deterministic scenario additions and verifier**
+- [x] **Step 3: Implement deterministic scenario additions and verifier**
 
 Use fixed synthetic UUIDs in `demo_seed.py`. Historical-head seed calls explicitly disable the new scenario rather than invoking `0014` functions before they exist.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-b-db-green-$$" \
@@ -341,11 +341,11 @@ git commit -m "test: freeze governed execution journeys"
 - malformed/cross-Case envelope causes zero mutation;
 - activity 65-plus discloses latest 64 and exact total.
 
-- [ ] **Step 1: Add harness architecture RED**
+- [x] **Step 1: Add harness architecture RED**
 
 Require exact locales, scenarios, role sequence, receipt replay, stale-tab rejection, session-generation closure, browser proof JSON schema, database verifier, phase markers, and teardown.
 
-- [ ] **Step 2: Run focused static GREEN after implementing harness shape**
+- [x] **Step 2: Run focused static GREEN after implementing harness shape**
 
 ```bash
 uv run pytest -q \
@@ -357,7 +357,7 @@ uv run pyright scripts/verify_timeline_execution.py
 sh -n scripts/verify_compose.sh
 ```
 
-- [ ] **Step 3: Run one normal task-scoped Compose proof**
+- [x] **Step 3: Run one normal task-scoped Compose proof**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-b-proof-$$" \
@@ -368,7 +368,7 @@ COMPOSE_PROJECT_NAME="night-voyager-execution-pr-b-proof-$$" \
 
 Expected: all prior lanes and exact `zh-CN`/`en` Happy/Blocked execution lanes pass; task/default project and container readbacks are empty.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add web/e2e/plan-execution.spec.ts scripts/verify_compose.sh \
@@ -397,13 +397,13 @@ git commit -m "test: prove governed plan execution recovery"
 
 Document exact Happy/Blocked commands and outcomes, recovery actions per public problem code, append-only latest-64 limitation, PostgreSQL observed-date boundary, session/stale-tab behavior, handoff non-successor boundary, expected proof phases, cleanup, and non-claims.
 
-- [ ] **Step 1: Add documentation/release RED and update current-development surfaces**
+- [x] **Step 1: Add documentation/release RED and update current-development surfaces**
 
-- [ ] **Step 2: Run a targeted documentation coverage audit**
+- [x] **Step 2: Run a targeted documentation coverage audit**
 
 Close confirmed tutorial/how-to, reference, operations, and explanation gaps without changing released artifacts.
 
-- [ ] **Step 3: Run final PR B gates**
+- [x] **Step 3: Run final PR B gates**
 
 ```bash
 uv lock --check
@@ -426,7 +426,7 @@ git diff "$BASE_SHA"..HEAD --check
 git status --short
 ```
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
 ```bash
 git add docs README.md README_CN.md scripts/verify_release.py
@@ -434,10 +434,14 @@ git add docs README.md README_CN.md scripts/verify_release.py
 git commit -m "docs: publish governed execution recovery"
 ```
 
-- [ ] **Step 5: Freeze PR B exit evidence**
+- [x] **Step 5: Freeze PR B exit evidence**
 
 Return commit list, exact diff/stat, RED→GREEN evidence, Happy/Blocked browser/database identities, receipt replay proof, session/stale-tab evidence, Docker inventories, documentation impact, rollback boundary, and remaining PR C/release work. Require clean worktree/staging/untracked.
 
-**Rollback:** Revert PR B web, fixture, proof, and documentation commits. PR A schema/API/minimal vertical remains complete; immutable execution/reassessment history remains readable and no migration rollback is required.
+**Rollback:** Revert PR B web, fixture, proof, and documentation commits. Downgrade
+`0015 -> 0014` only on an empty PR B identity boundary; if any 0015-only
+principal or session history exists, the migration refuses before catalog or row
+mutation. PR A schema/API/minimal vertical remains complete, and immutable
+execution/reassessment history remains readable.
 
 **Exit evidence:** Blocked/reassessment, recovery, and bilingual provider-free browser-to-database closure are GREEN. Professional cross-route presentation, version bump, release, provider execution, deploy, and successor workflow are not claimed.
