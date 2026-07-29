@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import text
@@ -67,6 +70,51 @@ def parse_expectation(argv: Sequence[str] | None = None) -> str:
         default="seed",
     )
     return str(parser.parse_args(argv).expect)
+
+
+def _load_proof(path: Path) -> dict[str, Any]:
+    if path.is_symlink() or not path.is_file():
+        raise RuntimeError("plan execution proof must be a regular file")
+    raw_value = cast(object, json.loads(path.read_text(encoding="utf-8")))
+    if not isinstance(raw_value, dict):
+        raise RuntimeError("invalid plan execution proof")
+    value = cast(dict[str, object], raw_value)
+    expected = {
+        "schema_version",
+        "locale",
+        "scenario",
+        "case_id",
+        "timeline_plan_id",
+        "execution_id",
+        "accepted_receipt_ids",
+        "checkpoint_ids",
+        "reassessment_request_id",
+    }
+    if (
+        set(value) != expected
+        or value["schema_version"] != 1
+        or value["locale"] not in ("zh-CN", "en")
+        or value["scenario"] not in ("happy", "blocked")
+        or not isinstance(value["accepted_receipt_ids"], list)
+        or not isinstance(value["checkpoint_ids"], list)
+    ):
+        raise RuntimeError("invalid plan execution proof")
+    receipt_values = cast(list[object], value["accepted_receipt_ids"])
+    checkpoint_values = cast(list[object], value["checkpoint_ids"])
+    try:
+        for key in ("case_id", "timeline_plan_id", "execution_id"):
+            UUID(str(value[key]))
+        for item in (*receipt_values, *checkpoint_values):
+            UUID(str(item))
+        if value["reassessment_request_id"] is not None:
+            UUID(str(value["reassessment_request_id"]))
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("invalid plan execution proof") from error
+    if len(set(receipt_values)) != len(receipt_values):
+        raise RuntimeError("invalid plan execution proof")
+    if len(set(checkpoint_values)) != 4:
+        raise RuntimeError("invalid plan execution proof")
+    return cast(dict[str, Any], value)
 
 
 async def _verify_seed(connection: AsyncConnection) -> None:
@@ -267,6 +315,124 @@ async def _verify_completed(connection: AsyncConnection) -> None:
     print("timeline execution completed verified")
 
 
+async def _verify_proof(connection: AsyncConnection, proof: dict[str, Any]) -> None:
+    scenario = str(proof["scenario"])
+    expected_case = (
+        PLAN_EXECUTION_CASE_ID
+        if scenario == "happy"
+        else BLOCKED_PLAN_EXECUTION_CASE_ID
+    )
+    expected_timeline = (
+        PLAN_EXECUTION_TIMELINE_ID
+        if scenario == "happy"
+        else BLOCKED_PLAN_EXECUTION_TIMELINE_ID
+    )
+    if (
+        proof["case_id"] != str(expected_case)
+        or proof["timeline_plan_id"] != str(expected_timeline)
+    ):
+        raise RuntimeError("plan execution proof anchor mismatch")
+    execution_id = UUID(str(proof["execution_id"]))
+    receipts = [UUID(str(value)) for value in proof["accepted_receipt_ids"]]
+    checkpoints = [UUID(str(value)) for value in proof["checkpoint_ids"]]
+    expected_state = "completed" if scenario == "happy" else "reassessment_required"
+    execution_exact = await connection.scalar(
+        text(
+            "SELECT count(*)=1 FROM app.timeline_executions "
+            "WHERE organization_id=:org AND id=:execution AND case_id=:case "
+            "AND timeline_plan_id=:timeline AND state=:state"
+        ),
+        {
+            "org": DEMO_ORG,
+            "execution": execution_id,
+            "case": expected_case,
+            "timeline": expected_timeline,
+            "state": expected_state,
+        },
+    )
+    if execution_exact is not True:
+        raise RuntimeError("plan execution proof state mismatch")
+    actual_checkpoints = (
+        await connection.scalars(
+            text(
+                "SELECT id FROM app.timeline_checkpoints "
+                "WHERE organization_id=:org AND execution_id=:execution "
+                "ORDER BY ordinal"
+            ),
+            {"org": DEMO_ORG, "execution": execution_id},
+        )
+    ).all()
+    if actual_checkpoints != checkpoints:
+        raise RuntimeError("plan execution proof checkpoint mismatch")
+    actual_receipts = set(
+        (
+            await connection.scalars(
+                text(
+                    "SELECT receipt_id FROM app.timeline_mutation_receipts "
+                    "WHERE organization_id=:org AND execution_id=:execution"
+                ),
+                {"org": DEMO_ORG, "execution": execution_id},
+            )
+        ).all()
+    )
+    if actual_receipts != set(receipts):
+        raise RuntimeError("plan execution proof receipt mismatch")
+    if scenario == "happy":
+        exact = await connection.scalar(
+            text(
+                "SELECT "
+                "(SELECT count(*) FROM app.timeline_checkpoint_attestations "
+                "WHERE execution_id=:execution)=6 "
+                "AND (SELECT count(*) FROM app.timeline_checkpoint_verifications "
+                "WHERE execution_id=:execution)=5 "
+                "AND (SELECT count(*) FROM app.timeline_reassessment_requests "
+                "WHERE execution_id=:execution)=0 "
+                "AND (SELECT count(*) FROM app.idempotency_records i "
+                "WHERE i.response_id IN ("
+                "SELECT result_id FROM app.timeline_mutation_receipts "
+                "WHERE execution_id=:execution))="
+                "(SELECT count(*) FROM app.timeline_mutation_receipts "
+                "WHERE execution_id=:execution)"
+            ),
+            {"execution": execution_id},
+        )
+        if exact is not True or proof["reassessment_request_id"] is not None:
+            raise RuntimeError("happy plan execution proof mismatch")
+    else:
+        reassessment_id = UUID(str(proof["reassessment_request_id"]))
+        exact = await connection.scalar(
+            text(
+                "SELECT "
+                "(SELECT count(*) FROM app.timeline_checkpoint_attestations "
+                "WHERE execution_id=:execution AND attestation_kind='blocked')=1 "
+                "AND (SELECT count(*) FROM app.timeline_checkpoint_verifications "
+                "WHERE execution_id=:execution)=0 "
+                "AND (SELECT count(*) FROM app.timeline_reassessment_requests "
+                "WHERE execution_id=:execution AND reassessment_id=:reassessment "
+                "AND successor_status='pending_future_authorization')=1 "
+                "AND (SELECT count(*) FROM app.agent_tasks WHERE case_id=:case)=0 "
+                "AND (SELECT count(*) FROM app.planning_runs WHERE case_id=:case)=1 "
+                "AND (SELECT count(*) FROM app.family_decisions WHERE case_id=:case)=1 "
+                "AND (SELECT count(*) FROM app.timeline_plans plan "
+                "JOIN app.family_decisions decision "
+                "ON (decision.organization_id,decision.id)="
+                "(plan.organization_id,plan.family_decision_id) "
+                "WHERE decision.case_id=:case)=1"
+            ),
+            {
+                "execution": execution_id,
+                "reassessment": reassessment_id,
+                "case": expected_case,
+            },
+        )
+        if exact is not True:
+            raise RuntimeError("blocked plan execution proof mismatch")
+    print(
+        "timeline execution browser database proof verified "
+        f"locale={proof['locale']} scenario={scenario}"
+    )
+
+
 async def verify(expectation: str = "seed") -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
@@ -286,5 +452,29 @@ async def verify(expectation: str = "seed") -> None:
         await engine.dispose()
 
 
+async def verify_proof(path: Path) -> None:
+    proof = _load_proof(path)
+    engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "SELECT set_config("
+                    "'night_voyager.organization_id',:organization_id,true)"
+                ),
+                {"organization_id": str(DEMO_ORG)},
+            )
+            await _verify_proof(connection, proof)
+    finally:
+        await engine.dispose()
+
+
 if __name__ == "__main__":
-    asyncio.run(verify(parse_expectation()))
+    cli = argparse.ArgumentParser(allow_abbrev=False)
+    cli.add_argument("--expect", choices=("seed", "completed"), default="seed")
+    cli.add_argument("--proof-file", type=Path)
+    arguments = cli.parse_args()
+    if arguments.proof_file is not None:
+        asyncio.run(verify_proof(arguments.proof_file))
+    else:
+        asyncio.run(verify(str(arguments.expect)))
