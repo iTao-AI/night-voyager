@@ -13,23 +13,72 @@ def test_web_healthcheck_uses_ipv4_loopback() -> None:
     assert '"http://127.0.0.1:3000"' in compose
 
 
-def test_hosted_compose_job_has_budget_and_preserves_required_order() -> None:
+def test_hosted_compose_heavy_gates_are_independent_and_exact() -> None:
+    workflow = yaml.safe_load(
+        Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+    )
+    jobs = workflow["jobs"]
+    heavy_commands = {
+        "compose_db": "make db-check",
+        "compose_collaboration_authority": (
+            "make collaboration-db-check SUITE=authority"
+        ),
+        "compose_proof": "make compose-proof",
+    }
+    project_names: set[str] = set()
+
+    assert set(jobs) == {
+        "python",
+        "frontend",
+        *heavy_commands,
+        "compose",
+    }
+    for lane_id, command in heavy_commands.items():
+        lane = jobs[lane_id]
+        steps = lane["steps"]
+        uses = [step["uses"] for step in steps if "uses" in step]
+        runs = [step["run"] for step in steps if "run" in step]
+        project_name = lane["env"]["COMPOSE_PROJECT_NAME"]
+
+        assert "needs" not in lane
+        assert lane["timeout-minutes"] == 30
+        assert any(use.startswith("actions/checkout@") for use in uses)
+        assert any(use.startswith("docker/setup-buildx-action@") for use in uses)
+        assert runs == [command, "make down"]
+        assert steps[-1] == {"if": "always()", "run": "make down"}
+        assert "continue-on-error" not in lane
+        assert all("continue-on-error" not in step for step in steps)
+        assert "${{ github.run_id }}" in project_name
+        assert "${{ github.run_attempt }}" in project_name
+        assert lane_id.replace("_", "-") in project_name
+        project_names.add(project_name)
+
+    assert len(project_names) == len(heavy_commands)
+
+
+def test_hosted_compose_aggregator_is_stable_and_fail_closed() -> None:
     workflow = yaml.safe_load(
         Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
     )
     compose_job = workflow["jobs"]["compose"]
-    steps = compose_job["steps"]
-    runs = [step["run"] for step in steps if "run" in step]
-    required_runs = [
-        "make db-check",
-        "make collaboration-db-check SUITE=authority",
-        "make compose-proof",
-        "make down",
+    expected_needs = [
+        "compose_db",
+        "compose_collaboration_authority",
+        "compose_proof",
     ]
+    success_checks = compose_job["steps"][0]["run"].splitlines()
 
-    assert compose_job["timeout-minutes"] == 30
-    assert runs[-4:] == required_runs
-    assert steps[-1] == {"if": "always()", "run": "make down"}
+    assert compose_job["name"] == "compose"
+    assert compose_job["needs"] == expected_needs
+    assert compose_job["if"] == "always()"
+    assert "timeout-minutes" not in compose_job
+    assert len(compose_job["steps"]) == 1
+    assert all("uses" not in step for step in compose_job["steps"])
+    assert success_checks == [
+        f'test "${{{{ needs.{lane_id}.result }}}}" = success'
+        for lane_id in expected_needs
+    ]
+    assert "continue-on-error" not in compose_job
 
 
 def test_compose_proof_executes_m3b_golden_flow_and_teardown() -> None:
