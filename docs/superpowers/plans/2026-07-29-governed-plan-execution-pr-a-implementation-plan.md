@@ -8,9 +8,8 @@
 
 **Tech Stack:** Python 3.12, Pydantic v2, FastAPI, SQLAlchemy async sessions, PostgreSQL 18, Alembic, Next.js 16, React 19, TypeScript, Vitest, Playwright 1.58, pytest, Ruff, Pyright, Docker Compose.
 
-**Plan status:** Implemented and locally verified; Career authority review complete;
-awaiting separate publication authorization. No push, PR, merge, publication, or
-release has occurred.
+**Plan status:** Implemented and locally verified; publication authorization pending.
+No push, PR, merge, publication, or release has occurred.
 
 ## Global Constraints
 
@@ -647,8 +646,8 @@ COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-http-red-$$" \
   scripts/run_db_tests.sh timeline-execution http
 uv run pytest -q tests/architecture/test_timeline_execution_contract.py
 npm --prefix web run test -- --run \
-  web/tests/unit/demo-bff-handlers.test.ts \
-  web/tests/unit/plan-execution-bff.test.ts
+  tests/unit/demo-bff-handlers.test.ts \
+  tests/unit/plan-execution-bff.test.ts
 ```
 
 - [x] **Step 3: Implement router, app wiring, BFF handlers, and exact error mapping**
@@ -664,8 +663,8 @@ uv run pytest -q tests/architecture/test_timeline_execution_contract.py
 npm --prefix web run lint
 npm --prefix web run typecheck
 npm --prefix web run test -- --run \
-  web/tests/unit/demo-bff-handlers.test.ts \
-  web/tests/unit/plan-execution-bff.test.ts
+  tests/unit/demo-bff-handlers.test.ts \
+  tests/unit/plan-execution-bff.test.ts
 uv run ruff check src/night_voyager/interfaces/http/timeline_execution.py \
   src/night_voyager/api.py tests/integration/timeline_execution
 uv run pyright src/night_voyager/interfaces/http/timeline_execution.py \
@@ -768,10 +767,10 @@ Test zero/ambiguous scenario, seed replay, malformed/extra client fields, storag
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-a-seed-red-$$" \
   scripts/run_db_tests.sh timeline-execution seed
 npm --prefix web run test -- --run \
-  web/tests/unit/plan-execution-contracts.test.ts \
-  web/tests/unit/plan-execution-reducer.test.ts \
-  web/tests/unit/plan-execution-recovery.test.tsx \
-  web/tests/unit/plan-execution-ui.test.tsx
+  tests/unit/plan-execution-contracts.test.ts \
+  tests/unit/plan-execution-reducer.test.ts \
+  tests/unit/plan-execution-recovery.test.tsx \
+  tests/unit/plan-execution-ui.test.tsx
 ```
 
 - [x] **Step 3: Implement the seed, verifier, strict client, and minimal semantic workspace**
@@ -860,6 +859,17 @@ git status --short
 ```
 
 The normal Compose proof must keep all prior journeys green and add a provider-free execution authority/minimal-browser lane. Record exact teardown and retained shared state.
+
+Local verification used a truthful split gate. The full default `make db-check`
+passed on the unchanged database scope, and the non-database phases reached by
+`make check` passed, but `make check` itself is not claimed GREEN because its
+repeated embedded database lane stopped during external package-index transport.
+Independent `make proof`, the development release verifier, and the normal
+task-scoped `make compose-proof` passed. The Compose proof covered the complete
+existing journey set and the minimal bilingual execution journey through terminal
+completion, followed by exact task-resource teardown. Exact-final-HEAD hosted
+`python`, `frontend`, and normal `compose` checks remain mandatory before
+publication or merge.
 
 - [x] **Step 4: Commit documentation**
 
