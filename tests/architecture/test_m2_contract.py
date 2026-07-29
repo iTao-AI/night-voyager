@@ -3,6 +3,8 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -54,15 +56,33 @@ def test_database_gate_is_mandatory_locally_and_in_existing_ci_job() -> None:
     check_target = makefile.split("\ncheck: ##", 1)[1].split("\n\n", 1)[0]
     assert '-m "not database and not mke"' in check_target
     assert "$(MAKE) db-check" in check_target
-    assert set(("python", "frontend", "compose")) <= {
-        line.strip().removesuffix(":")
-        for line in workflow.splitlines()
-        if line.startswith("  ") and not line.startswith("    ") and line.strip().endswith(":")
-    }
-    compose_job = workflow.split("  compose:", 1)[1]
-    assert "make db-check" in compose_job
-    python_job = workflow.split("  python:", 1)[1].split("  frontend:", 1)[0]
-    assert 'uv run pytest -q -m "not database and not mke"' in python_job
+    jobs = yaml.safe_load(workflow)["jobs"]
+    assert {
+        "python",
+        "frontend",
+        "compose_db",
+        "compose_collaboration_authority",
+        "compose_proof",
+        "compose",
+    } <= set(jobs)
+    db_command = "make db-check"
+    db_runs = [
+        step["run"] for step in jobs["compose_db"]["steps"] if "run" in step
+    ]
+    compose_runs = [
+        step["run"] for step in jobs["compose"]["steps"] if "run" in step
+    ]
+    python_runs = [
+        step["run"] for step in jobs["python"]["steps"] if "run" in step
+    ]
+    assert db_runs == [db_command, "make down"]
+    assert jobs["compose"]["needs"] == [
+        "compose_db",
+        "compose_collaboration_authority",
+        "compose_proof",
+    ]
+    assert db_command not in compose_runs
+    assert 'uv run pytest -q -m "not database and not mke"' in python_runs
     assert "COMPOSE_PROJECT_NAME" in script
     assert script.count("down --volumes --remove-orphans --rmi local") == 2
 

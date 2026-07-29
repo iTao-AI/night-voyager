@@ -55,16 +55,56 @@ jobs:
       - run: npm --prefix web run test
       - run: npm --prefix web run build
 
-  compose:
+  compose_db:
+    name: compose / db-check
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      COMPOSE_PROJECT_NAME: night-voyager-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      COMPOSE_PROJECT_NAME: night-voyager-ci-${{ github.run_id }}-${{ github.run_attempt }}-compose-db
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - run: make db-check
+      - if: always()
+        run: make down
+
+  compose_collaboration_authority:
+    name: compose / collaboration-authority
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: night-voyager-ci-${{ github.run_id }}-${{ github.run_attempt }}-compose-collaboration-authority
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - run: make collaboration-db-check SUITE=authority
+      - if: always()
+        run: make down
+
+  compose_proof:
+    name: compose / proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COMPOSE_PROJECT_NAME: night-voyager-ci-${{ github.run_id }}-${{ github.run_attempt }}-compose-proof
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - run: make compose-proof
       - if: always()
         run: make down
+
+  compose:
+    name: compose
+    needs:
+      - compose_db
+      - compose_collaboration_authority
+      - compose_proof
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every compose gate
+        run: |
+          test "${{ needs.compose_db.result }}" = success
+          test "${{ needs.compose_collaboration_authority.result }}" = success
+          test "${{ needs.compose_proof.result }}" = success
