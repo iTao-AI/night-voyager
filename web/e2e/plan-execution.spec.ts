@@ -32,7 +32,7 @@ const copy = {
     student: "Student", parent: "Parent", advisor: "Advisor",
     start: "Start the action plan", progress: "Record progress",
     completion: "Submit completion to advisor", requestUpdate: "Request update",
-    verify: "Verify and continue", blocked: "Record blocked and stop this checkpoint",
+    verify: "Verify and continue", blocked: "Record blocker and stop the current checkpoint",
     reassess: "Request reassessment and stop execution", recover: "Revalidate execution authority",
     completed: "The action plan is complete.", handoff: "Reassessment handoff",
   },
@@ -82,6 +82,11 @@ test("complete governed plan execution browser-to-database proof", async ({ page
   };
   page.on("response", observe);
 
+  if (locale === "en") {
+    await page.addInitScript(() => {
+      localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+    });
+  }
   await page.goto(`/demo/plan?scenario=${scenario}`);
   await rotate(page, "student");
   const contextResponse = await page.request.get("/api/demo/plan-execution-context");

@@ -4,6 +4,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "web/e2e/plan-execution.spec.ts"
 COMPOSE_PROOF = ROOT / "scripts/verify_compose.sh"
 VERIFIER = ROOT / "scripts/verify_timeline_execution.py"
+CATALOG = ROOT / "web/lib/presentation/catalog.ts"
 
 
 def test_browser_proof_closes_bilingual_happy_blocked_and_recovery_contract() -> None:
@@ -22,8 +23,34 @@ def test_browser_proof_closes_bilingual_happy_blocked_and_recovery_contract() ->
         "responseOrder",
     ):
         assert marker in source
-    for forbidden in ("case_id=", "localStorage", "sessionStorage.setItem"):
+    for forbidden in ("case_id=", "sessionStorage.setItem"):
         assert forbidden not in source
+
+
+def test_english_browser_proof_bootstraps_locale_before_first_navigation() -> None:
+    source = SPEC.read_text(encoding="utf-8")
+    bootstrap = (
+        'if (locale === "en") {\n'
+        "    await page.addInitScript(() => {\n"
+        '      localStorage.setItem("night-voyager:presentation-locale:v1", "en");\n'
+        "    });\n"
+        "  }"
+    )
+
+    assert source.count(bootstrap) == 1
+    assert source.index(bootstrap) < source.index(
+        "await page.goto(`/demo/plan?scenario=${scenario}`);"
+    )
+
+
+def test_english_blocked_action_matches_the_product_catalog() -> None:
+    source = SPEC.read_text(encoding="utf-8")
+    catalog = CATALOG.read_text(encoding="utf-8")
+    action = "Record blocker and stop the current checkpoint"
+
+    assert f'planExecutionRecordBlocked: "{action}"' in catalog
+    assert source.count(f'blocked: "{action}"') == 1
+    assert "Record blocked and stop this checkpoint" not in source
 
 
 def test_compose_runs_four_isolated_browser_database_lanes_and_cleans_proofs() -> None:
