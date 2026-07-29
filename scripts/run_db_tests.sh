@@ -263,6 +263,17 @@ if [ "${1:-}" = "inside-timeline-execution-http" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-timeline-execution-seed" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0014'
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/verify_timeline_execution.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/timeline_execution/test_seed.py
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -346,6 +357,10 @@ if [ "${1:-}" = "timeline-execution" ]; then
         http)
             run_lane "${BASE_PROJECT_NAME}-http" \
                 inside-timeline-execution-http
+            ;;
+        seed)
+            run_lane "${BASE_PROJECT_NAME}-seed" \
+                inside-timeline-execution-seed
             ;;
         *)
             echo "unknown timeline execution suite: ${suite:-<missing>}" >&2

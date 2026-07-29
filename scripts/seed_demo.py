@@ -26,6 +26,13 @@ from night_voyager.identity.demo_seed import (
     COLLABORATION_STALE_MESSAGE_ID,
     COLLABORATION_THREAD_IDS,
     CONNECTED_DEMO_CASE_ID,
+    PLAN_EXECUTION_BRIEF_ID,
+    PLAN_EXECUTION_CASE_ID,
+    PLAN_EXECUTION_DECISION_ID,
+    PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    PLAN_EXECUTION_REVIEW_ID,
+    PLAN_EXECUTION_RUN_ID,
+    PLAN_EXECUTION_TIMELINE_ID,
     build_demo_active_task_pin,
     build_demo_skill_seed,
     ensure_seed_allowed,
@@ -119,6 +126,7 @@ async def seed_demo(
                     },
                 )
                 await _seed_task_case(connection, fixture)
+                await _seed_plan_execution_scenario(connection, fixture)
                 if include_planning_revision:
                     await _seed_planning_revision_cases(connection, fixture)
                 if include_collaboration:
@@ -427,6 +435,279 @@ async def _seed_task_case(connection: AsyncConnection, fixture: ValidatedPlannin
             "parent": ACTORS[2][1],
         },
     )
+
+
+async def _seed_plan_execution_scenario(
+    connection: AsyncConnection, fixture: ValidatedPlanningFixture
+) -> None:
+    source_case = fixture.planning_input.case
+    inserted = (
+        await connection.execute(
+            text(
+                "INSERT INTO app.student_cases(organization_id,id,state,created_at) "
+                "VALUES(:org,:case,'planning',"
+                "timestamptz '2026-07-29 00:00:00+00') "
+                "ON CONFLICT DO NOTHING RETURNING id"
+            ),
+            {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+        )
+    ).scalar_one_or_none()
+    if inserted is None:
+        await _assert_exact_plan_execution_fixture(connection)
+        return
+    await connection.execute(
+        text(
+            "INSERT INTO app.student_case_revisions("
+            "organization_id,case_id,revision,schema_version,"
+            "student_preferences,family_preferences,created_at) "
+            "VALUES(:org,:case,1,1,CAST(:student AS jsonb),CAST(:family AS jsonb),"
+            "timestamptz '2026-07-29 00:00:00+00')"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "student": json.dumps(source_case.student.model_dump(mode="json")),
+            "family": json.dumps(source_case.family.model_dump(mode="json")),
+        },
+    )
+    await connection.execute(
+        text(
+            "UPDATE app.student_cases SET current_revision=1 "
+            "WHERE organization_id=:org AND id=:case"
+        ),
+        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+    )
+    await connection.execute(
+        text("SELECT app.seed_case_participants(:org,:case,:advisor,:student,:parent)"),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "advisor": ACTORS[0][1],
+            "student": ACTORS[1][1],
+            "parent": ACTORS[2][1],
+        },
+    )
+    await _clone_planning_snapshot(
+        connection,
+        case_id=PLAN_EXECUTION_CASE_ID,
+        run_id=PLAN_EXECUTION_RUN_ID,
+    )
+    await connection.execute(
+        text(
+            "UPDATE app.planning_runs target SET state=source.state,"
+            "reason_code=source.reason_code,output_sha256=source.output_sha256 "
+            "FROM app.planning_runs source WHERE target.organization_id=:org "
+            "AND target.id=:run AND source.organization_id=:org AND source.id=:source"
+        ),
+        {"org": DEMO_ORG, "run": PLAN_EXECUTION_RUN_ID, "source": RUN_ID},
+    )
+    await connection.execute(
+        text(
+            "INSERT INTO app.advisor_reviews("
+            "organization_id,id,case_id,case_revision,planning_run_id,"
+            "review_version,advisor_actor_id,action,eligible_route_ids,"
+            "risk_acceptances,reviewer_notes,created_at) "
+            "SELECT :org,:review,:case,1,:run,1,:advisor,"
+            "'approve_for_consultation',jsonb_build_array(id),'[]',"
+            "'Synthetic governed execution scenario.',"
+            "timestamptz '2026-07-29 00:00:01+00' "
+            "FROM app.planning_routes WHERE organization_id=:org "
+            "AND planning_run_id=:run AND country='australia'"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "run": PLAN_EXECUTION_RUN_ID,
+            "review": PLAN_EXECUTION_REVIEW_ID,
+            "advisor": ACTORS[0][1],
+        },
+    )
+    await connection.execute(
+        text(
+            "INSERT INTO app.decision_briefs("
+            "organization_id,id,case_id,case_revision,planning_run_id,"
+            "advisor_review_id,brief_version,policy_version,source_pack_id,"
+            "source_pack_version,evidence_projection_sha256,output_sha256,"
+            "source_snapshot_date,family_safe_projection,is_current,created_at) "
+            "SELECT organization_id,:brief,:case,1,id,:review,1,policy_version,"
+            "source_pack_id,source_pack_version,evidence_projection_sha256,"
+            "output_sha256,date '2026-07-29','{}',true,"
+            "timestamptz '2026-07-29 00:00:02+00' "
+            "FROM app.planning_runs WHERE organization_id=:org AND id=:run"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "run": PLAN_EXECUTION_RUN_ID,
+            "review": PLAN_EXECUTION_REVIEW_ID,
+            "brief": PLAN_EXECUTION_BRIEF_ID,
+        },
+    )
+    moved_to_family = await connection.execute(
+        text(
+            "UPDATE app.student_cases SET state='family_review' "
+            "WHERE organization_id=:org AND id=:case "
+            "AND state='advisor_review' AND current_revision=1"
+        ),
+        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+    )
+    if moved_to_family.rowcount != 1:
+        raise RuntimeError("demo timeline execution advisor handoff failed")
+    await connection.execute(
+        text(
+            "INSERT INTO app.family_decisions("
+            "organization_id,id,receipt_id,case_id,decision_brief_id,brief_version,"
+            "selected_route_id,accepted_budget_min_minor,accepted_budget_max_minor,"
+            "currency,accepted_trade_offs,decision_made_by_actor_id,"
+            "recorded_by_actor_id,source,created_at,planning_run_id) "
+            "SELECT :org,:decision,:receipt,:case,:brief,1,id,"
+            "30000000,40000000,'CNY','[\"budget_elasticity\"]',"
+            ":parent,:parent,'direct',timestamptz '2026-07-29 00:00:03+00',:run "
+            "FROM app.planning_routes WHERE organization_id=:org "
+            "AND planning_run_id=:run AND country='australia'"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "run": PLAN_EXECUTION_RUN_ID,
+            "brief": PLAN_EXECUTION_BRIEF_ID,
+            "decision": PLAN_EXECUTION_DECISION_ID,
+            "receipt": PLAN_EXECUTION_DECISION_RECEIPT_ID,
+            "parent": ACTORS[2][1],
+        },
+    )
+    moved_to_decided = await connection.execute(
+        text(
+            "UPDATE app.student_cases SET state='decided' "
+            "WHERE organization_id=:org AND id=:case "
+            "AND state='family_review' AND current_revision=1"
+        ),
+        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+    )
+    if moved_to_decided.rowcount != 1:
+        raise RuntimeError("demo timeline execution family handoff failed")
+    await connection.execute(
+        text(
+            "INSERT INTO app.timeline_plans("
+            "organization_id,id,family_decision_id,schema_version,country,intake,"
+            "milestones,created_at) VALUES(:org,:timeline,:decision,1,'australia',"
+            "'2027-02','[{\"key\":\"documents\",\"due_date\":\"2026-09-01\"},"
+            "{\"key\":\"application\",\"due_date\":\"2026-10-15\"},"
+            "{\"key\":\"visa\",\"due_date\":\"2026-12-15\"},"
+            "{\"key\":\"arrival\",\"due_date\":\"2027-01-20\"}]',"
+            "timestamptz '2026-07-29 00:00:04+00')"
+        ),
+        {
+            "org": DEMO_ORG,
+            "timeline": PLAN_EXECUTION_TIMELINE_ID,
+            "decision": PLAN_EXECUTION_DECISION_ID,
+        },
+    )
+    moved_to_plan_ready = await connection.execute(
+        text(
+            "UPDATE app.student_cases SET state='plan_ready' "
+            "WHERE organization_id=:org AND id=:case "
+            "AND state='decided' AND current_revision=1"
+        ),
+        {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+    )
+    if moved_to_plan_ready.rowcount != 1:
+        raise RuntimeError("demo timeline execution timeline handoff failed")
+    retired_brief = await connection.execute(
+        text(
+            "UPDATE app.decision_briefs SET is_current=false "
+            "WHERE organization_id=:org AND id=:brief AND is_current"
+        ),
+        {"org": DEMO_ORG, "brief": PLAN_EXECUTION_BRIEF_ID},
+    )
+    if retired_brief.rowcount != 1:
+        raise RuntimeError("demo timeline execution brief retirement failed")
+    await _assert_exact_plan_execution_fixture(connection)
+
+
+async def _assert_exact_plan_execution_fixture(
+    connection: AsyncConnection,
+) -> None:
+    await _assert_exact_planning_snapshot(
+        connection,
+        case_id=PLAN_EXECUTION_CASE_ID,
+        run_id=PLAN_EXECUTION_RUN_ID,
+        clone_tables=(
+            "planning_routes",
+            "comparison_dimensions",
+            "comparison_dimension_evidence_refs",
+            "cost_evidence",
+            "ranking_evidence",
+        ),
+    )
+    exact = await connection.scalar(
+        text(
+            "SELECT count(*)=1 "
+            "AND count(*) FILTER (WHERE c.state='plan_ready' "
+            "AND c.current_revision=1 AND r.id=:run "
+            "AND r.state='review_required' AND r.is_current "
+            "AND a.id=:review AND a.review_version=1 "
+            "AND a.advisor_actor_id=:advisor "
+            "AND a.action='approve_for_consultation' "
+            "AND b.id=:brief AND b.brief_version=1 AND NOT b.is_current "
+            "AND b.source_snapshot_date=date '2026-07-29' "
+            "AND d.id=:decision AND d.receipt_id=:decision_receipt "
+            "AND d.decision_made_by_actor_id=:parent "
+            "AND d.recorded_by_actor_id=:parent AND d.source='direct' "
+            "AND t.id=:timeline AND t.schema_version=1 "
+            "AND t.country='australia' AND t.intake='2027-02' "
+            "AND e.id IS NULL)=1 "
+            "FROM app.student_cases c "
+            "JOIN app.planning_runs r ON "
+            "(r.organization_id,r.case_id)=(c.organization_id,c.id) "
+            "JOIN app.advisor_reviews a ON "
+            "(a.organization_id,a.planning_run_id)="
+            "(r.organization_id,r.id) "
+            "JOIN app.decision_briefs b ON "
+            "(b.organization_id,b.advisor_review_id)="
+            "(a.organization_id,a.id) "
+            "JOIN app.family_decisions d ON "
+            "(d.organization_id,d.decision_brief_id)="
+            "(b.organization_id,b.id) "
+            "JOIN app.timeline_plans t ON "
+            "(t.organization_id,t.family_decision_id)="
+            "(d.organization_id,d.id) "
+            "LEFT JOIN app.timeline_executions e ON "
+            "e.organization_id=t.organization_id AND e.timeline_plan_id=t.id "
+            "WHERE c.organization_id=:org AND c.id=:case"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "run": PLAN_EXECUTION_RUN_ID,
+            "review": PLAN_EXECUTION_REVIEW_ID,
+            "advisor": ACTORS[0][1],
+            "brief": PLAN_EXECUTION_BRIEF_ID,
+            "decision": PLAN_EXECUTION_DECISION_ID,
+            "decision_receipt": PLAN_EXECUTION_DECISION_RECEIPT_ID,
+            "parent": ACTORS[2][1],
+            "timeline": PLAN_EXECUTION_TIMELINE_ID,
+        },
+    )
+    exact_roles = await connection.scalar(
+        text(
+            "SELECT count(*)=3 AND count(DISTINCT actor_id)=3 "
+            "AND bool_and((role='advisor' AND actor_id=:advisor) "
+            "OR (role='student' AND actor_id=:student) "
+            "OR (role='parent' AND actor_id=:parent)) "
+            "FROM app.student_case_participants "
+            "WHERE organization_id=:org AND case_id=:case"
+        ),
+        {
+            "org": DEMO_ORG,
+            "case": PLAN_EXECUTION_CASE_ID,
+            "advisor": ACTORS[0][1],
+            "student": ACTORS[1][1],
+            "parent": ACTORS[2][1],
+        },
+    )
+    if exact is not True or exact_roles is not True:
+        raise RuntimeError("demo timeline execution fixture seed mismatch")
 
 
 async def _seed_planning_revision_cases(
