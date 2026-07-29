@@ -28,7 +28,7 @@ if [ "$mode" = "inside-revision" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0011
     uv run alembic current | grep '0011'
-    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     uv run alembic upgrade 0012
     uv run alembic current | grep '0012'
     uv run alembic downgrade 0011
@@ -36,7 +36,7 @@ if [ "$mode" = "inside-revision" ]; then
         uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/planning/test_revision_migration.py::test_safe_downgrade_restores_exact_0011_surface
     uv run alembic upgrade 0012
-    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/planning/test_revision_migration.py \
         tests/integration/planning/test_revision_authority.py
@@ -64,7 +64,7 @@ if [ "$mode" = "inside" ]; then
         http)
             uv run alembic downgrade 0007
             uv run --no-editable python scripts/seed_demo.py \
-                --without-skills --without-planning-revision
+                --without-skills --without-planning-revision --without-plan-execution
             uv run alembic upgrade head
             uv run --no-editable python scripts/seed_demo.py
             uv run --no-editable python scripts/seed_demo.py
@@ -79,7 +79,7 @@ if [ "$mode" = "inside" ]; then
                 tests/architecture/test_collaboration_contract.py
             uv run alembic downgrade 0007
             uv run --no-editable python scripts/seed_demo.py \
-                --without-skills --without-planning-revision
+                --without-skills --without-planning-revision --without-plan-execution
             uv run alembic upgrade head
             uv run --no-editable python scripts/seed_demo.py
             uv run --no-editable python scripts/seed_demo.py

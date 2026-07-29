@@ -7,6 +7,7 @@ import { GET as execution } from "../../app/api/demo/cases/[caseId]/timeline-exe
 import { POST as attest } from "../../app/api/demo/timeline-executions/[executionId]/checkpoint-attestations/route";
 import { POST as verify } from "../../app/api/demo/timeline-executions/[executionId]/checkpoint-verifications/route";
 import { POST as reassess } from "../../app/api/demo/timeline-executions/[executionId]/reassessments/route";
+import { createPlanExecutionApi } from "../../lib/plan-execution/api";
 
 const ID = "94000000-0000-0000-0000-000000000001";
 const origin = "http://127.0.0.1:3000";
@@ -28,6 +29,29 @@ const mutation = (body: object) => new Request(`${origin}/api`, {
     Cookie: "night_voyager_session=opaque",
   },
   body: JSON.stringify(body),
+});
+
+it("composes the plan execution client through the exact queryless BFF context path", async () => {
+  const payload = {
+    schema_version: 1,
+    scenario: "governed-plan-execution-v1",
+    case_id: ID,
+    case_revision: 1,
+    decision_id: ID,
+    decision_receipt_id: ID,
+    timeline_plan_id: ID,
+    execution_id: null,
+    active_role: "student",
+    assignment_status: "assigned",
+  };
+  const fetchMock = vi.fn(async (url: string) => {
+    expect(url).toBe("/api/demo/plan-execution-context");
+    return Response.json(payload);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  await expect(createPlanExecutionApi().context()).resolves.toEqual(payload);
+  expect(fetchMock).toHaveBeenCalledOnce();
 });
 
 it("forwards only the fixed context scenario and rejects arbitrary query", async () => {

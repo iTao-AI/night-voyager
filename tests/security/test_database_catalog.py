@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import runpy
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -73,7 +74,70 @@ def test_release_verifier_exposes_database_catalog_gate() -> None:
     assert "DRA_TABLES" in verifier
     assert "SKILL_TABLES" in verifier
     assert "load_governed_mixed_planning_snapshot" in verifier
-    assert "policy_count != 38" in verifier
+    assert "expected_app_policy_count(alembic_revision)" in verifier
+
+
+def test_release_verifier_freezes_the_exact_0014_timeline_catalog() -> None:
+    verifier = runpy.run_path(str(ROOT / "scripts/verify_release.py"))
+    timeline_tables = {
+        "timeline_executions",
+        "timeline_checkpoints",
+        "timeline_checkpoint_attestations",
+        "timeline_checkpoint_verifications",
+        "timeline_reassessment_requests",
+        "timeline_mutation_receipts",
+    }
+    timeline_function_identities = {
+        ("read_plan_execution_context", "uuid, uuid, text, text"),
+        ("read_timeline_execution", "uuid, uuid, text, uuid"),
+        (
+            "start_timeline_execution",
+            "uuid, uuid, text, uuid, uuid, uuid, text, text",
+        ),
+        (
+            "attest_timeline_checkpoint",
+            "uuid, uuid, text, uuid, uuid, integer, integer, text, text, text, "
+            "text, uuid, uuid, text, text",
+        ),
+        (
+            "verify_timeline_checkpoint",
+            "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, text, "
+            "uuid, uuid, text, text",
+        ),
+        (
+            "request_timeline_reassessment",
+            "uuid, uuid, text, uuid, uuid, uuid, integer, integer, text, uuid, "
+            "uuid, text, text",
+        ),
+    }
+
+    assert verifier["TIMELINE_EXECUTION_TABLES"] == timeline_tables
+    assert (
+        verifier["TIMELINE_EXECUTION_FUNCTION_IDENTITIES"]
+        == timeline_function_identities
+    )
+    assert (
+        verifier["TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES"]
+        == timeline_function_identities
+    )
+    assert verifier["TIMELINE_EXECUTION_WORKER_FUNCTION_IDENTITIES"] == set()
+    assert verifier["expected_app_policy_count"]("0013") == 38
+    assert verifier["expected_app_policy_count"]("0014") == 44
+
+
+def test_0014_inherits_planning_revision_and_api_only_timeline_authority() -> None:
+    verifier = runpy.run_path(str(ROOT / "scripts/verify_release.py"))
+
+    assert verifier["PLANNING_REVISION_PENDING_REVISIONS"] == {
+        "0012",
+        "0013",
+        "0014",
+    }
+    assert verifier["PLANNING_REVISION_SEED_REVISIONS"] == {"0013", "0014"}
+    assert verifier["timeline_execution_function_identities"]("0013") == set()
+    assert verifier["timeline_execution_function_identities"]("0014") == verifier[
+        "TIMELINE_EXECUTION_FUNCTION_IDENTITIES"
+    ]
 
 
 def test_database_gate_requires_0010_head_and_isolated_migration_lanes() -> None:
@@ -114,7 +178,7 @@ def test_release_verifier_includes_collaboration_roles_and_legacy_revocation() -
     assert "runtime roles must not access collaboration authority tables" in verifier
     assert "legacy Case revision writer must not be executable by the API" in verifier
     assert "legacy Case transition must not be executable by runtime roles" in verifier
-    assert "policy_count != 38" in verifier
+    assert "expected_app_policy_count(alembic_revision)" in verifier
 
 
 def test_release_verifier_includes_skill_role_and_pin_authority() -> None:

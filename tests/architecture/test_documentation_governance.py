@@ -670,18 +670,18 @@ def test_versioned_planning_revision_authority_is_documented() -> None:
     )
 
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert 'heads != {"0013"}' in verifier
+    assert 'heads != {"0014"}' in verifier
     assert '"read_connected_journey_fact_pending"' in verifier
 
 
 def test_root_readmes_bind_current_development_migration_head() -> None:
     current_graph = (
         "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
-        "0009 -> 0010 -> 0011 -> 0012 -> 0013`"
+        "0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014`"
     )
     stale_graph = (
         "`0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> "
-        "0009 -> 0010 -> 0011 -> 0012`"
+        "0009 -> 0010 -> 0011 -> 0012 -> 0013`"
     )
     for relative in ("README.md", "README_CN.md"):
         source = (ROOT / relative).read_text(encoding="utf-8")

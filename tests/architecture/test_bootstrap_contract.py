@@ -200,15 +200,15 @@ def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() 
     assert 'if [ "${1:-}" = "dra-strict-migration" ]' in script
     assert "tests/integration/dra/test_dra_strict_migration.py" in script
     assert "--ignore=tests/integration/dra/test_dra_strict_migration.py" in shared_main
-    assert "uv run alembic current | grep '0013'" in shared_main
+    assert "uv run alembic current | grep '0014'" in shared_main
     assert "uv run alembic downgrade 0011" in final_refusal
     assert "uv run alembic downgrade 0007" not in final_refusal
     assert "expected planning revision authority downgrade refusal" in final_refusal
     assert "refusing downgrade: planning revision lineage exists" in final_refusal
     assert final_refusal.index("refusing downgrade: planning revision lineage exists") < (
-        final_refusal.index("uv run alembic current | grep '0013'")
+        final_refusal.index("uv run alembic current | grep '0014'")
     )
-    assert final_refusal.index("uv run alembic current | grep '0013'") < (
+    assert final_refusal.index("uv run alembic current | grep '0014'") < (
         final_refusal.index(
             "uv run --no-editable python scripts/verify_release.py --check-db-roles"
         )
@@ -224,6 +224,54 @@ def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() 
     assert script.index("unknown database test mode") < script.rindex(
         'run_lane "${BASE_PROJECT_NAME}-planning-start-migration"'
     )
+
+
+def test_database_runner_distinguishes_current_head_from_historical_0013_lanes() -> (
+    None
+):
+    script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+    shared_main = script.split('if [ "${1:-}" = "inside" ]; then', 1)[1].split(
+        'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
+    )[0]
+    mixed_downgrade = script.split(
+        'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
+    )[1].split('if [ "${1:-}" = "inside-planning-start-migration" ]; then', 1)[0]
+    planning_revision = script.split(
+        'if [ "${1:-}" = "inside-planning-revision" ]; then', 1
+    )[1].split('if [ "${1:-}" = "inside-planning-revision-journey" ]; then', 1)[
+        0
+    ]
+    planning_revision_journey = script.split(
+        'if [ "${1:-}" = "inside-planning-revision-journey" ]; then', 1
+    )[1].split('if [ "${1:-}" = "inside-timeline-execution-migration" ]; then', 1)[
+        0
+    ]
+    planning_revision_seed = script.split(
+        'if [ "${1:-}" = "inside-planning-revision-seed-migration" ]; then', 1
+    )[1].split('if [ "${1:-}" = "inside-planning-revision" ]; then', 1)[0]
+    timeline_execution_migration = script.split(
+        'if [ "${1:-}" = "inside-timeline-execution-migration" ]; then', 1
+    )[1].split('if [ "${1:-}" = "inside-timeline-execution-authority" ]; then', 1)[
+        0
+    ]
+
+    current_head_slices = (
+        (shared_main, 6),
+        (mixed_downgrade, 2),
+        (planning_revision, 1),
+        (planning_revision_journey, 2),
+    )
+    for lane, expected_count in current_head_slices:
+        assert lane.count("uv run alembic current | grep '0014'") == expected_count
+        assert "uv run alembic current | grep '0013'" not in lane
+
+    assert planning_revision_seed.count(
+        "uv run alembic current | grep '0013'"
+    ) == 2
+    assert timeline_execution_migration.count(
+        "uv run alembic current | grep '0013'"
+    ) == 1
+    assert script.count("uv run alembic current | grep '0013'") == 3
 
 
 def test_planning_persistence_tests_separate_internal_writer_from_api_denial() -> None:

@@ -174,6 +174,19 @@ release_planning_revision_barrier() {
     grep -Fqx "COMMIT" "$PLANNING_REVISION_BARRIER_OUTPUT"
 }
 
+run_plan_execution_minimal_lane() {
+    docker compose down --volumes --remove-orphans
+    docker compose up --no-build --wait
+    printf 'compose-proof: fresh governed plan execution baseline seeded\n'
+    docker compose --profile browser-proof run --rm --no-deps \
+        -e PLAN_EXECUTION_MINIMAL_PROOF=1 \
+        browser-proof npx playwright test \
+            --config playwright.compose.config.ts plan-execution-minimal.spec.ts
+    docker compose run --rm --no-deps \
+        demo-seed python scripts/verify_timeline_execution.py --expect completed
+    printf 'compose-proof: governed plan execution minimal browser and database proof passed\n'
+}
+
 run_fact_to_plan_lane() {
     lane_locale=$1
     case "$lane_locale" in
@@ -440,6 +453,7 @@ docker compose up --no-build --wait
 docker compose --profile browser-proof run --rm --no-deps \
     -e UPDATE_COLLABORATION_SCREENSHOT="$UPDATE_COLLABORATION_SCREENSHOT" browser-proof
 printf 'compose-proof: connected browser proof passed\n'
+run_plan_execution_minimal_lane
 run_fact_to_plan_lane "zh-CN"
 run_fact_to_plan_lane "en"
 run_planning_revision_proof

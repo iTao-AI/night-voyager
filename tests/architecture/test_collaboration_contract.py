@@ -207,7 +207,8 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
     legacy_upgrade = runner.index("uv run alembic upgrade 0007", identity_seed)
     legacy_seed = runner.index(
         "uv run --no-editable python scripts/seed_demo.py \\\n"
-        "        --without-skills --without-planning-revision",
+        "        --without-skills --without-planning-revision "
+        "--without-plan-execution",
         legacy_upgrade,
     )
     final_upgrade = runner.index("uv run alembic upgrade head", legacy_seed)
@@ -310,6 +311,51 @@ def test_planning_revision_seed_helper_has_one_closed_migration_lane() -> None:
     assert "uv run alembic upgrade 0013" not in revision_lane
 
 
+def test_database_runner_explicitly_bounds_plan_execution_seed_capability() -> None:
+    runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
+
+    historical_invocations = (
+        "uv run --no-editable python scripts/seed_demo.py \\\n"
+        "        --without-skills --without-planning-revision "
+        "--without-plan-execution",
+        "uv run --no-editable python scripts/seed_demo.py "
+        "--without-planning-revision --without-plan-execution",
+    )
+    assert historical_invocations[0] in runner
+    assert runner.count(historical_invocations[1]) == 4
+
+    migration_lane = runner[
+        runner.index('if [ "${1:-}" = "inside-timeline-execution-migration" ]') :
+        runner.index(
+            'if [ "${1:-}" = "inside-timeline-execution-authority" ]'
+        )
+    ]
+    assert (
+        "uv run --no-editable python scripts/seed_demo.py "
+        "--without-plan-execution"
+    ) in migration_lane
+    assert (
+        migration_lane.index("--without-plan-execution")
+        < migration_lane.index("uv run alembic upgrade head")
+        < migration_lane.rindex("uv run --no-editable python scripts/seed_demo.py")
+    )
+    assert runner.count("--without-plan-execution") == 6
+
+    head_seed_lanes = (
+        "inside-skill-seed-replay",
+        "inside-planning-revision",
+        "inside-planning-revision-journey",
+        "inside-timeline-execution-authority",
+        "inside-timeline-execution-seed",
+    )
+    for lane_name in head_seed_lanes:
+        lane = runner[
+            runner.index(f'if [ "${{1:-}}" = "{lane_name}" ]') :
+        ]
+        lane = lane.split("\nfi", maxsplit=1)[0]
+        assert "--without-plan-execution" not in lane
+
+
 def test_planning_revision_worker_isolates_historical_mixed_downgrade() -> None:
     runner = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     inside_start = runner.index('if [ "${1:-}" = "inside-planning-revision" ]')
@@ -363,7 +409,8 @@ def test_http_suite_crosses_the_real_identity_postgres_and_rls_boundary() -> Non
     legacy_downgrade = http_suite.index("uv run alembic downgrade 0007")
     legacy_seed = http_suite.index(
         "uv run --no-editable python scripts/seed_demo.py \\\n"
-        "                --without-skills --without-planning-revision",
+        "                --without-skills --without-planning-revision "
+        "--without-plan-execution",
         legacy_downgrade,
     )
     head = http_suite.index("uv run alembic upgrade head", legacy_seed)

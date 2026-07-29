@@ -100,6 +100,7 @@ async def seed_demo(
     include_collaboration: bool = True,
     include_planning_revision: bool = True,
     include_skills: bool = True,
+    include_plan_execution: bool = True,
 ) -> None:
     fixture = validate_planning_fixture()
     engine = create_async_engine(database_url)
@@ -126,7 +127,8 @@ async def seed_demo(
                     },
                 )
                 await _seed_task_case(connection, fixture)
-                await _seed_plan_execution_scenario(connection, fixture)
+                if include_plan_execution:
+                    await _seed_plan_execution_scenario(connection, fixture)
                 if include_planning_revision:
                     await _seed_planning_revision_cases(connection, fixture)
                 if include_collaboration:
@@ -1649,6 +1651,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--without-collaboration", action="store_true")
     parser.add_argument("--without-planning-revision", action="store_true")
     parser.add_argument("--without-skills", action="store_true")
+    parser.add_argument("--without-plan-execution", action="store_true")
     arguments = parser.parse_args(argv)
     fixture = validate_planning_fixture()
     if arguments.validate_only:
@@ -1668,6 +1671,7 @@ def main(argv: list[str] | None = None) -> None:
             include_collaboration=not arguments.without_collaboration,
             include_planning_revision=not arguments.without_planning_revision,
             include_skills=not arguments.without_skills,
+            include_plan_execution=not arguments.without_plan_execution,
         )
     )
 

@@ -26,6 +26,14 @@ BFF_PATHS = (
     "/api/demo/cases/{case_id}/current-decision-brief",
     "/api/demo/decision-briefs/{brief_id}/family-decisions",
 )
+PLAN_EXECUTION_BFF_PATHS = (
+    "/api/demo/plan-execution-context",
+    "/api/demo/cases/{case_id}/timeline-execution",
+    "/api/demo/timeline-plans/{timeline_plan_id}/executions",
+    "/api/demo/timeline-executions/{execution_id}/checkpoint-attestations",
+    "/api/demo/timeline-executions/{execution_id}/checkpoint-verifications",
+    "/api/demo/timeline-executions/{execution_id}/reassessments",
+)
 M5_SCREENSHOTS = (
     "docs/assets/m5-advisor-ledger.png",
     "docs/assets/m5-family-receipt-timeline.png",
@@ -71,6 +79,7 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0011_dra_strict_consumer_identity.py",
         "0012_versioned_planning_revision.py",
         "0013_planning_revision_demo_seed.py",
+        "0014_timeline_execution_authority.py",
     ]
     for relative in (
         "0005_dra_candidate_promotion.py",
@@ -90,6 +99,12 @@ def test_m5_freezes_exact_backend_and_bff_paths() -> None:
         assert path in source
     assert len(BACKEND_PATHS) == 2
     assert len(BFF_PATHS) == 11
+
+
+def test_plan_execution_bff_paths_are_closed_and_separate_from_m5() -> None:
+    assert len(PLAN_EXECUTION_BFF_PATHS) == 6
+    assert len(set(PLAN_EXECUTION_BFF_PATHS)) == 6
+    assert set(PLAN_EXECUTION_BFF_PATHS).isdisjoint(BFF_PATHS)
 
 
 def test_pure_connected_demo_contracts_do_not_import_frameworks() -> None:
@@ -137,7 +152,15 @@ def test_demo_bff_has_only_explicit_route_handlers() -> None:
         "memory-candidates/[candidateId]/verification-decisions/route.ts",
         "messages/[messageId]/memory-candidates/route.ts",
     }
-    assert routes == m5_routes | collaboration_routes
+    plan_execution_routes = {
+        "plan-execution-context/route.ts",
+        "cases/[caseId]/timeline-execution/route.ts",
+        "timeline-plans/[timelinePlanId]/executions/route.ts",
+        "timeline-executions/[executionId]/checkpoint-attestations/route.ts",
+        "timeline-executions/[executionId]/checkpoint-verifications/route.ts",
+        "timeline-executions/[executionId]/reassessments/route.ts",
+    }
+    assert routes == m5_routes | collaboration_routes | plan_execution_routes
     assert not any("[..." in route for route in routes)
     assert all('dynamic = "force-dynamic"' in (route_root / route).read_text() for route in routes)
 

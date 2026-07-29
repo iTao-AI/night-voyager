@@ -59,7 +59,7 @@ export function createPlanExecutionApi(): PlanExecutionApi {
       if (!response.ok) throw new Error("session_revoke_failed");
     },
     async context() {
-      return parsePlanExecutionContext(await json("/api/demo/plan-execution-context?scenario=governed-plan-execution-v1"));
+      return parsePlanExecutionContext(await json("/api/demo/plan-execution-context"));
     },
     async read(caseId) {
       return parseTimelineExecutionView(await json(`/api/demo/cases/${caseId}/timeline-execution`));

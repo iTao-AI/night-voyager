@@ -9,32 +9,32 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only
     uv run alembic upgrade 0007
     uv run alembic current | grep '0007'
     uv run --no-editable python scripts/seed_demo.py \
-        --without-skills --without-planning-revision
+        --without-skills --without-planning-revision --without-plan-execution
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -61,19 +61,19 @@ if [ "${1:-}" = "inside" ]; then
         exit 1
     fi
     grep -q 'refusing downgrade: planning revision lineage exists' "$downgrade_output"
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run --no-editable python scripts/seed_demo.py \
         --without-collaboration --without-planning-revision
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     exit 0
 fi
 
@@ -81,7 +81,7 @@ if [ "${1:-}" = "inside-planning-start-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0008
     uv run alembic current | grep '0008'
-    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/tasks/test_planning_start_migration.py
     uv run alembic current | grep '0009'
@@ -93,7 +93,7 @@ if [ "${1:-}" = "inside-dra-live-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0009
     uv run alembic current | grep '0009'
-    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/dra/test_dra_live_migration.py
     uv run alembic current | grep '0010'
@@ -104,7 +104,7 @@ if [ "${1:-}" = "inside-dra-strict-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0009
     uv run alembic current | grep '0009'
-    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/dra/test_dra_live_migration.py \
         tests/integration/dra/test_dra_strict_migration.py \
@@ -142,7 +142,7 @@ if [ "${1:-}" = "inside-planning-revision-seed-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0012
     uv run alembic current | grep '0012'
-    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     NIGHT_VOYAGER_REVISION_SEED_MIGRATION_PHASE=absent-0012 \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/planning/test_revision_seed_migration.py
@@ -205,19 +205,19 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
                 tests/integration/planning/test_revision_query_plan.py
             ;;
     esac
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-planning-revision-journey" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/connected_demo/test_postgres_read_models.py \
         tests/integration/connected_demo/test_http_read_models.py \
         tests/integration/connected_demo/test_planning_revision_flow.py
-    uv run alembic current | grep '0013'
+    uv run alembic current | grep '0014'
     exit 0
 fi
 
@@ -225,7 +225,7 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0013
     uv run alembic current | grep '0013'
-    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py --without-plan-execution
     uv run alembic upgrade head
     uv run alembic current | grep '0014'
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
