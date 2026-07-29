@@ -87,12 +87,12 @@ capabilities merely because they have versions or passing evaluations.
 
 Fact-to-plan PRs #57–#59, the high-end root PR #60, and route presentation polish PR #61 are released in `v0.1.3`. This presentation surface owns only the route-specific shell, closed copy/data additions, responsive imagery, route atlas, continuous journey, accessibility proof, and refreshed root screenshot. It adds no backend, BFF, task, worker, provider, or deployment authority.
 
-The post-v0.1.3 planning revision journey keeps the same editorial hierarchy while
+The v0.1.4 local synthetic portfolio release planning revision journey keeps the same editorial hierarchy while
 adding a controlled student preferred-country editor, retained predecessor context,
 deterministic old/new comparison, renewed advisor review, and current-revision family
 decision. `revision_blocked` keeps the comparison visible but exposes no approval or
 family-decision action. This remains controlled provider-free evidence rather than
-strict live acceptance or a released capability.
+strict live acceptance.
 
 ## Accessibility
 

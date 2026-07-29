@@ -6,7 +6,7 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Playwright, Python 3.12, FastAPI, PostgreSQL 18, Docker Compose, existing Night Voyager BFF and proof scripts.
 
-**Plan status:** Implementation complete locally; awaiting maintainer review.
+**Plan status:** Implementation complete and released in v0.1.4 as controlled provider-free evidence; strict live acceptance remains incomplete.
 
 ## Global Constraints
 
@@ -953,8 +953,8 @@ State accurately:
   failures with zero cited rows;
 - the revision journey is controlled/provider-free evidence, not strict live
   acceptance;
-- post-v0.1.3 unreleased;
-- expected separate release decision, not automatic publication.
+- subsequently released in v0.1.4 as controlled provider-free evidence;
+- the release decision remains separate from implementation completion.
 
 Add release-verifier assertions for each statement above so a future release
 cannot silently upgrade the claim.
@@ -1111,11 +1111,11 @@ transport prevented the local browser image proof. The exact-head hosted `python
 publication; any failure blocks merge. This gate-location amendment supersedes the
 local execution of Task 5 Step 5 without rewriting its originally approved text.
 
-PR 1, PR 2, and PR 3 are post-v0.1.3 unreleased controlled provider-free evidence.
+PR 1, PR 2, and PR 3 are released in v0.1.4 as controlled provider-free evidence.
 The exact DRA commit remains `01ba21f2996769e68cbc88f4bb0596740df27f6b`;
 strict live acceptance remains incomplete, the prior 25 and 83 row attempts retain
-zero cited rows, there was no third provider attempt, and publication requires a
-separate release decision.
+zero cited rows, and there was no third provider attempt. Publication followed the
+separate v0.1.4 release decision.
 
 ## PR 3 Completion Gate
 

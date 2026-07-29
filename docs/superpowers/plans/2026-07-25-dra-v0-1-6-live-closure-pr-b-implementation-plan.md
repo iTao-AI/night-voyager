@@ -1,7 +1,7 @@
 # DRA v0.1.6 Live Closure PR B Implementation Plan
 
 **Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are
-implemented provider-free. One bounded live attempt projected 25 Evidence rows, all
+released in v0.1.4 as provider-free Night Voyager consumer evidence. One bounded live attempt projected 25 Evidence rows, all
 `uncited`, and stopped safely before candidate import; governed live acceptance
 remains pending.
 

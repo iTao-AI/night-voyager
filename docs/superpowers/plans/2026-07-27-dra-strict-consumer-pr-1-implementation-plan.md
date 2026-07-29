@@ -6,7 +6,7 @@
 
 **Tech Stack:** Python 3.12, Pydantic 2, SQLAlchemy 2, PostgreSQL 18, Alembic, pytest, FastAPI, existing Night Voyager DRA fake transport and verification scripts.
 
-**Plan status:** Implementation complete locally; awaiting Career authority review.
+**Plan status:** Implementation complete and released in v0.1.4 as controlled provider-free evidence; strict live acceptance remains incomplete.
 
 ## Implementation authority correction
 

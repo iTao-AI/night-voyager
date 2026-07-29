@@ -119,7 +119,7 @@ make compose-proof
 make down
 ```
 
-For the post-v0.1.3 planning-revision lane, set
+For the v0.1.4 planning-revision lane, set
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. The lane proves request
 revision, the controlled student preferred-country change, retained predecessor,
 successor PlanningRun, lost-ack recovery, deterministic comparison, renewed review,

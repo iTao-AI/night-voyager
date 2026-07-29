@@ -55,7 +55,7 @@ depicts the final collaboration state. The same real journey also produces the
 
 ## Planning revision continuation
 
-The post-v0.1.3 provider-free continuation begins after the first advisor review:
+The v0.1.4 provider-free planning-revision continuation begins after the first advisor review:
 
 1. **Request revision** — the advisor requests one bounded change against the
    current PlanningRun; this is not a rejection or an inferred Case mutation.

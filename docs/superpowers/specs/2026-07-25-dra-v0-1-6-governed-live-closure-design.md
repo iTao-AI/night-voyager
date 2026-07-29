@@ -4,7 +4,8 @@
 ## Status
 
 **Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are
-implemented provider-free. Two bounded live attempts projected 25 and 83 Evidence rows,
+implemented and released in v0.1.4 as provider-free Night Voyager consumer evidence.
+Two bounded live attempts projected 25 and 83 Evidence rows,
 all `uncited`, and stopped safely before candidate import; governed live
 acceptance remains pending. Capability status remains
 `INCOMPLETE_PENDING_LIVE_ACCEPTANCE`.

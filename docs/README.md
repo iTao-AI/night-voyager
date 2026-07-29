@@ -1,11 +1,13 @@
 # Documentation
 
-v0.1.3 is the current local synthetic portfolio release of Night Voyager. It includes
-the connected advisor-to-family workflow, Governed Collaboration Core v1, explicit
-fact-to-plan authority, Chinese-first bilingual presentation, the High-End Portfolio
-Entry, and the Next.js 16.2.11 security patch. Start with the
-[release notes](releases/v0.1.3.md) and
-[source-archive verification guide](how-to/verify-v0.1.3-release.md). The v0.1.2
+v0.1.4 is the current local synthetic portfolio release of Night Voyager. It includes
+the prior advisor-to-family portfolio workflow, the Night Voyager-owned governed DRA
+consumer contract, versioned planning revision authority, bilingual browser proof,
+and React / Next.js / PostCSS maintenance. Start with the
+[release notes](releases/v0.1.4.md) and
+[source-archive verification guide](how-to/verify-v0.1.4-release.md). The v0.1.3
+[release notes](releases/v0.1.3.md) and [verification guide](how-to/verify-v0.1.3-release.md),
+the v0.1.2
 [release notes](releases/v0.1.2.md) and [verification guide](how-to/verify-v0.1.2-release.md),
 the v0.1.1 [release notes](releases/v0.1.1.md) and [verification guide](how-to/verify-v0.1.1-release.md),
 plus the v0.1.0 [release notes](releases/v0.1.0.md) and
@@ -22,7 +24,7 @@ documents remain historical visual context; current `/demo` behavior is the M5 w
 - Database reviewers: run `make db-check`, then inspect the [identity/RLS ADR](decisions/0001-identity-session-and-rls-boundary.md), [deterministic planning ADR](decisions/0002-deterministic-planning-and-evidence-authority.md), [advisor/family ADR](decisions/0003-advisor-family-decision-authority.md), [durable task ADR](decisions/0004-durable-agent-task-authority.md), [explicit planning-start ADR](decisions/0010-explicit-planning-start-authority.md), [DRA v0.1.6 live consumer ADR](decisions/0011-dra-v0-1-6-live-consumer-boundary.md), [HTTP contract](reference/http-api-v1.md), [AgentTask/event reference](reference/agent-tasks-and-events.md), [role operations](operations/database-roles.md), and [worker/SSE operations](operations/worker-and-sse.md).
 - MKE compatibility reviewers: inspect the [consumer reference](reference/mke-readonly-consumer.md), [candidate proof runbook](operations/mke-candidate-proof.md), [M4B design](superpowers/specs/2026-07-13-m4b-mke-readonly-consumer-design.md), [implementation plan](superpowers/plans/2026-07-13-m4b-mke-readonly-consumer.md), and [MKE Evidence boundary ADR](decisions/0005-mke-readonly-evidence-boundary.md). M4B is implemented as an optional local synthetic read-only proof; every result remains `UNTRUSTED_CANDIDATE`, and no `PlanningAdapter` or product path is connected.
 - DRA integration reviewers: inspect the [governed evidence reference](reference/dra-governed-evidence.md), [consumer proof runbook](operations/dra-consumer-proof.md), [governed mixed authority ADR](decisions/0007-dra-governed-mixed-evidence-boundary.md), [DRA live-consumer ADR and current strict correction](decisions/0011-dra-v0-1-6-live-consumer-boundary.md), [approved governed-live design](superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md), [approved strict revision design](superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md), and the [strict-consumer PR 1 plan](superpowers/plans/2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md). PR A, PR B, PR C, and strict-consumer PR 1 are implemented provider-free. New strict work pins the exact post-release DRA commit and `generic-strict-citation@1`; it does not claim that capability is included in DRA v0.1.6. DRA remains optional, imported results begin as `UNTRUSTED_CANDIDATE`, and the existing connected synthetic `/demo` remains unchanged by DRA integration. Two bounded live attempts stopped before candidate import with 25 and 83 same-run Evidence rows, all `uncited`; no third provider attempt is authorized and strict live acceptance remains incomplete.
-- Planning-revision reviewers: inspect [ADR 0012](decisions/0012-versioned-planning-revision-authority.md), the [current design](superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md), [PR 3 plan](superpowers/plans/2026-07-27-planning-revision-journey-pr-3-implementation-plan.md), [state matrix](design/state-and-interaction-matrix.md), and [connected runbook](operations/connected-demo.md). PR 1, PR 2, and PR 3 are implemented as controlled provider-free evidence but remain post-v0.1.3 unreleased. The two prior 25 and 83 row attempts retain zero cited rows; no third provider attempt occurred, strict live acceptance remains incomplete, and publication requires a separate release decision.
+- Planning-revision reviewers: inspect [ADR 0012](decisions/0012-versioned-planning-revision-authority.md), the [current design](superpowers/specs/2026-07-27-dra-strict-revision-lineage-design.md), [PR 3 plan](superpowers/plans/2026-07-27-planning-revision-journey-pr-3-implementation-plan.md), [state matrix](design/state-and-interaction-matrix.md), and [connected runbook](operations/connected-demo.md). PR 1, PR 2, and PR 3 are released in v0.1.4 as controlled provider-free evidence. The two prior 25 and 83 row attempts retain zero cited rows; no third provider attempt occurred, and strict live acceptance remains incomplete.
 - Collaboration-core reviewers: inspect the [governed collaboration and confirmed-fact reference](reference/collaboration-and-confirmed-facts.md), [authority operations](operations/collaboration-authority.md), [browser walkthrough](operations/collaboration-walkthrough.md), accepted [ADR 0008](decisions/0008-governed-collaboration-and-memory-authority.md), [Governed Collaboration Core v1 design](superpowers/specs/2026-07-16-governed-collaboration-core-design.md), [PR A implementation plan](superpowers/plans/2026-07-16-governed-conversation-memory-authority.md), and [PR C implementation plan](superpowers/plans/2026-07-16-collaboration-walkthrough-and-inspector.md). PR A and PR C are released in v0.1.2 as authority and browser layers.
 - Versioned-Skill reviewers: inspect [Versioned Skills and runtime pins](reference/versioned-skills-and-runtime-pins.md), [Skill governance operations](operations/skill-governance.md), accepted [ADR 0009](decisions/0009-versioned-skill-runtime-pinning.md), and the [PR B implementation plan](superpowers/plans/2026-07-16-versioned-skill-runtime-pinning.md). PR B is released in v0.1.2, and PR C implements the read-only server-projected inspector; live-provider execution remains separately authorized.
 - Fact-to-plan reviewers: inspect the approved [Governed Fact-to-Plan Closure design](superpowers/specs/2026-07-22-governed-fact-to-plan-closure-design.md), accepted [explicit planning-start ADR](decisions/0010-explicit-planning-start-authority.md), [PR 1 planning-start authority plan](superpowers/plans/2026-07-22-explicit-planning-start-authority.md), [PR 2 same-Case walkthrough plan](superpowers/plans/2026-07-22-governed-fact-to-plan-walkthrough.md), and [PR 3 Chinese-first presentation plan](superpowers/plans/2026-07-22-chinese-first-portfolio-presentation.md). They define a same-Case, explicitly authorized continuation from confirmed collaboration facts into the existing deterministic Task, Skill, SSE, advisor-review, and family-decision workflow, followed by a Chinese-default, English-switchable presentation refinement. PRs #57–#59 are released in v0.1.3. The path is local synthetic and provider-free, and does not depend on DRA or MKE.
@@ -33,8 +35,8 @@ documents remain historical visual context; current `/demo` behavior is the M5 w
 M1 preserves the historical visual contract; M2 adds identity/session/RLS; M3A adds deterministic planning; M3B adds the local synthetic advisor-to-family backend proof; M4A adds a local deterministic durable worker and authorized SSE replay proof; M4B adds the isolated exact-artifact MKE compatibility proof; M5 connects the synthetic `/demo` through the explicit BFF to those existing authorities. Default evaluator, worker, Compose, frontend, and `/demo` remain MKE-free.
 
 The deterministic governed mixed-evidence DRA closure was released in v0.1.1. The
-provider-free DRA v0.1.6 PR A/B/C closure and post-release strict-consumer PR 1
-prerequisite are implemented without changing the v0.1.3 release identity;
+provider-free DRA v0.1.6 PR A/B/C closure and strict-consumer PR 1 prerequisite
+are released in v0.1.4 as Night Voyager-owned consumer evidence;
 strict live acceptance remains incomplete. Governed
 collaboration PR A, versioned Skill PR B, and browser walkthrough/inspector PR C are
 released in v0.1.2 as Governed Collaboration Core v1. The two bounded DRA attempts
@@ -42,5 +44,5 @@ remain failed pre-import history, and no third provider attempt is authorized.
 Fact-to-plan PRs #57–#59, the
 high-end root PR #60, route presentation polish PR #61, and Next.js security patch
 PR #62 are released in v0.1.3 without changing deployment or provider status.
-Planning-revision PR 2 and PR 3 are implemented provider-free after v0.1.3 and
-remain unreleased pending a separate release decision.
+Planning-revision PR 2 and PR 3 are released in v0.1.4 as controlled
+provider-free evidence.

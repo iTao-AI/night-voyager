@@ -18,8 +18,8 @@ task-owned predecessor/successor lineage, deterministic comparison, negotiated
 V2 backend reads, and participant-safe journey status. Journey PR 3 now implements
 the bilingual request-revision browser journey, controlled student preference edit,
 closed V3 recovery, renewed review, current family decision, and blocked budget proof.
-This is post-v0.1.3 unreleased controlled provider-free evidence; it is not strict
-live acceptance and still requires a separate release decision.
+This is released in v0.1.4 as controlled provider-free evidence; it is not strict
+live acceptance.
 
 This design defines two ordered capabilities after the `v0.1.3` release:
 
@@ -1362,9 +1362,8 @@ After PR 3:
 5. publish one annotated tag and GitHub Release;
 6. run public archive smoke.
 
-The expected next version is `v0.1.4`, subject to a separate release decision.
-This design does not authorize a version bump, tag, or Release and does not
-justify `v0.2.0`.
+The combined capability is released in `v0.1.4`. This historical design did not
+authorize a version bump, tag, or Release and does not justify `v0.2.0`.
 
 An intermediate release is considered only if PR 3 is materially deferred and
 PR 1 or PR 2 gains an independently useful external consumer. That is not the

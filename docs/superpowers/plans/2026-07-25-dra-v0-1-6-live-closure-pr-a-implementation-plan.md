@@ -1,6 +1,6 @@
 # DRA v0.1.6 Live Closure PR A Implementation Plan
 
-**Implementation status:** PR A, PR B, and PR C are implemented provider-free; governed live acceptance remains pending.
+**Implementation status:** PR A, PR B, and PR C are released in v0.1.4 as provider-free Night Voyager consumer evidence; governed live acceptance remains pending.
 
 > **For agentic workers:** REQUIRED PRIMARY CONTROLLER: use
 > `superpowers:executing-plans`. This PR is one serial migration and contract
