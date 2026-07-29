@@ -255,6 +255,14 @@ if [ "${1:-}" = "inside-timeline-execution-authority" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-timeline-execution-http" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0014'
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/timeline_execution/test_http.py
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -334,6 +342,10 @@ if [ "${1:-}" = "timeline-execution" ]; then
         authority)
             run_lane "${BASE_PROJECT_NAME}-authority" \
                 inside-timeline-execution-authority
+            ;;
+        http)
+            run_lane "${BASE_PROJECT_NAME}-http" \
+                inside-timeline-execution-http
             ;;
         *)
             echo "unknown timeline execution suite: ${suite:-<missing>}" >&2

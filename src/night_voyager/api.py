@@ -26,6 +26,10 @@ from night_voyager.interfaces.http.skills import (
     skills_request_validation_problem,
 )
 from night_voyager.interfaces.http.tasks import create_task_router
+from night_voyager.interfaces.http.timeline_execution import (
+    create_timeline_execution_router,
+    is_timeline_execution_http_path,
+)
 
 
 def create_app(
@@ -48,6 +52,7 @@ def create_app(
             or path.startswith("/api/v1/tasks/")
             or is_collaboration_http_path(path)
             or is_skills_http_path(path)
+            or is_timeline_execution_http_path(path)
         )
 
     @app.exception_handler(HTTPException)
@@ -89,6 +94,9 @@ def create_app(
         app.include_router(create_dra_router(resolved_settings, session_factory))
         app.include_router(create_skills_router(resolved_settings, session_factory))
         app.include_router(create_task_router(resolved_settings, session_factory))
+        app.include_router(
+            create_timeline_execution_router(resolved_settings, session_factory)
+        )
     return app
 
 
