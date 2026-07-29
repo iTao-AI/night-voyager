@@ -40,30 +40,75 @@ Expected: clean `main`, identical `HEAD` and `origin/main`, successful verifier/
 Before publication, rehearse the exact reviewed commit through a Git-free prepublication archive:
 
 ```bash
+repo_root="$(git rev-parse --show-toplevel)"
+expected_commit="$(git -C "$repo_root" rev-parse HEAD)"
 tmp_dir="$(mktemp -d)"
-git archive --format=tar.gz --output "$tmp_dir/night-voyager-v0.1.4-prepublication.tar.gz" HEAD
+archive="$tmp_dir/night-voyager-v0.1.4-prepublication.tar.gz"
+git -C "$repo_root" archive \
+  --format=tar.gz \
+  --prefix=night-voyager-0.1.4/ \
+  --output "$archive" \
+  "$expected_commit"
 mkdir "$tmp_dir/extracted"
-tar -xzf "$tmp_dir/night-voyager-v0.1.4-prepublication.tar.gz" -C "$tmp_dir/extracted"
-test ! -e "$tmp_dir/extracted/.git"
-cd "$tmp_dir/extracted"
-make doctor
-make proof
-make compose-proof
-make down
-docker compose ps --all
+tar -xzf "$archive" -C "$tmp_dir/extracted"
+test ! -e "$tmp_dir/extracted/night-voyager-0.1.4/.git"
+(
+  cd "$tmp_dir/extracted/night-voyager-0.1.4"
+  make doctor
+  make proof
+  make compose-proof
+  make down
+  docker compose ps --all
+)
 ```
 
 Only after Career authority review, hosted checks, merge, and the prepublication archive pass may an authorized maintainer create the annotated tag and GitHub Release. Verify the published identity:
 
 ```bash
-git fetch origin --tags --prune
-git describe --tags --exact-match HEAD
-git cat-file -t v0.1.4
-git rev-parse v0.1.4^{tag}
-git rev-parse v0.1.4^{commit}
+git -C "$repo_root" fetch origin --tags --prune
+git -C "$repo_root" describe --tags --exact-match "$expected_commit"
+git -C "$repo_root" cat-file -t v0.1.4
+git -C "$repo_root" rev-parse v0.1.4^{tag}
+git -C "$repo_root" rev-parse v0.1.4^{commit}
+test "$(git -C "$repo_root" rev-parse origin/main)" = "$expected_commit"
+test "$(git -C "$repo_root" rev-parse v0.1.4^{commit})" = "$expected_commit"
+
+release_view_json="$tmp_dir/release-view.json"
+release_api_json="$tmp_dir/release-api.json"
+gh release view v0.1.4 \
+  --repo iTao-AI/night-voyager \
+  --json tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body \
+  > "$release_view_json"
+gh api repos/iTao-AI/night-voyager/releases/tags/v0.1.4 \
+  > "$release_api_json"
+python - "$repo_root" "$release_view_json" "$release_api_json" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+release_view = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
+release_api = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+expected_body = (repo_root / "docs/releases/v0.1.4.md").read_bytes()
+expected_url = "https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.4"
+
+assert release_view["tagName"] == release_api["tag_name"] == "v0.1.4"
+assert release_view["targetCommitish"] == release_api["target_commitish"] == "main"
+assert release_view["isDraft"] is False
+assert release_api["draft"] is False
+assert release_view["isPrerelease"] is False
+assert release_api["prerelease"] is False
+assert release_view["assets"] == release_api["assets"] == []
+assert release_view["url"] == release_api["html_url"] == expected_url
+assert release_view["publishedAt"] == release_api["published_at"]
+assert isinstance(release_view["publishedAt"], str)
+assert release_view["publishedAt"].endswith("Z")
+assert release_view["body"].encode("utf-8") == expected_body
+assert release_api["body"].encode("utf-8") == expected_body
+PY
 ```
 
-Expected: exact tag `v0.1.4`, object type `tag`, and a peeled commit equal to the verified merged release commit. Never move the tag after publication. Do not force-move `v0.1.4`.
+Expected: exact tag `v0.1.4`, object type `tag`, and a peeled commit equal to the verified merged release commit. The GitHub Release is public, non-prerelease, targets `main`, has the exact expected tag, URL, publication timestamp, and byte-identical release-notes body, and has no custom assets. GitHub-generated source archives remain the only release artifacts. Never move the tag after publication. Do not force-move `v0.1.4`.
 
 ## Gate E — official public source archive
 

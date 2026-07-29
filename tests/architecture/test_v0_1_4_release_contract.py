@@ -170,10 +170,10 @@ def test_v0_1_4_verification_guide_defines_gate_c_d_and_e() -> None:
         "git status --short --branch",
         "git rev-parse HEAD",
         "git rev-parse origin/main",
-        "git describe --tags --exact-match HEAD",
-        "git cat-file -t v0.1.4",
-        "git rev-parse v0.1.4^{tag}",
-        "git rev-parse v0.1.4^{commit}",
+        'git -C "$repo_root" describe --tags --exact-match "$expected_commit"',
+        'git -C "$repo_root" cat-file -t v0.1.4',
+        'git -C "$repo_root" rev-parse v0.1.4^{tag}',
+        'git -C "$repo_root" rev-parse v0.1.4^{commit}',
         'curl --fail --location --output "$archive"',
         "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.4.tar.gz",
         'wc -c "$archive"',
@@ -197,6 +197,50 @@ def test_v0_1_4_verification_guide_defines_gate_c_d_and_e() -> None:
         "Use the extracted source archive",
         "Do not force-move `v0.1.4`",
         "normal pull request",
+    ):
+        assert token in how_to
+
+
+def test_gate_d_archive_smoke_preserves_repo_context_and_official_archive_shape() -> None:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.4-release.md").read_text(
+        encoding="utf-8"
+    )
+
+    for token in (
+        'repo_root="$(git rev-parse --show-toplevel)"',
+        "--prefix=night-voyager-0.1.4/",
+        'test ! -e "$tmp_dir/extracted/night-voyager-0.1.4/.git"',
+        '(\n  cd "$tmp_dir/extracted/night-voyager-0.1.4"',
+        'git -C "$repo_root" fetch origin --tags --prune',
+        'test "$(git -C "$repo_root" rev-parse origin/main)" = "$expected_commit"',
+        'test "$(git -C "$repo_root" rev-parse v0.1.4^{commit})" = "$expected_commit"',
+    ):
+        assert token in how_to
+
+
+def test_gate_d_reads_back_exact_public_github_release_state() -> None:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.4-release.md").read_text(
+        encoding="utf-8"
+    )
+
+    for token in (
+        "gh release view v0.1.4",
+        "--repo iTao-AI/night-voyager",
+        "--json tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body",
+        "gh api repos/iTao-AI/night-voyager/releases/tags/v0.1.4",
+        'release_view["tagName"] == release_api["tag_name"] == "v0.1.4"',
+        'release_view["targetCommitish"] == release_api["target_commitish"] == "main"',
+        'release_view["isDraft"] is False',
+        'release_api["draft"] is False',
+        'release_view["isPrerelease"] is False',
+        'release_api["prerelease"] is False',
+        'release_view["assets"] == release_api["assets"] == []',
+        'release_view["publishedAt"] == release_api["published_at"]',
+        'release_view["url"] == release_api["html_url"]',
+        'repo_root / "docs/releases/v0.1.4.md"',
+        'release_view["body"].encode("utf-8") == expected_body',
+        'release_api["body"].encode("utf-8") == expected_body',
+        "GitHub-generated source archives remain the only release artifacts",
     ):
         assert token in how_to
 
