@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted for local authority review. PR 1, PR 2, and PR 3 are implemented
-provider-free and remain post-v0.1.3 unreleased. No provider, credential, live
-acceptance, tag, release, or deployment action is part of this decision.
+Accepted and released in v0.1.4 as controlled provider-free evidence. PR 1,
+PR 2, and PR 3 are implemented; strict live acceptance remains incomplete.
+No provider, credential, live acceptance, tag, release, or deployment action
+is authorized by this decision.
 
 ## Context
 

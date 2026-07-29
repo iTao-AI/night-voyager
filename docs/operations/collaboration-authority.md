@@ -9,7 +9,8 @@ boundaries.
 
 Current development extends that authority through migration `0012`: a valid
 request-revision review and confirmed fact revision retain the predecessor and allow
-an explicit successor task. This post-v0.1.3 work is provider-free and unreleased.
+an explicit successor task. This work is released in v0.1.4 as controlled
+provider-free evidence; strict live acceptance remains incomplete.
 
 ## Deterministic checks
 

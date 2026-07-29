@@ -93,52 +93,61 @@ PLAN_STATUS_BINDINGS = (
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B/C and effective-query v2 implemented provider-free; "
+        "PR A/B/C and effective-query v2 released in v0.1.4 as provider-free "
+        "Night Voyager consumer evidence; "
         "two live attempts safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-a-implementation-plan.md",
-        "**Implementation status:** PR A, PR B, and PR C are implemented "
-        "provider-free; governed live acceptance remains pending.",
+        "**Implementation status:** PR A, PR B, and PR C are released in v0.1.4 "
+        "as provider-free Night Voyager consumer evidence; governed live acceptance "
+        "remains pending.",
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B/C and effective-query v2 implemented provider-free; "
+        "PR A/B/C and effective-query v2 released in v0.1.4 as provider-free "
+        "Night Voyager consumer evidence; "
         "two live attempts safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-b-implementation-plan.md",
         "**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are\n"
-        "implemented provider-free. One bounded live attempt projected 25 Evidence rows, all\n"
+        "released in v0.1.4 as provider-free Night Voyager consumer evidence. One bounded "
+        "live attempt projected 25 Evidence rows, all\n"
         "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
         "remains pending.",
     ),
     (
         "DRA v0.1.6 governed live closure",
-        "PR A/B/C and effective-query v2 implemented provider-free; "
+        "PR A/B/C and effective-query v2 released in v0.1.4 as provider-free "
+        "Night Voyager consumer evidence; "
         "two live attempts safely stopped pre-import; acceptance incomplete",
         "2026-07-25-dra-v0-1-6-live-closure-pr-c-implementation-plan.md",
         "**Implementation status:** PR A, PR B, PR C, and the effective-query v2 repair are\n"
-        "implemented provider-free. One bounded live attempt projected 25 Evidence rows, all\n"
+        "released in v0.1.4 as provider-free Night Voyager consumer evidence. One bounded "
+        "live attempt projected 25 Evidence rows, all\n"
         "`uncited`, and stopped safely before candidate import; governed live acceptance\n"
         "remains pending.",
     ),
     (
         "DRA strict consumer and versioned planning revision",
-        "PR 1, PR 2, and PR 3 implemented provider-free; "
+        "PR 1, PR 2, and PR 3 released in v0.1.4 as controlled provider-free evidence; "
         "strict live acceptance incomplete",
         "2026-07-27-dra-strict-consumer-pr-1-implementation-plan.md",
-        "**Plan status:** Implementation complete locally; awaiting Career authority review.",
+        "**Plan status:** Implementation complete and released in v0.1.4 as controlled "
+        "provider-free evidence; strict live acceptance remains incomplete.",
     ),
     (
         "DRA strict consumer and versioned planning revision",
-        "PR 1, PR 2, and PR 3 implemented provider-free; "
+        "PR 1, PR 2, and PR 3 released in v0.1.4 as controlled provider-free evidence; "
         "strict live acceptance incomplete",
         "2026-07-27-versioned-planning-revision-pr-2-implementation-plan.md",
-        "**Plan status:** Implementation complete locally; awaiting Career authority review.",
+        "**Plan status:** Implementation complete and released in v0.1.4 as controlled "
+        "provider-free evidence; strict live acceptance remains incomplete.",
     ),
     (
         "DRA strict consumer and versioned planning revision",
-        "PR 1, PR 2, and PR 3 implemented provider-free; "
+        "PR 1, PR 2, and PR 3 released in v0.1.4 as controlled provider-free evidence; "
         "strict live acceptance incomplete",
         "2026-07-27-planning-revision-journey-pr-3-implementation-plan.md",
-        "**Plan status:** Implementation complete locally; awaiting maintainer review.",
+        "**Plan status:** Implementation complete and released in v0.1.4 as controlled "
+        "provider-free evidence; strict live acceptance remains incomplete.",
     ),
     (
         "High-End Portfolio Entry v1",
@@ -249,11 +258,12 @@ def test_dra_strict_prerequisite_current_docs_are_truthful() -> None:
         "strict live acceptance remains incomplete."
     ) in strict_spec
     assert (
-        "**Plan status:** Implementation complete locally; awaiting Career authority review."
+        "**Plan status:** Implementation complete and released in v0.1.4 as controlled "
+        "provider-free evidence; strict live acceptance remains incomplete."
     ) in strict_plan
     assert (
         "| DRA strict consumer and versioned planning revision | "
-        "PR 1, PR 2, and PR 3 implemented provider-free; "
+        "PR 1, PR 2, and PR 3 released in v0.1.4 as controlled provider-free evidence; "
         "strict live acceptance incomplete |"
     ) in plans_index
 MERGED_FACT_TO_PLAN_BANNERS = {
@@ -469,7 +479,9 @@ def test_implemented_document_statuses_do_not_regress() -> None:
         "docs/superpowers/specs/2026-07-25-dra-v0-1-6-governed-live-closure-design.md": (
             "**Implementation status:** PR A, PR B, PR C, and the "
             "effective-query v2 repair are\n"
-            "implemented provider-free. Two bounded live attempts projected 25 and 83 "
+            "implemented and released in v0.1.4 as provider-free Night Voyager "
+            "consumer evidence.\n"
+            "Two bounded live attempts projected 25 and 83 "
             "Evidence rows,\n"
             "all `uncited`, and stopped safely before candidate import; governed live\n"
             "acceptance remains pending.",
@@ -648,11 +660,12 @@ def test_versioned_planning_revision_authority_is_documented() -> None:
         / "docs/superpowers/plans/"
         "2026-07-27-versioned-planning-revision-pr-2-implementation-plan.md"
     ).read_text(encoding="utf-8")
-    assert "PR 1, PR 2, and PR 3 implemented provider-free" in (
+    assert "PR 1, PR 2, and PR 3 released in v0.1.4 as controlled provider-free evidence" in (
         plans_index
     )
     assert (
-        "**Plan status:** Implementation complete locally; awaiting Career authority review."
+        "**Plan status:** Implementation complete and released in v0.1.4 as controlled "
+        "provider-free evidence; strict live acceptance remains incomplete."
         in pr2_plan
     )
 
@@ -715,12 +728,11 @@ def test_planning_revision_journey_docs_are_current_and_claim_bounded() -> None:
         "blocked budget counterfactual",
         "01ba21f2996769e68cbc88f4bb0596740df27f6b",
         "strict live acceptance remains incomplete",
-        "post-v0.1.3 unreleased",
+        "released in v0.1.4",
         "no third provider attempt",
         "25 and 83",
         "zero cited rows",
         "controlled provider-free evidence",
-        "separate release decision",
         "night-voyager-planning-revision.png",
         "planning-revision",
         "UPDATE_PORTFOLIO_SCREENSHOTS",
@@ -736,13 +748,12 @@ def test_planning_revision_journey_docs_are_current_and_claim_bounded() -> None:
     for required in (
         "PLANNING_REVISION_CURRENT_DOCS",
         "PLANNING_REVISION_SCREENSHOT",
-        "post-v0.1.3 unreleased",
+        "released in v0.1.4",
         "strict live acceptance remains incomplete",
         "no third provider attempt",
         "25 and 83",
         "zero cited rows",
         "controlled provider-free evidence",
-        "separate release decision",
     ):
         assert required in verifier
 
@@ -948,7 +959,7 @@ def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
     assert "focused advisor-family/evidence route" in route_map
 
     for token in (
-        "v0.1.3 is the current local synthetic portfolio release",
+        "v0.1.4 is the current local synthetic portfolio release",
         "PRs #57–#59 are released in v0.1.3",
         "PR #60 and the route-presentation follow-up are released in v0.1.3",
     ):

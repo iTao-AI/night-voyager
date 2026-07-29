@@ -8,7 +8,7 @@ from pathlib import Path
 from night_voyager.api import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 HISTORICAL_RELEASE_DIGESTS = {
     "docs/releases/v0.1.0.md": "a3251cdb572b4d982f989917f7e44d111cf887cf7fc8d75629cdd69c393d3a93",
@@ -34,7 +34,7 @@ HISTORICAL_RELEASE_DIGESTS = {
 }
 
 
-def test_current_release_identity_is_v0_1_3_without_dependency_drift() -> None:
+def test_current_release_identity_is_v0_1_4_without_dependency_drift() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
@@ -58,25 +58,26 @@ def test_current_release_identity_is_v0_1_3_without_dependency_drift() -> None:
     assert 'f"docs/how-to/verify-v{VERSION}-release.md"' in verifier
 
 
-def test_current_release_entries_point_to_v0_1_3_and_keep_history() -> None:
+def test_current_release_entries_point_to_v0_1_4_and_keep_history() -> None:
     current_entries = {
         "README.md": (
-            "docs/releases/v0.1.3.md",
-            "docs/how-to/verify-v0.1.3-release.md",
+            "docs/releases/v0.1.4.md",
+            "docs/how-to/verify-v0.1.4-release.md",
             "local synthetic portfolio release",
         ),
         "README_CN.md": (
-            "docs/releases/v0.1.3.md",
-            "docs/how-to/verify-v0.1.3-release.md",
+            "docs/releases/v0.1.4.md",
+            "docs/how-to/verify-v0.1.4-release.md",
             "local synthetic portfolio release",
         ),
         "docs/README.md": (
-            "releases/v0.1.3.md",
-            "how-to/verify-v0.1.3-release.md",
+            "releases/v0.1.4.md",
+            "how-to/verify-v0.1.4-release.md",
             "local synthetic portfolio release",
         ),
-        "CONTRIBUTING.md": ("v0.1.3", "local synthetic portfolio release"),
-        "SECURITY.md": ("v0.1.3", "local synthetic portfolio release"),
+        "CONTRIBUTING.md": ("v0.1.4", "local synthetic portfolio release"),
+        "SECURITY.md": ("v0.1.4", "local synthetic portfolio release"),
+        "DESIGN.md": ("v0.1.4", "local synthetic portfolio release"),
     }
     for relative, tokens in current_entries.items():
         source = (ROOT / relative).read_text(encoding="utf-8")
@@ -89,8 +90,8 @@ def test_current_release_entries_point_to_v0_1_3_and_keep_history() -> None:
         assert "v0.1.2" in source, relative
 
 
-def test_v0_1_3_release_notes_define_fact_to_plan_portfolio_scope() -> None:
-    release = (ROOT / "docs/releases/v0.1.3.md").read_text(encoding="utf-8")
+def test_v0_1_4_release_notes_define_current_capability_and_non_claim_scope() -> None:
+    release = (ROOT / "docs/releases/v0.1.4.md").read_text(encoding="utf-8")
     headings = (
         "## Summary",
         "## Completion",
@@ -104,80 +105,106 @@ def test_v0_1_3_release_notes_define_fact_to_plan_portfolio_scope() -> None:
     )
     for token in (
         "local synthetic portfolio release",
-        "migration `0009`",
-        "explicit planning-start authority",
-        "atomic",
-        "idempotency",
-        "same Case",
-        "Browser -> Next.js BFF -> FastAPI -> PostgreSQL -> worker/SSE",
+        "migration `0013`",
+        "capture",
+        "recovery",
+        "Stage 2–4",
+        "evaluation",
+        "semantic candidate-freeze evidence",
+        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
+        "generic-strict-citation@1",
+        "not a DRA v0.1.6 release capability",
+        "versioned planning revision authority",
+        "deterministic old/new comparison",
+        "fresh advisor reauthorization",
+        "only-current family decision",
         "zh-CN",
-        "exact `en`",
-        "虚幻夜航",
-        "AVIF",
-        "WebP",
-        "30–40 万元",
-        "CNY 300,000–400,000",
-        "305,500–400,000 CNY",
-        "Next.js `16.2.11`",
-        "eslint-config-next `16.2.11`",
+        "en",
+        "React",
+        "Next.js",
+        "PostCSS",
+        "Dependabot #8",
+        "Dependabot #9",
+        "FIXED",
+        "Dependabot #7",
+        "OPEN",
         "GHSA-f88m-g3jw-g9cj",
-        "optional/transitive deferred risk",
-        "/demo/collaboration",
-        "Live provider proof was not run",
+        "brace-expansion",
+        "minimatch",
+        "ESLint",
+        "not audit-zero",
+        "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        "zero cited Evidence",
+        "before candidate import",
+        "no third provider attempt",
         "GitHub-generated source archive",
         "no production deployment",
-        "no real students",
-        "deterministic offline governed candidate import",
-        "optional read-only untrusted candidate boundary",
-        "not distributed HA or SLA",
+        "no source-truth or provider-quality claim",
+        "no real student or school coverage",
+        "no advisor-team adoption",
+        "no admissions outcome",
+        "no HA or SLA",
+        "no business-benefit claim",
         "release-prep does not change migration, API, runtime behavior, or dependency tree",
     ):
         assert token in release
 
 
-def test_v0_1_3_release_notes_reject_unsupported_security_claims() -> None:
-    release = (ROOT / "docs/releases/v0.1.3.md").read_text(encoding="utf-8")
+def test_v0_1_4_release_notes_reject_unsupported_security_claims() -> None:
+    release = (ROOT / "docs/releases/v0.1.4.md").read_text(encoding="utf-8")
 
-    assert "不声称 audit-zero" in release
-    assert "不加入 unsupported `sharp@0.35.x` override" in release
+    assert "not audit-zero" in release
     assert "all vulnerabilities" not in release.lower()
 
 
-def test_v0_1_3_verification_guide_defines_publication_and_archive_gates() -> None:
-    how_to = (ROOT / "docs/how-to/verify-v0.1.3-release.md").read_text(
+def test_v0_1_4_verification_guide_defines_gate_c_d_and_e() -> None:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.4-release.md").read_text(
         encoding="utf-8"
     )
     for token in (
         "local synthetic portfolio release",
+        "Gate C",
+        "Gate D",
+        "Gate E",
         "git fetch origin --tags --prune",
         "git status --short --branch",
         "git rev-parse HEAD",
         "git rev-parse origin/main",
         "git describe --tags --exact-match HEAD",
-        "git cat-file -t v0.1.3",
-        "git rev-parse v0.1.3^{tag}",
-        "git rev-parse v0.1.3^{commit}",
+        "git cat-file -t v0.1.4",
+        "git rev-parse v0.1.4^{tag}",
+        "git rev-parse v0.1.4^{commit}",
         'curl --fail --location --output "$archive"',
-        "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.3.tar.gz",
+        "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.4.tar.gz",
         'wc -c "$archive"',
         'shasum -a 256 "$archive"',
         'tar -xzf "$archive" -C "$tmp_dir"',
-        'cd "$tmp_dir/night-voyager-0.1.3"',
+        'cd "$tmp_dir/night-voyager-0.1.4"',
         "make doctor MODE=dev",
-        "make collaboration-check",
-        "make skills-check",
-        "make db-check",
         "make check",
         "make proof",
         "make compose-proof",
         "make down",
         "docker compose ps --all",
+        "scripts/verify_release.py --tree-mode release",
+        "Git-free",
+        "prepublication archive",
+        "annotated tag",
+        "GitHub Release",
+        "fresh extraction",
+        "public source archive",
         "Never move the tag after publication",
         "Use the extracted source archive",
-        "Do not force-move `v0.1.3`",
+        "Do not force-move `v0.1.4`",
         "normal pull request",
     ):
         assert token in how_to
+
+
+def test_current_release_keeps_exact_0013_migration_head() -> None:
+    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
+    assert 'heads != {"0013"}' in verifier
+    assert (ROOT / "migrations/versions/0013_planning_revision_demo_seed.py").is_file()
 
 
 def test_published_release_documents_remain_byte_identical() -> None:
