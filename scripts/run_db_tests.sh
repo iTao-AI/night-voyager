@@ -221,6 +221,27 @@ if [ "${1:-}" = "inside-planning-revision-journey" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
+    uv run alembic downgrade base
+    uv run alembic upgrade 0013
+    uv run alembic current | grep '0013'
+    uv run --no-editable python scripts/seed_demo.py
+    uv run alembic upgrade head
+    uv run alembic current | grep '0014'
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/security/test_timeline_execution_catalog.py \
+        tests/integration/timeline_execution/test_migration.py \
+        tests/integration/timeline_execution/test_query_plan.py
+    NIGHT_VOYAGER_TIMELINE_MIGRATION_PHASE=empty \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/timeline_execution/test_downgrade.py
+    uv run --no-editable python scripts/seed_demo.py
+    NIGHT_VOYAGER_TIMELINE_MIGRATION_PHASE=history \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/timeline_execution/test_downgrade.py
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -284,6 +305,21 @@ if [ "${1:-}" = "planning-revision" ]; then
             ;;
         *)
             echo "unknown planning revision suite: ${suite:-<missing>}" >&2
+            exit 2
+            ;;
+    esac
+    exit 0
+fi
+
+if [ "${1:-}" = "timeline-execution" ]; then
+    suite=${2:-}
+    case "$suite" in
+        migration)
+            run_lane "${BASE_PROJECT_NAME}-migration" \
+                inside-timeline-execution-migration
+            ;;
+        *)
+            echo "unknown timeline execution suite: ${suite:-<missing>}" >&2
             exit 2
             ;;
     esac
