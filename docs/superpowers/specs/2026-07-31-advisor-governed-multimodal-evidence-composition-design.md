@@ -244,10 +244,10 @@ frozen suite. It is a non-default CLI/proof lane. It:
 
 Three distinct logical roles are frozen:
 
-The admitted author package is `author_revision=2`. Revision 1 is permanently
-`rejected_pre_admission` and is not an eligible compatibility source.
+The admitted author package is `author_revision=3`. Logical revisions 1 and 2 are permanently
+`rejected_pre_admission` and are not eligible compatibility sources.
 
-1. **Dataset author** (`dataset_author_id=independent-dataset-author-v2`) prepares public-safe
+1. **Dataset author** (`dataset_author_id=independent-dataset-author-v3`) prepares public-safe
    synthetic Case/query/source material, decision gaps, expected source identities, and finalizes
    the holdout payload and evaluator-independent oracle before A4 begins.
 2. **Evaluator implementer**
@@ -255,7 +255,7 @@ The admitted author package is `author_revision=2`. Revision 1 is permanently
    canonicalization, metrics, sensitivity tests, reveal validator, native lane, frozen-suite
    harness, and terminal verifier using only development cases and public commitments.
 3. **Holdout custodian**
-   (`holdout_custodian_id=independent-holdout-custodian-v2`) independently verifies and seals the
+   (`holdout_custodian_id=independent-holdout-custodian-v3`) independently verifies and seals the
    pre-authored payload and oracle, keeps them in a separate non-mounted custody workspace, reveals
    them only after evaluator, harness, threshold, mapping, and eligible-source freeze, and signs
    the final receipt.
@@ -293,6 +293,10 @@ A3 implements the public corpus, manifests, store seal, and freeze tooling. A3 d
 harness, terminal verifier, and runner before final pre-registration. Development cases may be
 used to implement and test those surfaces while holdout payload and oracle bytes remain
 unreachable.
+
+The exact producer-native PDF proof precedes final evaluator freeze. It binds the admitted PDF
+bytes to the exact MKE v0.1.5 extraction and Search/Read descriptors before those source identities
+enter `PreRegistrationReceiptV2`.
 
 A `PreRegistrationReceiptV2` freezes after the complete evaluator and reveal/verification harness
 exist and before any eligible holdout producer observation:
