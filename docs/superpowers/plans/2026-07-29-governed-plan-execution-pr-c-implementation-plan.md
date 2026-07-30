@@ -13,7 +13,7 @@ v0.1.5 release remain pending.
 
 ## Global Constraints
 
-- Base is the reviewed and merged PR B at migration head `0014`.
+- Base is the reviewed and merged PR B at migration head `0015`.
 - No backend source, FastAPI/BFF route semantics, migration, database function, fixture authority, dependency, lockfile, Dockerfile, Compose policy, version bump, release note, tag, Release, deploy, provider, credential, or DRA live-status change.
 - Preserve the two intentional identities: root `Virtual Night Voyage` portfolio shell and warm-paper governed demo workspace.
 - Existing routes may change only when the rendered baseline records a P1/P2 hierarchy, accessibility, responsive, or cross-route consistency finding.
@@ -63,7 +63,7 @@ test "$(git rev-parse HEAD)" = "$EXPECTED_BASE_SHA"
 make doctor MODE=dev
 uv sync --locked
 npm --prefix web ci
-test "$(uv run alembic heads | awk '{print $1}')" = "0014"
+test "$(uv run alembic heads | awk '{print $1}')" = "0015"
 ```
 
 Record `BASE_SHA`. Create a mode-0700 task evidence root outside the repository for baseline screenshots, review notes, and timing logs. Do not commit private paths or raw review metadata. Each implementation task requires a recorded finding ID, valid RED, minimal GREEN, exact diff review, semantic commit, and clean worktree.
@@ -111,7 +111,7 @@ Severity:
 - P1: blocks primary action, keyboard completion, readable authority, role/stop understanding, or required reflow/contrast.
 - P2: material hierarchy, consistency, target-size, long-copy, or technical-noise problem that does not block the journey.
 
-- [ ] **Step 1: Add a RED for the missing presentation-audit harness and matrix coverage**
+- [x] **Step 1: Add a RED for the missing presentation-audit harness and matrix coverage**
 
 The architecture RED requires a committed provider-free audit harness that
 enumerates every approved route, both locales, 1440/768/390/320 widths, 200%
@@ -120,15 +120,15 @@ and latest-64 disclosure. Implement the harness without asserting that current
 product presentation already passes every finding. Product-specific REDs are
 added only after the rendered finding ledger is frozen in Tasks 2 and 3.
 
-- [ ] **Step 2: Run the baseline against one normal task-owned stack**
+- [x] **Step 2: Run the baseline against one normal task-owned stack**
 
 Use existing provider-free fixture authority and make no source changes during observation. Capture sanitized screenshots and accessibility/overflow data under the private evidence root.
 
-- [ ] **Step 3: Run a targeted rendered presentation review and record P1/P2 findings**
+- [x] **Step 3: Run a targeted rendered presentation review and record P1/P2 findings**
 
 The review is read-only. If no P1/P2 exists for an existing route, mark that route `no_change` and remove it from later authorized implementation paths.
 
-- [ ] **Step 4: Commit only the baseline contract**
+- [x] **Step 4: Commit only the baseline contract**
 
 ```bash
 uv run pytest -q tests/architecture/test_portfolio_presentation_contract.py
@@ -167,11 +167,11 @@ git commit -m "test: add governed presentation audit harness"
 
 `Overview`, `Plan`, and `Activity` are landmarks, anchors, or disclosures, not competing route-level tabs. On narrow screens and at 200% zoom, current action remains first in DOM and visual order. Raw hashes, row versions, SQL, task/lease terminology, and database rows are not default content.
 
-- [ ] **Step 1: For each plan-route finding, write one failing semantic/browser assertion**
+- [x] **Step 1: For each plan-route finding, write one failing semantic/browser assertion**
 
 The assertion names the finding ID and observable failure. Do not create a generic pixel snapshot.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
 ```bash
 npm --prefix web run test -- --run \
@@ -179,11 +179,11 @@ npm --prefix web run test -- --run \
   web/tests/unit/plan-execution-ui.test.tsx
 ```
 
-- [ ] **Step 3: Implement the smallest presentational fix**
+- [x] **Step 3: Implement the smallest presentational fix**
 
 Do not edit `web/lib/plan-execution/**`, API calls, reducer states, action labels, or mutation order.
 
-- [ ] **Step 4: Run GREEN and commit**
+- [x] **Step 4: Run GREEN and commit**
 
 ```bash
 npm --prefix web run lint
@@ -228,11 +228,11 @@ Permitted changes are presentation-only:
 
 Existing accessible action names stay unchanged unless the finding explicitly proves an ambiguity and the same closed catalog change is applied to semantic tests and browser selectors.
 
-- [ ] **Step 1: Write one RED per cross-route finding**
+- [x] **Step 1: Write one RED per cross-route finding**
 
-- [ ] **Step 2: Implement only finding-backed presentational changes**
+- [x] **Step 2: Implement only finding-backed presentational changes**
 
-- [ ] **Step 3: Run full web regression**
+- [x] **Step 3: Run full web regression**
 
 ```bash
 npm --prefix web run lint
@@ -242,7 +242,7 @@ npm --prefix web run build
 npm --prefix web exec playwright test -- --list
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 # First print the exact changed-path set and compare every path with the fixed
@@ -282,19 +282,19 @@ The four committed images use synthetic data, contain no session/CSRF/idempotenc
 
 They are documentation evidence only. Semantic Playwright assertions remain the pass/fail authority.
 
-- [ ] **Step 1: Run the complete matrix on one normal task-owned stack**
+- [x] **Step 1: Run the complete matrix on one normal task-owned stack**
 
 Assert no overflow, no clipped action/status, one H1, valid landmarks/headings, keyboard completion, visible focus, deterministic post-mutation focus, reduced-motion behavior, contrast evidence, target sizes, and exact bilingual state semantics.
 
-- [ ] **Step 2: Re-run targeted rendered review**
+- [x] **Step 2: Re-run targeted rendered review**
 
 Require zero P1. Fix remaining P2 or record an evidence-based PR-body disposition. A disposition cannot waive a blocked action, accessibility failure, hidden authority, or overflow.
 
-- [ ] **Step 3: Capture and sanitize the four representative images**
+- [x] **Step 3: Capture and sanitize the four representative images**
 
 Verify image dimensions, visible synthetic labels, and absence of forbidden text before staging.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 uv run pytest -q tests/architecture/test_portfolio_presentation_contract.py
@@ -365,15 +365,15 @@ task-resource teardown result
 
 It explicitly forbids credentials, cookies, CSRF, raw `.env`, database URLs, private paths, raw database rows, content-bearing Evidence, and uploaded logs containing those values.
 
-- [ ] **Step 1: Add documentation/DX RED**
+- [x] **Step 1: Add documentation/DX RED**
 
 Require all three proof paths, error catalog anchors, migration runbook, contributor matrix, issue-template fields/prohibitions, screenshot references, current statuses, non-claims, and immutable prior releases.
 
-- [ ] **Step 2: Update docs, audit documentation coverage, and run a live developer-experience walkthrough**
+- [x] **Step 2: Update docs, audit documentation coverage, and run a live developer-experience walkthrough**
 
 The live DX review executes documented public commands and records only public output/phase evidence. It does not change product scope.
 
-- [ ] **Step 3: Run focused GREEN**
+- [x] **Step 3: Run focused GREEN**
 
 ```bash
 uv run pytest -q \
@@ -383,7 +383,7 @@ uv run pytest -q \
 uv run python scripts/verify_release.py --tree-mode development
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add .github/ISSUE_TEMPLATE/proof-failure.yml \
@@ -395,7 +395,7 @@ git commit -m "docs: close governed execution DX"
 
 ### Task 6: Run exact-head final gates and freeze release readiness
 
-- [ ] **Step 1: Run non-container gates**
+- [x] **Step 1: Run non-container gates**
 
 ```bash
 uv lock --check
@@ -411,7 +411,7 @@ make proof
 uv run python scripts/verify_release.py --tree-mode development
 ```
 
-- [ ] **Step 2: Run one normal task-scoped full Compose proof**
+- [x] **Step 2: Run one normal task-scoped full Compose proof**
 
 ```bash
 COMPOSE_PROJECT_NAME="night-voyager-execution-pr-c-final-$$" \
@@ -422,7 +422,7 @@ COMPOSE_PROJECT_NAME="night-voyager-execution-pr-c-final-$$" \
 
 Require all existing collaboration, DRA, planning revision, and exact `zh-CN`/`en` governed execution Happy/Blocked lanes, plus presentation matrix evidence. Confirm task/default Compose projects and containers are empty; retain shared volume/images/cache.
 
-- [ ] **Step 3: Run final scope and hygiene review**
+- [x] **Step 3: Run final scope and hygiene review**
 
 ```bash
 git diff --check
@@ -439,7 +439,7 @@ Confirm:
 - no private path, coordination ID, credential-like value, session/CSRF/idempotency value, or raw sensitive payload;
 - published `v0.1.0`–`v0.1.4` notes/how-to remain byte-identical.
 
-- [ ] **Step 4: Freeze PR C exit evidence**
+- [x] **Step 4: Freeze PR C exit evidence**
 
 Return exact commit list, changed files/stat, finding ledger summary, RED→GREEN evidence, viewports/locales/accessibility proof, DX command observations, normal Compose proof, Docker inventories, documentation impact, rollback boundary, and non-claims. Worktree/staging/untracked must be clean.
 
