@@ -80,12 +80,18 @@ async function expectCheckpoint(
   page: Page,
   milestone: string,
   dueDate: string,
-  role: "student" | "parent",
+  role: "Student" | "Parent",
 ) {
-  await expect(page.getByRole("heading", { name: "Current checkpoint" })).toBeVisible();
-  await expect(page.getByText(milestone, { exact: true })).toBeVisible();
-  await expect(page.getByText(dueDate, { exact: true })).toBeVisible();
-  await expect(page.getByText(role, { exact: true })).toBeVisible();
+  const authoritySummary = page.locator("[data-plan-authority-summary]");
+  await expect(authoritySummary).toBeVisible();
+  await expect(authoritySummary).toContainText(milestone);
+  await expect(authoritySummary).toContainText(dueDate);
+  await expect(authoritySummary).toContainText(role);
+}
+
+async function expectLiveAndVisibleCopy(page: Page, message: string) {
+  await expect(page.getByRole("status")).toHaveText(message);
+  await expect(page.locator("p:not([role])").filter({ hasText: message })).toBeVisible();
 }
 
 test("minimal governed plan execution reaches completed through one bilingual journey", async ({
@@ -117,15 +123,15 @@ test("minimal governed plan execution reaches completed through one bilingual jo
   );
 
   const checkpoints = [
-    ["documents", "2026-09-01", "student"],
-    ["application", "2026-10-15", "student"],
-    ["visa", "2026-12-15", "student"],
-    ["arrival", "2027-01-20", "parent"],
+    ["Documents", "2026-09-01", "Student"],
+    ["Application", "2026-10-15", "Student"],
+    ["Visa", "2026-12-15", "Student"],
+    ["Arrival", "2027-01-20", "Parent"],
   ] as const;
   for (const [index, [milestone, dueDate, role]] of checkpoints.entries()) {
     if (index > 0) {
       await page.getByRole("button", {
-        name: role === "student" ? "Student" : "Parent",
+        name: role,
         exact: true,
       }).click();
     }
@@ -136,9 +142,10 @@ test("minimal governed plan execution reaches completed through one bilingual jo
       "/checkpoint-attestations",
       "attestation",
     );
-    await expect(
-      page.getByText("Family view: waiting for the assigned advisor to verify."),
-    ).toBeVisible();
+    await expectLiveAndVisibleCopy(
+      page,
+      "Family view: waiting for the assigned advisor to verify.",
+    );
 
     await page.getByRole("button", { name: "Advisor", exact: true }).click();
     const view = await clickMutationAndRead(
@@ -154,6 +161,6 @@ test("minimal governed plan execution reaches completed through one bilingual jo
     }
   }
 
-  await expect(page.getByText("The action plan is complete.")).toBeVisible();
+  await expectLiveAndVisibleCopy(page, "The action plan is complete.");
   await expect(page.getByText("There is no current checkpoint.")).toBeVisible();
 });

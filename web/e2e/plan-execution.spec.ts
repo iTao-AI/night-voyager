@@ -88,6 +88,11 @@ async function rotate(page: Page, role: keyof typeof copy.en): Promise<string> {
   return String((await response.json() as { csrf_token: string }).csrf_token);
 }
 
+async function expectLiveAndVisibleCopy(page: Page, message: string) {
+  await expect(page.getByRole("status")).toHaveText(message);
+  await expect(page.locator("p:not([role])").filter({ hasText: message })).toBeVisible();
+}
+
 async function progress(
   page: Page,
   context: { case_id: string },
@@ -243,9 +248,9 @@ test("complete governed plan execution browser-to-database proof", async ({ page
     acceptedReceiptIds.push(verified.receipt.receipt_id);
   }
   expect(verified.view.execution.state).toBe("completed");
-  await expect(page.getByText(labels.completed, { exact: true })).toBeVisible();
+  await expectLiveAndVisibleCopy(page, labels.completed);
   await page.reload();
-  await expect(page.getByText(labels.completed, { exact: true })).toBeVisible();
+  await expectLiveAndVisibleCopy(page, labels.completed);
   expect(responseOrder.indexOf("receipt")).toBeLessThan(responseOrder.lastIndexOf("fresh-read"));
   page.off("response", observe);
   await writeFile(proofFile!, `${JSON.stringify({
@@ -352,7 +357,7 @@ test("prove stale tab, shared session, envelope, and bounded activity", async ({
   const activity = page.getByRole("heading", {
     name: copy["zh-CN"].activity,
   }).locator("..");
-  await activity.getByRole("button").click();
+  await activity.locator("summary").click();
   await expect(activity.getByRole("listitem")).toHaveCount(64);
   await expect(activity.getByText("显示 64 / 67", { exact: true })).toBeVisible();
   await expect(activity.getByText(
@@ -387,10 +392,10 @@ test("prove stale tab, shared session, envelope, and bounded activity", async ({
   }, blockedCaseId);
   // cross-Case envelope: server context rejects the stored identity with zero mutation.
   await stalePage.reload();
-  await expect(stalePage.getByText(
+  await expectLiveAndVisibleCopy(
+    stalePage,
     "角色或执行 authority 已变化，请重新连接。",
-    { exact: true },
-  )).toBeVisible();
+  );
   expect(crossCasePosts).toBe(0);
 
   let releaseRead!: () => void;
@@ -437,10 +442,10 @@ test("prove stale tab, shared session, envelope, and bounded activity", async ({
   releaseRead();
   await reload;
   await page.unroute("**/timeline-execution");
-  await expect(page.getByText(
+  await expectLiveAndVisibleCopy(
+    page,
     "角色或执行 authority 已变化，请重新连接。",
-    { exact: true },
-  )).toBeVisible();
+  );
 
   await staleContext.close();
   await writeFile(recoveryProofFile!, `${JSON.stringify({
