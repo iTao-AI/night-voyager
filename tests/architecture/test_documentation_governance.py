@@ -14,6 +14,12 @@ ROOT = Path(__file__).resolve().parents[2]
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 PLAN_STATUS_BINDINGS = (
     (
+        "Advisor-Governed Multimodal Evidence Composition",
+        "Approved; Slice 0 is the only unlocked stage",
+        "2026-07-31-advisor-governed-multimodal-evidence-composition-implementation.md",
+        "**Status:** Re-audited and ready for implementation mandate",
+    ),
+    (
         "M2 identity, session, and RLS",
         "Implemented",
         "2026-07-12-m2-identity-session-rls.md",
