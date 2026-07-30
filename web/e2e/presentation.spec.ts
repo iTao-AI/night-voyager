@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Locator, type Page } from "@playwright/test";
 
 const AUDIT_OUTPUT = process.env.PRESENTATION_AUDIT_OUTPUT_DIR;
 const PUBLIC_EVIDENCE_ROOT = process.env.PRESENTATION_PUBLIC_EVIDENCE_ROOT;
@@ -82,13 +82,53 @@ async function keyboardAndFocusEvidence(page: Page) {
   return { focus, keyboard: sequence, visibleFocus };
 }
 
+async function activateByKeyboard(
+  target: Locator,
+  key: "Enter" | "Space" = "Enter",
+) {
+  await expect(target).toBeEnabled();
+  await target.focus();
+  await expect(target).toBeFocused();
+  await target.press(key);
+}
+
+async function keyboardDisclosureEvidence(page: Page) {
+  const summary = page.locator("summary").filter({ visible: true }).first();
+  if (await summary.count() === 0) return { activated: false, key: null };
+  const details = summary.locator("..");
+  const initiallyOpen = await details.evaluate((element) => element.hasAttribute("open"));
+  await activateByKeyboard(summary, "Enter");
+  if (initiallyOpen) await expect(details).not.toHaveAttribute("open");
+  else await expect(details).toHaveAttribute("open", "");
+  await activateByKeyboard(summary, "Space");
+  if (initiallyOpen) await expect(details).toHaveAttribute("open", "");
+  else await expect(details).not.toHaveAttribute("open");
+  return { activated: true, key: "Enter+Space" };
+}
+
 async function renderedMetrics(page: Page) {
   return page.evaluate(() => {
-    function rgb(value: string) {
-      const channels = value.match(/[\d.]+/g)?.slice(0, 3).map(Number);
-      return channels?.length === 3 ? channels : null;
+    type Color = [number, number, number, number];
+
+    function color(value: string): Color | null {
+      const channels = value.match(/[\d.]+/g)?.map(Number);
+      if (!channels || channels.length < 3) return null;
+      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
     }
-    function luminance(channels: number[]) {
+    function composite(foreground: Color, background: Color): Color {
+      const alpha = foreground[3] + background[3] * (1 - foreground[3]);
+      if (alpha === 0) return [0, 0, 0, 0];
+      return [
+        (foreground[0] * foreground[3]
+          + background[0] * background[3] * (1 - foreground[3])) / alpha,
+        (foreground[1] * foreground[3]
+          + background[1] * background[3] * (1 - foreground[3])) / alpha,
+        (foreground[2] * foreground[3]
+          + background[2] * background[3] * (1 - foreground[3])) / alpha,
+        alpha,
+      ];
+    }
+    function luminance(channels: Color) {
       const [red, green, blue] = channels.map((value) => {
         const normalized = value / 255;
         return normalized <= 0.04045
@@ -97,36 +137,82 @@ async function renderedMetrics(page: Page) {
       });
       return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
     }
-    function contrast(foreground: number[], background: number[]) {
+    function contrast(foreground: Color, background: Color) {
       const light = Math.max(luminance(foreground), luminance(background));
       const dark = Math.min(luminance(foreground), luminance(background));
       return (light + 0.05) / (dark + 0.05);
     }
     function backgroundFor(element: Element) {
+      let result: Color = [0, 0, 0, 0];
       for (let current: Element | null = element; current; current = current.parentElement) {
-        const value = getComputedStyle(current).backgroundColor;
-        if (value !== "rgba(0, 0, 0, 0)" && value !== "transparent") return value;
+        const style = getComputedStyle(current);
+        if (style.backgroundImage !== "none" && result[3] < 1) return null;
+        const layer = color(style.backgroundColor);
+        if (layer) result = composite(result, layer);
+        if (result[3] >= 0.999) return result;
       }
-      return "rgb(255, 255, 255)";
+      return composite(result, [255, 255, 255, 1]);
+    }
+    function milliseconds(value: string) {
+      return value.split(",").map((entry) => {
+        const token = entry.trim();
+        return token.endsWith("ms")
+          ? Number.parseFloat(token)
+          : Number.parseFloat(token) * 1000;
+      });
+    }
+    function maximumTimeline(duration: string, delay: string) {
+      const durations = milliseconds(duration);
+      const delays = milliseconds(delay);
+      return durations.reduce((maximum, value, index) => (
+        Math.max(maximum, value + Math.max(0, delays[index % delays.length] ?? 0))
+      ), 0);
     }
 
     const visible = [...document.querySelectorAll<HTMLElement>("body *")].filter((element) => {
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
-      return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden";
+      return rect.width > 0
+        && rect.height > 0
+        && style.visibility !== "hidden"
+        && !element.closest("[aria-hidden='true']");
     });
     const contrastSamples = visible
       .filter((element) => element.childElementCount === 0 && Boolean(element.textContent?.trim()))
       .map((element) => {
-        const foreground = rgb(getComputedStyle(element).color);
-        const background = rgb(backgroundFor(element));
+        const style = getComputedStyle(element);
+        const foreground = color(style.color);
+        const background = backgroundFor(element);
+        const fontSize = Number.parseFloat(style.fontSize);
+        const fontWeight = Number.parseInt(style.fontWeight, 10);
+        const isLargeText = fontSize >= 24 || (fontSize >= 18.6667 && fontWeight >= 700);
+        const requiredRatio = isLargeText ? 3 : 4.5;
         return foreground && background
-          ? { ratio: contrast(foreground, background), text: element.textContent!.trim().slice(0, 80) }
+          ? {
+              ratio: contrast(composite(foreground, background), background),
+              requiredRatio,
+              text: element.textContent!.trim().slice(0, 80),
+            }
           : null;
       })
-      .filter((sample): sample is { ratio: number; text: string } => sample !== null)
+      .filter((sample): sample is {
+        ratio: number;
+        requiredRatio: number;
+        text: string;
+      } => sample !== null)
       .sort((left, right) => left.ratio - right.ratio)
-      .slice(0, 20);
+    const motion = visible.map((element) => {
+      const style = getComputedStyle(element);
+      return {
+        animationMs: maximumTimeline(style.animationDuration, style.animationDelay),
+        name: element.getAttribute("aria-label") ?? element.textContent?.trim().slice(0, 80),
+        transitionMs: maximumTimeline(style.transitionDuration, style.transitionDelay),
+      };
+    });
+    const maxMotionMs = motion.reduce(
+      (maximum, entry) => Math.max(maximum, entry.animationMs, entry.transitionMs),
+      0,
+    );
     const targets = visible
       .filter((element) => element.matches("a, button, input, select, summary"))
       .map((element) => {
@@ -138,11 +224,30 @@ async function renderedMetrics(page: Page) {
         };
       });
     const longCopy = visible
-      .filter((element) => (element.textContent?.trim().length ?? 0) >= 80)
-      .map((element) => ({
-        clipped: element.scrollWidth > element.clientWidth + 1,
-        text: element.textContent!.trim().slice(0, 120),
-      }));
+      .filter((element) => (
+        (element.textContent?.trim().length ?? 0) >= 80
+        && (
+          element.childElementCount === 0
+          || element.matches("p, li, dd, button, summary, [role='status'], [role='alert']")
+        )
+      ))
+      .map((element) => {
+        const style = getComputedStyle(element);
+        const clips = (value: string) => value === "hidden" || value === "clip";
+        const lineClamp = Number.parseInt(style.webkitLineClamp, 10);
+        return {
+          clipped: (
+            clips(style.overflowX) && element.scrollWidth > element.clientWidth + 1
+          ) || (
+            clips(style.overflowY) && element.scrollHeight > element.clientHeight + 1
+          ) || (
+            Number.isFinite(lineClamp)
+            && lineClamp > 0
+            && element.scrollHeight > element.clientHeight + 1
+          ),
+          text: element.textContent!.trim().slice(0, 120),
+        };
+      });
 
     return {
       contrast: contrastSamples,
@@ -159,12 +264,17 @@ async function renderedMetrics(page: Page) {
         .filter((element) => element.hasAttribute("aria-live") || element.getAttribute("role") === "status")
         .map((element) => element.textContent?.trim().slice(0, 120)),
       "long-copy": longCopy,
+      maxMotionMs,
+      motionOffenders: motion.filter(
+        (entry) => entry.animationMs > 10 || entry.transitionMs > 10,
+      ),
       overflow: {
         clientWidth: document.documentElement.clientWidth,
         horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
         scrollWidth: document.documentElement.scrollWidth,
       },
       reducedMotion: matchMedia("(prefers-reduced-motion: reduce)").matches,
+      scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior,
       targets,
     };
   });
@@ -173,9 +283,18 @@ async function renderedMetrics(page: Page) {
 async function assertSemanticPresentation(page: Page) {
   const metrics = await renderedMetrics(page);
   expect(metrics.overflow.horizontal).toBe(false);
+  expect(
+    metrics.contrast.filter((sample) => sample.ratio < sample.requiredRatio),
+  ).toEqual([]);
+  expect(metrics["long-copy"].filter((entry) => entry.clipped)).toEqual([]);
   expect(metrics.headings.filter((heading) => heading.level === "H1")).toHaveLength(1);
   expect(metrics.landmarks).toContain("main");
   expect(metrics.targets.filter((target) => target.height < 24 || target.width < 24)).toEqual([]);
+  if (metrics.reducedMotion) {
+    expect(metrics.maxMotionMs).toBeLessThanOrEqual(10);
+    expect(metrics.motionOffenders).toEqual([]);
+    expect(metrics.scrollBehavior).not.toBe("smooth");
+  }
   if (page.url().includes("/demo/plan")) {
     await expect(page.locator("body")).not.toContainText(
       /\b(documents|application|visa|arrival|on_track|due_soon|in_progress|attestation_recorded|verification_recorded)\b/,
@@ -216,6 +335,7 @@ async function rotateRole(
   page: Page,
   locale: keyof typeof PLAN_COPY,
   role: "student" | "parent" | "advisor",
+  key: "Enter" | "Space" = "Enter",
 ) {
   const response = page.waitForResponse((candidate) =>
     candidate.request().method() === "POST"
@@ -224,21 +344,26 @@ async function rotateRole(
     exact: true,
     name: PLAN_COPY[locale][role],
   });
-  await button.click();
+  await activateByKeyboard(button, key);
   expect((await response).status()).toBe(201);
   await expect(button).toHaveAttribute("aria-pressed", "true");
 }
 
-async function mutation(page: Page, name: string) {
+async function mutation(
+  page: Page,
+  name: string,
+  key: "Enter" | "Space" = "Enter",
+) {
   const receipt = page.waitForResponse((response) =>
     response.request().method() === "POST"
     && !response.url().endsWith("/api/demo/sessions"));
   const freshRead = page.waitForResponse((response) =>
     response.request().method() === "GET"
     && response.url().includes("/timeline-execution"));
-  await page.getByRole("button", { exact: true, name }).click();
+  await activateByKeyboard(page.getByRole("button", { exact: true, name }), key);
   expect((await receipt).status()).toBe(200);
   expect((await freshRead).status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
 }
 
 async function captureState(page: Page, name: string) {
@@ -359,7 +484,7 @@ test.describe("provider-free governed presentation audit", () => {
     }
   }
 
-  test("captures the happy current, waiting, recovery, and completed states", async ({
+  test("completes the happy governed keyboard journey and captures its states", async ({
     browser,
   }) => {
     const locale = "zh-CN";
@@ -371,8 +496,8 @@ test.describe("provider-free governed presentation audit", () => {
       width: 1440,
       zoom: "default",
     });
-    await rotateRole(page, locale, "student");
-    await mutation(page, labels.start);
+    await rotateRole(page, locale, "student", "Enter");
+    await mutation(page, labels.start, "Space");
     await captureState(page, "plan-state-current-action-zh-CN-1440");
 
     let dropOnce = true;
@@ -385,26 +510,32 @@ test.describe("provider-free governed presentation audit", () => {
       await route.fetch();
       await route.abort("failed");
     });
-    await page.getByRole("button", { exact: true, name: labels.progress }).click();
+    await activateByKeyboard(
+      page.getByRole("button", { exact: true, name: labels.progress }),
+      "Enter",
+    );
     await expect(page.getByRole("button", { exact: true, name: labels.recover })).toBeVisible();
     await page.setViewportSize({ width: 390, height: 760 });
     await captureState(page, "plan-state-recovery-zh-CN-390");
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.unroute("**/checkpoint-attestations");
-    await mutation(page, labels.recover);
+    await mutation(page, labels.recover, "Space");
 
-    await mutation(page, labels.completion);
+    await mutation(page, labels.completion, "Enter");
     await captureState(page, "plan-state-awaiting-advisor-zh-CN-1440");
-    await rotateRole(page, locale, "advisor");
+    await rotateRole(page, locale, "advisor", "Space");
     await captureState(page, "plan-state-advisor-review-zh-CN-1440");
-    await mutation(page, labels.verify);
+    await mutation(page, labels.verify, "Enter");
 
-    for (const role of ["student", "student", "parent"] as const) {
-      await rotateRole(page, locale, role);
-      await mutation(page, labels.completion);
-      await rotateRole(page, locale, "advisor");
-      await mutation(page, labels.verify);
+    for (const [index, role] of (["student", "student", "parent"] as const).entries()) {
+      await rotateRole(page, locale, role, index % 2 === 0 ? "Space" : "Enter");
+      await mutation(page, labels.completion, index % 2 === 0 ? "Enter" : "Space");
+      await rotateRole(page, locale, "advisor", index % 2 === 0 ? "Space" : "Enter");
+      await mutation(page, labels.verify, index % 2 === 0 ? "Enter" : "Space");
     }
+    await expect(page.getByText("行动计划已完成。", { exact: true }).last()).toBeVisible();
+    await expect(page.locator(".approved-plan-steps > li[data-state='verified']")).toHaveCount(4);
+    expect((await keyboardDisclosureEvidence(page)).activated).toBe(true);
     await captureState(page, "plan-state-completed-zh-CN-1440");
     await context.close();
   });

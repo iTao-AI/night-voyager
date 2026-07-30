@@ -210,6 +210,21 @@ def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> Non
         assert required_contract in source
 
 
+def test_governed_presentation_audit_harness_enforces_semantic_authority() -> None:
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+
+    for required_enforcement in (
+        "requiredRatio",
+        "sample.ratio < sample.requiredRatio",
+        "entry.clipped",
+        "maxMotionMs",
+        "activateByKeyboard",
+        "keyboard journey",
+        'locator("summary")',
+    ):
+        assert required_enforcement in source
+
+
 @pytest.mark.parametrize(("relative", "expected_width"), PLAN_EXECUTION_EVIDENCE)
 def test_plan_execution_evidence_is_sanitized_png(
     relative: str,
