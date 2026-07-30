@@ -10,13 +10,18 @@ import { AdvisorVerificationPanel } from "./AdvisorVerificationPanel";
 import { CheckpointAttestationForm } from "./CheckpointAttestationForm";
 import { CurrentCheckpoint } from "./CurrentCheckpoint";
 import { ExecutionActivity } from "./ExecutionActivity";
+import { ExecutionRecoveryNotice } from "./ExecutionRecoveryNotice";
+import { ReassessmentHandoff } from "./ReassessmentHandoff";
+import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
 
 export function PlanExecutionWorkspace({
   controller: suppliedController,
+  scenario = "happy",
 }: {
   controller?: PlanExecutionController;
+  scenario?: PlanExecutionDemoScenario;
 }) {
-  const liveController = usePlanExecution();
+  const liveController = usePlanExecution(undefined, scenario);
   const controller = suppliedController ?? liveController;
   const { state, busy } = controller;
   const { copy } = usePresentation();
@@ -26,6 +31,11 @@ export function PlanExecutionWorkspace({
     && state.view?.current_action.owner_role === role;
   const canVerify = state.value === "awaiting_advisor"
     && state.view?.current_action.owner_role === role;
+  const isBlocked = state.view?.execution.state === "active"
+    && checkpoint?.state === "blocked";
+  const isOverdue = state.view?.execution.state === "active"
+    && checkpoint?.risk_state === "overdue";
+  const canReassess = role === "advisor" && (isBlocked || isOverdue);
   return (
     <PresentationShell contextKey="contextPlanExecution" mainId="plan-execution-main">
       <div className="demo-shell">
@@ -43,12 +53,31 @@ export function PlanExecutionWorkspace({
               disabled={busy}
               onProgress={() => void controller.attest("progress")}
               onCompletion={() => void controller.attest("completion")}
+              onBlocked={(reason) => void controller.attest("blocked", reason)}
               labels={{
                 group: copy("planExecutionAttestationLabel"),
                 progress: copy("planExecutionProgress"),
                 completion: copy("planExecutionSubmitCompletion"),
+                blocked: copy("planExecutionRecordBlocked"),
+                blockedReason: copy("planExecutionBlockedReason"),
+                missingInput: copy("planExecutionMissingInput"),
+                externalUnavailable: copy("planExecutionExternalUnavailable"),
+                deadlineRisk: copy("planExecutionDeadlineRisk"),
               }}
             />
+          )}
+          {isBlocked && <p>{copy("planExecutionBlocked")}</p>}
+          {isOverdue && <p>{copy("planExecutionOverdue")}</p>}
+          {canReassess && (
+            <>
+              <p>{copy("planExecutionReassessmentStop")}</p>
+              <button
+                disabled={busy}
+                onClick={() => void controller.reassess(isBlocked ? "blocked_attestation" : "deadline_elapsed")}
+              >
+                {copy("planExecutionRequestReassessment")}
+              </button>
+            </>
           )}
           {state.value === "awaiting_advisor" && !canVerify && (
             <p>{copy("planExecutionWaitingAdvisor")}</p>
@@ -67,16 +96,32 @@ export function PlanExecutionWorkspace({
           )}
           {state.value === "execution_completed" && <p>{copy("planExecutionCompleted")}</p>}
           {state.value === "reassessment_required" && <p>{copy("planExecutionReassessment")}</p>}
-          {state.value === "session_changed" && <p>{copy("planExecutionSessionChanged")}</p>}
-          {state.value === "recoverable_error" && (
-            <>
-              <p>{copy("planExecutionRecoverableError")}</p>
-              <button disabled={busy} onClick={() => void controller.recover()}>
-                {copy("planExecutionRecover")}
-              </button>
-            </>
+          {(state.value === "session_changed" || state.value === "recoverable_error") && (
+            <ExecutionRecoveryNotice
+              sessionChanged={state.value === "session_changed"}
+              disabled={busy}
+              onRecover={() => void controller.recover()}
+              labels={{
+                sessionChanged: copy("planExecutionSessionChanged"),
+                recoverable: copy("planExecutionRecoverableError"),
+                recover: copy("planExecutionRecover"),
+              }}
+            />
           )}
         </section>
+        {state.value === "reassessment_required" && state.view?.reassessment && (
+          <ReassessmentHandoff
+            reassessment={state.view.reassessment}
+            labels={{
+              title: copy("planExecutionHandoffTitle"),
+              stop: copy("planExecutionReassessmentStop"),
+              pending: copy("planExecutionHandoffPending"),
+              whoNext: copy("planExecutionWhoNext"),
+              blockedTrigger: copy("planExecutionBlockedTrigger"),
+              deadlineTrigger: copy("planExecutionDeadlineTrigger"),
+            }}
+          />
+        )}
         <section aria-labelledby="plan-role-title">
           <h2 id="plan-role-title">{copy("planExecutionRoleTitle")}</h2>
           <div>

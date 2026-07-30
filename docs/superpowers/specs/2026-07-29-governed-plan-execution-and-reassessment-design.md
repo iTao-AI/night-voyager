@@ -1,7 +1,7 @@
 # Governed Plan Execution and Reassessment
 
-**Status:** Approved design; PR A is implemented locally. PR B/C, publication,
-and release have not started.
+**Status:** Approved design; PR A/B is implemented locally. PR C, publication,
+and release remain pending.
 
 ## Summary
 
@@ -412,6 +412,16 @@ Migration `0014 -> 0013` refuses before mutation when any execution history
 exists. Empty-schema downgrade restores the exact prior catalog, functions,
 policies, indexes, and grants. Historical migrations and published release
 artifacts remain byte-identical.
+
+PR B adds the authority-approved identity-only migration `0015`. It widens the
+closed demo-principal allowlist to distinct exact Happy and Blocked
+advisor/student/parent triads and restricts rotation to generic-to-generic or
+within one scenario. The browser supplies only `happy|blocked`; the server maps
+that key to an exact principal and the existing context function resolves the
+one assigned Case. There is no arbitrary Case selector. `0014` timeline schema,
+functions, grants, and transition semantics remain immutable. `0015 -> 0014`
+refuses before catalog mutation when scenario principal or session history
+would make downgrade lossy.
 
 ## Session, Case, and Recovery Authority
 

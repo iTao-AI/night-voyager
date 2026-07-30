@@ -29,14 +29,14 @@ SIGNATURES = (
 
 
 @pytest.mark.asyncio
-async def test_0014_is_exact_head_with_forced_rls_and_closed_functions() -> None:
+async def test_0014_catalog_remains_exact_with_forced_rls_and_closed_functions() -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
         async with engine.connect() as connection:
             revision = await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
             )
-            assert revision == "0014"
+            assert revision in {"0014", "0015"}
             rows = (
                 await connection.execute(
                     text(

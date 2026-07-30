@@ -1,9 +1,11 @@
 import type { PlanExecutionRole } from "./contracts";
 import type { PlanExecutionIdempotencyRecord } from "./idempotency";
+import type { PlanExecutionDemoScenario } from "./scenario";
 
 export interface PlanExecutionEnvelopeV1 {
   schema_version: 1;
   journey: "plan-execution";
+  scenario: PlanExecutionDemoScenario;
   role: PlanExecutionRole;
   caseId: string;
   timelinePlanId: string;
@@ -25,8 +27,9 @@ function nullableVersion(value: unknown): value is number | null {
 function valid(value: unknown): value is PlanExecutionEnvelopeV1 {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
-  if (Object.keys(item).sort().join(",") !== "caseId,checkpointId,checkpointVersion,executionId,executionVersion,journey,lastReceiptId,mutations,role,schema_version,timelinePlanId") return false;
+  if (Object.keys(item).sort().join(",") !== "caseId,checkpointId,checkpointVersion,executionId,executionVersion,journey,lastReceiptId,mutations,role,scenario,schema_version,timelinePlanId") return false;
   if (item.schema_version !== 1 || item.journey !== "plan-execution"
+    || !["happy", "blocked"].includes(String(item.scenario))
     || !["advisor", "student", "parent"].includes(String(item.role))
     || !uuid(item.caseId) || !uuid(item.timelinePlanId) || !nullableUuid(item.executionId)
     || !nullableVersion(item.executionVersion) || !nullableUuid(item.checkpointId)

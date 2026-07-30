@@ -8,6 +8,7 @@ export default defineConfig({
     "fact-to-plan.spec.ts",
     "planning-revision.spec.ts",
     "plan-execution-minimal.spec.ts",
+    "plan-execution.spec.ts",
   ],
   timeout: 120_000,
   expect: { timeout: 15_000 },

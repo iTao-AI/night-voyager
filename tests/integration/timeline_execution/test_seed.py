@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import os
+from uuid import UUID
 
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from night_voyager.identity.demo_seed import (
+    BLOCKED_PLAN_EXECUTION_BRIEF_ID,
+    BLOCKED_PLAN_EXECUTION_CASE_ID,
+    BLOCKED_PLAN_EXECUTION_DECISION_ID,
+    BLOCKED_PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    BLOCKED_PLAN_EXECUTION_REVIEW_ID,
+    BLOCKED_PLAN_EXECUTION_RUN_ID,
+    BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
+    PLAN_EXECUTION_BLOCKED_ACTORS,
     PLAN_EXECUTION_BRIEF_ID,
     PLAN_EXECUTION_CASE_ID,
     PLAN_EXECUTION_DECISION_ID,
     PLAN_EXECUTION_DECISION_RECEIPT_ID,
+    PLAN_EXECUTION_HAPPY_ACTORS,
     PLAN_EXECUTION_REVIEW_ID,
     PLAN_EXECUTION_RUN_ID,
     PLAN_EXECUTION_TIMELINE_ID,
@@ -18,14 +28,55 @@ from night_voyager.identity.demo_seed import (
 
 pytestmark = pytest.mark.database
 DEMO_ORG = "10000000-0000-0000-0000-000000000001"
-ADVISOR = "20000000-0000-0000-0000-000000000001"
-STUDENT = "20000000-0000-0000-0000-000000000002"
-PARENT = "20000000-0000-0000-0000-000000000003"
 SOURCE_RUN = "70000000-0000-0000-0000-000000000001"
+SCENARIOS = (
+    (
+        PLAN_EXECUTION_CASE_ID,
+        PLAN_EXECUTION_RUN_ID,
+        PLAN_EXECUTION_REVIEW_ID,
+        PLAN_EXECUTION_BRIEF_ID,
+        PLAN_EXECUTION_DECISION_ID,
+        PLAN_EXECUTION_DECISION_RECEIPT_ID,
+        PLAN_EXECUTION_TIMELINE_ID,
+        PLAN_EXECUTION_HAPPY_ACTORS,
+    ),
+    (
+        BLOCKED_PLAN_EXECUTION_CASE_ID,
+        BLOCKED_PLAN_EXECUTION_RUN_ID,
+        BLOCKED_PLAN_EXECUTION_REVIEW_ID,
+        BLOCKED_PLAN_EXECUTION_BRIEF_ID,
+        BLOCKED_PLAN_EXECUTION_DECISION_ID,
+        BLOCKED_PLAN_EXECUTION_DECISION_RECEIPT_ID,
+        BLOCKED_PLAN_EXECUTION_TIMELINE_ID,
+        PLAN_EXECUTION_BLOCKED_ACTORS,
+    ),
+)
 
 
 @pytest.mark.asyncio
-async def test_governed_plan_execution_seed_is_exact_and_unstarted() -> None:
+@pytest.mark.parametrize(
+    (
+        "case_id",
+        "run_id",
+        "review_id",
+        "brief_id",
+        "decision_id",
+        "receipt_id",
+        "timeline_id",
+        "actors",
+    ),
+    SCENARIOS,
+)
+async def test_governed_plan_execution_seed_is_exact_and_unstarted(
+    case_id: UUID,
+    run_id: UUID,
+    review_id: UUID,
+    brief_id: UUID,
+    decision_id: UUID,
+    receipt_id: UUID,
+    timeline_id: UUID,
+    actors: tuple[tuple[str, str, UUID, str], ...],
+) -> None:
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
         async with engine.begin() as connection:
@@ -66,7 +117,7 @@ async def test_governed_plan_execution_seed_is_exact_and_unstarted() -> None:
                         "GROUP BY c.state,c.current_revision,r.state,r.is_current,"
                         "a.id,b.id,b.is_current,d.id,d.receipt_id,t.id"
                     ),
-                    {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+                        {"org": DEMO_ORG, "case": case_id},
                 )
                 )
                 .mappings()
@@ -77,12 +128,12 @@ async def test_governed_plan_execution_seed_is_exact_and_unstarted() -> None:
                 "current_revision": 1,
                 "run_state": "review_required",
                 "run_is_current": True,
-                "review_id": PLAN_EXECUTION_REVIEW_ID,
-                "brief_id": PLAN_EXECUTION_BRIEF_ID,
+                "review_id": review_id,
+                "brief_id": brief_id,
                 "brief_is_current": False,
-                "decision_id": PLAN_EXECUTION_DECISION_ID,
-                "receipt_id": PLAN_EXECUTION_DECISION_RECEIPT_ID,
-                "timeline_id": PLAN_EXECUTION_TIMELINE_ID,
+                "decision_id": decision_id,
+                "receipt_id": receipt_id,
+                "timeline_id": timeline_id,
                 "executions": 0,
             }
             participant_roles = (
@@ -93,20 +144,42 @@ async def test_governed_plan_execution_seed_is_exact_and_unstarted() -> None:
                         "WHERE organization_id=:org AND case_id=:case "
                         "ORDER BY role"
                     ),
-                    {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+                    {"org": DEMO_ORG, "case": case_id},
                 )
             ).all()
             assert participant_roles == [
-                f"{ADVISOR}:advisor",
-                f"{PARENT}:parent",
-                f"{STUDENT}:student",
+                f"{actors[0][2]}:advisor",
+                f"{actors[2][2]}:parent",
+                f"{actors[1][2]}:student",
+            ]
+            principal_roles = (
+                await connection.scalars(
+                    text(
+                        "SELECT demo_key || ':' || actor_id::text || ':' || role "
+                        "FROM auth.demo_principals "
+                        "WHERE organization_id=:org "
+                        "AND actor_id IN (:advisor,:student,:parent) "
+                        "ORDER BY role"
+                    ),
+                    {
+                        "org": DEMO_ORG,
+                        "advisor": actors[0][2],
+                        "student": actors[1][2],
+                        "parent": actors[2][2],
+                    },
+                )
+            ).all()
+            assert principal_roles == [
+                f"{actors[0][0]}:{actors[0][2]}:advisor",
+                f"{actors[2][0]}:{actors[2][2]}:parent",
+                f"{actors[1][0]}:{actors[1][2]}:student",
             ]
             assert await connection.scalar(
                 text(
                     "SELECT count(*)=1 FROM app.student_case_revisions "
                     "WHERE organization_id=:org AND case_id=:case AND revision=1"
                 ),
-                {"org": DEMO_ORG, "case": PLAN_EXECUTION_CASE_ID},
+                {"org": DEMO_ORG, "case": case_id},
             )
             for table in (
                 "planning_routes",
@@ -124,7 +197,7 @@ async def test_governed_plan_execution_seed_is_exact_and_unstarted() -> None:
                     ),
                     {
                         "org": DEMO_ORG,
-                        "target": PLAN_EXECUTION_RUN_ID,
+                        "target": run_id,
                         "source": SOURCE_RUN,
                     },
                 )

@@ -441,17 +441,17 @@ def copy_planning_start_gate_surface(destination: Path) -> None:
     shutil.copyfile(ROOT / "scripts/run_db_tests.sh", scripts / "run_db_tests.sh")
 
 
-def test_release_verifier_accepts_exactly_one_0014_alembic_head(
+def test_release_verifier_accepts_exactly_one_0015_alembic_head(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     verifier = load_verifier()
 
     verifier.verify_alembic_contract()
 
-    assert "proof migrations: exact Alembic head 0014" in capsys.readouterr().out
+    assert "proof migrations: exact Alembic head 0015" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("mutation", ("remove_0014", "add_second_head"))
+@pytest.mark.parametrize("mutation", ("remove_0015", "add_second_head"))
 def test_release_verifier_rejects_alembic_head_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -459,10 +459,10 @@ def test_release_verifier_rejects_alembic_head_mutation(
 ) -> None:
     verifier = load_verifier()
     copy_planning_start_gate_surface(tmp_path)
-    if mutation == "remove_0014":
+    if mutation == "remove_0015":
         (
             tmp_path
-            / "migrations/versions/0014_timeline_execution_authority.py"
+            / "migrations/versions/0015_plan_execution_demo_identity.py"
         ).unlink()
     else:
         (tmp_path / "migrations/versions/0099_test_branch.py").write_text(
@@ -470,7 +470,7 @@ def test_release_verifier_rejects_alembic_head_mutation(
         )
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
-    with pytest.raises(SystemExit, match="exactly one Alembic head 0014"):
+    with pytest.raises(SystemExit, match="exactly one Alembic head 0015"):
         verifier.verify_alembic_contract()
 
 

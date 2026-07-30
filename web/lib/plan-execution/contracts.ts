@@ -1,6 +1,6 @@
 export type PlanExecutionRole = "advisor" | "student" | "parent";
 export type PlanExecutionStateValue =
-  | "loading" | "ready_to_start" | "checkpoint_active" | "awaiting_advisor"
+  | "loading" | "ready_to_start" | "checkpoint_active" | "mutation_in_flight" | "awaiting_advisor"
   | "execution_completed" | "reassessment_required" | "session_changed"
   | "recoverable_error";
 

@@ -39,13 +39,14 @@ class FakeIdentityService:
 
     @staticmethod
     def _issued(choice: DemoActorChoice) -> IssuedSession:
+        role = ActorRole(choice.value.rsplit("_", maxsplit=1)[-1])
         return IssuedSession(
             raw_session_token=f"opaque-{choice.value}",
             raw_csrf_token=f"csrf-{choice.value}",
             context=ActorContext(
                 organization_id=UUID("10000000-0000-0000-0000-000000000001"),
                 actor_id=UUID("20000000-0000-0000-0000-000000000001"),
-                role=ActorRole(choice.value),
+                role=role,
                 session_id=UUID("30000000-0000-0000-0000-000000000001"),
             ),
         )

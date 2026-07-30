@@ -19,9 +19,21 @@ from night_voyager.identity.models import DemoActorChoice
 
 
 def test_demo_actor_choices_are_closed() -> None:
-    assert {choice.value for choice in DemoActorChoice} == {"advisor", "student", "parent"}
+    assert {choice.value for choice in DemoActorChoice} == {
+        "advisor",
+        "student",
+        "parent",
+        "plan_execution_happy_advisor",
+        "plan_execution_happy_student",
+        "plan_execution_happy_parent",
+        "plan_execution_blocked_advisor",
+        "plan_execution_blocked_student",
+        "plan_execution_blocked_parent",
+    }
     with pytest.raises(ValueError):
         DemoActorChoice("organization-id")
+    with pytest.raises(ValueError):
+        DemoActorChoice("plan_execution_unknown_student")
 
 
 def test_tokens_have_256_bits_and_digests_are_keyed() -> None:

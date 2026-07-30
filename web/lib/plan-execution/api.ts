@@ -7,10 +7,14 @@ import {
   type TimelineExecutionView,
   type TimelineMutationReceipt,
 } from "./contracts";
+import {
+  planExecutionPrincipal,
+  type PlanExecutionDemoScenario,
+} from "./scenario";
 
 export interface PlanExecutionApi {
   bootstrap(): Promise<{ csrf_token: string }>;
-  mint(role: PlanExecutionRole, csrf: string): Promise<{ role: PlanExecutionRole; csrf_token: string }>;
+  mint(role: PlanExecutionRole, csrf: string, scenario: PlanExecutionDemoScenario): Promise<{ role: PlanExecutionRole; csrf_token: string }>;
   revoke(csrf: string): Promise<void>;
   context(): Promise<PlanExecutionContext>;
   read(caseId: string): Promise<TimelineExecutionView>;
@@ -19,12 +23,46 @@ export interface PlanExecutionApi {
   verify(executionId: string, body: unknown, csrf: string, key: string): Promise<TimelineMutationReceipt>;
   reassess(executionId: string, body: unknown, csrf: string, key: string): Promise<TimelineMutationReceipt>;
 }
+
+export class PlanExecutionApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly code: string,
+  ) {
+    super(code);
+  }
+}
+
+const SESSION_LOSS_CODES = new Set([
+  "authentication_failed",
+  "bff_session_recovery_required",
+  "session_changed",
+]);
+const STALE_AUTHORITY_CODES = new Set([
+  "stale_execution_version",
+  "stale_checkpoint_version",
+  "checkpoint_not_current",
+  "execution_completed",
+]);
+
+export function isPlanExecutionSessionLoss(error: unknown): boolean {
+  return (error instanceof PlanExecutionApiError && error.status === 401)
+    || (error instanceof Error && SESSION_LOSS_CODES.has(error.message));
+}
+
+export function isPlanExecutionStaleAuthority(error: unknown): boolean {
+  return error instanceof Error && STALE_AUTHORITY_CODES.has(error.message);
+}
+
 async function json(path: string, init?: RequestInit): Promise<unknown> {
   const response = await fetch(path, { ...init, cache: "no-store" });
   const body = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(
-    body && typeof body === "object" && "code" in body ? String(body.code) : "request_failed",
-  );
+  if (!response.ok) {
+    const code = body && typeof body === "object" && "code" in body
+      ? String(body.code)
+      : "request_failed";
+    throw new PlanExecutionApiError(response.status, code);
+  }
   return body;
 }
 function headers(csrf: string, key?: string): Headers {
@@ -49,14 +87,18 @@ export function createPlanExecutionApi(): PlanExecutionApi {
       if (typeof value !== "object" || value === null || !("csrf_token" in value) || typeof value.csrf_token !== "string") throw new Error("invalid bootstrap");
       return { csrf_token: value.csrf_token };
     },
-    async mint(role, csrf) {
+    async mint(role, csrf, scenario) {
       return session(await json("/api/demo/sessions", {
-        method: "POST", headers: headers(csrf), body: JSON.stringify({ demo_actor: role }),
+        method: "POST",
+        headers: headers(csrf),
+        body: JSON.stringify({ demo_actor: planExecutionPrincipal(scenario, role) }),
       }));
     },
     async revoke(csrf) {
-      const response = await fetch("/api/demo/session", { method: "DELETE", headers: headers(csrf), cache: "no-store" });
-      if (!response.ok) throw new Error("session_revoke_failed");
+      await json("/api/demo/session", {
+        method: "DELETE",
+        headers: headers(csrf),
+      });
     },
     async context() {
       return parsePlanExecutionContext(await json("/api/demo/plan-execution-context"));

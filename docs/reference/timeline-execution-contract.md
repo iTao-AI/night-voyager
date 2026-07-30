@@ -64,7 +64,7 @@ persist operation fingerprint and key
 ```
 
 Browser `sessionStorage` is only a revalidated recovery hint. Its envelope contains
-role, Case/timeline/execution/checkpoint identifiers, observed versions, the last
+closed demo scenario, role, Case/timeline/execution/checkpoint identifiers, observed versions, the last
 receipt identifier, and operation fingerprints/keys. It contains no CSRF token,
 opaque session, tenant/actor authority, due date, mutable activity, or attestation
 body.
@@ -76,5 +76,17 @@ database-observed elapsed deadlines. It records predecessor identities and
 `pending_future_authorization`; one composite foreign key binds the predecessor
 Case, revision, decision, decision receipt, timeline, and execution, while the
 checkpoint remains bound to that execution. It creates no successor business
-row. PR A renders the stop safely but exposes no reassessment action. PR B owns
-that UI and recovery proof.
+row. PR B exposes that UI and proves its terminal recovery boundary.
+
+## Closed synthetic identity
+
+Migration `0015` is identity-only. It retains the generic demo principals and
+adds distinct exact advisor/student/parent triads for `happy` and `blocked`.
+The browser supplies only the closed scenario key; the server maps it to an
+exact principal and the queryless BFF context validates the one assigned Case.
+Same-scenario role rotation is allowed. Generic-to-scenario, Happy-to-Blocked,
+unknown, ambiguous, or Case-selector attempts fail before the old session is
+revoked. The browser holds one generation-scoped lock across the atomic
+`POST /demo/sessions` rotation and the following context/read reconciliation;
+an older generation cannot unlock a newer operation. Migration `0014` and all
+timeline transitions remain unchanged.

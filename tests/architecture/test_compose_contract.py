@@ -114,14 +114,14 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 5
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 7
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     assert script.count("docker compose --profile browser-proof build") == 1
-    assert script.count("docker compose up --no-build --wait") == 6
+    assert script.count("docker compose up --no-build --wait") == 8
     assert "docker compose up --build --wait" not in script
     assert "run --rm --build" not in script
 
@@ -433,6 +433,25 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
     assert "FACT_TO_PLAN_WORKER_READY_FILE" in browser
     assert "await firstStream" in browser
     assert browser.index("await firstStream") < browser.index("writeFile(workerReadyFile")
+    assert "waitForFactToPlanReviewAuthority" in browser
+    assert "`/api/demo/cases/${caseId}/journey-status`" in browser
+    assert "`/api/demo/tasks/${taskId}`" in browser
+    assert "`/api/demo/cases/${caseId}/advisor-ledger`" in browser
+    assert 'phase: journey.phase' in browser
+    assert 'taskStatus: task.status' in browser
+    assert 'ledgerPhase: ledger.phase' in browser
+    assert 'problemCode: payload.code' in browser
+    assert "timeout: 120_000" in browser
+    assert "fact-to-plan approval convergence diagnostic" in browser
+    cursor_wait = browser.index(
+        'Number(JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}").cursor) > 0'
+    )
+    authority_wait = browser.index("await waitForFactToPlanReviewAuthority")
+    approval_wait = browser.index(
+        'page.getByRole("button", { name: presentationCopy.approve })'
+    )
+    assert cursor_wait < authority_wait < approval_wait
+    assert "waitForTimeout" not in browser
     assert "requiredVisible: readonly Locator[]" in browser
     assert "for (const required of requiredVisible)" in browser
     for content in (
@@ -750,6 +769,12 @@ def test_full_compose_proof_runs_one_minimal_plan_execution_lane() -> None:
     ):
         assert forbidden not in lane
         assert forbidden not in browser
+
+
+def test_full_compose_proof_includes_the_governed_plan_execution_suite() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+
+    assert config.count('"plan-execution.spec.ts"') == 1
 
 
 def test_timeline_execution_verifier_has_closed_seed_and_completed_modes() -> None:

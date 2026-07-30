@@ -75,3 +75,13 @@ The v0.1.4 provider-free planning-revision continuation begins after the first a
 
 The dedicated capture is
 [night-voyager-planning-revision.png](../assets/night-voyager-planning-revision.png).
+
+## Governed plan execution continuation
+
+`/demo/plan` defaults to the closed Happy scenario; `?scenario=blocked` selects
+the only other supported synthetic scenario. Each scenario has a distinct,
+server-mapped assigned actor triad and exact Case. Happy proves receipt-then-GET,
+lost-ack exact replay, request-update, role rotation, completion, and reload.
+Blocked proves one blocked attestation, one advisor reassessment request, and a
+terminal handoff with no successor action. Both locales render identical
+authority semantics; the browser never selects a Case identifier.

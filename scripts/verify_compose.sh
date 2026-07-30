@@ -38,6 +38,8 @@ PLANNING_REVISION_BARRIER_STATE=tmp/.planning-revision-barrier-state
 PLANNING_REVISION_PREDECESSOR_STDOUT=tmp/.planning-revision-predecessor-stdout
 PLANNING_REVISION_PREDECESSOR_STDERR=tmp/.planning-revision-predecessor-stderr
 PLANNING_REVISION_BARRIER_READY="planning revision predecessor lock ready"
+PLAN_EXECUTION_PROOF_FILE=
+PLAN_EXECUTION_RECOVERY_PROOF_FILE=docs/assets/.plan-execution-recovery-proof.json
 # Review artifacts retained for the required manual inspection:
 # planning-revision-zh-CN-1440-happy.png planning-revision-zh-CN-1440-blocked.png
 # planning-revision-zh-CN-390-happy.png planning-revision-zh-CN-390-blocked.png
@@ -75,7 +77,12 @@ cleanup() {
         "$PLANNING_REVISION_BARRIER_FIFO" "$PLANNING_REVISION_BARRIER_OUTPUT" \
         "$PLANNING_REVISION_BARRIER_STATE" \
         "$PLANNING_REVISION_PREDECESSOR_STDOUT" \
-        "$PLANNING_REVISION_PREDECESSOR_STDERR"
+        "$PLANNING_REVISION_PREDECESSOR_STDERR" \
+        docs/assets/.plan-execution-zh-CN-happy-proof.json \
+        docs/assets/.plan-execution-zh-CN-blocked-proof.json \
+        docs/assets/.plan-execution-en-happy-proof.json \
+        docs/assets/.plan-execution-en-blocked-proof.json \
+        "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
     docker compose down --volumes --remove-orphans --rmi local
 }
 
@@ -185,6 +192,61 @@ run_plan_execution_minimal_lane() {
     docker compose run --rm --no-deps \
         demo-seed python scripts/verify_timeline_execution.py --expect completed
     printf 'compose-proof: governed plan execution minimal browser and database proof passed\n'
+}
+
+run_plan_execution_recovery_lane() {
+    docker compose down --volumes --remove-orphans
+    docker compose up --no-build --wait
+    rm -f "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
+    : > "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
+    chmod 0666 "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
+    printf 'compose-proof: fresh plan execution recovery counterfactual baseline\n'
+    docker compose --profile browser-proof run --rm --no-deps \
+        -e PLAN_EXECUTION_RECOVERY_PROOF_FILE="/workspace/$PLAN_EXECUTION_RECOVERY_PROOF_FILE" \
+        browser-proof npx playwright test \
+            --config playwright.compose.config.ts plan-execution.spec.ts
+    test -s "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
+    docker compose run --rm --no-deps \
+        -v "$PWD/$PLAN_EXECUTION_RECOVERY_PROOF_FILE:/tmp/plan-execution-recovery-proof.json:ro" \
+        demo-seed python scripts/verify_timeline_execution.py \
+        --recovery-proof-file /tmp/plan-execution-recovery-proof.json
+    rm -f "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
+    printf 'compose-proof: plan execution recovery browser and database proof passed\n'
+}
+
+run_plan_execution_lane() {
+    lane_locale=$1
+    lane_scenario=$2
+    case "$lane_locale" in
+        zh-CN) set -- ;;
+        en) set -- -e PRESENTATION_LOCALE=en ;;
+        *) printf 'compose-proof: unsupported plan execution locale %s\n' "$lane_locale" >&2; exit 1 ;;
+    esac
+    case "$lane_scenario" in
+        happy|blocked) ;;
+        *) printf 'compose-proof: unsupported plan execution scenario %s\n' "$lane_scenario" >&2; exit 1 ;;
+    esac
+    PLAN_EXECUTION_PROOF_FILE="docs/assets/.plan-execution-${lane_locale}-${lane_scenario}-proof.json"
+    docker compose down --volumes --remove-orphans
+    docker compose up --no-build --wait
+    rm -f "$PLAN_EXECUTION_PROOF_FILE"
+    : > "$PLAN_EXECUTION_PROOF_FILE"
+    chmod 0666 "$PLAN_EXECUTION_PROOF_FILE"
+    printf 'compose-proof: fresh plan execution baseline locale=%s scenario=%s\n' \
+        "$lane_locale" "$lane_scenario"
+    docker compose --profile browser-proof run --rm --no-deps "$@" \
+        -e PLAN_EXECUTION_SCENARIO="$lane_scenario" \
+        -e PLAN_EXECUTION_PROOF_FILE="/workspace/$PLAN_EXECUTION_PROOF_FILE" \
+        browser-proof npx playwright test \
+            --config playwright.compose.config.ts plan-execution.spec.ts
+    test -s "$PLAN_EXECUTION_PROOF_FILE"
+    docker compose run --rm --no-deps \
+        -v "$PWD/$PLAN_EXECUTION_PROOF_FILE:/tmp/plan-execution-proof.json:ro" \
+        demo-seed python scripts/verify_timeline_execution.py \
+        --proof-file /tmp/plan-execution-proof.json
+    rm -f "$PLAN_EXECUTION_PROOF_FILE"
+    printf 'compose-proof: plan execution browser and database proof passed locale=%s scenario=%s\n' \
+        "$lane_locale" "$lane_scenario"
 }
 
 run_fact_to_plan_lane() {
@@ -454,6 +516,11 @@ docker compose --profile browser-proof run --rm --no-deps \
     -e UPDATE_COLLABORATION_SCREENSHOT="$UPDATE_COLLABORATION_SCREENSHOT" browser-proof
 printf 'compose-proof: connected browser proof passed\n'
 run_plan_execution_minimal_lane
+run_plan_execution_recovery_lane
+run_plan_execution_lane "zh-CN" "happy"
+run_plan_execution_lane "zh-CN" "blocked"
+run_plan_execution_lane "en" "happy"
+run_plan_execution_lane "en" "blocked"
 run_fact_to_plan_lane "zh-CN"
 run_fact_to_plan_lane "en"
 run_planning_revision_proof

@@ -15,6 +15,12 @@ class DemoActorChoice(StrEnum):
     ADVISOR = "advisor"
     STUDENT = "student"
     PARENT = "parent"
+    PLAN_EXECUTION_HAPPY_ADVISOR = "plan_execution_happy_advisor"
+    PLAN_EXECUTION_HAPPY_STUDENT = "plan_execution_happy_student"
+    PLAN_EXECUTION_HAPPY_PARENT = "plan_execution_happy_parent"
+    PLAN_EXECUTION_BLOCKED_ADVISOR = "plan_execution_blocked_advisor"
+    PLAN_EXECUTION_BLOCKED_STUDENT = "plan_execution_blocked_student"
+    PLAN_EXECUTION_BLOCKED_PARENT = "plan_execution_blocked_parent"
 
 
 class Permission(StrEnum):

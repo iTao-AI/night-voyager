@@ -7,12 +7,21 @@ function canonical(value: unknown): string {
   return JSON.stringify(value);
 }
 export interface PlanExecutionIdempotencyRecord { fingerprint: string; idempotencyKey: string }
+async function fingerprintFor(body: unknown): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(body)));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+export async function matchesIdempotencyRecord(
+  body: unknown,
+  record: PlanExecutionIdempotencyRecord,
+): Promise<boolean> {
+  return await fingerprintFor(body) === record.fingerprint;
+}
 export async function idempotencyFor(
   body: unknown,
   previous?: PlanExecutionIdempotencyRecord,
 ): Promise<PlanExecutionIdempotencyRecord> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonical(body)));
-  const fingerprint = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const fingerprint = await fingerprintFor(body);
   return previous?.fingerprint === fingerprint
     ? previous
     : { fingerprint, idempotencyKey: crypto.randomUUID() };
