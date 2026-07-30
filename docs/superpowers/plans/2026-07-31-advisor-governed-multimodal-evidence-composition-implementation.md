@@ -4,15 +4,15 @@
 > authority. Execute task by task with TDD. A passed local gate does not unlock the next slice; only
 > the exact merged stage receipt does.
 
-**Status:** Re-audited and ready for implementation mandate  
+**Status:** Re-audited and ready for implementation mandate
 **Goal:** Prove bounded complementary MKE Evidence value, then govern accepted input through
 Night Voyager's existing advisor, PostgreSQL, planning, family-decision, timeline, execution, and
-recovery authorities.  
+recovery authorities.
 **Architecture:** Night Voyager is the only consumer and system of record. MKE and DRA remain
 independent read-only evidence paths. Slice 0 is file-based and mutation-free during its sealed
 evaluation window. Slice 1 adds an MKE-specific candidate and advisor decision. Slice 2 adds one
 atomic Night Voyager composition operation. A generic provider framework and runtime multi-agent
-system are prohibited.  
+system are prohibited.
 **Default delivery:** six ordered PRs: A, B1, B2, C1, C2, D.
 
 ## 1. Global identity, ownership, and stop rules
@@ -67,18 +67,23 @@ producer non-authority, moving-checkout prohibition, or cleanup ownership.
   and decides whether a merged receipt unlocks the next slice.
 - **Execution owner:** implements one unlocked PR in an isolated worktree/branch, runs RED/GREEN and
   terminal gates, and preserves exact evidence.
-- **Dataset author:** authors public-safe source material, development cases, holdout bytes, and
-  evaluator-independent oracles.
-- **Evaluator implementer:** sees development cases and holdout hashes only until freeze.
-- **Holdout custodian/reviewer:** keeps sealed bytes in a non-mounted custody workspace, confirms
-  them, and reveals only after evaluator freeze.
+- **Dataset author** (`dataset_author_id=independent-dataset-author-v1`): authors public-safe source
+  material and development cases, and finalizes holdout payload plus evaluator-independent oracle
+  before A4.
+- **Evaluator implementer**
+  (`evaluator_implementer_id=night-voyager-slice0-evaluator-v1`): sees development cases and only
+  opaque, separate payload/oracle commitments until final freeze.
+- **Holdout custodian/reviewer**
+  (`holdout_custodian_id=independent-holdout-custodian-v1`): independently verifies and seals the
+  pre-authored payload/oracle bytes in a non-mounted custody workspace, and reveals only after the
+  complete evaluator and harness freeze.
 - **Publication owner:** owns Draft PR lifecycle, exact-head CI binding, conditional merge, and
   task-owned cleanup after architecture review.
 
 The evaluator implementer may not also author or custody the holdout answers used for that receipt.
 Other mechanical roles may overlap only when committed receipts preserve ordering and no holdout
 content was visible before evaluator freeze. The implementation report must state the actual role
-mapping.
+mapping and `nv.slice0.one-way-reveal.v1` procedure.
 
 ### 1.4 Shared hard stops
 
@@ -199,7 +204,21 @@ archive/tree identity, builds the MKE wheel in `work_root`, ingests only allowli
 write capability, and records the task-owned archive basenames/digests plus wheel/store/active-set
 identities. It never records the caller's external archive path.
 
-The evaluator implementer freezes the development contract without access to holdout bytes:
+The evaluator implementer first completes and tests the evaluator, reveal validator, tagged-wheel
+lane, frozen-suite harness, terminal verifier, and runner using development or mock structural
+fixtures without access to holdout payload/oracle bytes. Development-only evaluation does not
+consume a final pre-registration receipt:
+
+```bash
+uv run python scripts/evaluate_evidence_loop.py \
+  --development-dataset tests/fixtures/evidence_loop/development-dataset-v1.json \
+  --store-receipt "$EVIDENCE_LOOP_RUN_ROOT/receipts/sealed-mke-store-v1.json" \
+  --output "$EVIDENCE_LOOP_RUN_ROOT/receipts/development-evaluation-v2.json" \
+  --json
+```
+
+Only after the complete implementation is tested on a clean candidate does the evaluator
+implementer issue `PreRegistrationReceiptV2`:
 
 ```bash
 uv run python scripts/freeze_evidence_loop.py \
@@ -210,17 +229,10 @@ uv run python scripts/freeze_evidence_loop.py \
   --dra-baseline tests/fixtures/evidence_loop/dra-governed-baseline-v1.json \
   --output "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
   --json
-
-uv run python scripts/evaluate_evidence_loop.py \
-  --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
-  --store-root "$EVIDENCE_LOOP_RUN_ROOT/store" \
-  --dataset tests/fixtures/evidence_loop/development-dataset-v1.json \
-  --output "$EVIDENCE_LOOP_RUN_ROOT/receipts/development-evaluation-v2.json" \
-  --json
 ```
 
-The success codes are `evidence_loop_preregistered` and
-`evidence_loop_development_evaluated`. Only after both succeed does the independent custodian run:
+The success codes are `evidence_loop_development_evaluated` and
+`evidence_loop_preregistered`. Only after both succeed does the independent custodian run:
 
 ```bash
 : "${EVIDENCE_LOOP_CUSTODY_ROOT:?set the unmounted custodian-owned holdout root}"
@@ -434,8 +446,11 @@ separate schema and never replaces historical provenance.
 **Files**
 
 - `tests/fixtures/evidence_loop/source-manifest-v1.json` (new);
+- `tests/fixtures/evidence_loop/source-manifest-fragment-v1.json` (exact public commitment, new);
 - `tests/fixtures/evidence_loop/development-dataset-v1.json` (new; four cases);
 - `tests/fixtures/evidence_loop/holdout-manifest-v1.json` (new; four hashes/identities, no content);
+- `tests/fixtures/evidence_loop/holdout-case-schema-v1.json` (exact public schema, new);
+- `tests/fixtures/evidence_loop/holdout-dataset-schema-v1.json` (exact public schema, new);
 - `tests/fixtures/evidence_loop/dra-governed-baseline-v1.json` (new);
 - `tests/fixtures/evidence_loop/mke-corpus/` (new; public-safe synthetic material);
 - `scripts/prepare_evidence_loop_store.py` (new);
@@ -466,14 +481,18 @@ trace.
 The setup receipt records the bounded store mutation. The later zero-mutation claim applies only to
 the sealed evaluation window.
 
-`freeze_evidence_loop.py` writes `PreRegistrationReceiptV2` before eligible producer observation.
-It freezes all identities, cases, source access, metrics, thresholds, evaluator inputs, role
-mapping, and holdout hashes.
+`freeze_evidence_loop.py` implements the closed final-freeze validator and canonical receipt
+builder, but A3 does not issue `PreRegistrationReceiptV2`. A3 tests that the future receipt binds
+all identities, cases, source access, metrics, thresholds, evaluator/harness inputs, three distinct
+logical roles, separate payload/oracle commitments, pre-reveal scan, one-way reveal procedure, and
+post-reveal generated-file allowlist.
 
 Holdout content and answer keys live outside the evaluator checkout in a custodian-owned,
 non-mounted source. Before freeze, scan the evaluator worktree and command environment for the
-holdout byte digests and answer-key markers; only identity, byte length, and SHA-256 may be present.
-The receipt binds that scan, the custodian source identity, and the one-way reveal procedure.
+holdout byte digests and answer-key markers; only opaque identity/dimension plus separate
+`payload_byte_length`, `payload_sha256`, `oracle_byte_length`, and `oracle_sha256` may be present.
+The future receipt binds that scan, the three role identities, and
+`nv.slice0.one-way-reveal.v1`.
 
 **RED/GREEN**
 
@@ -491,7 +510,7 @@ The receipt binds that scan, the custodian source identity, and the one-way reve
 
 **Commit:** `test: freeze the complementary evidence suite`
 
-### Task A4 — Implement evaluator on development cases
+### Task A4 — Implement evaluator and complete the pre-reveal freeze boundary
 
 **Files**
 
@@ -499,9 +518,16 @@ The receipt binds that scan, the custodian source identity, and the one-way reve
 - `src/night_voyager/evidence_loop/evaluator.py` (new);
 - `src/night_voyager/evidence_loop/receipt.py` (new);
 - `scripts/evaluate_evidence_loop.py` (new);
+- `scripts/reveal_evidence_loop_holdouts.py` (new; validator implemented without custody content);
+- `scripts/verify_evidence_loop.py` (new);
+- `scripts/run_mke_lane.sh`;
 - `tests/unit/evidence_loop/test_canonicalization.py` (new);
 - `tests/unit/evidence_loop/test_evaluator.py` (new);
 - `tests/unit/evidence_loop/test_receipt.py` (new).
+- `tests/integration/adapters/test_mke_v2_tagged_wheel.py` (new; development/mock structural lane);
+- `tests/integration/evidence_loop/test_frozen_suite.py` (new; development/mock structural harness);
+- `tests/architecture/test_m4b_contract.py`;
+- `tests/architecture/test_skills_contract.py` only if runner inventory requires it.
 
 Implement:
 
@@ -541,24 +567,29 @@ Guardrails are vetoes. The evaluator never averages them into a quality score.
 - filesystem/database mutation is rejected;
 - three fresh processes produce identical bytes.
 
-Do not mount or read holdout content during A4.
+Do not mount or read holdout payload/oracle content during A4. A4 completes the reveal validator,
+tagged-wheel lane, frozen-suite harness, terminal verifier, and runner before final
+pre-registration. All paths are fully tested with development or mock structural fixtures. The
+final pre-registration binds exact clean HEAD/tree, evaluator and harness path digests,
+environment/dependencies, corpus/source identities, thresholds/mappings, separate holdout
+payload/oracle digests, three roles, the pre-reveal scan, `nv.slice0.one-way-reveal.v1`, and this
+exact post-reveal generated-file allowlist:
+
+```text
+tests/fixtures/evidence_loop/holdout-dataset-v1.json
+tests/fixtures/evidence_loop/mke-capture-v2.json
+tests/fixtures/evidence_loop/slice0-receipt-v2.json
+```
 
 **Commit:** `feat: evaluate bounded complementary evidence`
 
-### Task A5 — Reveal new holdouts and run the tagged native vertical
+### Task A5 — One-shot reveal and execution
 
 **Files**
 
 - `tests/fixtures/evidence_loop/holdout-dataset-v1.json` (new; exact pre-authored bytes);
 - `tests/fixtures/evidence_loop/mke-capture-v2.json` (new generated canonical artifact);
 - `tests/fixtures/evidence_loop/slice0-receipt-v2.json` (new generated terminal receipt);
-- `scripts/reveal_evidence_loop_holdouts.py` (new);
-- `tests/integration/adapters/test_mke_v2_tagged_wheel.py` (new);
-- `tests/integration/evidence_loop/test_frozen_suite.py` (new);
-- `scripts/verify_evidence_loop.py` (new);
-- `scripts/run_mke_lane.sh`;
-- `tests/architecture/test_m4b_contract.py`;
-- `tests/architecture/test_skills_contract.py` only if the runner inventory requires it.
 
 Holdouts:
 
@@ -568,9 +599,11 @@ Holdouts:
 - one explicit conflict-retention case.
 
 The custodian verifies the pre-freeze hashes before copying the bytes once into the evaluator
-worktree. Any evaluator, threshold, mapping, eligible-source, or oracle change after reveal
-permanently retires these holdouts to development and requires a newly authored sealed set.
-“Restart with the same holdouts” is prohibited.
+worktree. A5 is one-shot reveal and execution only. No code, test, evaluator, oracle, threshold,
+mapping, or eligible-source change is permitted after reveal; only the three preregistered
+generated files may be added. Apart from the preregistered three fresh-process determinism runs,
+there is no retry or repair with revealed holdouts. Any drift returns `evaluation_invalid` and ends
+the direction; “restart with the same holdouts” is prohibited.
 
 Run the actual archive/wheel through:
 
@@ -603,6 +636,11 @@ Pass requires:
 - conflict explicit;
 - all guardrails;
 - three byte-identical fresh-process receipts.
+
+An exhaustive active miss is `no_incremental_value`; bounded incomplete or unavailable retrieval
+is `inconclusive`; custody, hash, order, freeze, mutation, or identity drift is
+`evaluation_invalid`. Every non-confirming outcome ends the direction. Only the exact confirmed
+receipt can unlock B1.
 
 `MkeCaptureArtifactV2` is a frozen provider-free reference artifact. It does not imply arbitrary
 advisor corpus intake.

@@ -1,10 +1,10 @@
 # Advisor-Governed Multimodal Evidence Composition Design
 
-**Status:** Re-audited and ready for implementation mandate  
-**Consumer and system of record:** Night Voyager  
+**Status:** Re-audited and ready for implementation mandate
+**Consumer and system of record:** Night Voyager
 **Read-only evidence producers:** Multimodal Knowledge Engine (MKE) and Decision Research Agent
-(DRA)  
-**Target release:** Night Voyager v0.1.6 only if all three slices complete  
+(DRA)
+**Target release:** Night Voyager v0.1.6 only if all three slices complete
 **Public claim level:** controlled, provider-free portfolio proof; no production or source-truth claim
 
 ## 1. Executive summary
@@ -242,14 +242,19 @@ frozen suite. It is a non-default CLI/proof lane. It:
 
 ### 7.2 Roles and freeze sequence
 
-Three roles are separated:
+Three distinct logical roles are frozen:
 
-1. **Dataset author** prepares public-safe synthetic Case/query/source material, decision gaps,
-   expected source identities, and holdout bytes.
-2. **Evaluator implementer** builds the consumer, canonicalization, metrics, and sensitivity tests
-   using only development cases and the holdout manifest hashes.
-3. **Holdout custodian** confirms the pre-authored holdout bytes, keeps them in a separate
-   non-mounted custody workspace, reveals them only after evaluator and threshold freeze, and signs
+1. **Dataset author** (`dataset_author_id=independent-dataset-author-v1`) prepares public-safe
+   synthetic Case/query/source material, decision gaps, expected source identities, and finalizes
+   the holdout payload and evaluator-independent oracle before A4 begins.
+2. **Evaluator implementer**
+   (`evaluator_implementer_id=night-voyager-slice0-evaluator-v1`) builds the consumer,
+   canonicalization, metrics, sensitivity tests, reveal validator, native lane, frozen-suite
+   harness, and terminal verifier using only development cases and public commitments.
+3. **Holdout custodian**
+   (`holdout_custodian_id=independent-holdout-custodian-v1`) independently verifies and seals the
+   pre-authored payload and oracle, keeps them in a separate non-mounted custody workspace, reveals
+   them only after evaluator, harness, threshold, mapping, and eligible-source freeze, and signs
    the final receipt.
 
 The evaluator implementer cannot also author or custody the holdout answers for the receipt being
@@ -268,39 +273,62 @@ not.
 
 No receipt persists any absolute root. It records only logical role, basename, bytes, digest, mode
 class, and lifecycle state. The evaluator process can see `input_root`, sealed `store_root`, and
-public-safe `receipt_root`; it cannot mount, enumerate, or receive `custody_root`. The one reveal
-operation runs as the custodian after pre-registration, validates every boundary, and atomically
-copies only the exact public-safe holdout bytes to the committed dataset destination.
+public-safe `receipt_root`; it cannot mount, enumerate, or receive `custody_root`. The public
+holdout manifest exposes only opaque Case identity, decision dimension, `payload_byte_length`,
+`payload_sha256`, `oracle_byte_length`, and `oracle_sha256`; it contains no payload, oracle,
+physical path, or outcome mapping. The one reveal operation uses
+`nv.slice0.one-way-reveal.v1` as the custodian after pre-registration, validates every boundary,
+and atomically copies only the exact public-safe holdout bytes to the committed dataset
+destination.
 
-A `PreRegistrationReceiptV2` freezes before any eligible producer observation:
+A3 implements the public corpus, manifests, store seal, and freeze tooling. A3 does not issue
+`PreRegistrationReceiptV2`. A4 completes the reveal validator, tagged-wheel lane, frozen-suite
+harness, terminal verifier, and runner before final pre-registration. Development cases may be
+used to implement and test those surfaces while holdout payload and oracle bytes remain
+unreachable.
+
+A `PreRegistrationReceiptV2` freezes after the complete evaluator and reveal/verification harness
+exist and before any eligible holdout producer observation:
 
 - Night Voyager, MKE, and DRA identities;
 - MKE wheel, MCP schema, tool-name, and corpus/active-set digests;
 - historical DRA-baseline export identity and provenance;
+- exact clean HEAD and tree plus evaluator and harness path digests;
+- environment and dependency identities;
 - eight Case/query identities and decision dimensions;
 - the eligible source matrix;
 - development dataset bytes;
-- four holdout hashes without content;
+- four separate holdout payload and oracle lengths/digests without content;
 - canonicalization and deduplication rules;
 - mechanism, target, and guardrail metrics;
 - terminal thresholds and failure taxonomy;
-- evaluator source and environment identity;
-- role separation and reveal timestamps.
+- the three distinct role identities and pre-reveal reachability scan;
+- `nv.slice0.one-way-reveal.v1`;
+- the exact post-reveal generated-file allowlist.
 
-Any observation before receipt creation, source addition after freeze, threshold change after reveal,
-or evaluator change after reveal returns `evaluation_invalid` and restarts Slice 0 from a new
-receipt.
+Any eligible holdout producer observation before receipt creation, source addition after freeze,
+custody/hash/order/freeze/mutation drift, or evaluator change after reveal returns
+`evaluation_invalid` and ends this direction. Development-case observations before final freeze
+remain allowed.
 
 After a holdout has been revealed, it can never become sealed again. Any evaluator, threshold,
 mapping, eligible-source, or oracle change retires the revealed holdouts into the development set
 and requires a new independently authored sealed holdout set and new hashes.
 
 Custody is a filesystem boundary, not a promise inside one checkout. Before reveal, the evaluator
-worktree contains only the four holdout identities, byte lengths, and SHA-256 digests. The holdout
-custodian's directory is not mounted, copied, indexed, or included in evaluator command arguments.
-The freeze receipt records a pre-reveal scan proving that no holdout bytes or answer keys are
-reachable. Reveal copies the exact pre-authored bytes once and verifies all hashes. After reveal,
-any evaluator or oracle edit invalidates the receipt and requires a newly authored holdout set.
+worktree contains only the four opaque holdout identities/dimensions and separate payload/oracle
+byte lengths and SHA-256 digests. The holdout custodian's directory is not mounted, copied,
+indexed, or included in evaluator command arguments. The freeze receipt records a pre-reveal scan
+proving that no holdout bytes, answer keys, or custody path are reachable. Reveal copies the exact
+pre-authored bytes once and verifies all hashes. A5 is one-shot reveal and execution only. No
+code, test, evaluator, oracle, threshold, mapping, or eligible-source change is permitted after
+reveal. Apart from the preregistered three fresh-process determinism runs, no retry or repair uses
+revealed holdouts.
+
+An exhaustive active miss maps to `no_incremental_value`; bounded incomplete or unavailable
+retrieval maps to `inconclusive`; custody, hash, order, freeze, mutation, or identity drift maps to
+`evaluation_invalid`. Every non-confirming disposition ends this direction. Only the exact
+`incremental_value_confirmed` receipt may unlock the next slice.
 
 ### 7.3 Disposable MKE store preparation and seal
 

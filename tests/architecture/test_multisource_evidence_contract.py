@@ -87,3 +87,48 @@ def test_complementary_evidence_plan_has_one_index_entry() -> None:
         "implementation.md"
         in index
     )
+
+
+def test_pre_reveal_freeze_has_distinct_roles_and_separate_commitments() -> None:
+    governance = _governance_text()
+    role_ids = (
+        "independent-dataset-author-v1",
+        "night-voyager-slice0-evaluator-v1",
+        "independent-holdout-custodian-v1",
+    )
+
+    assert len(set(role_ids)) == 3
+    for role_id in role_ids:
+        assert role_id in governance
+    for commitment in (
+        "`payload_byte_length`",
+        "`payload_sha256`",
+        "`oracle_byte_length`",
+        "`oracle_sha256`",
+    ):
+        assert commitment in governance
+    assert "nv.slice0.one-way-reveal.v1" in governance
+
+
+def test_pre_reveal_ordering_freezes_complete_harness_before_observation() -> None:
+    governance = " ".join(_governance_text().split())
+
+    for required in (
+        "before any eligible holdout producer observation",
+        "A3 does not issue `PreRegistrationReceiptV2`",
+        "A4 completes the reveal validator, tagged-wheel lane, frozen-suite harness, "
+        "terminal verifier, and runner before final pre-registration",
+        "A5 is one-shot reveal and execution only",
+        "No code, test, evaluator, oracle, threshold, mapping, or eligible-source change "
+        "is permitted after reveal",
+        "preregistered three fresh-process determinism runs",
+    ):
+        assert required in governance
+
+
+def test_governance_documents_have_no_trailing_whitespace() -> None:
+    for path in (DESIGN, PLAN):
+        for line_number, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            assert line == line.rstrip(), f"{path.name}:{line_number}"
