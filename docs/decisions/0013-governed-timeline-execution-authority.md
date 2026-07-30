@@ -42,7 +42,9 @@ Reusing planning revision authority after a final decision would erase that boun
 The local `/demo/plan` route can start, attest, request an advisor update, verify,
 advance, and complete the deterministic synthetic timeline. It renders blocked or
 reassessment-required state without exposing a reassessment mutation in PR A.
-Published v0.1.4 remains migration `0013`; the current development head is `0014`.
+Published v0.1.4 remains migration `0013`. The v0.1.5 release candidate current head is
+`0015`: timeline transition authority remains owned by migration `0014`, while migration
+`0015` only closes deterministic demo identity and does not add transition authority.
 
 ## Non-claims
 

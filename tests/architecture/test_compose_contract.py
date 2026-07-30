@@ -2,9 +2,106 @@ import json
 import os
 import stat
 import subprocess
+import textwrap
 from pathlib import Path
 
 import yaml
+
+
+def _run_compose_cleanup_harness(
+    tmp_path: Path,
+    *,
+    initial_status: int = 0,
+    down_status: int = 0,
+    residue: str = "",
+) -> subprocess.CompletedProcess[str]:
+    source = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    cleanup = source.split("cleanup() {", 1)[1].split(
+        "\n}\n\nstart_planning_revision_barrier", 1
+    )[0]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    docker_stub = bin_dir / "docker"
+    docker_stub.write_text(
+        textwrap.dedent(
+            """\
+            #!/bin/sh
+            printf '%s|%s\n' "$COMPOSE_PROJECT_NAME" "$*" >> "$STUB_LOG"
+            case "$*" in
+                "compose down"*) exit "$STUB_DOWN_STATUS" ;;
+                "compose ps --all --quiet") printf '%s' "$STUB_RESIDUE" ;;
+            esac
+            """
+        ),
+        encoding="utf-8",
+    )
+    docker_stub.chmod(0o755)
+    harness = tmp_path / "cleanup-harness.sh"
+    harness.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/bin/sh
+            set -eu
+            COMPOSE_PROJECT_NAME=night-voyager-cleanup-contract
+            export COMPOSE_PROJECT_NAME
+            planning_revision_browser_pid=
+            worker_start_pid=
+            barrier_fd_open=0
+            barrier_pid=
+            FACT_TO_PLAN_ZH_PROOF_FILE=fact-zh
+            FACT_TO_PLAN_ZH_WORKER_READY_FILE=fact-zh-ready
+            FACT_TO_PLAN_EN_PROOF_FILE=fact-en
+            FACT_TO_PLAN_EN_WORKER_READY_FILE=fact-en-ready
+            PLANNING_REVISION_ZH_PROOF_FILE=revision-zh
+            PLANNING_REVISION_ZH_WORKER_READY_FILE=revision-zh-ready
+            PLANNING_REVISION_EN_PROOF_FILE=revision-en
+            PLANNING_REVISION_EN_WORKER_READY_FILE=revision-en-ready
+            PLANNING_REVISION_BARRIER_FIFO=barrier-fifo
+            PLANNING_REVISION_BARRIER_OUTPUT=barrier-output
+            PLANNING_REVISION_BARRIER_STATE=barrier-state
+            PLANNING_REVISION_PREDECESSOR_STDOUT=predecessor-out
+            PLANNING_REVISION_PREDECESSOR_STDERR=predecessor-err
+            PLAN_EXECUTION_RECOVERY_PROOF_FILE=recovery-proof
+            cleanup() {{{cleanup}
+            }}
+            trap cleanup EXIT
+            exit {initial_status}
+            """
+        ),
+        encoding="utf-8",
+    )
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{bin_dir}:/usr/bin:/bin",
+        STUB_LOG=str(tmp_path / "docker.log"),
+        STUB_DOWN_STATUS=str(down_status),
+        STUB_RESIDUE=residue,
+    )
+    return subprocess.run(
+        ["sh", str(harness)],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_compose_cleanup_preserves_main_failure_and_fails_on_teardown_or_residue(
+    tmp_path: Path,
+) -> None:
+    original_failure = _run_compose_cleanup_harness(tmp_path / "original", initial_status=7)
+    teardown_failure = _run_compose_cleanup_harness(tmp_path / "down", down_status=9)
+    residue_failure = _run_compose_cleanup_harness(tmp_path / "residue", residue="container-id")
+
+    assert original_failure.returncode == 7
+    assert teardown_failure.returncode != 0
+    assert residue_failure.returncode != 0
+    for case in ("original", "down", "residue"):
+        log = (tmp_path / case / "docker.log").read_text(encoding="utf-8")
+        assert log.count("night-voyager-cleanup-contract|") >= 2
+        assert "compose down --volumes --remove-orphans --rmi local" in log
+        assert "compose ps --all --quiet" in log
 
 
 def test_web_healthcheck_uses_ipv4_loopback() -> None:

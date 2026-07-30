@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import re
+import subprocess
+import textwrap
 import tomllib
 from pathlib import Path
 
@@ -38,6 +42,134 @@ HISTORICAL_RELEASE_DIGESTS = {
         "6fab5465f24c6765910814a7f554c9c57971c6e6c613d194f1a25e8a9ddf0f45"
     ),
 }
+
+
+def _gate_bash_blocks(how_to: str, gate: str) -> list[str]:
+    section = how_to.split(f"## Gate {gate}", 1)[1].split("\n## ", 1)[0]
+    return re.findall(r"```bash\n(.*?)```", section, flags=re.DOTALL)
+
+
+def _run_gate_c(
+    tmp_path: Path,
+    *,
+    branch: str = "main",
+    head: str = "reviewed-commit",
+    origin_main: str = "reviewed-commit",
+    dirty: str = "",
+    down_status: int = 0,
+    residue: str = "",
+) -> subprocess.CompletedProcess[str]:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.5-release.md").read_text(
+        encoding="utf-8"
+    )
+    block = _gate_bash_blocks(how_to, "C")[0]
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    tool_stub = textwrap.dedent(
+        """\
+        #!/bin/sh
+        tool=$(basename "$0")
+        printf '%s|%s|%s\n' "$tool" "${COMPOSE_PROJECT_NAME:-unset}" "$*" >> "$STUB_LOG"
+        case "$tool:$*" in
+            "git:status --porcelain") printf '%s' "$STUB_DIRTY" ;;
+            "git:branch --show-current") printf '%s\n' "$STUB_BRANCH" ;;
+            "git:rev-parse HEAD") printf '%s\n' "$STUB_HEAD" ;;
+            "git:rev-parse origin/main") printf '%s\n' "$STUB_ORIGIN_MAIN" ;;
+            "make:down") exit "$STUB_DOWN_STATUS" ;;
+            "docker:compose ps --all --quiet") printf '%s' "$STUB_RESIDUE" ;;
+        esac
+        """
+    )
+    for tool in ("git", "make", "uv", "npm", "docker"):
+        path = bin_dir / tool
+        path.write_text(tool_stub, encoding="utf-8")
+        path.chmod(0o755)
+    environment = os.environ.copy()
+    environment.update(
+        PATH=f"{bin_dir}:/usr/bin:/bin",
+        STUB_LOG=str(tmp_path / "gate.log"),
+        STUB_BRANCH=branch,
+        STUB_HEAD=head,
+        STUB_ORIGIN_MAIN=origin_main,
+        STUB_DIRTY=dirty,
+        STUB_DOWN_STATUS=str(down_status),
+        STUB_RESIDUE=residue,
+    )
+    return subprocess.run(
+        ["bash", "-c", block],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_v0_1_5_copyable_bash_blocks_fail_fast_on_an_injected_prior_failure() -> None:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.5-release.md").read_text(
+        encoding="utf-8"
+    )
+    blocks = [block for gate in "CDE" for block in _gate_bash_blocks(how_to, gate)]
+
+    assert blocks
+    for block in blocks:
+        prologue = block.splitlines()[0]
+        result = subprocess.run(
+            ["bash", "-c", f"{prologue}\nfalse\ntrue"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode != 0, block
+
+
+def test_gate_c_rejects_dirty_non_main_or_non_merged_identity(tmp_path: Path) -> None:
+    assert _run_gate_c(tmp_path / "clean").returncode == 0
+    assert _run_gate_c(tmp_path / "dirty", dirty=" M changed").returncode != 0
+    assert _run_gate_c(tmp_path / "branch", branch="release-candidate").returncode != 0
+    assert _run_gate_c(tmp_path / "head", head="different-commit").returncode != 0
+
+
+def test_gate_c_teardown_is_fail_closed_and_reads_back_the_same_project(
+    tmp_path: Path,
+) -> None:
+    down_failure = _run_gate_c(tmp_path / "down", down_status=9)
+    residue_failure = _run_gate_c(tmp_path / "residue", residue="container-id")
+
+    assert down_failure.returncode != 0
+    assert residue_failure.returncode != 0
+    for case in ("down", "residue"):
+        log_lines = (tmp_path / case / "gate.log").read_text(encoding="utf-8").splitlines()
+        projects = {line.split("|", 2)[1] for line in log_lines}
+        assert len(projects) == 1
+        assert projects.pop().startswith("night-voyager-v0-1-5-gate-c-")
+
+
+def test_v0_1_5_current_authority_and_public_claims_are_unambiguous() -> None:
+    adr = (
+        ROOT / "docs/decisions/0013-governed-timeline-execution-authority.md"
+    ).read_text(encoding="utf-8")
+    release = (ROOT / "docs/releases/v0.1.5.md").read_text(encoding="utf-8")
+    how_to = (ROOT / "docs/how-to/verify-v0.1.5-release.md").read_text(
+        encoding="utf-8"
+    )
+    normalized_adr = " ".join(adr.split())
+
+    assert "v0.1.4 remains migration `0013`" in normalized_adr
+    assert "v0.1.5 release candidate current head is `0015`" in normalized_adr
+    assert (
+        "timeline transition authority remains owned by migration `0014`"
+        in normalized_adr
+    )
+    assert "migration `0015` only closes deterministic demo identity" in normalized_adr
+    assert "Career authority review" not in how_to
+    assert "independent maintainer review" in how_to
+    assert (
+        "except for the declared version identities, release-prep does not change "
+        "migrations, runtime behavior, backend/domain product logic, BFF/API endpoints "
+        "or schemas, dependency choices, Dockerfiles, or Compose policy"
+        in release
+    )
 
 
 def test_current_release_identity_is_v0_1_5_without_dependency_drift() -> None:
@@ -143,8 +275,9 @@ def test_v0_1_5_release_notes_define_capability_and_non_claim_scope() -> None:
         "no admissions outcome",
         "no business-benefit claim",
         "no HA or SLA",
-        "release-prep does not change migration, runtime, backend, product, BFF, API, "
-        "domain, dependency choice, Dockerfile, or Compose policy",
+        "except for the declared version identities, release-prep does not change "
+        "migrations, runtime behavior, backend/domain product logic, BFF/API endpoints "
+        "or schemas, dependency choices, Dockerfiles, or Compose policy",
     ):
         assert token in release
 

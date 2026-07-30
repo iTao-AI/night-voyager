@@ -358,8 +358,9 @@ RELEASE_NOTE_TOKENS = (
     "no admissions outcome",
     "no business-benefit claim",
     "no HA or SLA",
-    "release-prep does not change migration, runtime, backend, product, BFF, API, "
-    "domain, dependency choice, Dockerfile, or Compose policy",
+    "except for the declared version identities, release-prep does not change "
+    "migrations, runtime behavior, backend/domain product logic, BFF/API endpoints "
+    "or schemas, dependency choices, Dockerfiles, or Compose policy",
 )
 RELEASE_HOW_TO_TOKENS = (
     "git fetch origin --tags --prune",

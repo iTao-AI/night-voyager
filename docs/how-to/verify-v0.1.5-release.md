@@ -7,10 +7,35 @@ This procedure verifies the `local synthetic portfolio release`. It does not dep
 Run from the clean reviewed release tree after the release pull request is merged:
 
 ```bash
+set -euo pipefail
+export COMPOSE_PROJECT_NAME="night-voyager-v0-1-5-gate-c-$$"
+cleanup_compose() {
+  gate_status=$?
+  trap - EXIT
+  teardown_status=0
+  make down || teardown_status=$?
+  compose_residue=""
+  docker compose ps --all --quiet > /tmp/night-voyager-compose-ps-$$ \
+    || teardown_status=$?
+  compose_residue="$(cat /tmp/night-voyager-compose-ps-$$ 2>/dev/null || true)"
+  rm -f /tmp/night-voyager-compose-ps-$$
+  if [[ -n "$compose_residue" ]]; then
+    printf 'Gate C teardown left containers in %s: %s\n' \
+      "$COMPOSE_PROJECT_NAME" "$compose_residue" >&2
+    teardown_status=1
+  fi
+  if (( gate_status != 0 )); then
+    exit "$gate_status"
+  fi
+  exit "$teardown_status"
+}
+trap cleanup_compose EXIT
 git fetch origin --tags --prune
 git status --short --branch
-git rev-parse HEAD
-git rev-parse origin/main
+test -z "$(git status --porcelain)"
+test "$(git branch --show-current)" = "main"
+expected_commit="$(git rev-parse origin/main)"
+test "$(git rev-parse HEAD)" = "$expected_commit"
 make doctor MODE=dev
 uv lock --check
 uv run pytest -q tests/architecture/test_v0_1_5_release_contract.py tests/architecture/test_documentation_governance.py tests/unit/test_release_surface.py
@@ -27,8 +52,6 @@ make db-check
 make check
 make proof
 make compose-proof
-make down
-docker compose ps --all
 uv run python scripts/verify_release.py --tree-mode release
 git diff --check
 ```
@@ -40,6 +63,7 @@ Expected: clean `main`, identical `HEAD` and `origin/main`, successful verifier/
 Before publication, rehearse the exact reviewed commit through a Git-free prepublication archive:
 
 ```bash
+set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 expected_commit="$(git -C "$repo_root" rev-parse HEAD)"
 tmp_dir="$(mktemp -d)"
@@ -53,18 +77,36 @@ mkdir "$tmp_dir/extracted"
 tar -xzf "$archive" -C "$tmp_dir/extracted"
 test ! -e "$tmp_dir/extracted/night-voyager-0.1.5/.git"
 (
+  set -euo pipefail
   cd "$tmp_dir/extracted/night-voyager-0.1.5"
+  export COMPOSE_PROJECT_NAME="night-voyager-v0-1-5-gate-d-$$"
+  cleanup_compose() {
+    gate_status=$?
+    trap - EXIT
+    teardown_status=0
+    make down || teardown_status=$?
+    compose_residue="$(docker compose ps --all --quiet)" || teardown_status=$?
+    if [[ -n "$compose_residue" ]]; then
+      printf 'Gate D teardown left containers in %s: %s\n' \
+        "$COMPOSE_PROJECT_NAME" "$compose_residue" >&2
+      teardown_status=1
+    fi
+    if (( gate_status != 0 )); then
+      exit "$gate_status"
+    fi
+    exit "$teardown_status"
+  }
+  trap cleanup_compose EXIT
   make doctor
   make proof
   make compose-proof
-  make down
-  docker compose ps --all
 )
 ```
 
-Only after Career authority review, hosted checks, merge, and the prepublication archive pass may an authorized maintainer create the annotated tag and GitHub Release. Verify the published identity:
+Only after independent maintainer review, hosted checks, merge, and the prepublication archive pass may an authorized maintainer create the annotated tag and GitHub Release. Verify the published identity:
 
 ```bash
+set -euo pipefail
 git -C "$repo_root" fetch origin --tags --prune
 git -C "$repo_root" describe --tags --exact-match "$expected_commit"
 git -C "$repo_root" cat-file -t v0.1.5
@@ -115,6 +157,7 @@ Expected: exact tag `v0.1.5`, object type `tag`, and a peeled commit equal to th
 After the authorized GitHub Release exists, verify the public source archive from a fresh extraction:
 
 ```bash
+set -euo pipefail
 tmp_dir="$(mktemp -d)"
 archive="$tmp_dir/night-voyager-v0.1.5.tar.gz"
 curl --fail --location --output "$archive" \
@@ -123,11 +166,27 @@ wc -c "$archive"
 shasum -a 256 "$archive"
 tar -xzf "$archive" -C "$tmp_dir"
 cd "$tmp_dir/night-voyager-0.1.5"
+export COMPOSE_PROJECT_NAME="night-voyager-v0-1-5-gate-e-$$"
+cleanup_compose() {
+  gate_status=$?
+  trap - EXIT
+  teardown_status=0
+  make down || teardown_status=$?
+  compose_residue="$(docker compose ps --all --quiet)" || teardown_status=$?
+  if [[ -n "$compose_residue" ]]; then
+    printf 'Gate E teardown left containers in %s: %s\n' \
+      "$COMPOSE_PROJECT_NAME" "$compose_residue" >&2
+    teardown_status=1
+  fi
+  if (( gate_status != 0 )); then
+    exit "$gate_status"
+  fi
+  exit "$teardown_status"
+}
+trap cleanup_compose EXIT
 make doctor
 make proof
 make compose-proof
-make down
-docker compose ps --all
 ```
 
 Expected: the archive has non-zero bytes and a recorded SHA-256; all fresh public source archive smoke checks pass; final Compose state is empty. Use the extracted source archive, not a development `.venv`, `node_modules`, retained volume, custom wheel, or working tree.
