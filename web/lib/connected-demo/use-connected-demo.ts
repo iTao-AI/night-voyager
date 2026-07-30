@@ -329,7 +329,7 @@ export function useConnectedDemo() {
     let pending = false;
     let closed = false;
     const events = new EventSource(`/api/demo/tasks/${streamingTaskId}/events?after=${cursor}`);
-    const readConsistentAuthority = async (caseId: string) => {
+    const readConsistentAuthority = async (caseId: string, taskId: string) => {
       for (let attempt = 0; attempt < 3; attempt += 1) {
         const status = await api.journeyStatus(caseId);
         if (closed) return null;
@@ -339,6 +339,7 @@ export function useConnectedDemo() {
           && ledger.case_id === caseId
           && ledger.case_revision === status.current_revision
           && ledger.phase === status.phase
+          && ledger.task?.task_id === taskId
         ) {
           return { status, ledger };
         }
@@ -353,7 +354,7 @@ export function useConnectedDemo() {
           pending = false;
           const current = loadRecoveryMetadata();
           if (!current || current.role !== "advisor" || current.currentTaskId !== streamingTaskId) throw new Error("projection identity mismatch");
-          const authority = await readConsistentAuthority(current.caseId);
+          const authority = await readConsistentAuthority(current.caseId, streamingTaskId);
           if (!authority || closed) return;
           const { status, ledger } = authority;
           const next = metadataFor(current, status, "advisor", current.csrf, ledger);

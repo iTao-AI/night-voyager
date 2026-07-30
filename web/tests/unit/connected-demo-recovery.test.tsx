@@ -17,6 +17,7 @@ import {
 const THREAD_ID = "42000000-0000-0000-0000-000000000001";
 const MESSAGE_ID = "43000000-0000-0000-0000-000000000001";
 const CANDIDATE_ID = "44000000-0000-0000-0000-000000000001";
+const OTHER_TASK_ID = "61000000-0000-0000-0000-000000000002";
 const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 
@@ -286,6 +287,140 @@ it("reconciles a transient split read while a streamed task reaches advisor revi
     currentRunId: "70000000-0000-0000-0000-000000000001",
     cursor: 4,
   });
+  expect(statusReads).toBe(4);
+  expect(ledgerReads).toBe(4);
+});
+
+it("rejects a streamed projection for a different task after the bounded authority reads", async () => {
+  saveRecoveryMetadata(advisorMetadata("active_task"));
+  const listeners = new Map<string, (event: Event) => void>();
+  class FakeEventSource {
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      listeners.set(type, listener as (event: Event) => void);
+    }
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  let statusReads = 0;
+  let ledgerReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/journey-status")) {
+      statusReads += 1;
+      return Response.json(status(statusReads === 1 ? "active_task" : "review_required"));
+    }
+    if (path.endsWith("/advisor-ledger")) {
+      ledgerReads += 1;
+      const value = ledger(ledgerReads === 1 ? "active_task" : "review_required");
+      return Response.json(ledgerReads === 1 ? value : {
+        ...value,
+        task: { ...value.task!, task_id: OTHER_TASK_ID },
+      });
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+
+  await act(async () => {
+    listeners.get("waiting_review")?.(new MessageEvent("waiting_review", { lastEventId: "4" }));
+  });
+
+  await waitFor(() => expect(result.current.state).toMatchObject({
+    value: "recoverable_error",
+    code: "transport_failure",
+  }));
+  expect(statusReads).toBe(4);
+  expect(ledgerReads).toBe(4);
+  expect(loadRecoveryMetadata()).toMatchObject({
+    phase: "active_task",
+    currentTaskId: TASK_ID,
+    cursor: 0,
+  });
+});
+
+it("exhausts exactly three streamed authority reads for a persistent projection contradiction", async () => {
+  saveRecoveryMetadata(advisorMetadata("active_task"));
+  const listeners = new Map<string, (event: Event) => void>();
+  class FakeEventSource {
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      listeners.set(type, listener as (event: Event) => void);
+    }
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  let statusReads = 0;
+  let ledgerReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/journey-status")) {
+      statusReads += 1;
+      return Response.json(status(statusReads === 1 ? "active_task" : "review_required"));
+    }
+    if (path.endsWith("/advisor-ledger")) {
+      ledgerReads += 1;
+      return Response.json(ledger("active_task"));
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+
+  await act(async () => {
+    listeners.get("waiting_review")?.(new MessageEvent("waiting_review", { lastEventId: "4" }));
+  });
+
+  await waitFor(() => expect(result.current.state).toMatchObject({
+    value: "recoverable_error",
+    code: "transport_failure",
+  }));
+  expect(statusReads).toBe(4);
+  expect(ledgerReads).toBe(4);
+});
+
+it.each([
+  { name: "session loss", response: () => Response.json({ code: "authentication_failed" }, { status: 401 }), code: "session_expired" },
+  { name: "transport failure", response: () => Response.json({ code: "upstream_unavailable" }, { status: 503 }), code: "transport_failure" },
+])("stops the streamed authority read immediately on first $name", async ({ response, code }) => {
+  saveRecoveryMetadata(advisorMetadata("active_task"));
+  const listeners = new Map<string, (event: Event) => void>();
+  class FakeEventSource {
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      listeners.set(type, listener as (event: Event) => void);
+    }
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  let statusReads = 0;
+  let ledgerReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/journey-status")) {
+      statusReads += 1;
+      return statusReads === 1 ? Response.json(status("active_task")) : response();
+    }
+    if (path.endsWith("/advisor-ledger")) {
+      ledgerReads += 1;
+      return Response.json(ledger("active_task"));
+    }
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+
+  await act(async () => {
+    listeners.get("waiting_review")?.(new MessageEvent("waiting_review", { lastEventId: "4" }));
+  });
+
+  await waitFor(() => expect(result.current.state).toMatchObject({
+    value: "recoverable_error",
+    code,
+  }));
+  expect(statusReads).toBe(2);
+  expect(ledgerReads).toBe(1);
 });
 
 it("uses status to recover a pending explicit role rotation without reading wrong-role detail", async () => {
