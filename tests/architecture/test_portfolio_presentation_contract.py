@@ -53,6 +53,7 @@ LOCKED_DEPENDENCY_IDENTITIES = {
         "fea0e9d1e11cf684deae87eb7167877965855986cea63e9fb46f98b0cefe015d"
     ),
 }
+PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
 
 
 def _sha256(path: Path) -> str:
@@ -176,3 +177,28 @@ def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> 
         "pointermove",
     ):
         assert forbidden not in components
+
+
+def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> None:
+    assert PRESENTATION_AUDIT.is_file()
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+
+    for route in ('"/"', '"/demo/collaboration"', '"/demo"', '"/demo/plan"'):
+        assert route in source
+    for locale in ('"zh-CN"', '"en"'):
+        assert locale in source
+    for width in ("1440", "768", "390", "320"):
+        assert width in source
+    for required_contract in (
+        "PRESENTATION_AUDIT_OUTPUT_DIR",
+        "deviceScaleFactor",
+        "200%",
+        "keyboard",
+        "focus",
+        "reducedMotion",
+        "contrast",
+        "scrollWidth",
+        "long-copy",
+        "latest-64",
+    ):
+        assert required_contract in source
