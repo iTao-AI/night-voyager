@@ -904,7 +904,14 @@ def _native_failure_exit_code(code: str) -> int:
         return 14
     if (
         code.startswith(("search_", "read_", "native_"))
-        or code == "store_artifact_invalid"
+        or code
+        in {
+            "native descriptor count mismatch",
+            "native descriptor identity mismatch",
+            "native descriptor trace identity missing",
+            "producer_tool_inventory_mismatch",
+            "store_artifact_invalid",
+        }
     ):
         return 10
     return 13

@@ -363,11 +363,19 @@ def test_documented_operator_contract_admits_only_exact_producer_inputs(
 @pytest.mark.parametrize(
     ("exception", "exit_code"),
     [
+        ("producer_tool_inventory_mismatch", 10),
+        ("search_unavailable", 10),
+        ("read_unavailable", 10),
+        ("native_tool_call_failed", 10),
         ("native_source_set_mismatch", 10),
+        ("native descriptor count mismatch", 10),
+        ("native descriptor identity mismatch", 10),
+        ("native descriptor trace identity missing", 10),
         ("store_artifact_invalid", 10),
         ("sealed_mutation_not_closed", 14),
         ("store_artifact_drift", 14),
         ("receipt_destination_exists", 13),
+        ("receipt_archive_identity_mismatch", 13),
     ],
 )
 def test_native_failure_codes_have_explicit_a3_exit_ownership(
