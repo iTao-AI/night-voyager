@@ -54,6 +54,12 @@ LOCKED_DEPENDENCY_IDENTITIES = {
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
+PLAN_EXECUTION_EVIDENCE = (
+    ("docs/assets/plan-execution-current-action.png", 1440),
+    ("docs/assets/plan-execution-advisor-review.png", 1440),
+    ("docs/assets/plan-execution-reassessment-mobile.png", 390),
+    ("docs/assets/plan-execution-recovery-mobile.png", 390),
+)
 
 
 def _sha256(path: Path) -> str:
@@ -202,3 +208,32 @@ def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> Non
         "latest-64",
     ):
         assert required_contract in source
+
+
+@pytest.mark.parametrize(("relative", "expected_width"), PLAN_EXECUTION_EVIDENCE)
+def test_plan_execution_evidence_is_sanitized_png(
+    relative: str,
+    expected_width: int,
+) -> None:
+    path = ROOT / relative
+    assert path.is_file(), relative
+    data = path.read_bytes()
+    width, height = _png_size(data)
+    assert width == expected_width
+    assert expected_width <= height < 10_000
+    assert 10_000 < len(data) < 2_000_000
+    assert all(marker not in data for marker in PRIVATE_OR_METADATA_MARKERS)
+
+
+def test_plan_execution_evidence_is_generated_from_semantic_state_assertions() -> None:
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+    for filename in (
+        "plan-execution-current-action.png",
+        "plan-execution-advisor-review.png",
+        "plan-execution-reassessment-mobile.png",
+        "plan-execution-recovery-mobile.png",
+    ):
+        assert filename in source
+    assert "PRESENTATION_PUBLIC_EVIDENCE_ROOT" in source
+    assert '"Local synthetic demo"' in source
+    assert '"本地合成演示"' in source

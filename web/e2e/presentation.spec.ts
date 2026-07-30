@@ -4,6 +4,7 @@ import path from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 
 const AUDIT_OUTPUT = process.env.PRESENTATION_AUDIT_OUTPUT_DIR;
+const PUBLIC_EVIDENCE_ROOT = process.env.PRESENTATION_PUBLIC_EVIDENCE_ROOT;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const ROUTES = ["/", "/demo/collaboration", "/demo", "/demo/plan"] as const;
 const LOCALES = ["zh-CN", "en"] as const;
@@ -49,17 +50,24 @@ async function openCell(browser: Browser, cell: AuditCell) {
 
 async function keyboardAndFocusEvidence(page: Page) {
   const sequence: string[] = [];
+  let visibleFocus = false;
   for (let index = 0; index < 12; index += 1) {
     await page.keyboard.press("Tab");
-    sequence.push(await page.evaluate(() => {
+    const step = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
-      if (!active) return "none";
-      return [
-        active.tagName.toLowerCase(),
-        active.getAttribute("aria-label"),
-        active.textContent?.trim().slice(0, 80),
-      ].filter(Boolean).join(":");
-    }));
+      if (!active) return { descriptor: "none", visible: false };
+      const style = getComputedStyle(active);
+      return {
+        descriptor: [
+          active.tagName.toLowerCase(),
+          active.getAttribute("aria-label"),
+          active.textContent?.trim().slice(0, 80),
+        ].filter(Boolean).join(":"),
+        visible: style.outlineStyle !== "none" && style.outlineWidth !== "0px",
+      };
+    });
+    sequence.push(step.descriptor);
+    visibleFocus ||= step.visible;
   }
   const focus = await page.evaluate(() => {
     const active = document.activeElement as HTMLElement | null;
@@ -71,7 +79,7 @@ async function keyboardAndFocusEvidence(page: Page) {
       boxShadow: style.boxShadow,
     };
   });
-  return { focus, keyboard: sequence };
+  return { focus, keyboard: sequence, visibleFocus };
 }
 
 async function renderedMetrics(page: Page) {
@@ -162,6 +170,21 @@ async function renderedMetrics(page: Page) {
   });
 }
 
+async function assertSemanticPresentation(page: Page) {
+  const metrics = await renderedMetrics(page);
+  expect(metrics.overflow.horizontal).toBe(false);
+  expect(metrics.headings.filter((heading) => heading.level === "H1")).toHaveLength(1);
+  expect(metrics.landmarks).toContain("main");
+  expect(metrics.targets.filter((target) => target.height < 24 || target.width < 24)).toEqual([]);
+  if (page.url().includes("/demo/plan")) {
+    await expect(page.locator("body")).not.toContainText(
+      /\b(documents|application|visa|arrival|on_track|due_soon|in_progress|attestation_recorded|verification_recorded)\b/,
+    );
+    expect(metrics.liveRegions).toHaveLength(1);
+  }
+  return metrics;
+}
+
 const PLAN_COPY = {
   "zh-CN": {
     advisor: "顾问",
@@ -219,11 +242,34 @@ async function mutation(page: Page, name: string) {
 }
 
 async function captureState(page: Page, name: string) {
+  const publicFilename = {
+    "plan-state-current-action-zh-CN-1440": "plan-execution-current-action.png",
+    "plan-state-advisor-review-zh-CN-1440": "plan-execution-advisor-review.png",
+    "plan-state-reassessment-en-390": "plan-execution-reassessment-mobile.png",
+    "plan-state-recovery-zh-CN-390": "plan-execution-recovery-mobile.png",
+  }[name];
+  if (name.includes("-en-")) {
+    await expect(page.getByText("Local synthetic demo", { exact: true })).toBeVisible();
+  } else {
+    await expect(page.getByText("本地合成演示", { exact: true })).toBeVisible();
+  }
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    window.scrollTo({ left: 0, top: 0 });
+  });
   await page.screenshot({
     animations: "disabled",
     fullPage: true,
     path: path.join(AUDIT_OUTPUT!, `${name}.png`),
   });
+  if (PUBLIC_EVIDENCE_ROOT && publicFilename) {
+    await mkdir(PUBLIC_EVIDENCE_ROOT, { mode: 0o755, recursive: true });
+    await page.screenshot({
+      animations: "disabled",
+      fullPage: true,
+      path: path.join(PUBLIC_EVIDENCE_ROOT, publicFilename),
+    });
+  }
   await writeFile(
     path.join(AUDIT_OUTPUT!, `${name}.json`),
     `${JSON.stringify(await renderedMetrics(page), null, 2)}\n`,
@@ -246,11 +292,14 @@ test.describe("provider-free governed presentation audit", () => {
         };
         test(`${slug(cell)} rendered baseline`, async ({ browser }) => {
           const { context, page } = await openCell(browser, cell);
+          const keyboardEvidence = await keyboardAndFocusEvidence(page);
           const evidence = {
             cell,
-            ...(await keyboardAndFocusEvidence(page)),
-            metrics: await renderedMetrics(page),
+            ...keyboardEvidence,
+            metrics: await assertSemanticPresentation(page),
           };
+          expect(keyboardEvidence.keyboard.some((item) => item !== "none")).toBe(true);
+          expect(keyboardEvidence.visibleFocus).toBe(true);
           await mkdir(AUDIT_OUTPUT!, { mode: 0o700, recursive: true });
           await page.screenshot({
             animations: "disabled",
@@ -276,7 +325,8 @@ test.describe("provider-free governed presentation audit", () => {
         };
         test(`${slug(cell)} motion baseline`, async ({ browser }) => {
           const { context, page } = await openCell(browser, cell);
-          const evidence = { cell, metrics: await renderedMetrics(page) };
+          const evidence = { cell, metrics: await assertSemanticPresentation(page) };
+          expect(evidence.metrics.reducedMotion).toBe(motion === "reduce");
           await writeFile(
             path.join(AUDIT_OUTPUT!, `${slug(cell)}-motion.json`),
             `${JSON.stringify(evidence, null, 2)}\n`,
@@ -295,7 +345,10 @@ test.describe("provider-free governed presentation audit", () => {
       };
       test(`${slug(zoomCell)} zoom baseline`, async ({ browser }) => {
         const { context, page } = await openCell(browser, zoomCell);
-        const evidence = { cell: zoomCell, metrics: await renderedMetrics(page) };
+        const evidence = {
+          cell: zoomCell,
+          metrics: await assertSemanticPresentation(page),
+        };
         await writeFile(
           path.join(AUDIT_OUTPUT!, `${slug(zoomCell)}-zoom.json`),
           `${JSON.stringify(evidence, null, 2)}\n`,
@@ -334,7 +387,9 @@ test.describe("provider-free governed presentation audit", () => {
     });
     await page.getByRole("button", { exact: true, name: labels.progress }).click();
     await expect(page.getByRole("button", { exact: true, name: labels.recover })).toBeVisible();
-    await captureState(page, "plan-state-recovery-zh-CN-1440");
+    await page.setViewportSize({ width: 390, height: 760 });
+    await captureState(page, "plan-state-recovery-zh-CN-390");
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.unroute("**/checkpoint-attestations");
     await mutation(page, labels.recover);
 
