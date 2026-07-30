@@ -4,6 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any, cast
 
 POST_REVEAL_ALLOWLIST = (
     "tests/fixtures/evidence_loop/holdout-dataset-v1.json",
@@ -30,7 +31,7 @@ def _load_object(path: Path) -> dict[str, object]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{path.name} must be a JSON object")
-    return value
+    return cast(dict[str, object], value)
 
 
 def _digest(path: Path) -> str:
@@ -58,15 +59,19 @@ def validate_public_commitments(root: Path) -> PublicCommitmentValidation:
     ):
         raise ValueError("holdout content must remain unreachable")
 
-    sources = fragment.get("sources")
-    if not isinstance(sources, list) or len(sources) != 4:
+    sources_raw = fragment.get("sources")
+    if not isinstance(sources_raw, list):
+        raise ValueError("source identity mismatch")
+    sources = cast(list[object], sources_raw)
+    if len(sources) != 4:
         raise ValueError("source identity mismatch")
     digests: list[str] = []
     identities: set[str] = set()
     for source in sources:
         if not isinstance(source, dict):
             raise ValueError("source identity mismatch")
-        relative = source.get("relative_path")
+        typed_source = cast(dict[str, Any], source)
+        relative = typed_source.get("relative_path")
         if not isinstance(relative, str):
             raise ValueError("source identity mismatch")
         posix = PurePosixPath(relative)
@@ -75,12 +80,12 @@ def validate_public_commitments(root: Path) -> PublicCommitmentValidation:
         path = root.joinpath(*posix.parts)
         digest = _digest(path)
         if (
-            source.get("media_type") != "application/pdf"
-            or path.stat().st_size != source.get("byte_length")
-            or digest != source.get("content_sha256")
+            typed_source.get("media_type") != "application/pdf"
+            or path.stat().st_size != typed_source.get("byte_length")
+            or digest != typed_source.get("content_sha256")
         ):
             raise ValueError("source identity mismatch")
-        identity = source.get("evaluation_canonical_source_id")
+        identity = typed_source.get("evaluation_canonical_source_id")
         if not isinstance(identity, str) or identity in identities:
             raise ValueError("source identity mismatch")
         identities.add(identity)
