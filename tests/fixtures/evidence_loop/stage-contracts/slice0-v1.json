@@ -1,0 +1,16 @@
+{
+  "schema_version": "night-voyager.stage-readiness-contract.v1",
+  "stage": "slice0",
+  "proof_path": "tests/fixtures/evidence_loop/slice0-receipt-v2.json",
+  "allowed_terminal_dispositions": ["incremental_value_confirmed"],
+  "required_hosted_checks": ["python", "frontend"],
+  "next_stage_unlock": "candidate-authority",
+  "non_claims": [
+    "source_truth",
+    "provider_quality",
+    "statistical_generalization",
+    "production_deployment",
+    "real_user_outcomes",
+    "runtime_multi_agent"
+  ]
+}

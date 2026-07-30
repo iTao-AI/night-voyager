@@ -1,0 +1,41 @@
+{
+  "schema_version": "night-voyager.evidence-loop-provider-locks.v1",
+  "night_voyager": {
+    "repository": "https://github.com/iTao-AI/night-voyager",
+    "release": "v0.1.5",
+    "ref_kind": "tag",
+    "tag_object": "44000702c75fa3002e12245b8d7f762b564db944",
+    "commit": "3a82721a86f65353b849e9ee93050912d0cb079a",
+    "tree": "bbe32e5629b2758421d80598dbca1c795934fcb5",
+    "migration_head": "0015"
+  },
+  "mke": {
+    "repository": "https://github.com/iTao-AI/multimodal-knowledge-engine",
+    "release": "v0.1.5",
+    "ref_kind": "tag",
+    "tag_object": "1ca0a0b348638369e8407270ca5f363b0e551a9e",
+    "commit": "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610",
+    "source_archive_basename": "mke-v0.1.5-source.tar.gz",
+    "source_archive_sha256": "7046ab1a6a3a0336472ef114c95b11a6b94cea0b083f2b025a96b994c1cab4bc",
+    "wheel_basename": "multimodal_knowledge_engine-0.1.5-py3-none-any.whl",
+    "wheel_sha256": "4c2da1a84871e1865b05a720c6ef7b7d2122ed570ec8eb0035627493ba96d281",
+    "tool_schema_sha256": "48b3b6c3a8d17af460ceff23ae64e619486f5792eb77b35416841e73a8190561",
+    "tools": [
+      "search_library_v2",
+      "read_evidence_v1"
+    ]
+  },
+  "dra": {
+    "repository": "https://github.com/iTao-AI/decision-research-agent",
+    "release": "v0.1.8",
+    "ref_kind": "tag",
+    "tag_object": "f828606741f636bca7ddbb66244ca60019eaa3c8",
+    "commit": "cb1f4660ee4ac7d81b04ffea014362e933487e61",
+    "source_archive_basename": "dra-v0.1.8-source.tar.gz",
+    "source_archive_sha256": "ab9deaf7678571b2dda6e8275fcfe2ff69d6baab04f3ab66f84c6abdcb2a6e7f",
+    "consumer_contract_schema": "dra.downstream-consumer.v1",
+    "consumer_fixture_sha256": "cc602576115ff9b41b0f07fa5f6ee88db15424760a78ab4611675e62e19a8157",
+    "profile_id": "generic-strict-citation",
+    "profile_version": "1"
+  }
+}
