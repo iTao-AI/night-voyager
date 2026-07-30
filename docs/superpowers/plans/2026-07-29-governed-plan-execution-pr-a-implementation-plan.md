@@ -8,8 +8,8 @@
 
 **Tech Stack:** Python 3.12, Pydantic v2, FastAPI, SQLAlchemy async sessions, PostgreSQL 18, Alembic, Next.js 16, React 19, TypeScript, Vitest, Playwright 1.58, pytest, Ruff, Pyright, Docker Compose.
 
-**Plan status:** Implemented, reviewed, and merged into the current development
-base. Publication and v0.1.5 release remain pending.
+**Plan status:** Implemented, reviewed, and merged; included in the v0.1.5
+release candidate. Publication remains separately gated.
 
 ## Global Constraints
 

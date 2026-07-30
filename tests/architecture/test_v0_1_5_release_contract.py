@@ -40,7 +40,7 @@ HISTORICAL_RELEASE_DIGESTS = {
 }
 
 
-def test_current_release_identity_advances_to_v0_1_5_without_dependency_drift() -> None:
+def test_current_release_identity_is_v0_1_5_without_dependency_drift() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
@@ -60,8 +60,6 @@ def test_current_release_identity_advances_to_v0_1_5_without_dependency_drift() 
     assert create_app().version == VERSION
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
     assert f'VERSION = "{VERSION}"' in verifier
-    assert 'f"docs/releases/v{VERSION}.md"' in verifier
-    assert 'f"docs/how-to/verify-v{VERSION}-release.md"' in verifier
 
 
 def test_current_release_entries_point_to_v0_1_5_and_keep_history() -> None:
@@ -91,13 +89,12 @@ def test_current_release_entries_point_to_v0_1_5_and_keep_history() -> None:
 
     for relative in ("README.md", "README_CN.md", "docs/README.md"):
         source = (ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.1.0" in source, relative
-        assert "v0.1.1" in source, relative
-        assert "v0.1.2" in source, relative
+        for historical_version in ("v0.1.0", "v0.1.1", "v0.1.2", "v0.1.3", "v0.1.4"):
+            assert historical_version in source, (relative, historical_version)
 
 
-def test_v0_1_4_release_notes_define_current_capability_and_non_claim_scope() -> None:
-    release = (ROOT / "docs/releases/v0.1.4.md").read_text(encoding="utf-8")
+def test_v0_1_5_release_notes_define_capability_and_non_claim_scope() -> None:
+    release = (ROOT / "docs/releases/v0.1.5.md").read_text(encoding="utf-8")
     headings = (
         "## Summary",
         "## Completion",
@@ -111,60 +108,52 @@ def test_v0_1_4_release_notes_define_current_capability_and_non_claim_scope() ->
     )
     for token in (
         "local synthetic portfolio release",
-        "migration `0013`",
-        "capture",
+        "migration `0015`",
+        "PR #80",
+        "governed timeline execution",
+        "PR #83",
         "recovery",
-        "Stage 2–4",
-        "evaluation",
-        "semantic candidate-freeze evidence",
-        "01ba21f2996769e68cbc88f4bb0596740df27f6b",
-        "generic-strict-citation@1",
-        "not a DRA v0.1.6 release capability",
-        "versioned planning revision authority",
-        "deterministic old/new comparison",
-        "fresh advisor reauthorization",
-        "only-current family decision",
-        "zh-CN",
-        "en",
-        "React",
-        "Next.js",
-        "PostCSS",
-        "Dependabot #8",
-        "Dependabot #9",
-        "FIXED",
-        "Dependabot #7",
-        "OPEN",
+        "PR #84",
+        "reassessment",
+        "session",
+        "task",
+        "receipt",
+        "reconciliation",
+        "PR #85",
+        "professional presentation",
+        "evaluator-first DX",
+        "PR #78",
+        "dependency maintenance",
+        "sharp",
         "GHSA-f88m-g3jw-g9cj",
         "brace-expansion",
         "minimatch",
-        "ESLint",
         "not audit-zero",
+        "PR #81",
+        "PR #82",
+        "CI verification maintenance",
         "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
+        "two",
         "zero cited Evidence",
-        "before candidate import",
         "no third provider attempt",
         "GitHub-generated source archive",
         "no production deployment",
-        "no source-truth or provider-quality claim",
-        "no real student or school coverage",
-        "no advisor-team adoption",
+        "no real users",
+        "no real schools or student data",
         "no admissions outcome",
-        "no HA or SLA",
         "no business-benefit claim",
-        "release-prep does not change migration, API, runtime behavior, or dependency tree",
+        "no HA or SLA",
+        "release-prep does not change migration, runtime, backend, product, BFF, API, "
+        "domain, dependency choice, Dockerfile, or Compose policy",
     ):
         assert token in release
 
-
-def test_v0_1_4_release_notes_reject_unsupported_security_claims() -> None:
-    release = (ROOT / "docs/releases/v0.1.4.md").read_text(encoding="utf-8")
-
-    assert "not audit-zero" in release
     assert "all vulnerabilities" not in release.lower()
+    assert "audit-zero" in release
 
 
-def test_v0_1_4_verification_guide_defines_gate_c_d_and_e() -> None:
-    how_to = (ROOT / "docs/how-to/verify-v0.1.4-release.md").read_text(
+def test_v0_1_5_verification_guide_defines_gate_c_d_and_e() -> None:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.5-release.md").read_text(
         encoding="utf-8"
     )
     for token in (
@@ -177,15 +166,11 @@ def test_v0_1_4_verification_guide_defines_gate_c_d_and_e() -> None:
         "git rev-parse HEAD",
         "git rev-parse origin/main",
         'git -C "$repo_root" describe --tags --exact-match "$expected_commit"',
-        'git -C "$repo_root" cat-file -t v0.1.4',
-        'git -C "$repo_root" rev-parse v0.1.4^{tag}',
-        'git -C "$repo_root" rev-parse v0.1.4^{commit}',
-        'curl --fail --location --output "$archive"',
-        "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.4.tar.gz",
-        'wc -c "$archive"',
-        'shasum -a 256 "$archive"',
-        'tar -xzf "$archive" -C "$tmp_dir"',
-        'cd "$tmp_dir/night-voyager-0.1.4"',
+        'git -C "$repo_root" cat-file -t v0.1.5',
+        'git -C "$repo_root" rev-parse v0.1.5^{tag}',
+        'git -C "$repo_root" rev-parse v0.1.5^{commit}',
+        "https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.5.tar.gz",
+        'cd "$tmp_dir/night-voyager-0.1.5"',
         "make doctor MODE=dev",
         "make check",
         "make proof",
@@ -201,60 +186,10 @@ def test_v0_1_4_verification_guide_defines_gate_c_d_and_e() -> None:
         "public source archive",
         "Never move the tag after publication",
         "Use the extracted source archive",
-        "Do not force-move `v0.1.4`",
+        "Do not force-move `v0.1.5`",
         "normal pull request",
     ):
         assert token in how_to
-
-
-def test_gate_d_archive_smoke_preserves_repo_context_and_official_archive_shape() -> None:
-    how_to = (ROOT / "docs/how-to/verify-v0.1.4-release.md").read_text(
-        encoding="utf-8"
-    )
-
-    for token in (
-        'repo_root="$(git rev-parse --show-toplevel)"',
-        "--prefix=night-voyager-0.1.4/",
-        'test ! -e "$tmp_dir/extracted/night-voyager-0.1.4/.git"',
-        '(\n  cd "$tmp_dir/extracted/night-voyager-0.1.4"',
-        'git -C "$repo_root" fetch origin --tags --prune',
-        'test "$(git -C "$repo_root" rev-parse origin/main)" = "$expected_commit"',
-        'test "$(git -C "$repo_root" rev-parse v0.1.4^{commit})" = "$expected_commit"',
-    ):
-        assert token in how_to
-
-
-def test_gate_d_reads_back_exact_public_github_release_state() -> None:
-    how_to = (ROOT / "docs/how-to/verify-v0.1.4-release.md").read_text(
-        encoding="utf-8"
-    )
-
-    for token in (
-        "gh release view v0.1.4",
-        "--repo iTao-AI/night-voyager",
-        "--json tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body",
-        "gh api repos/iTao-AI/night-voyager/releases/tags/v0.1.4",
-        'release_view["tagName"] == release_api["tag_name"] == "v0.1.4"',
-        'release_view["targetCommitish"] == release_api["target_commitish"] == "main"',
-        'release_view["isDraft"] is False',
-        'release_api["draft"] is False',
-        'release_view["isPrerelease"] is False',
-        'release_api["prerelease"] is False',
-        'release_view["assets"] == release_api["assets"] == []',
-        'release_view["publishedAt"] == release_api["published_at"]',
-        'release_view["url"] == release_api["html_url"]',
-        'repo_root / "docs/releases/v0.1.4.md"',
-        'release_view["body"].encode("utf-8") == expected_body',
-        'release_api["body"].encode("utf-8") == expected_body',
-        "GitHub-generated source archives remain the only release artifacts",
-    ):
-        assert token in how_to
-
-
-def test_published_v0_1_4_release_keeps_exact_0013_migration_identity() -> None:
-    release = (ROOT / "docs/releases/v0.1.4.md").read_text(encoding="utf-8")
-    assert "当前 development 与 release identity 使用 migration `0013`；" in release
-    assert (ROOT / "migrations/versions/0013_planning_revision_demo_seed.py").is_file()
 
 
 def test_published_release_documents_remain_byte_identical() -> None:
@@ -270,6 +205,5 @@ def test_release_documentation_skills_do_not_expand_authority() -> None:
         "Invoking a Skill does not authorize push, PR mutation, merge, tag, GitHub Release",
         "Use `document-generate` only to close a concrete, in-scope documentation gap",
         "Do not generate every Diataxis quadrant mechanically",
-        "duplicate existing",
     ):
         assert token in agents

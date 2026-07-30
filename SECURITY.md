@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Night Voyager v0.1.4 is a local synthetic portfolio release with the prior portfolio workflow, the Night Voyager-owned governed DRA consumer contract, and versioned planning revision authority. Security fixes apply to the current default branch; the release is not supported as a production service.
+Night Voyager v0.1.5 is a local synthetic portfolio release with the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, and evaluator-first presentation. Security fixes apply to the current default branch; the release is not supported as a production service.
 
 ## Reporting
 

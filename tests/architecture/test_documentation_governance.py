@@ -959,7 +959,7 @@ def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
     assert "focused advisor-family/evidence route" in route_map
 
     for token in (
-        "v0.1.4 is the current local synthetic portfolio release",
+            "v0.1.5 is the current local synthetic portfolio release",
         "PRs #57–#59 are released in v0.1.3",
         "PR #60 and the route-presentation follow-up are released in v0.1.3",
     ):
@@ -1198,9 +1198,9 @@ def test_governed_plan_execution_dx_surface_is_evaluator_first() -> None:
         "plan-execution-recovery-mobile.png",
         "semantic assertions",
         "screenshots are review evidence",
-        "PR A/B are merged",
-        "PR C is implemented and locally verified",
-        "publication and v0.1.5 release remain pending",
+            "PR A/B/C are implemented, reviewed, merged",
+            "included in the v0.1.5 release candidate",
+            "Publication remains separately gated",
     ):
         assert token in combined
 

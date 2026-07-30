@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted and implemented locally in PR A. PR B recovery/reassessment presentation,
-PR C presentation/DX/release closure, publication, and release remain pending.
+Accepted and implemented through merged PR A/B/C. The complete authority,
+recovery/reassessment, presentation, and evaluator-first DX surface is included
+in the v0.1.5 release candidate; publication remains separately gated.
 
 ## Context
 
