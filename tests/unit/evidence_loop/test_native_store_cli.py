@@ -15,6 +15,14 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts/prepare_evidence_loop_store.py"
 FIXTURES = ROOT / "tests/fixtures/evidence_loop"
+FORBIDDEN_DIAGNOSTIC_TEXT = (
+    "/Users/",
+    "/private/",
+    "/tmp/",
+    "query",
+    "cursor",
+    "credential",
+)
 
 
 def _load_script() -> ModuleType:
@@ -36,6 +44,24 @@ def _copy_public_sources(target: Path) -> Path:
         shutil.copyfile(source, corpus / source.name)
         (corpus / source.name).chmod(0o644)
     return target / "source-manifest-v1.json"
+
+
+def _assert_bounded_failure(
+    result: subprocess.CompletedProcess[str],
+    *,
+    exit_code: int,
+    stage: str,
+    code: str,
+) -> dict[str, Any]:
+    assert result.returncode == exit_code
+    payload = json.loads(result.stdout)
+    assert set(payload) == {"stage", "code", "problem", "cause", "recovery"}
+    assert payload["stage"] == stage
+    assert payload["code"] == code
+    assert result.stderr.splitlines() == [f"recovery: {payload['recovery']}"]
+    encoded = result.stdout + result.stderr
+    assert all(value not in encoded for value in FORBIDDEN_DIAGNOSTIC_TEXT)
+    return payload
 
 
 def test_native_store_cli_help_matches_approved_archive_contract() -> None:
@@ -73,15 +99,71 @@ def test_native_store_cli_missing_required_input_is_bounded_json() -> None:
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 2
-    payload = json.loads(result.stdout)
-    assert set(payload) == {"stage", "code", "problem", "cause", "recovery"}
-    assert payload["stage"] == "arguments"
-    assert result.stderr == ""
+    _assert_bounded_failure(
+        result,
+        exit_code=2,
+        stage="arguments",
+        code="required_argument_missing",
+    )
+
+
+def test_native_store_cli_unknown_argument_is_bounded_json() -> None:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--unknown-argument"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    _assert_bounded_failure(
+        result,
+        exit_code=2,
+        stage="arguments",
+        code="invalid_cli",
+    )
+
+
+def test_native_store_cli_unreadable_archive_is_exit_2(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    run_root.mkdir(mode=0o700)
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mke-source-archive",
+            str(tmp_path / "missing-mke.tar"),
+            "--mke-tag-object",
+            "1ca0a0b348638369e8407270ca5f363b0e551a9e",
+            "--mke-commit",
+            "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610",
+            "--dra-source-archive",
+            str(tmp_path / "missing-dra.tar.gz"),
+            "--dra-tag-object",
+            "f828606741f636bca7ddbb66244ca60019eaa3c8",
+            "--dra-commit",
+            "cb1f4660ee4ac7d81b04ffea014362e933487e61",
+            "--source-manifest",
+            str(FIXTURES / "source-manifest-v1.json"),
+            "--run-root",
+            str(run_root),
+            "--json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    _assert_bounded_failure(
+        result,
+        exit_code=2,
+        stage="arguments",
+        code="input_unreadable",
+    )
 
 
 def test_manifest_accepts_fresh_checkout_0644_and_copies_both_archives_0400(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_script()
     manifest_path = _copy_public_sources(tmp_path / "package")
@@ -89,6 +171,22 @@ def test_manifest_accepts_fresh_checkout_0644_and_copies_both_archives_0400(
     mke_archive.write_bytes(b"exact mke archive")
     dra_archive = tmp_path / "dra.tar.gz"
     dra_archive.write_bytes(b"exact dra archive")
+    monkeypatch.setattr(
+        module,
+        "SOURCE_ARCHIVE_SHA256",
+        hashlib.sha256(mke_archive.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(module, "SOURCE_ARCHIVE_BYTES", len(mke_archive.read_bytes()))
+    monkeypatch.setattr(
+        module,
+        "DRA_SOURCE_ARCHIVE_SHA256",
+        hashlib.sha256(dra_archive.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        module,
+        "DRA_SOURCE_ARCHIVE_BYTES",
+        len(dra_archive.read_bytes()),
+    )
     input_root = tmp_path / "input"
     input_root.mkdir(mode=0o700)
     manifest, sources = module._load_manifest(manifest_path)
@@ -136,6 +234,7 @@ def test_precreated_run_child_fails_closed(tmp_path: Path) -> None:
         module._prepare_run_root(run_root)
 
     assert captured.value.payload["code"] == "destination_exists"
+    assert captured.value.exit_code == 11
 
 
 @pytest.mark.parametrize(
@@ -197,20 +296,23 @@ def test_producer_input_validation_rejects_each_identity_drift(
 
 
 @pytest.mark.parametrize(
-    ("flag", "value"),
+    ("flag", "value", "exit_code", "stage", "code"),
     [
-        ("--mke-source-archive", "wrong-mke"),
-        ("--mke-tag-object", "0" * 40),
-        ("--mke-commit", "0" * 40),
-        ("--dra-source-archive", "wrong-dra"),
-        ("--dra-tag-object", "0" * 40),
-        ("--dra-commit", "0" * 40),
+        ("--mke-source-archive", "wrong-mke", 2, "arguments", "input_unreadable"),
+        ("--mke-tag-object", "0" * 40, 10, "producer", "producer_identity_mismatch"),
+        ("--mke-commit", "0" * 40, 10, "producer", "producer_identity_mismatch"),
+        ("--dra-source-archive", "wrong-dra", 2, "arguments", "input_unreadable"),
+        ("--dra-tag-object", "0" * 40, 10, "producer", "producer_identity_mismatch"),
+        ("--dra-commit", "0" * 40, 10, "producer", "producer_identity_mismatch"),
     ],
 )
 def test_documented_operator_contract_admits_only_exact_producer_inputs(
     tmp_path: Path,
     flag: str,
     value: str,
+    exit_code: int,
+    stage: str,
+    code: str,
 ) -> None:
     mke_archive = tmp_path / "mke-v0.1.5.tar"
     mke_archive.write_bytes(b"wrong-mke")
@@ -250,11 +352,214 @@ def test_documented_operator_contract_admits_only_exact_producer_inputs(
         text=True,
     )
 
-    assert result.returncode == 11
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload["stage"] == "producer"
-    assert payload["code"] == "producer_identity_mismatch"
+    _assert_bounded_failure(
+        result,
+        exit_code=exit_code,
+        stage=stage,
+        code=code,
+    )
+
+
+@pytest.mark.parametrize(
+    ("exception", "exit_code"),
+    [
+        ("native_source_set_mismatch", 10),
+        ("store_artifact_invalid", 10),
+        ("sealed_mutation_not_closed", 14),
+        ("store_artifact_drift", 14),
+        ("receipt_destination_exists", 13),
+    ],
+)
+def test_native_failure_codes_have_explicit_a3_exit_ownership(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    exception: str,
+    exit_code: int,
+) -> None:
+    module = _load_script()
+
+    def fail(_: Any) -> None:
+        raise module.NativeStoreValidationError(exception)
+
+    monkeypatch.setattr(module, "_prepare", fail)
+
+    assert module.main([]) == exit_code
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["code"] == exception
+    assert captured.err.splitlines() == [f"recovery: {payload['recovery']}"]
+    assert exit_code != 12
+
+
+def test_internal_validation_failure_is_exit_13_and_public_safe(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_script()
+
+    def fail(_: Any) -> None:
+        raise RuntimeError("sensitive physical path")
+
+    monkeypatch.setattr(module, "_prepare", fail)
+
+    assert module.main([]) == 13
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+    assert payload["code"] == "a3_preparation_failed"
+    assert "sensitive" not in captured.out + captured.err
+    assert captured.err.splitlines() == [f"recovery: {payload['recovery']}"]
+
+
+def test_copy_time_archive_swap_fails_before_native_work(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    manifest_path = _copy_public_sources(tmp_path / "package")
+    mke_archive = tmp_path / "mke-v0.1.5.tar"
+    mke_archive.write_bytes(b"exact mke")
+    dra_archive = tmp_path / "dra-v0.1.8-source.tar.gz"
+    dra_archive.write_bytes(b"exact dra")
+    monkeypatch.setattr(
+        module,
+        "SOURCE_ARCHIVE_SHA256",
+        hashlib.sha256(mke_archive.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(module, "SOURCE_ARCHIVE_BYTES", len(mke_archive.read_bytes()))
+    monkeypatch.setattr(
+        module,
+        "DRA_SOURCE_ARCHIVE_SHA256",
+        hashlib.sha256(dra_archive.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        module,
+        "DRA_SOURCE_ARCHIVE_BYTES",
+        len(dra_archive.read_bytes()),
+    )
+    module._validate_producer_inputs(
+        mke_source_archive=mke_archive,
+        mke_tag_object=module.TAG_OBJECT,
+        mke_commit=module.PEELED_COMMIT,
+        dra_source_archive=dra_archive,
+        dra_tag_object=module.DRA_TAG_OBJECT,
+        dra_commit=module.DRA_PEELED_COMMIT,
+    )
+    dra_archive.write_bytes(b"post-validation swap")
+    input_root = tmp_path / "input"
+    input_root.mkdir(mode=0o700)
+    _, sources = module._load_manifest(manifest_path)
+
+    with pytest.raises(module.PreparationFailure) as captured:
+        module._prepare_input_root(
+            manifest_path,
+            mke_archive,
+            dra_archive,
+            input_root,
+            sources,
+        )
+
+    assert captured.value.payload["code"] == "admitted_input_identity_mismatch"
+    assert not (input_root / "dra-v0.1.8-source.tar.gz").exists()
+
+
+@pytest.mark.parametrize("swapped", ["manifest", "fragment", "corpus"])
+def test_copy_time_public_input_swap_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    swapped: str,
+) -> None:
+    module = _load_script()
+    manifest_path = _copy_public_sources(tmp_path / "package")
+    mke_archive = tmp_path / "mke-v0.1.5.tar"
+    mke_archive.write_bytes(b"exact mke")
+    dra_archive = tmp_path / "dra-v0.1.8-source.tar.gz"
+    dra_archive.write_bytes(b"exact dra")
+    monkeypatch.setattr(
+        module,
+        "SOURCE_ARCHIVE_SHA256",
+        hashlib.sha256(mke_archive.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(module, "SOURCE_ARCHIVE_BYTES", len(mke_archive.read_bytes()))
+    monkeypatch.setattr(
+        module,
+        "DRA_SOURCE_ARCHIVE_SHA256",
+        hashlib.sha256(dra_archive.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        module,
+        "DRA_SOURCE_ARCHIVE_BYTES",
+        len(dra_archive.read_bytes()),
+    )
+    _, sources = module._load_manifest(manifest_path)
+    if swapped == "manifest":
+        manifest_path.write_bytes(b"swapped")
+    elif swapped == "fragment":
+        (manifest_path.parent / "source-manifest-fragment-v1.json").write_bytes(
+            b"swapped"
+        )
+    else:
+        (manifest_path.parent / sources[0]["relative_path"]).write_bytes(b"swapped")
+    input_root = tmp_path / "input"
+    input_root.mkdir(mode=0o700)
+
+    with pytest.raises(module.PreparationFailure) as captured:
+        module._prepare_input_root(
+            manifest_path,
+            mke_archive,
+            dra_archive,
+            input_root,
+            sources,
+        )
+
+    assert captured.value.payload["code"] == "admitted_input_identity_mismatch"
+
+
+def test_receipt_archive_entries_must_equal_provider_and_admission_peers() -> None:
+    module = _load_script()
+    receipt: dict[str, Any] = {
+        "producer": {
+            "source_archive": {
+                "basename": "mke-v0.1.5.tar",
+                "byte_length": 14_643_200,
+                "sha256": module.SOURCE_ARCHIVE_SHA256,
+                "mode": "0400",
+            },
+            "dra_admission": {
+                "source_archive": {
+                    "basename": "dra-v0.1.8-source.tar.gz",
+                    "byte_length": 1_687_802,
+                    "sha256": module.DRA_SOURCE_ARCHIVE_SHA256,
+                    "mode": "0400",
+                }
+            },
+        },
+        "input_admission": {
+            "files": [
+                {
+                    "logical_name": "mke_a3_source_tree_archive",
+                    "basename": "mke-v0.1.5.tar",
+                    "byte_length": 14_643_200,
+                    "sha256": module.SOURCE_ARCHIVE_SHA256,
+                    "mode": "0400",
+                },
+                {
+                    "logical_name": "dra_source_archive",
+                    "basename": "dra-v0.1.8-source.tar.gz",
+                    "byte_length": 1_687_802,
+                    "sha256": module.DRA_SOURCE_ARCHIVE_SHA256,
+                    "mode": "0400",
+                },
+            ]
+        },
+    }
+    module._validate_receipt_archive_peers(receipt)
+    receipt["producer"]["dra_admission"]["source_archive"]["sha256"] = "0" * 64
+
+    with pytest.raises(
+        module.NativeStoreValidationError,
+        match="receipt_archive_identity_mismatch",
+    ):
+        module._validate_receipt_archive_peers(receipt)
 
 
 @pytest.mark.parametrize(

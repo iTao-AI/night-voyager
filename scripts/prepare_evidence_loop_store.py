@@ -10,9 +10,10 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tarfile
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, NoReturn, cast
 
 from night_voyager.evidence_loop.native_store import (
     NativeStoreValidationError,
@@ -31,6 +32,7 @@ TAG_OBJECT = "1ca0a0b348638369e8407270ca5f363b0e551a9e"
 PEELED_COMMIT = "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610"
 TREE = "22756fdfa8ef131d3e28fc2a44acc3f2b6fa32f0"
 MKE_SOURCE_ARCHIVE_BASENAME = "mke-v0.1.5.tar"
+SOURCE_ARCHIVE_BYTES = 14_643_200
 SOURCE_ARCHIVE_SHA256 = (
     "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
 )
@@ -38,6 +40,7 @@ DRA_TAG = "v0.1.8"
 DRA_TAG_OBJECT = "f828606741f636bca7ddbb66244ca60019eaa3c8"
 DRA_PEELED_COMMIT = "cb1f4660ee4ac7d81b04ffea014362e933487e61"
 DRA_SOURCE_ARCHIVE_BASENAME = "dra-v0.1.8-source.tar.gz"
+DRA_SOURCE_ARCHIVE_BYTES = 1_687_802
 DRA_SOURCE_ARCHIVE_SHA256 = (
     "ab9deaf7678571b2dda6e8275fcfe2ff69d6baab04f3ab66f84c6abdcb2a6e7f"
 )
@@ -47,6 +50,10 @@ SOURCE_FRAGMENT_SHA256 = (
     "d9926321da8c244e93d93afd4e8a5c4571aa14ceac4a7913644a887f195c0793"
 )
 SOURCE_FRAGMENT_BYTES = 11549
+SOURCE_MANIFEST_SHA256 = (
+    "8d6559feb891f5509fe25f034b97c77ed825a60d3ba682f110bfa50517ba8e75"
+)
+SOURCE_MANIFEST_BYTES = 3992
 PYMUPDF_VERSION = "1.27.2.3"
 PYMUPDF_WHEEL = "pymupdf-1.27.2.3-cp310-abi3-macosx_11_0_arm64.whl"
 PYMUPDF_WHEEL_SHA256 = (
@@ -88,8 +95,21 @@ class PreparationFailure(RuntimeError):
         super().__init__(code)
 
 
+class BoundedArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> NoReturn:
+        del message
+        raise PreparationFailure(
+            "arguments",
+            "invalid_cli",
+            "The A3 command line is invalid.",
+            "An unknown or malformed argument was supplied.",
+            "Use --help and supply only the documented A3 arguments.",
+            2,
+        )
+
+
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = BoundedArgumentParser(
         description="Prepare the exact tagged MKE v0.1.5 Slice 0 store and close mutation."
     )
     parser.add_argument("--mke-source-archive")
@@ -128,7 +148,7 @@ def _run(
             "The exact producer command did not complete.",
             "A verified local producer step failed.",
             "Inspect the task-owned producer environment.",
-            11,
+            10,
         )
     return result.stdout.strip()
 
@@ -149,7 +169,7 @@ def _verify_cached_pymupdf(uv: str) -> None:
             "The locked cached PDF dependency is unavailable.",
             "The exact cached wheel commitment is absent.",
             "Restore the approved shared package cache.",
-            11,
+            10,
         )
     data = proof.read_bytes()
     if (
@@ -162,7 +182,7 @@ def _verify_cached_pymupdf(uv: str) -> None:
             "The cached PDF dependency does not match the frozen contract.",
             "The locked wheel filename or digest differs.",
             "Restore the approved locked wheel cache entry.",
-            11,
+            10,
         )
 
 
@@ -178,7 +198,7 @@ def _verify_archive_tree(extracted: Path) -> None:
             "The MKE source archive tree does not match the frozen contract.",
             "The extracted Git tree identity differs.",
             "Restore the exact task-owned MKE v0.1.5 source archive.",
-            11,
+            10,
         )
 
 
@@ -193,7 +213,7 @@ def _prepare_wheel(
             "The local package runner is unavailable.",
             "The required cached build tool is not on PATH.",
             "Restore the approved local build tool.",
-            11,
+            10,
         )
     _verify_cached_pymupdf(uv)
     if _sha256(source_archive) != SOURCE_ARCHIVE_SHA256:
@@ -203,7 +223,7 @@ def _prepare_wheel(
             "The MKE source archive does not match the frozen contract.",
             "The exact source archive digest differs.",
             "Restore the exact task-owned MKE v0.1.5 source archive.",
-            11,
+            10,
         )
     source = work_root / "source"
     dist = work_root / "dist"
@@ -220,7 +240,7 @@ def _prepare_wheel(
             "The MKE source archive layout is invalid.",
             "The expected source root is absent.",
             "Restore the exact task-owned MKE v0.1.5 source archive.",
-            11,
+            10,
         )
     _verify_archive_tree(extracted)
     _run(
@@ -243,7 +263,7 @@ def _prepare_wheel(
             "The exact MKE wheel was not produced uniquely.",
             "The local build output was missing or ambiguous.",
             "Inspect the exact tagged archive build.",
-            11,
+            10,
         )
     _run([uv, "venv", "--python", "3.12", str(venv)])
     _run(
@@ -288,7 +308,7 @@ def _prepare_wheel(
             "The isolated producer runtime does not match the frozen contract.",
             "One or more installed producer versions differ.",
             "Restore the approved cached producer dependencies.",
-            11,
+            10,
         )
     return venv / "bin/mke", _sha256(wheels[0])
 
@@ -300,7 +320,7 @@ def _corpus_failure() -> PreparationFailure:
         "The project source manifest does not match Revision 3.",
         "A closed manifest, producer, proof, or source commitment differs.",
         "Restore the committed Revision 3 public package.",
-        12,
+        10,
     )
 
 
@@ -398,7 +418,24 @@ def _load_manifest(
     return manifest, stable_sources
 
 
-def _copy_exclusive(source: Path, destination: Path) -> dict[str, Any]:
+def _admission_copy_failure() -> PreparationFailure:
+    return PreparationFailure(
+        "producer",
+        "admitted_input_identity_mismatch",
+        "An admitted A3 input does not match its frozen commitment.",
+        "The copied bytes, length, or mode differ from the approved identity.",
+        "Restore the exact committed or producer input and use a fresh run root.",
+        10,
+    )
+
+
+def _copy_exclusive(
+    source: Path,
+    destination: Path,
+    *,
+    expected_sha256: str,
+    expected_byte_length: int,
+) -> dict[str, Any]:
     descriptor = os.open(
         destination,
         os.O_WRONLY | os.O_CREAT | os.O_EXCL,
@@ -411,17 +448,19 @@ def _copy_exclusive(source: Path, destination: Path) -> dict[str, Any]:
             os.fsync(writer.fileno())
     except Exception:
         destination.unlink(missing_ok=True)
-        raise
+        raise _admission_copy_failure() from None
     destination.chmod(0o400)
     if (
-        destination.stat().st_size != source.stat().st_size
-        or _sha256(destination) != _sha256(source)
+        destination.stat().st_size != expected_byte_length
+        or _sha256(destination) != expected_sha256
+        or destination.stat().st_mode & 0o777 != 0o400
     ):
-        raise _corpus_failure()
+        destination.unlink(missing_ok=True)
+        raise _admission_copy_failure()
     return {
         "basename": destination.name,
-        "byte_length": destination.stat().st_size,
-        "sha256": _sha256(destination),
+        "byte_length": expected_byte_length,
+        "sha256": expected_sha256,
         "mode": "0400",
     }
 
@@ -441,6 +480,8 @@ def _prepare_input_root(
             **_copy_exclusive(
                 mke_source_archive,
                 input_root / MKE_SOURCE_ARCHIVE_BASENAME,
+                expected_sha256=SOURCE_ARCHIVE_SHA256,
+                expected_byte_length=SOURCE_ARCHIVE_BYTES,
             ),
         },
         {
@@ -448,17 +489,26 @@ def _prepare_input_root(
             **_copy_exclusive(
                 dra_source_archive,
                 input_root / DRA_SOURCE_ARCHIVE_BASENAME,
+                expected_sha256=DRA_SOURCE_ARCHIVE_SHA256,
+                expected_byte_length=DRA_SOURCE_ARCHIVE_BYTES,
             ),
         },
         {
             "logical_name": "source_manifest",
-            **_copy_exclusive(manifest_path, input_root / "source-manifest-v1.json"),
+            **_copy_exclusive(
+                manifest_path,
+                input_root / "source-manifest-v1.json",
+                expected_sha256=SOURCE_MANIFEST_SHA256,
+                expected_byte_length=SOURCE_MANIFEST_BYTES,
+            ),
         },
         {
             "logical_name": "source_manifest_fragment",
             **_copy_exclusive(
                 manifest_path.parent / "source-manifest-fragment-v1.json",
                 input_root / "source-manifest-fragment-v1.json",
+                expected_sha256=SOURCE_FRAGMENT_SHA256,
+                expected_byte_length=SOURCE_FRAGMENT_BYTES,
             ),
         },
     ]
@@ -467,7 +517,12 @@ def _prepare_input_root(
         files.append(
             {
                 "logical_name": source["relative_path"],
-                **_copy_exclusive(source_path, corpus / source_path.name),
+                **_copy_exclusive(
+                    source_path,
+                    corpus / source_path.name,
+                    expected_sha256=str(source["content_sha256"]),
+                    expected_byte_length=int(source["byte_length"]),
+                ),
             }
         )
     return {
@@ -490,7 +545,7 @@ def _prepare_run_root(run_root: Path) -> dict[str, Path]:
             "The task-owned run root is not fresh and empty.",
             "A3 preparation is single-use and fail-closed.",
             "Create one fresh mode-0700 run root without child directories.",
-            2,
+            11,
         )
     roots = {
         name: run_root / name for name in ("input", "work", "store", "receipts")
@@ -509,15 +564,38 @@ def _validate_producer_inputs(
     dra_tag_object: str,
     dra_commit: str,
 ) -> None:
+    if not mke_source_archive.is_file() or not dra_source_archive.is_file():
+        raise PreparationFailure(
+            "arguments",
+            "input_unreadable",
+            "A required A3 producer input is unreadable.",
+            "One or more declared source archives are unavailable.",
+            "Restore readable exact producer archives and retry.",
+            2,
+        )
+    try:
+        mke_bytes = mke_source_archive.stat().st_size
+        mke_sha256 = _sha256(mke_source_archive)
+        dra_bytes = dra_source_archive.stat().st_size
+        dra_sha256 = _sha256(dra_source_archive)
+    except OSError:
+        raise PreparationFailure(
+            "arguments",
+            "input_unreadable",
+            "A required A3 producer input is unreadable.",
+            "One or more declared source archives cannot be read.",
+            "Restore readable exact producer archives and retry.",
+            2,
+        ) from None
     if (
         mke_tag_object != TAG_OBJECT
         or mke_commit != PEELED_COMMIT
         or dra_tag_object != DRA_TAG_OBJECT
         or dra_commit != DRA_PEELED_COMMIT
-        or not mke_source_archive.is_file()
-        or _sha256(mke_source_archive) != SOURCE_ARCHIVE_SHA256
-        or not dra_source_archive.is_file()
-        or _sha256(dra_source_archive) != DRA_SOURCE_ARCHIVE_SHA256
+        or mke_bytes != SOURCE_ARCHIVE_BYTES
+        or mke_sha256 != SOURCE_ARCHIVE_SHA256
+        or dra_bytes != DRA_SOURCE_ARCHIVE_BYTES
+        or dra_sha256 != DRA_SOURCE_ARCHIVE_SHA256
     ):
         raise PreparationFailure(
             "producer",
@@ -525,8 +603,45 @@ def _validate_producer_inputs(
             "The supplied producer inputs do not match the frozen A3 contract.",
             "An exact archive, tag object, commit, or digest differs.",
             "Supply the approved MKE v0.1.5 and DRA v0.1.8 inputs.",
-            11,
+            10,
         )
+
+
+def _validate_receipt_archive_peers(receipt: dict[str, Any]) -> None:
+    expected_mke = {
+        "basename": MKE_SOURCE_ARCHIVE_BASENAME,
+        "byte_length": SOURCE_ARCHIVE_BYTES,
+        "sha256": SOURCE_ARCHIVE_SHA256,
+        "mode": "0400",
+    }
+    expected_dra = {
+        "basename": DRA_SOURCE_ARCHIVE_BASENAME,
+        "byte_length": DRA_SOURCE_ARCHIVE_BYTES,
+        "sha256": DRA_SOURCE_ARCHIVE_SHA256,
+        "mode": "0400",
+    }
+    try:
+        producer = cast(dict[str, Any], receipt["producer"])
+        dra = cast(dict[str, Any], producer["dra_admission"])
+        admission = cast(dict[str, Any], receipt["input_admission"])
+        files = cast(list[dict[str, Any]], admission["files"])
+        by_logical_name = {
+            str(entry["logical_name"]): {
+                key: entry[key]
+                for key in ("basename", "byte_length", "sha256", "mode")
+            }
+            for entry in files
+        }
+        valid = (
+            producer["source_archive"] == expected_mke
+            and dra["source_archive"] == expected_dra
+            and by_logical_name["mke_a3_source_tree_archive"] == expected_mke
+            and by_logical_name["dra_source_archive"] == expected_dra
+        )
+    except (KeyError, TypeError):
+        valid = False
+    if not valid:
+        raise NativeStoreValidationError("receipt_archive_identity_mismatch")
 
 
 async def _native_observation(
@@ -762,6 +877,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         input_admission=input_admission,
         sealed_write_rejection=sealed_write_rejection,
     )
+    _validate_receipt_archive_peers(setup)
     write_canonical_json(receipt_path, setup)
     return {
         "schema_version": "night-voyager.evidence-loop-store-preparation-response.v1",
@@ -777,23 +893,39 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
-def main() -> int:
-    args = _parser().parse_args()
+def _emit_failure(payload: dict[str, Any], exit_code: int) -> int:
+    print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
+    print(f"recovery: {payload['recovery']}", file=sys.stderr)
+    return exit_code
+
+
+def _native_failure_exit_code(code: str) -> int:
+    if code in {"sealed_mutation_not_closed", "store_artifact_drift"}:
+        return 14
+    if (
+        code.startswith(("search_", "read_", "native_"))
+        or code == "store_artifact_invalid"
+    ):
+        return 10
+    return 13
+
+
+def main(argv: list[str] | None = None) -> int:
     try:
+        args = _parser().parse_args(argv)
         payload = _prepare(args)
     except PreparationFailure as error:
-        print(json.dumps(error.payload, separators=(",", ":"), sort_keys=True))
-        return error.exit_code
+        return _emit_failure(error.payload, error.exit_code)
     except NativeStoreValidationError as error:
+        code = str(error)
         payload = {
             "stage": "native",
-            "code": str(error),
+            "code": code,
             "problem": "The native MKE store did not satisfy the frozen A3 contract.",
             "cause": "A bounded native identity or completeness check failed.",
             "recovery": "Inspect the exact tagged producer and committed public sources.",
         }
-        print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
-        return 13
+        return _emit_failure(payload, _native_failure_exit_code(code))
     except Exception:
         payload = {
             "stage": "internal",
@@ -802,8 +934,7 @@ def main() -> int:
             "cause": "An internal bounded operation failed.",
             "recovery": "Inspect task-owned runtime diagnostics without changing producer inputs.",
         }
-        print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
-        return 14
+        return _emit_failure(payload, 13)
     if args.json_output:
         print(json.dumps(payload, separators=(",", ":"), sort_keys=True))
     else:
