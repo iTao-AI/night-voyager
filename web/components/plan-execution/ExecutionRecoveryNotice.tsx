@@ -10,7 +10,7 @@ export function ExecutionRecoveryNotice({
   labels: { sessionChanged: string; recoverable: string; recover: string };
 }) {
   return (
-    <div role="status" aria-live="polite">
+    <div className="execution-recovery-notice">
       <p>{sessionChanged ? labels.sessionChanged : labels.recoverable}</p>
       <button disabled={disabled} onClick={onRecover}>{labels.recover}</button>
     </div>

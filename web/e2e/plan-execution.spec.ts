@@ -40,6 +40,7 @@ const copy = {
     verify: "验证并继续", blocked: "记录阻塞并停止当前 checkpoint",
     reassess: "请求重新评估并停止执行", recover: "重新验证执行 authority",
     completed: "行动计划已完成。", handoff: "重新评估交接", activity: "活动记录",
+    currentAction: "当前行动", documents: "材料准备", attestation: "checkpoint 状态证明",
   },
   en: {
     student: "Student", parent: "Parent", advisor: "Advisor",
@@ -48,6 +49,7 @@ const copy = {
     verify: "Verify and continue", blocked: "Record blocker and stop the current checkpoint",
     reassess: "Request reassessment and stop execution", recover: "Revalidate execution authority",
     completed: "The action plan is complete.", handoff: "Reassessment handoff", activity: "Activity",
+    currentAction: "Current action", documents: "Documents", attestation: "Checkpoint attestation",
   },
 } as const;
 
@@ -159,6 +161,11 @@ test("complete governed plan execution browser-to-database proof", async ({ page
   acceptedReceiptIds.push(started.receipt.receipt_id);
   expect(started.view.current_checkpoint?.milestone_key).toBe("documents");
   checkpointIds.push(...started.view.checkpoints.map((item) => item.checkpoint_id));
+  await expect(page.getByRole("heading", { level: 1, name: labels.currentAction })).toBeFocused();
+  const authoritySummary = page.locator("[data-plan-authority-summary]");
+  await expect(authoritySummary).toContainText(labels.documents);
+  await expect(authoritySummary).not.toContainText("documents");
+  await expect(page.locator(".approved-plan-steps > li")).toHaveCount(4);
 
   if (scenario === "blocked") {
     const blocked = await mutate(page, labels.blocked, "/checkpoint-attestations");
@@ -170,6 +177,7 @@ test("complete governed plan execution browser-to-database proof", async ({ page
     await expect(page.getByRole("heading", { name: labels.handoff })).toBeVisible();
     await expect(page.getByRole("button", { name: labels.verify, exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: labels.completion, exact: true })).toHaveCount(0);
+    await expect(page.getByRole("group", { name: labels.attestation })).toHaveCount(0);
     await writeFile(proofFile!, `${JSON.stringify({
       schema_version: 1,
       locale,
@@ -344,8 +352,13 @@ test("prove stale tab, shared session, envelope, and bounded activity", async ({
   const activity = page.getByRole("heading", {
     name: copy["zh-CN"].activity,
   }).locator("..");
+  await activity.getByRole("button").click();
   await expect(activity.getByRole("listitem")).toHaveCount(64);
   await expect(activity.getByText("显示 64 / 67", { exact: true })).toBeVisible();
+  await expect(activity.getByText(
+    "当前仅显示最近 64 条；更早的保留历史不在此视图中。",
+    { exact: true },
+  )).toBeVisible();
 
   const blockedContext = await browser.newContext({ baseURL: ORIGIN });
   const blockedPage = await blockedContext.newPage();

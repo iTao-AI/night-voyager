@@ -102,7 +102,7 @@ it("shows reassessment only to the advisor for server-blocked authority", () => 
       <PlanExecutionWorkspace controller={controllerFor("student", "blocked")} />
     </PresentationProvider>,
   );
-  expect(screen.getByText(/已阻塞/)).toBeInTheDocument();
+  expect(screen.getAllByText(/已阻塞/).length).toBeGreaterThan(0);
   expect(screen.queryByRole("button", { name: "请求重新评估并停止执行" })).not.toBeInTheDocument();
   student.unmount();
 
@@ -193,4 +193,126 @@ it("renders the deadline trigger through the English catalog without raw codes",
     )).toBeInTheDocument();
   });
   expect(screen.queryByText("deadline_elapsed")).not.toBeInTheDocument();
+});
+
+it("NVPC-P1-001 localizes checkpoint and activity authority without raw codes", () => {
+  const controller = activeController();
+  controller.state.view!.activity = [{
+    schema_version: 1,
+    kind: "attestation_recorded",
+    durable_id: "10000000-0000-0000-0000-000000000090",
+    execution_id: controller.state.view!.execution.execution_id,
+    checkpoint_id: controller.state.view!.current_checkpoint!.checkpoint_id,
+    created_at: "2026-07-29T00:00:00Z",
+  }];
+  controller.state.view!.activity_total = 1;
+  const { container } = render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={controller} />
+    </PresentationProvider>,
+  );
+
+  expect(screen.getAllByText("材料准备").length).toBeGreaterThan(0);
+  expect(screen.getAllByText("学生").length).toBeGreaterThan(0);
+  expect(screen.getByText("按计划")).toBeInTheDocument();
+  expect(screen.getByText("家庭状态更新")).toBeInTheDocument();
+  expect(container.textContent).not.toMatch(
+    /documents|student|on_track|attestation_recorded/,
+  );
+});
+
+it("NVPC-P1-002 leaves only reassessment in the blocked advisor action region", () => {
+  const controller = controllerFor("advisor", "blocked");
+  const { container } = render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={controller} />
+    </PresentationProvider>,
+  );
+  const action = container.querySelector("[data-section='current-action']");
+  expect(action).not.toBeNull();
+  expect(action!.textContent).not.toContain("记录进行中");
+  expect(action!.textContent).not.toContain("提交完成状态给顾问");
+  expect(action!.textContent).not.toContain("记录阻塞并停止当前 checkpoint");
+  expect(action!.textContent).toContain("请求重新评估并停止执行");
+});
+
+it("NVPC-P1-003 puts authority summary and next handoff before the action", () => {
+  const { container } = render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={activeController()} />
+    </PresentationProvider>,
+  );
+  const region = container.querySelector("[data-section='current-action']");
+  const summary = region?.querySelector("[data-plan-authority-summary]");
+  const action = region?.querySelector("[data-current-action-controls]");
+  expect(summary).not.toBeNull();
+  expect(action).not.toBeNull();
+  expect(summary!.compareDocumentPosition(action!))
+    .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  expect(region!.textContent).toContain("下一位行动者");
+  expect(screen.getByRole("group", { name: "checkpoint 状态证明" })).toBeInTheDocument();
+});
+
+it("NVPC-P1-004 moves focus and announces one accepted state transition", async () => {
+  const controller = activeController();
+  const rendered = render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={controller} />
+    </PresentationProvider>,
+  );
+  const heading = screen.getByRole("heading", { name: "当前行动" });
+
+  controller.state = {
+    ...controller.state,
+    value: "awaiting_advisor",
+    view: viewFixture("awaiting_advisor"),
+  };
+  rendered.rerender(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={controller} />
+    </PresentationProvider>,
+  );
+
+  await waitFor(() => expect(heading).toHaveFocus());
+  expect(screen.getAllByRole("status")).toHaveLength(1);
+  expect(screen.getByRole("status")).toHaveTextContent("等待已分配顾问验证");
+});
+
+it("NVPC-P2-005 keeps localized activity in a secondary disclosure", () => {
+  const controller = activeController();
+  controller.state.view!.activity = [{
+    schema_version: 1,
+    kind: "mutation_receipt_recorded",
+    durable_id: "10000000-0000-0000-0000-000000000091",
+    execution_id: controller.state.view!.execution.execution_id,
+    checkpoint_id: controller.state.view!.current_checkpoint!.checkpoint_id,
+    created_at: "2026-07-29T00:00:00Z",
+  }];
+  controller.state.view!.activity_total = 67;
+  controller.state.view!.activity_truncated = true;
+  render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={controller} />
+    </PresentationProvider>,
+  );
+
+  expect(screen.getByText("操作回执")).toBeInTheDocument();
+  expect(screen.getByText(/最近 64 条/)).toBeInTheDocument();
+  expect(screen.getByText("活动记录")).toBeInTheDocument();
+  expect(screen.queryByText("mutation_receipt_recorded")).not.toBeInTheDocument();
+});
+
+it("NVPC-P2-006 renders the immutable four-step approved plan", () => {
+  render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={activeController()} />
+    </PresentationProvider>,
+  );
+  const plan = screen.getByRole("region", { name: "已批准的行动计划" });
+  expect(plan).toBeInTheDocument();
+  expect(plan.querySelectorAll("li")).toHaveLength(4);
+  expect(plan).toHaveTextContent("材料准备");
+  expect(plan).toHaveTextContent("申请提交");
+  expect(plan).toHaveTextContent("签证准备");
+  expect(plan).toHaveTextContent("抵达安排");
 });

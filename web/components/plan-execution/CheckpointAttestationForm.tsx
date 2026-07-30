@@ -18,10 +18,17 @@ export function CheckpointAttestationForm({
 }) {
   const [reason, setReason] = useState<"missing_required_input" | "external_dependency_unavailable" | "deadline_at_risk">("missing_required_input");
   return (
-    <div aria-label={labels.group}>
-      <button disabled={disabled} onClick={onProgress}>{labels.progress}</button>
-      <button disabled={disabled} onClick={onCompletion}>{labels.completion}</button>
-      <label>
+    <div className="checkpoint-attestation" role="group" aria-label={labels.group}>
+      <div className="execution-action-row">
+        <button className="execution-primary-action" disabled={disabled} onClick={onCompletion}>
+          {labels.completion}
+        </button>
+        <button className="execution-secondary-action" disabled={disabled} onClick={onProgress}>
+          {labels.progress}
+        </button>
+      </div>
+      <div className="execution-blocker-row">
+        <label>
         {labels.blockedReason}
         <select
           disabled={disabled}
@@ -32,8 +39,15 @@ export function CheckpointAttestationForm({
           <option value="external_dependency_unavailable">{labels.externalUnavailable}</option>
           <option value="deadline_at_risk">{labels.deadlineRisk}</option>
         </select>
-      </label>
-      <button disabled={disabled} onClick={() => onBlocked(reason)}>{labels.blocked}</button>
+        </label>
+        <button
+          className="execution-danger-action"
+          disabled={disabled}
+          onClick={() => onBlocked(reason)}
+        >
+          {labels.blocked}
+        </button>
+      </div>
     </div>
   );
 }
