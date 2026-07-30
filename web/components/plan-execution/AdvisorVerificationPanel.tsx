@@ -10,9 +10,13 @@ export function AdvisorVerificationPanel({
   labels: { group: string; verify: string; requestUpdate: string };
 }) {
   return (
-    <div aria-label={labels.group}>
-      <button disabled={disabled} onClick={onVerify}>{labels.verify}</button>
-      <button disabled={disabled} onClick={onRequestUpdate}>{labels.requestUpdate}</button>
+    <div className="execution-action-row" role="group" aria-label={labels.group}>
+      <button className="execution-primary-action" disabled={disabled} onClick={onVerify}>
+        {labels.verify}
+      </button>
+      <button className="execution-secondary-action" disabled={disabled} onClick={onRequestUpdate}>
+        {labels.requestUpdate}
+      </button>
     </div>
   );
 }

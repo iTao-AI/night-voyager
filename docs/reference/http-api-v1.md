@@ -357,3 +357,13 @@ advisor-family envelope. The UI may submit the bounded request-revision review a
 student preferred-country proposal through existing authority endpoints, but it
 cannot submit predecessor/run hashes, synthesize comparison, reuse an old approval,
 or decide a non-current Brief.
+
+## Governed timeline execution transport
+
+The development-only `/demo/plan` BFF preserves the existing FastAPI contract:
+closed scenario identity is resolved server-side, every mutation returns an
+immutable receipt, and the browser then performs a fresh timeline-execution GET.
+The UI cannot submit role, current action, due date, risk, or an authority date.
+Lost acknowledgements may replay only the exact persisted request body and
+idempotency key. Presentation locale, viewport, focus, and reduced-motion
+preference never enter these requests.

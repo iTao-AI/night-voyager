@@ -1,0 +1,70 @@
+name: Provider-free proof failure
+description: Report a sanitized failure from a documented local proof path.
+title: "proof: "
+labels:
+  - proof-failure
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Include only public phase markers and stable problem codes. Do not attach logs
+        containing credentials, cookies, CSRF values, raw `.env` content, database URLs,
+        private paths, raw database rows, content-bearing Evidence, or other sensitive data.
+  - type: input
+    id: command
+    attributes:
+      label: Command
+    validations:
+      required: true
+  - type: input
+    id: phase
+    attributes:
+      label: Public phase marker
+    validations:
+      required: true
+  - type: input
+    id: problem
+    attributes:
+      label: Public problem code
+    validations:
+      required: true
+  - type: input
+    id: expected
+    attributes:
+      label: Expected stable marker
+    validations:
+      required: true
+  - type: input
+    id: observed
+    attributes:
+      label: Observed stable marker
+    validations:
+      required: true
+  - type: input
+    id: host_space
+    attributes:
+      label: Host available space
+      description: Report the available-space count only.
+    validations:
+      required: true
+  - type: input
+    id: docker_space
+    attributes:
+      label: Docker VM available space
+      description: Report the available-space count only.
+    validations:
+      required: true
+  - type: input
+    id: compose_project
+    attributes:
+      label: Compose project name
+      description: Use only the task-scoped public Compose project name.
+    validations:
+      required: true
+  - type: textarea
+    id: teardown
+    attributes:
+      label: Task-resource teardown result
+      description: List only task-owned containers, networks, volumes, and local images.
+    validations:
+      required: true

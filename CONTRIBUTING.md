@@ -21,6 +21,17 @@ behavior is the connected M5 local synthetic walkthrough.
 | Versioned Skill, evaluation, activation, runtime pin, or persisted planning materialization | `make skills-check`, the focused `skills-db-check` suites, `make db-check`, and `make compose-proof` |
 | Documentation or public claim | Link and command review plus public-hygiene proof |
 
+For governed plan execution, use this evaluator-oriented mapping:
+
+| Surface | Required evidence |
+| --- | --- |
+| Domain/model | Focused unit tests plus Pyright |
+| Migration/SQL | Isolated PostgreSQL migration, catalog/RLS, and downgrade gates |
+| FastAPI/BFF | HTTP contract tests plus strict transport assertions |
+| Web state/recovery | Vitest reducer/controller tests plus real browser recovery |
+| Presentation | Semantic assertions plus the rendered `zh-CN`/`en` viewport matrix |
+| Docs/release surface | Documentation governance tests plus the development release verifier |
+
 ## Documentation action matrix
 
 | Change | Documentation action |

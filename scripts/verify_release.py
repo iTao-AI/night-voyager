@@ -1065,6 +1065,56 @@ def verify_planning_revision_surface() -> None:
     print("proof planning revision surface: durable lineage and role-safe projection confirmed")
 
 
+def verify_plan_execution_dx_surface() -> None:
+    required_paths = (
+        "docs/operations/plan-execution-walkthrough.md",
+        "docs/operations/timeline-execution.md",
+        "docs/reference/timeline-execution-contract.md",
+        "docs/design/demo-storyboard.md",
+        "CONTRIBUTING.md",
+        ".github/ISSUE_TEMPLATE/proof-failure.yml",
+    )
+    evidence = (
+        "docs/assets/plan-execution-current-action.png",
+        "docs/assets/plan-execution-advisor-review.png",
+        "docs/assets/plan-execution-reassessment-mobile.png",
+        "docs/assets/plan-execution-recovery-mobile.png",
+    )
+    if any(not (ROOT / relative).is_file() for relative in (*required_paths, *evidence)):
+        raise SystemExit("governed plan execution DX surface incomplete")
+
+    docs = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8") for relative in required_paths
+    )
+    for token in (
+        "make proof",
+        "make demo",
+        "make compose-proof",
+        "proof compose: PASS",
+        "semantic assertions",
+        "screenshots are review evidence",
+        "Migration/SQL",
+        "Presentation",
+        "Task-resource teardown result",
+        "content-bearing Evidence",
+    ):
+        if token not in docs:
+            raise SystemExit("governed plan execution evaluator contract drift")
+
+    for relative in evidence:
+        data = (ROOT / relative).read_bytes()
+        if (
+            not data.startswith(b"\x89PNG\r\n\x1a\n")
+            or b"/" + b"Users/" in data
+            or b"." + b"codex" in data
+        ):
+            raise SystemExit("governed plan execution evidence drift")
+    print(
+        "proof plan execution DX: evaluator paths, presentation evidence, and "
+        "safe failure reporting confirmed"
+    )
+
+
 def verify_release_surface() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     if pyproject["project"]["description"] != DESCRIPTION:
@@ -2103,6 +2153,7 @@ def main() -> None:
     verify_collaboration_surface()
     verify_skill_surface()
     verify_planning_revision_surface()
+    verify_plan_execution_dx_surface()
     verify_release_surface()
     verify_config()
     verify_wheel()

@@ -1,7 +1,7 @@
 # Governed Plan Execution and Reassessment
 
-**Status:** Approved design; PR A/B is implemented locally. PR C, publication,
-and release remain pending.
+**Status:** Approved design; PR A/B are merged; PR C is implemented and locally
+verified. Publication and v0.1.5 release remain pending.
 
 ## Summary
 

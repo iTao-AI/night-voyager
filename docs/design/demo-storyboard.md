@@ -85,3 +85,13 @@ lost-ack exact replay, request-update, role rotation, completion, and reload.
 Blocked proves one blocked attestation, one advisor reassessment request, and a
 terminal handoff with no successor action. Both locales render identical
 authority semantics; the browser never selects a Case identifier.
+
+Representative synthetic review evidence:
+
+- [desktop current action](../assets/plan-execution-current-action.png)
+- [desktop advisor review](../assets/plan-execution-advisor-review.png)
+- [mobile reassessment stop](../assets/plan-execution-reassessment-mobile.png)
+- [mobile lost-acknowledgement recovery](../assets/plan-execution-recovery-mobile.png)
+
+Semantic assertions, not image comparison, are the acceptance authority;
+screenshots are review evidence only.

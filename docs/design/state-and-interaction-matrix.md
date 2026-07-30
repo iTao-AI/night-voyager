@@ -62,3 +62,19 @@ provider-free: the reducer adopts only closed V2/V3 projections, presents the
 controlled student preferred-country editor and deterministic old/new comparison,
 requires fresh advisor authorization, and keeps `revision_blocked` free of approval
 and family-decision actions.
+
+The governed plan-execution route has a separate closed lifecycle:
+
+| Phase | Visible truth | Primary action | Forbidden action |
+| --- | --- | --- | --- |
+| `ready_to_start` | immutable approved plan; no execution | assigned family role starts | advisor start or inferred execution |
+| `checkpoint_active` | current milestone, state, due date, role, risk, next handoff | accountable role attests | another role attests |
+| `awaiting_advisor` | accepted completion and advisor handoff | assigned advisor verifies or requests update | family verification |
+| `recoverable_error` | outcome is uncertain but the exact body/key is retained | explicit authority revalidation | new body or idempotency key |
+| `session_changed` | role/session authority changed | reconnect through server authority | trust browser storage |
+| `execution_completed` | immutable terminal execution | read result | further mutation |
+| `reassessment_required` | predecessor stopped with pending future authorization | read terminal handoff | resume or create a successor |
+
+Every accepted transition returns focus to `Current action` and announces through
+one polite live region. The blocked advisor surface exposes only reassessment;
+it never retains family attestation controls.

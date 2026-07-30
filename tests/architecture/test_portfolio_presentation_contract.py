@@ -53,6 +53,13 @@ LOCKED_DEPENDENCY_IDENTITIES = {
         "fea0e9d1e11cf684deae87eb7167877965855986cea63e9fb46f98b0cefe015d"
     ),
 }
+PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
+PLAN_EXECUTION_EVIDENCE = (
+    ("docs/assets/plan-execution-current-action.png", 1440),
+    ("docs/assets/plan-execution-advisor-review.png", 1440),
+    ("docs/assets/plan-execution-reassessment-mobile.png", 390),
+    ("docs/assets/plan-execution-recovery-mobile.png", 390),
+)
 
 
 def _sha256(path: Path) -> str:
@@ -176,3 +183,72 @@ def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> 
         "pointermove",
     ):
         assert forbidden not in components
+
+
+def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> None:
+    assert PRESENTATION_AUDIT.is_file()
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+
+    for route in ('"/"', '"/demo/collaboration"', '"/demo"', '"/demo/plan"'):
+        assert route in source
+    for locale in ('"zh-CN"', '"en"'):
+        assert locale in source
+    for width in ("1440", "768", "390", "320"):
+        assert width in source
+    for required_contract in (
+        "PRESENTATION_AUDIT_OUTPUT_DIR",
+        "deviceScaleFactor",
+        "200%",
+        "keyboard",
+        "focus",
+        "reducedMotion",
+        "contrast",
+        "scrollWidth",
+        "long-copy",
+        "latest-64",
+    ):
+        assert required_contract in source
+
+
+def test_governed_presentation_audit_harness_enforces_semantic_authority() -> None:
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+
+    for required_enforcement in (
+        "requiredRatio",
+        "sample.ratio < sample.requiredRatio",
+        "entry.clipped",
+        "maxMotionMs",
+        "activateByKeyboard",
+        "keyboard journey",
+        'locator("summary")',
+    ):
+        assert required_enforcement in source
+
+
+@pytest.mark.parametrize(("relative", "expected_width"), PLAN_EXECUTION_EVIDENCE)
+def test_plan_execution_evidence_is_sanitized_png(
+    relative: str,
+    expected_width: int,
+) -> None:
+    path = ROOT / relative
+    assert path.is_file(), relative
+    data = path.read_bytes()
+    width, height = _png_size(data)
+    assert width == expected_width
+    assert expected_width <= height < 10_000
+    assert 10_000 < len(data) < 2_000_000
+    assert all(marker not in data for marker in PRIVATE_OR_METADATA_MARKERS)
+
+
+def test_plan_execution_evidence_is_generated_from_semantic_state_assertions() -> None:
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+    for filename in (
+        "plan-execution-current-action.png",
+        "plan-execution-advisor-review.png",
+        "plan-execution-reassessment-mobile.png",
+        "plan-execution-recovery-mobile.png",
+    ):
+        assert filename in source
+    assert "PRESENTATION_PUBLIC_EVIDENCE_ROOT" in source
+    assert '"Local synthetic demo"' in source
+    assert '"本地合成演示"' in source

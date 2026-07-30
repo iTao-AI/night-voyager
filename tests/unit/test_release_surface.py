@@ -451,6 +451,19 @@ def test_release_verifier_accepts_exactly_one_0015_alembic_head(
     assert "proof migrations: exact Alembic head 0015" in capsys.readouterr().out
 
 
+def test_release_verifier_checks_governed_plan_execution_dx(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    verifier = load_verifier()
+
+    verifier.verify_plan_execution_dx_surface()
+
+    assert (
+        "proof plan execution DX: evaluator paths, presentation evidence, and "
+        "safe failure reporting confirmed"
+    ) in capsys.readouterr().out
+
+
 @pytest.mark.parametrize("mutation", ("remove_0015", "add_second_head"))
 def test_release_verifier_rejects_alembic_head_mutation(
     tmp_path: Path,

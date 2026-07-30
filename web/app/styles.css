@@ -385,6 +385,18 @@ summary:focus-visible,
   padding-bottom: 1rem;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .ledger-hero {
   max-width: 65rem;
 }
@@ -404,6 +416,243 @@ summary:focus-visible,
 .demo-shell h3 {
   font-size: 1.28rem;
   line-height: 1.25;
+}
+
+.plan-execution-workspace {
+  --execution-rule: 2px solid var(--ink);
+}
+
+.plan-execution-hero {
+  max-width: none;
+}
+
+.plan-execution-current-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .9fr) minmax(20rem, 1.1fr);
+  gap: clamp(1.25rem, 3vw, 3rem);
+  margin-top: clamp(1.5rem, 3vw, 2.5rem);
+  padding-top: 1.25rem;
+  border-top: var(--execution-rule);
+}
+
+.plan-authority-summary,
+.current-action-controls {
+  min-width: 0;
+}
+
+.current-checkpoint-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.current-checkpoint-summary div {
+  min-width: 0;
+  padding: .8rem 1rem;
+}
+
+.current-checkpoint-summary div:nth-child(odd) {
+  border-right: 1px solid var(--border);
+}
+
+.current-checkpoint-summary div:nth-child(n + 3) {
+  border-top: 1px solid var(--border);
+}
+
+.current-checkpoint-summary dt {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.current-checkpoint-summary dd {
+  margin: .1rem 0 0;
+  font-weight: 800;
+}
+
+.next-handoff {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-left: 4px solid var(--trust);
+  background: rgba(15, 92, 85, .06);
+}
+
+.next-handoff p:last-child {
+  margin-bottom: 0;
+}
+
+.current-action-controls {
+  align-self: start;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--attention);
+  background: var(--surface);
+}
+
+.execution-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: .75rem;
+}
+
+.execution-primary-action {
+  background: var(--trust);
+  border-color: var(--trust);
+}
+
+.execution-secondary-action {
+  background: transparent;
+  color: var(--ink);
+}
+
+.execution-danger-action {
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.execution-blocker-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1fr) minmax(14rem, auto);
+  gap: .75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.execution-blocker-row label {
+  display: grid;
+  gap: .35rem;
+  color: var(--muted);
+  font-size: .85rem;
+  font-weight: 800;
+}
+
+.execution-blocker-row select {
+  width: 100%;
+  min-height: 44px;
+  padding: .55rem .7rem;
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+
+.execution-recovery-notice p {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.plan-role-switcher,
+.approved-plan,
+.execution-activity {
+  margin-top: clamp(2rem, 5vw, 4rem);
+}
+
+.plan-role-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 2rem;
+  padding-block: 1rem;
+  border-block: 1px solid var(--border);
+}
+
+.plan-role-switcher h2 {
+  margin: 0;
+  font-size: clamp(1.15rem, 2vw, 1.4rem);
+}
+
+.role-switcher-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.role-switcher-row button {
+  min-width: 6rem;
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+
+.role-switcher-row button + button {
+  border-left: 0;
+}
+
+.role-switcher-row button[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.approved-plan {
+  padding-top: clamp(1.5rem, 3vw, 2.5rem);
+  border-top: var(--execution-rule);
+}
+
+.approved-plan .section-heading p {
+  color: var(--muted);
+}
+
+.approved-plan-steps {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 1.5rem 0 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  list-style: none;
+}
+
+.approved-plan-steps li {
+  display: grid;
+  align-content: start;
+  gap: .35rem;
+  min-width: 0;
+  padding: 1rem;
+}
+
+.approved-plan-steps li + li {
+  border-left: 1px solid var(--border);
+}
+
+.approved-plan-steps li[data-state="verified"] {
+  box-shadow: inset 0 4px var(--trust);
+}
+
+.approved-plan-steps li[data-state="in_progress"],
+.approved-plan-steps li[data-state="awaiting_advisor"],
+.approved-plan-steps li[data-state="blocked"] {
+  box-shadow: inset 0 4px var(--attention);
+}
+
+.approved-plan-steps .plan-step-number {
+  color: var(--attention);
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.approved-plan-steps strong {
+  font-family: var(--editorial);
+  font-size: 1.2rem;
+}
+
+.approved-plan-steps small {
+  color: var(--muted);
+}
+
+.execution-activity {
+  max-width: var(--reading);
+}
+
+.execution-activity .technical-details {
+  margin-top: 0;
 }
 
 .section-heading {
@@ -859,6 +1108,22 @@ thead th {
   .primary-action {
     width: fit-content;
   }
+
+  .plan-execution-current-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .approved-plan-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .approved-plan-steps li:nth-child(3) {
+    border-left: 0;
+  }
+
+  .approved-plan-steps li:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
 }
 
 @media (max-width: 767px) {
@@ -896,6 +1161,56 @@ thead th {
 
   .demo-shell h1 {
     font-size: clamp(2.35rem, 12vw, 3.75rem);
+  }
+
+  .plan-execution-hero {
+    padding-top: 2rem;
+  }
+
+  .current-checkpoint-summary,
+  .approved-plan-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .current-checkpoint-summary div:nth-child(odd) {
+    border-right: 0;
+  }
+
+  .current-checkpoint-summary div:nth-child(n + 2),
+  .approved-plan-steps li + li {
+    border-top: 1px solid var(--border);
+  }
+
+  .approved-plan-steps li + li {
+    border-left: 0;
+  }
+
+  .execution-action-row,
+  .execution-blocker-row,
+  .plan-role-switcher {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .execution-action-row,
+  .plan-role-switcher {
+    flex-direction: column;
+  }
+
+  .execution-action-row button,
+  .execution-blocker-row button,
+  .role-switcher-row {
+    width: 100%;
+  }
+
+  .role-switcher-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .role-switcher-row button {
+    min-width: 0;
+    padding-inline: .5rem;
   }
 
   .portfolio-summary {
