@@ -67,14 +67,14 @@ producer non-authority, moving-checkout prohibition, or cleanup ownership.
   and decides whether a merged receipt unlocks the next slice.
 - **Execution owner:** implements one unlocked PR in an isolated worktree/branch, runs RED/GREEN and
   terminal gates, and preserves exact evidence.
-- **Dataset author** (`dataset_author_id=independent-dataset-author-v1`): authors public-safe source
+- **Dataset author** (`dataset_author_id=independent-dataset-author-v2`): authors public-safe source
   material and development cases, and finalizes holdout payload plus evaluator-independent oracle
   before A4.
 - **Evaluator implementer**
   (`evaluator_implementer_id=night-voyager-slice0-evaluator-v1`): sees development cases and only
   opaque, separate payload/oracle commitments until final freeze.
 - **Holdout custodian/reviewer**
-  (`holdout_custodian_id=independent-holdout-custodian-v1`): independently verifies and seals the
+  (`holdout_custodian_id=independent-holdout-custodian-v2`): independently verifies and seals the
   pre-authored payload/oracle bytes in a non-mounted custody workspace, and reveals only after the
   complete evaluator and harness freeze.
 - **Publication owner:** owns Draft PR lifecycle, exact-head CI binding, conditional merge, and
@@ -84,6 +84,12 @@ The evaluator implementer may not also author or custody the holdout answers use
 Other mechanical roles may overlap only when committed receipts preserve ordering and no holdout
 content was visible before evaluator freeze. The implementation report must state the actual role
 mapping and `nv.slice0.one-way-reveal.v1` procedure.
+
+The admitted package is `author_revision=2`; revision 1 is permanently
+`rejected_pre_admission`. Its author package and custody seal are never read, copied, admitted, or
+reused. The DRA baseline nature is
+`deterministic_public_safe_synthetic_governed_fixture`, which is a contract fixture rather than a
+production or historical-user receipt claim.
 
 ### 1.4 Shared hard stops
 

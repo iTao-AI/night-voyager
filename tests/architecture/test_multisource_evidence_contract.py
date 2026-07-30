@@ -92,9 +92,9 @@ def test_complementary_evidence_plan_has_one_index_entry() -> None:
 def test_pre_reveal_freeze_has_distinct_roles_and_separate_commitments() -> None:
     governance = _governance_text()
     role_ids = (
-        "independent-dataset-author-v1",
+        "independent-dataset-author-v2",
         "night-voyager-slice0-evaluator-v1",
-        "independent-holdout-custodian-v1",
+        "independent-holdout-custodian-v2",
     )
 
     assert len(set(role_ids)) == 3
@@ -108,6 +108,22 @@ def test_pre_reveal_freeze_has_distinct_roles_and_separate_commitments() -> None
     ):
         assert commitment in governance
     assert "nv.slice0.one-way-reveal.v1" in governance
+
+
+def test_revision_two_roles_reject_pre_admission_revision_one() -> None:
+    governance = _governance_text()
+
+    for required in (
+        "`author_revision=2`",
+        "`dataset_author_id=independent-dataset-author-v2`",
+        "`evaluator_implementer_id=night-voyager-slice0-evaluator-v1`",
+        "`holdout_custodian_id=independent-holdout-custodian-v2`",
+        "`rejected_pre_admission`",
+        "`deterministic_public_safe_synthetic_governed_fixture`",
+    ):
+        assert required in governance
+    assert "dataset_author_id=independent-dataset-author-v1" not in governance
+    assert "holdout_custodian_id=independent-holdout-custodian-v1" not in governance
 
 
 def test_pre_reveal_ordering_freezes_complete_harness_before_observation() -> None:

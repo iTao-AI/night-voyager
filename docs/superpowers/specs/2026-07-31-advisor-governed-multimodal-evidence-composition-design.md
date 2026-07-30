@@ -244,7 +244,10 @@ frozen suite. It is a non-default CLI/proof lane. It:
 
 Three distinct logical roles are frozen:
 
-1. **Dataset author** (`dataset_author_id=independent-dataset-author-v1`) prepares public-safe
+The admitted author package is `author_revision=2`. Revision 1 is permanently
+`rejected_pre_admission` and is not an eligible compatibility source.
+
+1. **Dataset author** (`dataset_author_id=independent-dataset-author-v2`) prepares public-safe
    synthetic Case/query/source material, decision gaps, expected source identities, and finalizes
    the holdout payload and evaluator-independent oracle before A4 begins.
 2. **Evaluator implementer**
@@ -252,7 +255,7 @@ Three distinct logical roles are frozen:
    canonicalization, metrics, sensitivity tests, reveal validator, native lane, frozen-suite
    harness, and terminal verifier using only development cases and public commitments.
 3. **Holdout custodian**
-   (`holdout_custodian_id=independent-holdout-custodian-v1`) independently verifies and seals the
+   (`holdout_custodian_id=independent-holdout-custodian-v2`) independently verifies and seals the
    pre-authored payload and oracle, keeps them in a separate non-mounted custody workspace, reveals
    them only after evaluator, harness, threshold, mapping, and eligible-source freeze, and signs
    the final receipt.
@@ -260,6 +263,10 @@ Three distinct logical roles are frozen:
 The evaluator implementer cannot also author or custody the holdout answers for the receipt being
 used. Mechanical publication and review roles may overlap, but the pre-reveal content boundary may
 not.
+
+The governed DRA baseline is a
+`deterministic_public_safe_synthetic_governed_fixture`. It demonstrates the typed contract and
+does not claim a production or historical-user receipt.
 
 `EvidenceLoopWorkspaceV1` makes that separation executable:
 
