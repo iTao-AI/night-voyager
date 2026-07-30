@@ -13,7 +13,8 @@ cleanup_compose() {
   gate_status=$?
   trap - EXIT
   teardown_status=0
-  make down || teardown_status=$?
+  docker compose down --volumes --remove-orphans --rmi local \
+    || teardown_status=$?
   compose_residue=""
   docker compose ps --all --quiet > /tmp/night-voyager-compose-ps-$$ \
     || teardown_status=$?
@@ -84,7 +85,8 @@ test ! -e "$tmp_dir/extracted/night-voyager-0.1.5/.git"
     gate_status=$?
     trap - EXIT
     teardown_status=0
-    make down || teardown_status=$?
+    docker compose down --volumes --remove-orphans --rmi local \
+      || teardown_status=$?
     compose_residue="$(docker compose ps --all --quiet)" || teardown_status=$?
     if [[ -n "$compose_residue" ]]; then
       printf 'Gate D teardown left containers in %s: %s\n' \
@@ -171,7 +173,8 @@ cleanup_compose() {
   gate_status=$?
   trap - EXIT
   teardown_status=0
-  make down || teardown_status=$?
+  docker compose down --volumes --remove-orphans --rmi local \
+    || teardown_status=$?
   compose_residue="$(docker compose ps --all --quiet)" || teardown_status=$?
   if [[ -n "$compose_residue" ]]; then
     printf 'Gate E teardown left containers in %s: %s\n' \

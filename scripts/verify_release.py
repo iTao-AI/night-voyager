@@ -389,7 +389,7 @@ RELEASE_HOW_TO_TOKENS = (
     "make check",
     "make proof",
     "make compose-proof",
-    "make down",
+    "docker compose down --volumes --remove-orphans --rmi local",
     "docker compose ps --all",
     "object type `tag`",
     "Never move the tag after publication",

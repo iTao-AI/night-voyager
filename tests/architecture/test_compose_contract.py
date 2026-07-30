@@ -14,11 +14,15 @@ def _run_compose_cleanup_harness(
     initial_status: int = 0,
     down_status: int = 0,
     residue: str = "",
+    signal_name: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     source = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
     cleanup = source.split("cleanup() {", 1)[1].split(
         "\n}\n\nstart_planning_revision_barrier", 1
     )[0]
+    trap_contract = "\n".join(
+        line for line in source.splitlines() if line.startswith("trap ")
+    )
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir(parents=True)
     docker_stub = bin_dir / "docker"
@@ -64,8 +68,9 @@ def _run_compose_cleanup_harness(
             PLAN_EXECUTION_RECOVERY_PROOF_FILE=recovery-proof
             cleanup() {{{cleanup}
             }}
-            trap cleanup EXIT
-            exit {initial_status}
+            {trap_contract}
+            {f'kill -{signal_name} $$' if signal_name else f'exit {initial_status}'}
+            exit 99
             """
         ),
         encoding="utf-8",
@@ -87,6 +92,23 @@ def _run_compose_cleanup_harness(
     )
 
 
+def test_compose_interruptions_preserve_signal_status_and_cleanup_once(
+    tmp_path: Path,
+) -> None:
+    for signal_name, expected_status in (("INT", 130), ("TERM", 143)):
+        result = _run_compose_cleanup_harness(
+            tmp_path / signal_name.lower(), signal_name=signal_name
+        )
+
+        assert result.returncode == expected_status
+        log = (tmp_path / signal_name.lower() / "docker.log").read_text(
+            encoding="utf-8"
+        )
+        assert log.count("night-voyager-cleanup-contract|") == 2
+        assert "compose down --volumes --remove-orphans --rmi local" in log
+        assert "compose ps --all --quiet" in log
+
+
 def test_compose_cleanup_preserves_main_failure_and_fails_on_teardown_or_residue(
     tmp_path: Path,
 ) -> None:
@@ -99,7 +121,7 @@ def test_compose_cleanup_preserves_main_failure_and_fails_on_teardown_or_residue
     assert residue_failure.returncode != 0
     for case in ("original", "down", "residue"):
         log = (tmp_path / case / "docker.log").read_text(encoding="utf-8")
-        assert log.count("night-voyager-cleanup-contract|") >= 2
+        assert log.count("night-voyager-cleanup-contract|") == 2
         assert "compose down --volumes --remove-orphans --rmi local" in log
         assert "compose ps --all --quiet" in log
 

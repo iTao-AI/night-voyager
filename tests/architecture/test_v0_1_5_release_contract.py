@@ -75,7 +75,8 @@ def _run_gate_c(
             "git:branch --show-current") printf '%s\n' "$STUB_BRANCH" ;;
             "git:rev-parse HEAD") printf '%s\n' "$STUB_HEAD" ;;
             "git:rev-parse origin/main") printf '%s\n' "$STUB_ORIGIN_MAIN" ;;
-            "make:down") exit "$STUB_DOWN_STATUS" ;;
+            "docker:compose down --volumes --remove-orphans --rmi local")
+                exit "$STUB_DOWN_STATUS" ;;
             "docker:compose ps --all --quiet") printf '%s' "$STUB_RESIDUE" ;;
         esac
         """
@@ -143,6 +144,21 @@ def test_gate_c_teardown_is_fail_closed_and_reads_back_the_same_project(
         projects = {line.split("|", 2)[1] for line in log_lines}
         assert len(projects) == 1
         assert projects.pop().startswith("night-voyager-v0-1-5-gate-c-")
+        commands = [line.split("|", 2)[2] for line in log_lines]
+        assert "compose down --volumes --remove-orphans --rmi local" in commands
+        assert "compose ps --all --quiet" in commands
+
+
+def test_gate_c_d_and_e_use_complete_task_owned_fallback_teardown() -> None:
+    how_to = (ROOT / "docs/how-to/verify-v0.1.5-release.md").read_text(
+        encoding="utf-8"
+    )
+
+    for gate in "CDE":
+        block = _gate_bash_blocks(how_to, gate)[0]
+        assert "docker compose down --volumes --remove-orphans --rmi local" in block
+        assert "docker compose ps --all --quiet" in block
+        assert "make down" not in block
 
 
 def test_v0_1_5_current_authority_and_public_claims_are_unambiguous() -> None:
@@ -308,7 +324,7 @@ def test_v0_1_5_verification_guide_defines_gate_c_d_and_e() -> None:
         "make check",
         "make proof",
         "make compose-proof",
-        "make down",
+        "docker compose down --volumes --remove-orphans --rmi local",
         "docker compose ps --all",
         "scripts/verify_release.py --tree-mode release",
         "Git-free",
