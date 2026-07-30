@@ -29,8 +29,8 @@ it took 5.90 seconds with the Python/uv and Docker builder cache already shared.
 The final rendered matrix took 8.9 seconds and its two state-capture lanes took
 5.2 seconds against task-local images and a warm shared cache. These are
 observations, not performance commitments or synthetic cold-start claims. The
-full Compose observation is recorded by the final PR C gate because it must run
-exactly once on one task-scoped project.
+successful full Compose gate took 408.08 seconds on the same task-scoped project
+with task-local images rebuilt from warm shared caches.
 
 The quick path proves the proof configuration and installed-wheel contract
 confirmed by its exact public markers. The manual path is for evaluator
