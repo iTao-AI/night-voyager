@@ -1,11 +1,13 @@
 # Documentation
 
-v0.1.4 is the current local synthetic portfolio release of Night Voyager. It includes
-the prior advisor-to-family portfolio workflow, the Night Voyager-owned governed DRA
-consumer contract, versioned planning revision authority, bilingual browser proof,
-and React / Next.js / PostCSS maintenance. Start with the
-[release notes](releases/v0.1.4.md) and
-[source-archive verification guide](how-to/verify-v0.1.4-release.md). The v0.1.3
+v0.1.5 is the current local synthetic portfolio release of Night Voyager. It includes
+the prior advisor-to-family portfolio workflow plus governed timeline execution,
+recovery/reassessment authority, reconciliation, professional presentation,
+evaluator-first DX, and bounded dependency maintenance. Start with the
+[release notes](releases/v0.1.5.md) and
+[source-archive verification guide](how-to/verify-v0.1.5-release.md). The v0.1.4
+[release notes](releases/v0.1.4.md) and [verification guide](how-to/verify-v0.1.4-release.md),
+the v0.1.3
 [release notes](releases/v0.1.3.md) and [verification guide](how-to/verify-v0.1.3-release.md),
 the v0.1.2
 [release notes](releases/v0.1.2.md) and [verification guide](how-to/verify-v0.1.2-release.md),
@@ -15,9 +17,9 @@ plus the v0.1.0 [release notes](releases/v0.1.0.md) and
 documents remain historical visual context; current `/demo` behavior is the M5 walkthrough.
 
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).
-- Portfolio reviewers: open `/` for the static Chinese-default Virtual Night Voyage entry, switch explicitly to English when needed, then inspect the released captures plus the unreleased synthetic plan-execution evidence: [current action](assets/plan-execution-current-action.png), [advisor review](assets/plan-execution-advisor-review.png), [mobile reassessment](assets/plan-execution-reassessment-mobile.png), and [mobile recovery](assets/plan-execution-recovery-mobile.png). Semantic assertions remain authority; screenshots are review evidence. The root is local synthetic and provider-free; responsive AVIF/WebP files are runtime imagery and the source PNG is provenance only.
+- Portfolio reviewers: open `/` for the static Chinese-default Virtual Night Voyage entry, switch explicitly to English when needed, then inspect the released captures and synthetic plan-execution evidence: [current action](assets/plan-execution-current-action.png), [advisor review](assets/plan-execution-advisor-review.png), [mobile reassessment](assets/plan-execution-reassessment-mobile.png), and [mobile recovery](assets/plan-execution-recovery-mobile.png). Semantic assertions remain authority; screenshots are review evidence. The root is local synthetic and provider-free; responsive AVIF/WebP files are runtime imagery and the source PNG is provenance only.
 - Interviewers: begin the complete governed walkthrough at `/demo/collaboration` with the [collaboration runbook](operations/collaboration-walkthrough.md), or inspect the independently usable focused advisor-family/evidence route at `/demo` with the [connected runbook](operations/connected-demo.md). Both demo routes retain the warm-paper ledger presentation and must not be treated as production.
-- Timeline-execution reviewers: use the local `/demo/plan` vertical with the [execution runbook](operations/timeline-execution.md), [complete walkthrough](operations/plan-execution-walkthrough.md), [contract reference](reference/timeline-execution-contract.md), and [ADR 0013](decisions/0013-governed-timeline-execution-authority.md). PR A/B are merged; PR C is implemented and locally verified at development migration `0015`; publication and v0.1.5 release remain pending. The current v0.1.4 release remains fixed at `0013`.
+- Timeline-execution reviewers: use the local `/demo/plan` vertical with the [execution runbook](operations/timeline-execution.md), [complete walkthrough](operations/plan-execution-walkthrough.md), [contract reference](reference/timeline-execution-contract.md), and [ADR 0013](decisions/0013-governed-timeline-execution-authority.md). PR #80, PR #83, PR #84, and PR #85 are merged and included in the v0.1.5 release candidate at migration `0015`; publication remains a separate authorization gate.
 - Contributors: follow the [change-to-test matrix and guardrails](../CONTRIBUTING.md).
 - Planning-history reviewers: use the [approved specs and plans status index](superpowers/README.md) to distinguish implemented, approved-but-not-implemented, historical, and superseded work from current runtime authority.
 - Design and domain reviewers: inspect the connected [demo storyboard](design/demo-storyboard.md), [route map](design/route-map.md), [state and interaction matrix](design/state-and-interaction-matrix.md), [projection matrix](design/projection-matrix.md), and current [domain and source-manifest reference](reference/domain-and-source-manifests.md).

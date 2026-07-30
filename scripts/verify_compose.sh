@@ -52,6 +52,8 @@ barrier_fd_open=0
 export COMPOSE_PROJECT_NAME
 
 cleanup() {
+    original_status=$?
+    trap - EXIT INT TERM
     if [ -n "$planning_revision_browser_pid" ]; then
         kill "$planning_revision_browser_pid" 2>/dev/null || true
         wait "$planning_revision_browser_pid" 2>/dev/null || true
@@ -83,7 +85,22 @@ cleanup() {
         docs/assets/.plan-execution-en-happy-proof.json \
         docs/assets/.plan-execution-en-blocked-proof.json \
         "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
-    docker compose down --volumes --remove-orphans --rmi local
+    teardown_status=0
+    docker compose down --volumes --remove-orphans --rmi local || teardown_status=$?
+    compose_residue=
+    if ! compose_residue=$(docker compose ps --all --quiet 2>/dev/null); then
+        printf 'compose-proof: same-project teardown readback failed project=%s\n' \
+            "$COMPOSE_PROJECT_NAME" >&2
+        teardown_status=1
+    elif [ -n "$compose_residue" ]; then
+        printf 'compose-proof: same-project teardown left containers project=%s ids=%s\n' \
+            "$COMPOSE_PROJECT_NAME" "$compose_residue" >&2
+        teardown_status=1
+    fi
+    if [ "$original_status" -ne 0 ]; then
+        exit "$original_status"
+    fi
+    exit "$teardown_status"
 }
 
 start_planning_revision_barrier() {
@@ -444,7 +461,9 @@ run_planning_revision_proof() {
     run_planning_revision_lane "zh-CN"
     run_planning_revision_lane "en"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 docker compose config --quiet
 docker compose --profile browser-proof build

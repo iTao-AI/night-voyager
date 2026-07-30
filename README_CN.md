@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family decision：以 durable Agent task 执行流程，经过明确的人工复核，并持久化 decision receipt 与 timeline。当前 v0.1.4 local synthetic portfolio release 在 `/` 提供 high-end Chinese-first“虚幻夜航”入口，并保留显式、持久的 English 切换。这个 root 是 static、local synthetic、provider-free 展示面，不发起 API、session、task 或 EventSource。运行时图片使用响应式 AVIF 与 WebP；仓库中的 source PNG 只用于 provenance。
+Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family decision：以 durable Agent task 执行流程，经过明确的人工复核，并持久化 decision receipt 与 timeline。当前 v0.1.5 local synthetic portfolio release 在 `/` 提供 high-end Chinese-first“虚幻夜航”入口，并保留显式、持久的 English 切换。这个 root 是 static、local synthetic、provider-free 展示面，不发起 API、session、task 或 EventSource。运行时图片使用响应式 AVIF 与 WebP；仓库中的 source PNG 只用于 provenance。
 
 完整 governed walkthrough 从 `/demo/collaboration` 开始，并将同一个 Case 继续交给显式 planning。focused advisor-family/evidence route 保留在 `/demo`，也可独立使用。两个 governed demo route 都保留既有 warm-paper ledger 视觉。
 
@@ -23,7 +23,7 @@ assertions 才是 acceptance authority；screenshots are review evidence。
 
 ## 工程证据
 
-- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；current development graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`，已发布的 v0.1.4 identity 仍固定在 migration `0013`。
+- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；released graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`，v0.1.5 identity 固定在 migration `0015`。
 - **Durable task 与 SSE：** `AgentTask` 可跨 worker/API restart 保持，使用 bounded lease 与 generation fencing，并恢复授权 event stream。
 - **Human gates：** deterministic evidence policy、advisor review 与显式 family confirmation 相互分离；模型或 adapter 输出不能自行获得 promotion authority。
 - **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。当前 provider-free prerequisite 将 strict new work 固定到 exact post-release commit `01ba21f2996769e68cbc88f4bb0596740df27f6b` 与 `generic-strict-citation@1`；它不属于 DRA v0.1.6 release。
@@ -32,8 +32,8 @@ assertions 才是 acceptance authority；screenshots are review evidence。
 - **Explicit fact-to-plan authority：** v0.1.3 migration `0009` 把 first deterministic task creation 固定为 atomic `intake -> planning` authority，并在同一 transaction 写入 pinned task、dispatch、first event 与 idempotency result；legacy runtime transition authority 继续被撤回。
 - **Browser to database：** v0.1.3 `/demo/collaboration` 现在可在不创建 task 的情况下，把已确认的同一 Case 交给 `/demo`；advisor 随后显式启动真实 pinned task、SSE、review、parent decision、receipt 与 timeline 路径。整条 provider-free chain 在真实 Chromium 与 PostgreSQL 上运行，同时两个 route 仍可独立使用。
 - **Planning revision journey：** v0.1.4 发布 provider-free `request revision`、controlled student preferred-country change、retained predecessor lineage、successor PlanningRun、deterministic old/new comparison、fresh advisor authorization，以及 only the current family decision。blocked budget counterfactual 不会到达 approval 或 decision。
-- **Governed timeline execution：** current development PR A/B/C 新增 provider-free `/demo/plan` vertical、closed Happy/Blocked scenario、structured family attestation、assigned-advisor verification、immutable receipt recovery、PostgreSQL-owned risk/date authority、reassessment stop，以及 bilingual responsive/action-hierarchy proof；不创建新 `AgentTask`、provider call、successor business row、release 或 deployment。
-- **Portfolio 与 dependency boundary：** v0.1.4 包含 React / Next.js / PostCSS maintenance。Dependabot #8 与 #9 已修复；optional/transitive `sharp` Dependabot #7 仍以 `GHSA-f88m-g3jw-g9cj` 保持 open，full development audit 仍包含 dev-only `brace-expansion` / `minimatch` -> ESLint chain，因此不能声称 audit-zero。
+- **Governed timeline execution：** v0.1.5 发布 provider-free `/demo/plan` vertical、closed Happy/Blocked scenario、structured family attestation、assigned-advisor verification、immutable receipt recovery、PostgreSQL-owned risk/date authority、reassessment stop，以及 bilingual responsive/action-hierarchy proof；不创建新 `AgentTask`、provider call、successor business row 或 deployment。
+- **Portfolio 与 dependency boundary：** v0.1.5 包含 PR #78 合并的 frontend dependency maintenance。Dependabot #8 与 #9 已修复；optional/transitive runtime `sharp` Dependabot #7 仍以 `GHSA-f88m-g3jw-g9cj` 保持 open，full development audit 仍包含 dev-only `brace-expansion` / `minimatch` -> ESLint chain，因此不能声称 audit-zero。
 
 ## 验证 release
 
@@ -47,7 +47,7 @@ make proof
 make down
 ```
 
-当前作品集入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。完整 governed walkthrough 按 [collaboration runbook](docs/operations/collaboration-walkthrough.md)从 `/demo/collaboration` 进入 `/demo`；focused advisor-family/evidence route 可按 [connected demo runbook](docs/operations/connected-demo.md)直接从 `/demo` 开始。[v0.1.4 release/source-archive verification guide](docs/how-to/verify-v0.1.4-release.md)定义 current release gates。
+当前作品集入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。完整 governed walkthrough 按 [collaboration runbook](docs/operations/collaboration-walkthrough.md)从 `/demo/collaboration` 进入 `/demo`；focused advisor-family/evidence route 可按 [connected demo runbook](docs/operations/connected-demo.md)直接从 `/demo` 开始。[v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md)定义 current release gates。
 
 如需验证当前 same-Case development walkthrough，请从
 `/demo/collaboration` 开始，确认 synthetic family fact，选择
@@ -60,29 +60,30 @@ make down
 `UPDATE_PLANNING_REVISION_SCREENSHOT` 只能更新
 `night-voyager-planning-revision.png`。
 
-当前 governed execution development path 位于 `/demo/plan`，操作步骤见
+v0.1.5 发布的 governed execution path 位于 `/demo/plan`，操作步骤见
 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md)。
-PR A/B are merged；PR C is implemented and locally verified。Publication and
-v0.1.5 release remain pending，因此这些 surface 均未进入 v0.1.4。
+PR #80、PR #83、PR #84 与 PR #85 均已合并；release candidate 包含
+governed authority、recovery/reassessment closure、reconciliation，以及
+professional presentation/evaluator-first DX。
 
 `make doctor` 检查 Docker、Compose capability、本地端口、host project filesystem 至少 5 GiB，以及 Docker VM filesystem 至少 8 GiB。运维人员只能通过 `NIGHT_VOYAGER_DOCKER_MINIMUM_KB` 调整 Docker VM 门槛；检查会 fail closed，且绝不会自动删除 Docker 资源。`make demo` 迁移并 seed fresh synthetic stack。`make proof` 验证配置、public hygiene 与隔离 installed wheel，不要求 host Python、uv、Node.js 或 npm。`make compose-proof` 还会在真实 Chromium 中执行 browser-to-database flow。
 
 ## 合成与本地边界
 
-- v0.1.4 是 local synthetic portfolio release，在既有 portfolio workflow 上发布 Night Voyager-owned governed DRA consumer contract 与 versioned planning revision authority；不代表 production deployment 或 production tenancy。
+- v0.1.5 是 local synthetic portfolio release，在既有 portfolio workflow 上发布 governed timeline execution、recovery/reassessment authority、reconciliation 与 professional evaluator-facing presentation；不代表 production deployment 或 production tenancy。
 - 仓库不包含真实学生记录，也不宣称录取结果、真实用户、SLA、可用性或业务收益。
 - worker 与 SSE 仅提供 deterministic local proof，不代表 distributed high availability。
 - Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。Deterministic offline DRA candidate import、atomic promotion 与 governed mixed PlanningRun generation 已在本地实现。两次分别授权的 bounded live attempt 返回了 25 与 83 条 same-run Evidence，全部为 `uncited`，并都在 candidate import 前停止。第三次 provider attempt 未获授权；strict live acceptance 仍不完整。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
 - Planning-revision PR 1、PR 2、PR 3 已在 v0.1.4 作为 controlled provider-free evidence 发布。它保留 25 and 83 row 失败尝试为 zero cited rows；strict live acceptance remains incomplete，且 no third provider attempt。
 - Governed collaboration PR A、versioned Skill governance PR B 与 browser walkthrough/inspector PR C 已在 v0.1.2 作为 local synthetic capability 发布。`/demo/collaboration` 本身不创建 `AgentTask`；只有 same-Case handoff 后在 `/demo` 执行显式 action，才会启动既有 governed planning path。
-- v0.1.4 不新增 live provider、production deployment、distributed HA、SLA、真实学生数据、真实学校覆盖、顾问团队采用或录取结果。
-- Governed timeline-execution PR A/B/C 仅属于 current local development。
-  Publication and v0.1.5 release remain pending；不宣称 release、deployment、
-  live provider、real user 或 outcome。
+- v0.1.5 不新增 live provider、production deployment、distributed HA、SLA、真实学生数据、真实学校覆盖、顾问团队采用、录取结果或 business-benefit claim。
+- Governed timeline-execution PR A/B/C 只作为 local synthetic、provider-free
+  evidence 发布；不宣称 deployment、live provider、real user 或 outcome。
 
 ## Milestone 与历史
 
-- [v0.1.4 release notes](docs/releases/v0.1.4.md)
+- [v0.1.5 release notes](docs/releases/v0.1.5.md)
+- [v0.1.4 historical release notes](docs/releases/v0.1.4.md)
 - [v0.1.3 历史 release notes](docs/releases/v0.1.3.md)
 - [v0.1.2 历史 release notes](docs/releases/v0.1.2.md)
 - [v0.1.1 历史 release notes](docs/releases/v0.1.1.md)

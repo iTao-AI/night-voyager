@@ -1,7 +1,7 @@
 # Governed Plan Execution and Reassessment
 
-**Status:** Approved design; PR A/B are merged; PR C is implemented and locally
-verified. Publication and v0.1.5 release remain pending.
+**Status:** Implemented, reviewed, and merged through PR A/B/C; included in the
+v0.1.5 release candidate. Publication remains separately gated.
 
 ## Summary
 
@@ -948,7 +948,7 @@ verification.
 The release candidate binds:
 
 - exact merged `main`;
-- migration head `0014`;
+- migration head `0015`;
 - reviewed feature trees;
 - successful hosted `python`, `frontend`, and `compose` checks;
 - normal merged-main provider-free proof;

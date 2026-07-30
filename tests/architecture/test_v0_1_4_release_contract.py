@@ -1,15 +1,9 @@
 from __future__ import annotations
 
 import hashlib
-import json
-import tomllib
 from pathlib import Path
 
-from night_voyager.api import create_app
-
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "0.1.4"
-DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 HISTORICAL_RELEASE_DIGESTS = {
     "docs/releases/v0.1.0.md": "a3251cdb572b4d982f989917f7e44d111cf887cf7fc8d75629cdd69c393d3a93",
     "docs/how-to/verify-v0.1.0-release.md": (
@@ -31,63 +25,13 @@ HISTORICAL_RELEASE_DIGESTS = {
     "docs/how-to/verify-v0.1.3-release.md": (
         "1f62ca4b1c8db8caa0613df3851ea79b48afb6c5696b590d8b6cc5caa4986162"
     ),
+    "docs/releases/v0.1.4.md": (
+        "cf13ff4cdee937ba111186bbc73258712695a190d8317d9085024344b799f3da"
+    ),
+    "docs/how-to/verify-v0.1.4-release.md": (
+        "6fab5465f24c6765910814a7f554c9c57971c6e6c613d194f1a25e8a9ddf0f45"
+    ),
 }
-
-
-def test_current_release_identity_is_v0_1_4_without_dependency_drift() -> None:
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
-    package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
-    package_lock = json.loads(
-        (ROOT / "web/package-lock.json").read_text(encoding="utf-8")
-    )
-    locked_project = next(
-        item for item in uv_lock["package"] if item.get("name") == "night-voyager"
-    )
-
-    assert pyproject["project"]["version"] == VERSION
-    assert pyproject["project"]["description"] == DESCRIPTION
-    assert locked_project["version"] == VERSION
-    assert package["version"] == VERSION
-    assert package_lock["version"] == VERSION
-    assert package_lock["packages"][""]["version"] == VERSION
-    assert create_app().version == VERSION
-    verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert f'VERSION = "{VERSION}"' in verifier
-    assert 'f"docs/releases/v{VERSION}.md"' in verifier
-    assert 'f"docs/how-to/verify-v{VERSION}-release.md"' in verifier
-
-
-def test_current_release_entries_point_to_v0_1_4_and_keep_history() -> None:
-    current_entries = {
-        "README.md": (
-            "docs/releases/v0.1.4.md",
-            "docs/how-to/verify-v0.1.4-release.md",
-            "local synthetic portfolio release",
-        ),
-        "README_CN.md": (
-            "docs/releases/v0.1.4.md",
-            "docs/how-to/verify-v0.1.4-release.md",
-            "local synthetic portfolio release",
-        ),
-        "docs/README.md": (
-            "releases/v0.1.4.md",
-            "how-to/verify-v0.1.4-release.md",
-            "local synthetic portfolio release",
-        ),
-        "CONTRIBUTING.md": ("v0.1.4", "local synthetic portfolio release"),
-        "SECURITY.md": ("v0.1.4", "local synthetic portfolio release"),
-        "DESIGN.md": ("v0.1.4", "local synthetic portfolio release"),
-    }
-    for relative, tokens in current_entries.items():
-        source = (ROOT / relative).read_text(encoding="utf-8")
-        assert all(token in source for token in tokens), relative
-
-    for relative in ("README.md", "README_CN.md", "docs/README.md"):
-        source = (ROOT / relative).read_text(encoding="utf-8")
-        assert "v0.1.0" in source, relative
-        assert "v0.1.1" in source, relative
-        assert "v0.1.2" in source, relative
 
 
 def test_v0_1_4_release_notes_define_current_capability_and_non_claim_scope() -> None:

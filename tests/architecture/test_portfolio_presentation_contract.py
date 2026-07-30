@@ -46,11 +46,11 @@ PRODUCTION_ASSETS = (
     ),
 )
 LOCKED_DEPENDENCY_IDENTITIES = {
-    "pyproject.toml": "99cf04e2c07f50593f2f4841194d9365f3deda0621d18953229b96d675362646",
-    "uv.lock": "a9f10236313c64f8b088795a661c1fce9b64e51ed3d3dcbb9999d16380d4d37c",
-    "web/package.json": "7251e741c58b12fb2c952a85c95d18ac3d9fed9af9da1bff4dad0d8759b1942c",
+    "pyproject.toml": "8eabfc4c5dc2cabd9f4465ffb90e01c8e58964ffb7d1c33e78f21405a1e21bb0",
+    "uv.lock": "6ca925427796a88f37ac764ed7857ca5524d49d4d84b4ef7accd317fdc3a4fe8",
+    "web/package.json": "c43763f9502a68f6c470f12da5fa59a0834d3ca3e25b597d135773a625fd1fec",
     "web/package-lock.json": (
-        "fea0e9d1e11cf684deae87eb7167877965855986cea63e9fb46f98b0cefe015d"
+        "fc566d469f9bcfcba83d7e00f7e67046f8b4648173e6638011a161512da48b3d"
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"

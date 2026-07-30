@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[2]
 NEXT_VERSION = "16.2.12"
 POSTCSS_VERSION = "8.5.18"
 REACT_VERSION = "19.2.8"
-PROJECT_VERSION = "0.1.4"
+PROJECT_VERSION = "0.1.5"
 SHARP_VERSION = "0.34.5"
 
 

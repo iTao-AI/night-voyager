@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.4"
+VERSION = "0.1.5"
 FASTAPI_VERSION_FLOOR = (0, 139, 2)
 FASTAPI_VERSION_CEILING = (0, 140)
 RELEASE_TAG = f"v{VERSION}"
@@ -307,6 +307,12 @@ PUBLISHED_RELEASE_DOCUMENTS = {
     "docs/how-to/verify-v0.1.3-release.md": (
         "1f62ca4b1c8db8caa0613df3851ea79b48afb6c5696b590d8b6cc5caa4986162"
     ),
+    "docs/releases/v0.1.4.md": (
+        "cf13ff4cdee937ba111186bbc73258712695a190d8317d9085024344b799f3da"
+    ),
+    "docs/how-to/verify-v0.1.4-release.md": (
+        "6fab5465f24c6765910814a7f554c9c57971c6e6c613d194f1a25e8a9ddf0f45"
+    ),
 }
 RELEASE_HEADINGS = (
     "## Summary",
@@ -318,47 +324,43 @@ RELEASE_HEADINGS = (
 )
 RELEASE_NOTE_TOKENS = (
     "local synthetic portfolio release",
-    "migration `0013`",
-    "capture",
+    "migration `0015`",
+    "PR #80",
+    "governed timeline execution",
+    "PR #83",
     "recovery",
-    "Stage 2–4",
-    "evaluation",
-    "semantic candidate-freeze evidence",
-    "01ba21f2996769e68cbc88f4bb0596740df27f6b",
-    "generic-strict-citation@1",
-    "not a DRA v0.1.6 release capability",
-    "versioned planning revision authority",
-    "deterministic old/new comparison",
-    "fresh advisor reauthorization",
-    "only-current family decision",
-    "zh-CN",
-    "en",
-    "React",
-    "Next.js",
-    "PostCSS",
-    "Dependabot #8",
-    "Dependabot #9",
-    "FIXED",
-    "Dependabot #7",
-    "OPEN",
+    "PR #84",
+    "reassessment",
+    "session",
+    "task",
+    "receipt",
+    "reconciliation",
+    "PR #85",
+    "professional presentation",
+    "evaluator-first DX",
+    "PR #78",
+    "dependency maintenance",
     "GHSA-f88m-g3jw-g9cj",
+    "sharp",
     "brace-expansion",
     "minimatch",
-    "ESLint",
     "not audit-zero",
+    "PR #81",
+    "PR #82",
+    "CI verification maintenance",
     "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
     "zero cited Evidence",
-    "before candidate import",
     "no third provider attempt",
     "GitHub-generated source archive",
     "no production deployment",
-    "no source-truth or provider-quality claim",
-    "no real student or school coverage",
-    "no advisor-team adoption",
+    "no real users",
+    "no real schools or student data",
     "no admissions outcome",
-    "no HA or SLA",
     "no business-benefit claim",
-    "release-prep does not change migration, API, runtime behavior, or dependency tree",
+    "no HA or SLA",
+    "except for the declared version identities, release-prep does not change "
+    "migrations, runtime behavior, backend/domain product logic, BFF/API endpoints "
+    "or schemas, dependency choices, Dockerfiles, or Compose policy",
 )
 RELEASE_HOW_TO_TOKENS = (
     "git fetch origin --tags --prune",
@@ -387,7 +389,7 @@ RELEASE_HOW_TO_TOKENS = (
     "make check",
     "make proof",
     "make compose-proof",
-    "make down",
+    "docker compose down --volumes --remove-orphans --rmi local",
     "docker compose ps --all",
     "object type `tag`",
     "Never move the tag after publication",
