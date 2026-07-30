@@ -17,6 +17,13 @@ authority, and proves that no execution exists before an explicit start. The
 task-owned project and volume are removed on exit; the protected shared
 `night-voyager_postgres-data` volume is not pruned.
 
+Migration `0014` owns timeline-execution state and transitions; migration `0015`
+only adds the closed synthetic scenario principals. A downgrade from `0015` to
+`0014` must refuse before mutation when those principals or session history
+exist. A downgrade from `0014` to `0013` must refuse when execution history
+exists. Never edit or reinterpret either migration to recover a development
+database.
+
 ## Run the browser journey
 
 ```bash
@@ -50,6 +57,12 @@ Stop the stack with:
 ```bash
 make down
 ```
+
+For evaluator intent, choose one path: `make proof` for the quick provider-free
+contract, `make demo` plus the walkthrough for human-readable function, or a
+task-scoped `make compose-proof` for the full browser-to-database gate. The
+stable full-proof terminal marker is `proof compose: PASS`; always follow with
+the same-project `make down`.
 
 ## Troubleshooting
 

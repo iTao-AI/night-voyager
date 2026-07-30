@@ -1159,3 +1159,85 @@ def test_collaboration_state_matrix_matches_executable_and_approved_plan() -> No
     assert approved == expected_persisted
     assert '"handoff_validating"' in reducer
     assert documented == expected_persisted | {"handoff_validating"}
+
+
+def test_governed_plan_execution_dx_surface_is_evaluator_first() -> None:
+    paths = {
+        relative: (ROOT / relative).read_text(encoding="utf-8")
+        for relative in (
+            "README.md",
+            "README_CN.md",
+            "CONTRIBUTING.md",
+            "DESIGN.md",
+            "docs/README.md",
+            "docs/design/demo-storyboard.md",
+            "docs/design/state-and-interaction-matrix.md",
+            "docs/design/projection-matrix.md",
+            "docs/operations/plan-execution-walkthrough.md",
+            "docs/operations/timeline-execution.md",
+            "docs/reference/timeline-execution-contract.md",
+            "docs/reference/http-api-v1.md",
+            "docs/superpowers/README.md",
+            "docs/superpowers/specs/2026-07-29-governed-plan-execution-and-reassessment-design.md",
+            "docs/superpowers/plans/2026-07-29-governed-plan-execution-pr-a-implementation-plan.md",
+            "docs/superpowers/plans/2026-07-29-governed-plan-execution-pr-b-implementation-plan.md",
+            "docs/superpowers/plans/2026-07-29-governed-plan-execution-pr-c-implementation-plan.md",
+        )
+    }
+    combined = " ".join("\n".join(paths.values()).split())
+    for token in (
+        "make proof",
+        "make demo",
+        "make compose-proof",
+        "proof configuration and installed-wheel contract confirmed",
+        "proof compose: PASS",
+        "migration `0015`",
+        "plan-execution-current-action.png",
+        "plan-execution-advisor-review.png",
+        "plan-execution-reassessment-mobile.png",
+        "plan-execution-recovery-mobile.png",
+        "semantic assertions",
+        "screenshots are review evidence",
+        "PR A/B are merged",
+        "PR C is implemented and locally verified",
+        "publication and v0.1.5 release remain pending",
+    ):
+        assert token in combined
+
+    contributing = paths["CONTRIBUTING.md"]
+    for mapping in (
+        "Domain/model",
+        "Migration/SQL",
+        "FastAPI/BFF",
+        "Web state/recovery",
+        "Presentation",
+        "Docs/release surface",
+    ):
+        assert mapping in contributing
+
+    template = (
+        ROOT / ".github/ISSUE_TEMPLATE/proof-failure.yml"
+    ).read_text(encoding="utf-8")
+    for allowed in (
+        "Command",
+        "Public phase marker",
+        "Public problem code",
+        "Expected stable marker",
+        "Observed stable marker",
+        "Host available space",
+        "Docker VM available space",
+        "Compose project name",
+        "Task-resource teardown result",
+    ):
+        assert allowed in template
+    for forbidden in (
+        "credentials",
+        "cookies",
+        "CSRF",
+        ".env",
+        "database URLs",
+        "private paths",
+        "raw database rows",
+        "content-bearing Evidence",
+    ):
+        assert forbidden in template

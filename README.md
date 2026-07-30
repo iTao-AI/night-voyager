@@ -14,6 +14,13 @@ The complete governed walkthrough begins at `/demo/collaboration` and continues 
 
 ![Planning revision comparison and renewed review](docs/assets/night-voyager-planning-revision.png)
 
+Governed plan-execution development evidence (synthetic review evidence only):
+[current action](docs/assets/plan-execution-current-action.png),
+[advisor review](docs/assets/plan-execution-advisor-review.png),
+[mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png), and
+[mobile recovery](docs/assets/plan-execution-recovery-mobile.png). Semantic
+assertions remain the acceptance authority; screenshots are review evidence.
+
 ## Engineering proof
 
 - **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the current development graph `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`; the released v0.1.4 identity remains fixed at migration `0013`.
@@ -25,7 +32,7 @@ The complete governed walkthrough begins at `/demo/collaboration` and continues 
 - **Explicit fact-to-plan authority:** v0.1.3 migration `0009` makes the first deterministic task creation the atomic `intake -> planning` authority with the pinned task, dispatch, first event, and idempotency result; legacy runtime transition authority stays revoked.
 - **Browser to database:** v0.1.3 `/demo/collaboration` hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
 - **Planning revision journey:** v0.1.4 releases provider-free `request revision`, a controlled student preferred-country change, retained predecessor lineage, a successor PlanningRun, deterministic old/new comparison, fresh advisor authorization, and only the current family decision. The blocked budget counterfactual reaches neither approval nor decision.
-- **Governed timeline execution:** current development PR A/B adds a provider-free `/demo/plan` vertical, closed Happy/Blocked scenarios, structured family attestations, assigned-advisor verification, immutable receipt recovery, PostgreSQL-owned risk/date authority, and a reassessment stop. It creates no new `AgentTask`, provider call, successor business row, release, or deployment.
+- **Governed timeline execution:** current development PR A/B/C adds a provider-free `/demo/plan` vertical, closed Happy/Blocked scenarios, structured family attestations, assigned-advisor verification, immutable receipt recovery, PostgreSQL-owned risk/date authority, a reassessment stop, and a bilingual responsive/action-hierarchy proof. It creates no new `AgentTask`, provider call, successor business row, release, or deployment.
 - **Portfolio and dependency boundary:** v0.1.4 includes React / Next.js / PostCSS maintenance. Dependabot #8 and #9 are fixed; optional/transitive `sharp` Dependabot #7 remains open at `GHSA-f88m-g3jw-g9cj`, and the full development audit retains the dev-only `brace-expansion` / `minimatch` -> ESLint chain. This is not an audit-zero claim.
 
 ## Evaluate the release
@@ -54,8 +61,9 @@ captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
 `night-voyager-planning-revision.png`.
 
 For the current governed execution development path, open `/demo/plan` and follow
-the [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md). PR A/B
-surface is implemented locally but not included in the v0.1.4 release.
+the [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md).
+PR A/B are merged; PR C is implemented and locally verified. Publication and
+v0.1.5 release remain pending, so none of this surface is included in v0.1.4.
 
 `make doctor` checks Docker, Compose capability, local ports, at least 5 GiB on the host project filesystem, and at least 8 GiB on the Docker VM filesystem. Operators may override only the Docker VM threshold with `NIGHT_VOYAGER_DOCKER_MINIMUM_KB`; the check fails closed and never removes Docker resources. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
@@ -68,7 +76,9 @@ surface is implemented locally but not included in the v0.1.4 release.
 - PR 1, PR 2, and PR 3 of the planning-revision work are released in v0.1.4 as controlled provider-free evidence only. They preserve the failed 25 and 83 row attempts as zero cited rows; strict live acceptance remains incomplete and there is no third provider attempt.
 - Governed collaboration PR A, versioned Skill governance PR B, and browser walkthrough/inspector PR C are released in v0.1.2 as local synthetic capabilities. `/demo/collaboration` itself creates no `AgentTask`; only the explicit action after the same-Case handoff to `/demo` starts the existing governed planning path.
 - The v0.1.4 release does not add live providers, production deployment, distributed HA, SLA, real student data, real school coverage, advisor-team adoption, or admissions outcomes.
-- Governed timeline-execution PR A/B is current local development only. PR C presentation/DX/release closure, publication, and release are not claimed.
+- Governed timeline-execution PR A/B/C is current local development only.
+  Publication and v0.1.5 release remain pending; no release, deployment, live
+  provider, real-user, or outcome claim is made.
 
 ## Milestones and history
 

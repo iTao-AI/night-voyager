@@ -90,3 +90,15 @@ revoked. The browser holds one generation-scoped lock across the atomic
 `POST /demo/sessions` rotation and the following context/read reconciliation;
 an older generation cannot unlock a newer operation. Migration `0014` and all
 timeline transitions remain unchanged.
+
+## Presentation and proof boundary
+
+`/demo/plan` localizes the closed milestone, checkpoint, risk, activity, and role
+codes without changing them. Current authority appears before controls, the
+approved four-step plan is read-only, and blocked advisor state exposes only the
+reassessment stop. One live region and deterministic post-mutation focus are
+accessibility projections, not business state.
+
+The semantic Playwright assertions and browser-to-database receipt/GET proof are
+the pass/fail authority. The four checked-in screenshots are review evidence and
+use only visibly labelled synthetic data.

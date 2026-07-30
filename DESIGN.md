@@ -7,6 +7,8 @@ Night Voyager is an evidence-grounded study-abroad decision workflow. The curren
 - **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, route-evidence secondary action to `#route-atlas`)
 - **Complete governed walkthrough:** `/demo/collaboration` -> read-only same-Case handoff -> explicit task action on `/demo`
 - **Focused advisor-family/evidence route:** `/demo`
+- **Governed plan-execution route:** `/demo/plan` (`happy` by default; exact
+  `blocked` query scenario)
 - **Audience:** advisors first, then students and families
 - **Page boundary:** root presentation has zero product-side network/session/task effects; demo routes use local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
@@ -16,7 +18,9 @@ Night Voyager is an evidence-grounded study-abroad decision workflow. The curren
 Night Voyager intentionally has two visual layers:
 
 1. **Root `/` — Virtual Night Voyage:** deep navy, ivory, and champagne frame a cinematic but legible voyage backdrop, an evidence-bearing route atlas, and one continuous student-first decision trajectory. Responsive AVIF/WebP files are runtime assets; the source PNG is provenance only.
-2. **Governed demo routes — warm-paper ledger:** `/demo` and `/demo/collaboration` retain the existing advisor ledger, family decision documents, restrained rules, and semantic status accents.
+2. **Governed demo routes — warm-paper ledger:** `/demo`,
+   `/demo/collaboration`, and `/demo/plan` retain the existing advisor ledger,
+   family decision documents, restrained rules, and semantic status accents.
 
 The root may feel atmospheric; the governed application must feel calm, accountable, and readable. Neither layer should resemble a generic chat product, KPI dashboard, or infrastructure control tower.
 
@@ -93,6 +97,15 @@ deterministic old/new comparison, renewed advisor review, and current-revision f
 decision. `revision_blocked` keeps the comparison visible but exposes no approval or
 family-decision action. This remains controlled provider-free evidence rather than
 strict live acceptance.
+
+The unreleased governed plan-execution development surface uses the same
+warm-paper identity with a stricter action hierarchy: current milestone, state,
+due date, accountable role, risk, and next handoff precede the one available
+action. The immutable four-step plan remains visible, technical activity is a
+secondary disclosure, accepted transitions move focus to the current-action
+heading, and one polite live region announces terminal or waiting changes.
+Presentation locale and responsive layout never alter PostgreSQL, HTTP, BFF,
+receipt-then-GET, recovery, role, or reassessment authority.
 
 ## Accessibility
 

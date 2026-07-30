@@ -8,7 +8,9 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, Playwright 1.58, existing FastAPI/PostgreSQL timeline-execution contracts, pytest, Ruff, Pyright, Docker Compose.
 
-**Plan status:** Implemented locally; authority review, publication, PR C, and release remain pending.
+**Plan status:** Implemented, reviewed, and merged into the current development
+base. PR C is implemented and locally verified; publication and v0.1.5 release
+remain pending.
 
 ## Global Constraints
 

@@ -16,6 +16,8 @@
 | `MemoryCandidate` | current handoff candidate | absent | current no-store candidate projection |
 | `ConfirmedFact` + Case revision | current confirmed facts, fact version, and revision | family-safe fact after role rotation | PostgreSQL current fact heads and Case |
 | presentation locale | exact `zh-CN` or `en` labels over the same projection | exact `zh-CN` or `en` labels over the same projection | presentation-only `localStorage`; no business authority |
+| `TimelineExecution` current action | milestone/state/due date/accountable role/risk/next handoff plus advisor controls | the same server-owned facts plus only the accountable family action | PostgreSQL projection, immutable receipt, and fresh GET |
+| execution activity | localized bounded technical disclosure | localized bounded technical disclosure | latest 64 durable rows plus exact total/truncation from PostgreSQL |
 
 Before task creation, the checked-in fixture contract only limits the canonical
 synthetic input identity and must match the existing source-pack row. It is not

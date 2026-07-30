@@ -8,7 +8,8 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, existing CSS and presentation catalog, Vitest/Testing Library, Playwright 1.58, existing provider-free Compose proof, pytest documentation/release contracts.
 
-**Plan status:** Approved; implementation has not started.
+**Plan status:** Implementation complete and locally verified. Publication and
+v0.1.5 release remain pending.
 
 ## Global Constraints
 
