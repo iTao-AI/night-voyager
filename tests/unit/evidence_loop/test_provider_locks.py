@@ -24,6 +24,13 @@ def test_exact_release_objects_are_closed() -> None:
     assert locks.night_voyager.commit == "3a82721a86f65353b849e9ee93050912d0cb079a"
     assert locks.mke.tag_object == "1ca0a0b348638369e8407270ca5f363b0e551a9e"
     assert locks.mke.commit == "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610"
+    assert locks.mke.a3_source_tree_archive_basename == "mke-v0.1.5.tar"
+    assert (
+        locks.mke.a3_source_tree_archive_sha256
+        == "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
+    )
+    assert not hasattr(locks.mke, "source_archive_basename")
+    assert not hasattr(locks.mke, "source_archive_sha256")
     assert locks.dra.tag_object == "f828606741f636bca7ddbb66244ca60019eaa3c8"
     assert locks.dra.commit == "cb1f4660ee4ac7d81b04ffea014362e933487e61"
 
@@ -34,9 +41,11 @@ def test_exact_release_objects_are_closed() -> None:
         (("mke", "ref_kind"), "branch"),
         (("mke", "release"), "main"),
         (("mke", "tag_object"), "0" * 40),
+        (("mke", "a3_source_tree_archive_sha256"), "0" * 64),
         (("mke", "wheel_sha256"), "0" * 64),
         (("mke", "tool_schema_sha256"), "0" * 64),
         (("dra", "commit"), "0" * 40),
+        (("dra", "source_archive_sha256"), "0" * 64),
         (("night_voyager", "tree"), "0" * 40),
     ),
 )

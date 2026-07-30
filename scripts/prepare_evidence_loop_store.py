@@ -30,9 +30,19 @@ TAG = "v0.1.5"
 TAG_OBJECT = "1ca0a0b348638369e8407270ca5f363b0e551a9e"
 PEELED_COMMIT = "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610"
 TREE = "22756fdfa8ef131d3e28fc2a44acc3f2b6fa32f0"
+MKE_SOURCE_ARCHIVE_BASENAME = "mke-v0.1.5.tar"
 SOURCE_ARCHIVE_SHA256 = (
     "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
 )
+DRA_TAG = "v0.1.8"
+DRA_TAG_OBJECT = "f828606741f636bca7ddbb66244ca60019eaa3c8"
+DRA_PEELED_COMMIT = "cb1f4660ee4ac7d81b04ffea014362e933487e61"
+DRA_SOURCE_ARCHIVE_BASENAME = "dra-v0.1.8-source.tar.gz"
+DRA_SOURCE_ARCHIVE_SHA256 = (
+    "ab9deaf7678571b2dda6e8275fcfe2ff69d6baab04f3ab66f84c6abdcb2a6e7f"
+)
+DRA_PROFILE_ID = "generic-strict-citation"
+DRA_PROFILE_VERSION = "1"
 SOURCE_FRAGMENT_SHA256 = (
     "d9926321da8c244e93d93afd4e8a5c4571aa14ceac4a7913644a887f195c0793"
 )
@@ -85,10 +95,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--mke-source-archive")
     parser.add_argument("--mke-tag-object")
     parser.add_argument("--mke-commit")
+    parser.add_argument("--dra-source-archive")
+    parser.add_argument("--dra-tag-object")
+    parser.add_argument("--dra-commit")
     parser.add_argument("--source-manifest")
-    parser.add_argument("--work-root")
-    parser.add_argument("--store-root")
-    parser.add_argument("--receipt")
+    parser.add_argument("--run-root")
     parser.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
@@ -417,17 +428,27 @@ def _copy_exclusive(source: Path, destination: Path) -> dict[str, Any]:
 
 def _prepare_input_root(
     manifest_path: Path,
-    source_archive: Path,
+    mke_source_archive: Path,
+    dra_source_archive: Path,
     input_root: Path,
     sources: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    input_root.mkdir(mode=0o700, parents=False)
     corpus = input_root / "corpus"
     corpus.mkdir(mode=0o700)
     files = [
         {
-            "logical_name": "mke_source_archive",
-            **_copy_exclusive(source_archive, input_root / "mke-v0.1.5.tar"),
+            "logical_name": "mke_a3_source_tree_archive",
+            **_copy_exclusive(
+                mke_source_archive,
+                input_root / MKE_SOURCE_ARCHIVE_BASENAME,
+            ),
+        },
+        {
+            "logical_name": "dra_source_archive",
+            **_copy_exclusive(
+                dra_source_archive,
+                input_root / DRA_SOURCE_ARCHIVE_BASENAME,
+            ),
         },
         {
             "logical_name": "source_manifest",
@@ -455,6 +476,57 @@ def _prepare_input_root(
         "corpus_root_mode": "0700",
         "files": files,
     }
+
+
+def _prepare_run_root(run_root: Path) -> dict[str, Path]:
+    if (
+        not run_root.is_dir()
+        or run_root.stat().st_mode & 0o777 != 0o700
+        or any(run_root.iterdir())
+    ):
+        raise PreparationFailure(
+            "arguments",
+            "destination_exists",
+            "The task-owned run root is not fresh and empty.",
+            "A3 preparation is single-use and fail-closed.",
+            "Create one fresh mode-0700 run root without child directories.",
+            2,
+        )
+    roots = {
+        name: run_root / name for name in ("input", "work", "store", "receipts")
+    }
+    for root in roots.values():
+        root.mkdir(mode=0o700)
+    return roots
+
+
+def _validate_producer_inputs(
+    *,
+    mke_source_archive: Path,
+    mke_tag_object: str,
+    mke_commit: str,
+    dra_source_archive: Path,
+    dra_tag_object: str,
+    dra_commit: str,
+) -> None:
+    if (
+        mke_tag_object != TAG_OBJECT
+        or mke_commit != PEELED_COMMIT
+        or dra_tag_object != DRA_TAG_OBJECT
+        or dra_commit != DRA_PEELED_COMMIT
+        or not mke_source_archive.is_file()
+        or _sha256(mke_source_archive) != SOURCE_ARCHIVE_SHA256
+        or not dra_source_archive.is_file()
+        or _sha256(dra_source_archive) != DRA_SOURCE_ARCHIVE_SHA256
+    ):
+        raise PreparationFailure(
+            "producer",
+            "producer_identity_mismatch",
+            "The supplied producer inputs do not match the frozen A3 contract.",
+            "An exact archive, tag object, commit, or digest differs.",
+            "Supply the approved MKE v0.1.5 and DRA v0.1.8 inputs.",
+            11,
+        )
 
 
 async def _native_observation(
@@ -561,10 +633,11 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         args.mke_source_archive,
         args.mke_tag_object,
         args.mke_commit,
+        args.dra_source_archive,
+        args.dra_tag_object,
+        args.dra_commit,
         args.source_manifest,
-        args.work_root,
-        args.store_root,
-        args.receipt,
+        args.run_root,
     )
     if not all(required):
         raise PreparationFailure(
@@ -575,47 +648,41 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
             "Provide all documented A3 root arguments.",
             2,
         )
-    if args.mke_tag_object != TAG_OBJECT or args.mke_commit != PEELED_COMMIT:
-        raise PreparationFailure(
-            "producer",
-            "producer_identity_mismatch",
-            "The supplied MKE release identity does not match the frozen contract.",
-            "The exact tag object or commit differs.",
-            "Supply the approved MKE v0.1.5 identities.",
-            11,
-        )
-    source_archive = Path(args.mke_source_archive).resolve()
+    mke_source_archive = Path(args.mke_source_archive).resolve()
+    dra_source_archive = Path(args.dra_source_archive).resolve()
     manifest_path = Path(args.source_manifest).resolve()
-    work_root = Path(args.work_root).resolve()
-    store_root = Path(args.store_root).resolve()
-    receipt_path = Path(args.receipt).resolve()
-    input_root = work_root.parent / "input"
-    roots = {input_root, work_root, store_root, receipt_path.parent}
-    if (
-        len(roots) != 4
-        or not source_archive.is_file()
-        or not manifest_path.is_file()
-        or input_root.exists()
-        or work_root.exists()
-        or store_root.exists()
-        or receipt_path.exists()
-    ):
+    run_root = Path(args.run_root).resolve()
+    _validate_producer_inputs(
+        mke_source_archive=mke_source_archive,
+        mke_tag_object=args.mke_tag_object,
+        mke_commit=args.mke_commit,
+        dra_source_archive=dra_source_archive,
+        dra_tag_object=args.dra_tag_object,
+        dra_commit=args.dra_commit,
+    )
+    if not manifest_path.is_file():
         raise PreparationFailure(
             "arguments",
-            "destination_exists",
-            "A task-owned destination already exists.",
-            "A3 preparation is single-use and fail-closed.",
-            "Choose fresh task-owned destinations.",
+            "required_argument_missing",
+            "The Revision 3 source manifest is unavailable.",
+            "The declared source manifest is not a file.",
+            "Supply the committed Revision 3 source manifest.",
             2,
         )
     _, sources = _load_manifest(manifest_path)
+    roots = _prepare_run_root(run_root)
+    input_root = roots["input"]
+    work_root = roots["work"]
+    store_root = roots["store"]
+    receipt_path = roots["receipts"] / "sealed-mke-store-v1.json"
     input_admission = _prepare_input_root(
-        manifest_path, source_archive, input_root, sources
+        manifest_path,
+        mke_source_archive,
+        dra_source_archive,
+        input_root,
+        sources,
     )
-    work_root.mkdir(mode=0o700)
-    store_root.mkdir(mode=0o700, parents=True)
-    receipt_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    admitted_archive = input_root / "mke-v0.1.5.tar"
+    admitted_archive = input_root / MKE_SOURCE_ARCHIVE_BASENAME
     executable, wheel_sha256 = _prepare_wheel(admitted_archive, work_root)
     database = store_root / "store.sqlite"
     corpus = input_root / "corpus"
@@ -667,6 +734,24 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         "pymupdf_wheel_filename": PYMUPDF_WHEEL,
         "pymupdf_wheel_sha256": PYMUPDF_WHEEL_SHA256,
         "tool_inventory": list(TOOLS),
+        "dra_admission": {
+            "name": "decision-research-agent",
+            "version": "0.1.8",
+            "tag": DRA_TAG,
+            "tag_object": DRA_TAG_OBJECT,
+            "peeled_commit": DRA_PEELED_COMMIT,
+            "profile_id": DRA_PROFILE_ID,
+            "profile_version": DRA_PROFILE_VERSION,
+            "execution": "not_executed_admission_only",
+            "source_archive": {
+                "basename": DRA_SOURCE_ARCHIVE_BASENAME,
+                "byte_length": (
+                    input_root / DRA_SOURCE_ARCHIVE_BASENAME
+                ).stat().st_size,
+                "sha256": DRA_SOURCE_ARCHIVE_SHA256,
+                "mode": "0400",
+            },
+        },
     }
     setup = build_setup_receipt(
         source_manifest_sha256=_sha256(input_root / "source-manifest-v1.json"),

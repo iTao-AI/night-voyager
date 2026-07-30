@@ -27,9 +27,9 @@ class MkeLockV1(FrozenModel):
     ref_kind: Literal["tag"]
     tag_object: Literal["1ca0a0b348638369e8407270ca5f363b0e551a9e"]
     commit: Literal["d258c10dc40bd9eccd67c858b56f4e4cf5fe4610"]
-    source_archive_basename: Literal["mke-v0.1.5-source.tar.gz"]
-    source_archive_sha256: Literal[
-        "7046ab1a6a3a0336472ef114c95b11a6b94cea0b083f2b025a96b994c1cab4bc"
+    a3_source_tree_archive_basename: Literal["mke-v0.1.5.tar"]
+    a3_source_tree_archive_sha256: Literal[
+        "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
     ]
     wheel_basename: Literal["multimodal_knowledge_engine-0.1.5-py3-none-any.whl"]
     wheel_sha256: Literal[

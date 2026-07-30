@@ -175,37 +175,27 @@ umask 077
 : "${DRA_SOURCE_ARCHIVE:?set the exact DRA v0.1.8 tagged source archive}"
 EVIDENCE_LOOP_RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/nv-evidence-loop.XXXXXX")"
 export EVIDENCE_LOOP_RUN_ROOT
-mkdir -p \
-  "$EVIDENCE_LOOP_RUN_ROOT/input" \
-  "$EVIDENCE_LOOP_RUN_ROOT/work" \
-  "$EVIDENCE_LOOP_RUN_ROOT/store" \
-  "$EVIDENCE_LOOP_RUN_ROOT/receipts"
-chmod 700 "$EVIDENCE_LOOP_RUN_ROOT" "$EVIDENCE_LOOP_RUN_ROOT"/*
-install -m 0400 \
-  "$MKE_SOURCE_ARCHIVE" \
-  "$EVIDENCE_LOOP_RUN_ROOT/input/mke-v0.1.5-source.tar.gz"
-install -m 0400 \
-  "$DRA_SOURCE_ARCHIVE" \
-  "$EVIDENCE_LOOP_RUN_ROOT/input/dra-v0.1.8-source.tar.gz"
-MKE_OWNED_ARCHIVE="$EVIDENCE_LOOP_RUN_ROOT/input/mke-v0.1.5-source.tar.gz"
-DRA_OWNED_ARCHIVE="$EVIDENCE_LOOP_RUN_ROOT/input/dra-v0.1.8-source.tar.gz"
-export MKE_OWNED_ARCHIVE DRA_OWNED_ARCHIVE
+chmod 700 "$EVIDENCE_LOOP_RUN_ROOT"
 ```
 
-The execution owner prepares and seals the exact producer/store boundary:
+The execution owner supplies the canonical A3 MKE source-tree archive
+`mke-v0.1.5.tar` (14,643,200 bytes, SHA-256
+`12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a`) and the
+exact DRA release source archive `dra-v0.1.8-source.tar.gz` (SHA-256
+`ab9deaf7678571b2dda6e8275fcfe2ff69d6baab04f3ab66f84c6abdcb2a6e7f`). The
+script exclusively creates the fresh `input`, `work`, `store`, and `receipts`
+children and prepares and seals the exact producer/store boundary:
 
 ```bash
 uv run python scripts/prepare_evidence_loop_store.py \
-  --mke-source-archive "$MKE_OWNED_ARCHIVE" \
+  --mke-source-archive "$MKE_SOURCE_ARCHIVE" \
   --mke-tag-object 1ca0a0b348638369e8407270ca5f363b0e551a9e \
   --mke-commit d258c10dc40bd9eccd67c858b56f4e4cf5fe4610 \
-  --dra-source-archive "$DRA_OWNED_ARCHIVE" \
+  --dra-source-archive "$DRA_SOURCE_ARCHIVE" \
   --dra-tag-object f828606741f636bca7ddbb66244ca60019eaa3c8 \
   --dra-commit cb1f4660ee4ac7d81b04ffea014362e933487e61 \
   --source-manifest tests/fixtures/evidence_loop/source-manifest-v1.json \
-  --work-root "$EVIDENCE_LOOP_RUN_ROOT/work" \
-  --store-root "$EVIDENCE_LOOP_RUN_ROOT/store" \
-  --receipt "$EVIDENCE_LOOP_RUN_ROOT/receipts/sealed-mke-store-v1.json" \
+  --run-root "$EVIDENCE_LOOP_RUN_ROOT" \
   --json
 ```
 
