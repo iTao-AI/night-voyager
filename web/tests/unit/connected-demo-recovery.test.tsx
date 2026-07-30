@@ -20,14 +20,14 @@ const CANDIDATE_ID = "44000000-0000-0000-0000-000000000001";
 const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 
-const advisorMetadata = (phase: "task_ready" | "review_required" | "revision_task_active" | "revision_blocked" = "task_ready") => ({
+const advisorMetadata = (phase: "task_ready" | "active_task" | "review_required" | "revision_task_active" | "revision_blocked" = "task_ready") => ({
   schema_version: 3 as const,
   journey: "advisor-family" as const,
   role: "advisor" as const,
   csrf: "csrf",
   caseId: CASE_ID,
   currentRevision: phase === "revision_task_active" || phase === "revision_blocked" ? 2 : 1,
-  currentTaskId: phase === "revision_task_active" || phase === "revision_blocked" ? TASK_ID : null,
+  currentTaskId: phase === "active_task" || phase === "revision_task_active" || phase === "revision_blocked" ? TASK_ID : null,
   predecessorRunId: phase === "revision_blocked" ? "70000000-0000-0000-0000-000000000001" : null,
   currentRunId: phase === "review_required"
     ? "70000000-0000-0000-0000-000000000001"
@@ -243,6 +243,49 @@ it("fails closed on status/detail revision or phase mismatch", async () => {
     value: "recoverable_error",
     code: "transport_failure",
   }));
+});
+
+it("reconciles a transient split read while a streamed task reaches advisor review", async () => {
+  saveRecoveryMetadata(advisorMetadata("active_task"));
+  const listeners = new Map<string, (event: Event) => void>();
+  class FakeEventSource {
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+      listeners.set(type, listener as (event: Event) => void);
+    }
+    close() {}
+  }
+  vi.stubGlobal("EventSource", FakeEventSource);
+  let statusReads = 0;
+  let ledgerReads = 0;
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.endsWith("/journey-status")) {
+      statusReads += 1;
+      return Response.json(status(statusReads === 1 ? "active_task" : "review_required"));
+    }
+    if (path.endsWith("/advisor-ledger")) {
+      ledgerReads += 1;
+      return Response.json(ledger(ledgerReads <= 2 ? "active_task" : "review_required"));
+    }
+    if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [], history: [], next_cursor: null });
+    if (path.endsWith("/planning-skill-inspector")) return Response.json({ code: "unavailable" }, { status: 404 });
+    throw new Error(`unexpected ${path}`);
+  }));
+
+  const { result } = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("task_streaming"));
+
+  await act(async () => {
+    listeners.get("waiting_review")?.(new MessageEvent("waiting_review", { lastEventId: "4" }));
+  });
+
+  await waitFor(() => expect(result.current.state.value).toBe("advisor_review"));
+  expect(loadRecoveryMetadata()).toMatchObject({
+    phase: "review_required",
+    currentTaskId: TASK_ID,
+    currentRunId: "70000000-0000-0000-0000-000000000001",
+    cursor: 4,
+  });
 });
 
 it("uses status to recover a pending explicit role rotation without reading wrong-role detail", async () => {
