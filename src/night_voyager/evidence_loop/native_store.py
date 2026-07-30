@@ -70,13 +70,23 @@ async def collect_search_pages(
         if not isinstance(page_matches_raw, list):
             _fail("search_response_invalid")
         page_matches = cast(list[object], page_matches_raw)
-        for match in page_matches:
-            matches.append(_object(match, "search_response_invalid"))
         selection = _object(body.get("selection"), "search_selection_invalid")
+        if selection.get("returned") != len(page_matches):
+            _fail("search_selection_invalid")
+        for match in page_matches:
+            typed_match = _object(match, "search_match_invalid")
+            evidence = _object(typed_match.get("evidence"), "search_match_invalid")
+            excerpt = _object(typed_match.get("excerpt"), "search_match_invalid")
+            read = _object(typed_match.get("read"), "search_match_invalid")
+            if (
+                excerpt.get("content_trust") != "untrusted_evidence"
+                or read.get("tool") != "read_evidence_v1"
+                or read.get("evidence_id") != evidence.get("evidence_id")
+            ):
+                _fail("search_match_invalid")
+            matches.append(typed_match)
         status = selection.get("status")
         if status == "complete":
-            if selection.get("returned") != len(page_matches):
-                _fail("search_selection_invalid")
             return SearchCollection(tuple(matches), snapshot)
         if status != "more_available":
             _fail("search_selection_incomplete")
@@ -342,8 +352,10 @@ def build_setup_receipt(
     store_seal: Mapping[str, Any],
     producer: Mapping[str, Any],
     mappings: Sequence[Mapping[str, Any]],
+    input_admission: Mapping[str, Any] | None = None,
+    sealed_write_rejection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    receipt = {
         "schema_version": "night-voyager.evidence-loop-store-setup-receipt.v1",
         "preparation_scope": "task_owned_mutation_before_sealed_evaluation_window",
         "sealed_evaluation_window_started": False,
@@ -354,6 +366,38 @@ def build_setup_receipt(
         "store_seal": dict(store_seal),
         "mutation_capability": "closed_after_preparation",
         "read_only_reopen_verified": True,
+    }
+    if input_admission is not None:
+        receipt["input_admission"] = dict(input_admission)
+    if sealed_write_rejection is not None:
+        receipt["sealed_write_rejection"] = dict(sealed_write_rejection)
+    return receipt
+
+
+def validate_sealed_write_rejection(
+    *,
+    response: Mapping[str, Any],
+    before_seal: Mapping[str, Any],
+    after_seal: Mapping[str, Any],
+    before_active_set_fingerprint: str,
+    after_active_set_fingerprint: str,
+) -> dict[str, Any]:
+    problem = response.get("problem")
+    if (
+        response.get("ok") is not False
+        or not isinstance(problem, str)
+        or response.get("active_publication_impact") != "unchanged"
+        or before_seal != after_seal
+        or before_active_set_fingerprint != after_active_set_fingerprint
+    ):
+        _fail("sealed_mutation_not_closed")
+    return {
+        "attempted_tool": "ingest_file",
+        "rejected": True,
+        "problem": problem,
+        "active_publication_impact": "unchanged",
+        "store_tree_unchanged": True,
+        "active_set_unchanged": True,
     }
 
 

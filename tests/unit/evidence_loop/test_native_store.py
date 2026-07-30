@@ -86,6 +86,49 @@ async def test_search_follows_every_cursor_and_requires_complete() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    ("mutation", "code"),
+    [
+        ("returned", "search_selection_invalid"),
+        ("trust", "search_match_invalid"),
+        ("read_tool", "search_match_invalid"),
+        ("read_evidence_id", "search_match_invalid"),
+    ],
+)
+async def test_search_rejects_native_match_contradictions(
+    mutation: str, code: str
+) -> None:
+    match = _match(_descriptor("a"))
+    response = _search("complete", [match])
+    if mutation == "returned":
+        response["selection"]["returned"] = 2
+    elif mutation == "trust":
+        match["excerpt"]["content_trust"] = "trusted"
+    elif mutation == "read_tool":
+        match["read"]["tool"] = "search_library_v1"
+    else:
+        match["read"]["evidence_id"] = "ev_other"
+    with pytest.raises(native_store.NativeStoreValidationError, match=code):
+        await native_store.collect_search_pages(
+            FakeCaller([response]), query="public source probe"
+        )
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_intermediate_returned_mismatch() -> None:
+    first = _search(
+        "more_available", [_match(_descriptor("a"))], cursor="next"
+    )
+    first["selection"]["returned"] = 2
+    with pytest.raises(
+        native_store.NativeStoreValidationError, match="search_selection_invalid"
+    ):
+        await native_store.collect_search_pages(
+            FakeCaller([first]), query="public source probe"
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     ("responses", "code"),
     [
         ([_search("capped", [])], "search_selection_incomplete"),
@@ -297,3 +340,61 @@ def test_setup_receipt_excludes_paths_queries_cursors_and_raw_evidence() -> None
     encoded = str(receipt)
     for forbidden in ("/private/", "query", "cursor", "raw_evidence", "text"):
         assert forbidden not in encoded
+
+
+def test_sealed_write_rejection_binds_unchanged_store_and_authority() -> None:
+    seal: dict[str, Any] = {"tree_sha256": "a" * 64, "files": []}
+    response = {
+        "ok": False,
+        "problem": "internal_error",
+        "cause": "operation failed; details were redacted",
+        "active_publication_impact": "unchanged",
+        "next_step": "check_server_logs",
+    }
+    result = native_store.validate_sealed_write_rejection(
+        response=response,
+        before_seal=seal,
+        after_seal=seal,
+        before_active_set_fingerprint=f"sha256:{'b' * 64}",
+        after_active_set_fingerprint=f"sha256:{'b' * 64}",
+    )
+    assert result == {
+        "attempted_tool": "ingest_file",
+        "rejected": True,
+        "problem": "internal_error",
+        "active_publication_impact": "unchanged",
+        "store_tree_unchanged": True,
+        "active_set_unchanged": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["accepted", "store", "authority"],
+)
+def test_sealed_write_rejection_fails_closed_on_any_mutation(mutation: str) -> None:
+    response = {
+        "ok": False,
+        "problem": "internal_error",
+        "active_publication_impact": "unchanged",
+    }
+    before: dict[str, Any] = {"tree_sha256": "a" * 64, "files": []}
+    after: dict[str, Any] = dict(before)
+    before_fingerprint = f"sha256:{'b' * 64}"
+    after_fingerprint = before_fingerprint
+    if mutation == "accepted":
+        response["ok"] = True
+    elif mutation == "store":
+        after["tree_sha256"] = "c" * 64
+    else:
+        after_fingerprint = f"sha256:{'d' * 64}"
+    with pytest.raises(
+        native_store.NativeStoreValidationError, match="sealed_mutation_not_closed"
+    ):
+        native_store.validate_sealed_write_rejection(
+            response=response,
+            before_seal=before,
+            after_seal=after,
+            before_active_set_fingerprint=before_fingerprint,
+            after_active_set_fingerprint=after_fingerprint,
+        )

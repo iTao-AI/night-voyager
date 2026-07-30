@@ -12,9 +12,8 @@ import shutil
 import subprocess
 import tarfile
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from night_voyager.evidence_loop.freeze import validate_public_commitments
 from night_voyager.evidence_loop.native_store import (
     NativeStoreValidationError,
     build_setup_receipt,
@@ -22,6 +21,7 @@ from night_voyager.evidence_loop.native_store import (
     collect_search_pages,
     seal_store,
     validate_native_vertical,
+    validate_sealed_write_rejection,
     verify_store_seal,
     write_canonical_json,
 )
@@ -30,6 +30,13 @@ TAG = "v0.1.5"
 TAG_OBJECT = "1ca0a0b348638369e8407270ca5f363b0e551a9e"
 PEELED_COMMIT = "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610"
 TREE = "22756fdfa8ef131d3e28fc2a44acc3f2b6fa32f0"
+SOURCE_ARCHIVE_SHA256 = (
+    "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
+)
+SOURCE_FRAGMENT_SHA256 = (
+    "d9926321da8c244e93d93afd4e8a5c4571aa14ceac4a7913644a887f195c0793"
+)
+SOURCE_FRAGMENT_BYTES = 11549
 PYMUPDF_VERSION = "1.27.2.3"
 PYMUPDF_WHEEL = "pymupdf-1.27.2.3-cp310-abi3-macosx_11_0_arm64.whl"
 PYMUPDF_WHEEL_SHA256 = (
@@ -75,14 +82,13 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Prepare the exact tagged MKE v0.1.5 Slice 0 store and close mutation."
     )
-    parser.add_argument("--mke-repository")
-    parser.add_argument("--workspace-root")
-    parser.add_argument("--receipt-root")
-    parser.add_argument(
-        "--source-root",
-        default="tests/fixtures/evidence_loop",
-        help="Revision 3 public package root.",
-    )
+    parser.add_argument("--mke-source-archive")
+    parser.add_argument("--mke-tag-object")
+    parser.add_argument("--mke-commit")
+    parser.add_argument("--source-manifest")
+    parser.add_argument("--work-root")
+    parser.add_argument("--store-root")
+    parser.add_argument("--receipt")
     parser.add_argument("--json", action="store_true", dest="json_output")
     return parser
 
@@ -114,25 +120,6 @@ def _run(
             11,
         )
     return result.stdout.strip()
-
-
-def _verify_git_identity(repository: Path) -> None:
-    values = (
-        _run(["git", "-C", str(repository), "rev-parse", f"refs/tags/{TAG}"]),
-        _run(["git", "-C", str(repository), "rev-parse", f"refs/tags/{TAG}^{{}}"]),
-        _run(
-            ["git", "-C", str(repository), "rev-parse", f"refs/tags/{TAG}^{{}}^{{tree}}"]
-        ),
-    )
-    if values != (TAG_OBJECT, PEELED_COMMIT, TREE):
-        raise PreparationFailure(
-            "producer",
-            "producer_identity_mismatch",
-            "The MKE release identity does not match the frozen contract.",
-            "The exact tag object, commit, or tree is unavailable.",
-            "Restore the exact MKE v0.1.5 Git objects.",
-            11,
-        )
 
 
 def _verify_cached_pymupdf(uv: str) -> None:
@@ -168,7 +155,25 @@ def _verify_cached_pymupdf(uv: str) -> None:
         )
 
 
-def _prepare_wheel(repository: Path, workspace: Path) -> tuple[Path, str, str]:
+def _verify_archive_tree(extracted: Path) -> None:
+    _run(["git", "init", "--quiet"], cwd=extracted)
+    _run(["git", "config", "core.autocrlf", "false"], cwd=extracted)
+    _run(["git", "config", "core.filemode", "true"], cwd=extracted)
+    _run(["git", "add", "--force", "."], cwd=extracted)
+    if _run(["git", "write-tree"], cwd=extracted) != TREE:
+        raise PreparationFailure(
+            "producer",
+            "producer_identity_mismatch",
+            "The MKE source archive tree does not match the frozen contract.",
+            "The extracted Git tree identity differs.",
+            "Restore the exact task-owned MKE v0.1.5 source archive.",
+            11,
+        )
+
+
+def _prepare_wheel(
+    source_archive: Path, work_root: Path
+) -> tuple[Path, str]:
     uv = shutil.which("uv")
     if uv is None:
         raise PreparationFailure(
@@ -180,27 +185,33 @@ def _prepare_wheel(repository: Path, workspace: Path) -> tuple[Path, str, str]:
             11,
         )
     _verify_cached_pymupdf(uv)
-    archive = workspace / "mke-v0.1.5.tar"
-    source = workspace / "source"
-    dist = workspace / "dist"
-    venv = workspace / "venv"
+    if _sha256(source_archive) != SOURCE_ARCHIVE_SHA256:
+        raise PreparationFailure(
+            "producer",
+            "producer_identity_mismatch",
+            "The MKE source archive does not match the frozen contract.",
+            "The exact source archive digest differs.",
+            "Restore the exact task-owned MKE v0.1.5 source archive.",
+            11,
+        )
+    source = work_root / "source"
+    dist = work_root / "dist"
+    venv = work_root / "venv"
     source.mkdir(mode=0o700)
     dist.mkdir(mode=0o700)
-    _run(
-        [
-            "git",
-            "-C",
-            str(repository),
-            "archive",
-            "--format=tar",
-            "--prefix=mke-v0.1.5/",
-            f"--output={archive}",
-            f"refs/tags/{TAG}^{{}}",
-        ]
-    )
-    with tarfile.open(archive) as package:
+    with tarfile.open(source_archive) as package:
         package.extractall(source, filter="data")
     extracted = source / "mke-v0.1.5"
+    if not extracted.is_dir():
+        raise PreparationFailure(
+            "producer",
+            "producer_archive_invalid",
+            "The MKE source archive layout is invalid.",
+            "The expected source root is absent.",
+            "Restore the exact task-owned MKE v0.1.5 source archive.",
+            11,
+        )
+    _verify_archive_tree(extracted)
     _run(
         [
             uv,
@@ -268,67 +279,182 @@ def _prepare_wheel(repository: Path, workspace: Path) -> tuple[Path, str, str]:
             "Restore the approved cached producer dependencies.",
             11,
         )
-    return venv / "bin/mke", _sha256(archive), _sha256(wheels[0])
+    return venv / "bin/mke", _sha256(wheels[0])
 
 
-def _load_manifest(source_root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    validate_public_commitments(source_root)
-    manifest_path = source_root / "source-manifest-v1.json"
-    fragment_path = source_root / "source-manifest-fragment-v1.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    fragment = json.loads(fragment_path.read_text(encoding="utf-8"))
-    if (
-        manifest.get("author_revision") != 3
-        or manifest.get("source_manifest_fragment", {}).get("sha256")
-        != _sha256(fragment_path)
-        or manifest.get("sources") != fragment.get("sources")
-    ):
-        # The project manifest intentionally narrows producer detail, so compare stable sources.
-        stable = [
-            {
-                key: source[key]
-                for key in (
-                    "relative_path",
-                    "dataset_source_id",
-                    "evaluation_canonical_source_id",
-                    "canonical_url",
-                    "byte_length",
-                    "content_sha256",
-                    "media_type",
-                    "redistribution_class",
-                    "expected_publication_revision",
-                    "expected_extracted_text_sha256",
-                    "expected_extracted_utf8_bytes",
-                    "expected_locator",
-                )
-            }
-            for source in fragment["sources"]
+def _corpus_failure() -> PreparationFailure:
+    return PreparationFailure(
+        "corpus",
+        "corpus_identity_mismatch",
+        "The project source manifest does not match Revision 3.",
+        "A closed manifest, producer, proof, or source commitment differs.",
+        "Restore the committed Revision 3 public package.",
+        12,
+    )
+
+
+def _load_manifest(
+    manifest_path: Path,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    try:
+        manifest = cast(
+            dict[str, Any],
+            json.loads(manifest_path.read_text(encoding="utf-8")),
+        )
+        fragment_path = manifest_path.parent / "source-manifest-fragment-v1.json"
+        fragment_bytes = fragment_path.read_bytes()
+        fragment = cast(dict[str, Any], json.loads(fragment_bytes))
+        sources = cast(list[dict[str, Any]], fragment["sources"])
+        producer = sources[0]["producer"]
+        expected_producer_lock = {
+            key: producer[key] for key in ("release", "pymupdf", "wheel", "profile")
+        }
+        stable_keys = (
+            "relative_path",
+            "dataset_source_id",
+            "evaluation_canonical_source_id",
+            "canonical_url",
+            "byte_length",
+            "content_sha256",
+            "media_type",
+            "redistribution_class",
+            "expected_publication_revision",
+            "expected_extracted_text_sha256",
+            "expected_extracted_utf8_bytes",
+            "expected_locator",
+        )
+        stable_sources = [
+            {key: source[key] for key in stable_keys} for source in sources
         ]
-        if manifest.get("sources") != stable:
-            raise PreparationFailure(
-                "corpus",
-                "corpus_identity_mismatch",
-                "The project source manifest does not match Revision 3.",
-                "A stable source commitment differs.",
-                "Restore the committed Revision 3 public package.",
-                12,
+        native_proof = sources[0]["producer_native_proof_commitment"]
+        exact_top_keys = {
+            "schema_version",
+            "author_revision",
+            "canonicalization_id",
+            "source_manifest_fragment",
+            "producer_lock",
+            "producer_native_proof_commitment",
+            "sources",
+        }
+        valid = (
+            set(manifest) == exact_top_keys
+            and manifest.get("schema_version")
+            == "night-voyager.evidence-loop-source-manifest.v1"
+            and manifest.get("author_revision") == 3
+            and manifest.get("canonicalization_id")
+            == "night-voyager.slice0.compact-sorted-utf8-lf.v1"
+            and manifest.get("source_manifest_fragment")
+            == {
+                "basename": "source-manifest-fragment-v1.json",
+                "byte_length": SOURCE_FRAGMENT_BYTES,
+                "sha256": SOURCE_FRAGMENT_SHA256,
+            }
+            and len(fragment_bytes) == SOURCE_FRAGMENT_BYTES
+            and hashlib.sha256(fragment_bytes).hexdigest() == SOURCE_FRAGMENT_SHA256
+            and len(sources) == 4
+            and all(
+                {key: source["producer"][key] for key in expected_producer_lock}
+                == expected_producer_lock
+                for source in sources
             )
-    for source in manifest["sources"]:
-        path = source_root / source["relative_path"]
+            and all(
+                source["producer_native_proof_commitment"] == native_proof
+                for source in sources
+            )
+            and manifest.get("producer_lock") == expected_producer_lock
+            and manifest.get("producer_native_proof_commitment") == native_proof
+            and manifest.get("sources") == stable_sources
+        )
+    except (
+        AttributeError,
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+    ):
+        raise _corpus_failure() from None
+    if not valid:
+        raise _corpus_failure()
+    for source in stable_sources:
+        path = manifest_path.parent / source["relative_path"]
         if (
-            path.stat().st_size != source["byte_length"]
+            not path.is_file()
+            or path.stat().st_size != source["byte_length"]
             or _sha256(path) != source["content_sha256"]
-            or path.stat().st_mode & 0o777 != 0o600
         ):
-            raise PreparationFailure(
-                "corpus",
-                "corpus_identity_mismatch",
-                "An admitted public source does not match its commitment.",
-                "Source bytes, length, or mode differ.",
-                "Restore the committed Revision 3 public package.",
-                12,
-            )
-    return manifest, manifest["sources"]
+            raise _corpus_failure()
+    return manifest, stable_sources
+
+
+def _copy_exclusive(source: Path, destination: Path) -> dict[str, Any]:
+    descriptor = os.open(
+        destination,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        0o400,
+    )
+    try:
+        with source.open("rb") as reader, os.fdopen(descriptor, "wb") as writer:
+            shutil.copyfileobj(reader, writer)
+            writer.flush()
+            os.fsync(writer.fileno())
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    destination.chmod(0o400)
+    if (
+        destination.stat().st_size != source.stat().st_size
+        or _sha256(destination) != _sha256(source)
+    ):
+        raise _corpus_failure()
+    return {
+        "basename": destination.name,
+        "byte_length": destination.stat().st_size,
+        "sha256": _sha256(destination),
+        "mode": "0400",
+    }
+
+
+def _prepare_input_root(
+    manifest_path: Path,
+    source_archive: Path,
+    input_root: Path,
+    sources: list[dict[str, Any]],
+) -> dict[str, Any]:
+    input_root.mkdir(mode=0o700, parents=False)
+    corpus = input_root / "corpus"
+    corpus.mkdir(mode=0o700)
+    files = [
+        {
+            "logical_name": "mke_source_archive",
+            **_copy_exclusive(source_archive, input_root / "mke-v0.1.5.tar"),
+        },
+        {
+            "logical_name": "source_manifest",
+            **_copy_exclusive(manifest_path, input_root / "source-manifest-v1.json"),
+        },
+        {
+            "logical_name": "source_manifest_fragment",
+            **_copy_exclusive(
+                manifest_path.parent / "source-manifest-fragment-v1.json",
+                input_root / "source-manifest-fragment-v1.json",
+            ),
+        },
+    ]
+    for source in sources:
+        source_path = manifest_path.parent / source["relative_path"]
+        files.append(
+            {
+                "logical_name": source["relative_path"],
+                **_copy_exclusive(source_path, corpus / source_path.name),
+            }
+        )
+    return {
+        "schema_version": "night-voyager.evidence-loop-input-admission.v1",
+        "root_mode": "0700",
+        "corpus_root_mode": "0700",
+        "files": files,
+    }
 
 
 async def _native_observation(
@@ -338,7 +464,8 @@ async def _native_observation(
     sources: list[dict[str, Any]],
     *,
     ingest: bool,
-) -> tuple[tuple[dict[str, Any], ...], str]:
+    sealed_write_probe: bool = False,
+) -> tuple[tuple[dict[str, Any], ...], str, dict[str, Any] | None]:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
@@ -353,6 +480,7 @@ async def _native_observation(
         ],
     )
     ingests: list[dict[str, Any]] = []
+    write_response: dict[str, Any] | None = None
     with Path(os.devnull).open("w") as errlog:
         async with stdio_client(params, errlog=errlog) as (read, write):
             async with ClientSession(read, write) as session:
@@ -376,6 +504,11 @@ async def _native_observation(
                             "ingest_file", {"path": Path(relative).name}
                         )
                         ingests.append({"relative_path": relative, **result})
+                if sealed_write_probe:
+                    write_response = await call_tool(
+                        "ingest_file",
+                        {"path": Path(str(sources[0]["relative_path"])).name},
+                    )
                 search = await collect_search_pages(call_tool, query=PROBE_QUERY)
                 descriptors = [
                     dict(match["evidence"]) for match in search.matches
@@ -414,7 +547,7 @@ async def _native_observation(
                 fingerprint = str(
                     search.authority_snapshot["active_set_fingerprint"]
                 )
-                return mappings, fingerprint
+                return mappings, fingerprint, write_response
 
 
 def _remove_sqlite_runtime_files(database: Path) -> None:
@@ -424,20 +557,49 @@ def _remove_sqlite_runtime_files(database: Path) -> None:
 
 
 def _prepare(args: argparse.Namespace) -> dict[str, Any]:
-    if not args.mke_repository or not args.workspace_root or not args.receipt_root:
+    required = (
+        args.mke_source_archive,
+        args.mke_tag_object,
+        args.mke_commit,
+        args.source_manifest,
+        args.work_root,
+        args.store_root,
+        args.receipt,
+    )
+    if not all(required):
         raise PreparationFailure(
             "arguments",
             "required_argument_missing",
             "Required A3 input is missing.",
-            "Producer, workspace, and receipt roots are required.",
+            "Archive, producer identities, manifest, work, store, and receipt are required.",
             "Provide all documented A3 root arguments.",
             2,
         )
-    repository = Path(args.mke_repository).resolve()
-    workspace = Path(args.workspace_root).resolve()
-    receipt_root = Path(args.receipt_root).resolve()
-    source_root = Path(args.source_root).resolve()
-    if workspace.exists() or receipt_root.exists():
+    if args.mke_tag_object != TAG_OBJECT or args.mke_commit != PEELED_COMMIT:
+        raise PreparationFailure(
+            "producer",
+            "producer_identity_mismatch",
+            "The supplied MKE release identity does not match the frozen contract.",
+            "The exact tag object or commit differs.",
+            "Supply the approved MKE v0.1.5 identities.",
+            11,
+        )
+    source_archive = Path(args.mke_source_archive).resolve()
+    manifest_path = Path(args.source_manifest).resolve()
+    work_root = Path(args.work_root).resolve()
+    store_root = Path(args.store_root).resolve()
+    receipt_path = Path(args.receipt).resolve()
+    input_root = work_root.parent / "input"
+    roots = {input_root, work_root, store_root, receipt_path.parent}
+    if (
+        len(roots) != 4
+        or not source_archive.is_file()
+        or not manifest_path.is_file()
+        or input_root.exists()
+        or work_root.exists()
+        or store_root.exists()
+        or receipt_path.exists()
+    ):
         raise PreparationFailure(
             "arguments",
             "destination_exists",
@@ -446,28 +608,46 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
             "Choose fresh task-owned destinations.",
             2,
         )
-    workspace.mkdir(mode=0o700, parents=True)
-    receipt_root.mkdir(mode=0o700, parents=True)
-    _verify_git_identity(repository)
-    _, sources = _load_manifest(source_root)
-    executable, archive_sha256, wheel_sha256 = _prepare_wheel(repository, workspace)
-    store_root = workspace / "store"
-    store_root.mkdir(mode=0o700)
+    _, sources = _load_manifest(manifest_path)
+    input_admission = _prepare_input_root(
+        manifest_path, source_archive, input_root, sources
+    )
+    work_root.mkdir(mode=0o700)
+    store_root.mkdir(mode=0o700, parents=True)
+    receipt_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    admitted_archive = input_root / "mke-v0.1.5.tar"
+    executable, wheel_sha256 = _prepare_wheel(admitted_archive, work_root)
     database = store_root / "store.sqlite"
-    corpus = source_root / "mke-corpus"
-    mappings, active_set_fingerprint = asyncio.run(
+    corpus = input_root / "corpus"
+    mappings, active_set_fingerprint, _ = asyncio.run(
         _native_observation(executable, database, corpus, sources, ingest=True)
     )
     _remove_sqlite_runtime_files(database)
     store_seal = seal_store(store_root, database)
     verify_store_seal(store_root, store_seal)
-    reopened, reopened_fingerprint = asyncio.run(
-        _native_observation(executable, database, corpus, sources, ingest=False)
+    reopened, reopened_fingerprint, write_response = asyncio.run(
+        _native_observation(
+            executable,
+            database,
+            corpus,
+            sources,
+            ingest=False,
+            sealed_write_probe=True,
+        )
     )
     if reopened != mappings or reopened_fingerprint != active_set_fingerprint:
         raise NativeStoreValidationError("read_only_reopen_drift")
     _remove_sqlite_runtime_files(database)
-    verify_store_seal(store_root, store_seal)
+    after_seal = dict(verify_store_seal(store_root, store_seal))
+    if write_response is None:
+        raise NativeStoreValidationError("sealed_mutation_not_closed")
+    sealed_write_rejection = validate_sealed_write_rejection(
+        response=write_response,
+        before_seal=store_seal,
+        after_seal=after_seal,
+        before_active_set_fingerprint=active_set_fingerprint,
+        after_active_set_fingerprint=reopened_fingerprint,
+    )
     producer = {
         "name": "multimodal-knowledge-engine",
         "version": "0.1.5",
@@ -475,7 +655,12 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         "tag_object": TAG_OBJECT,
         "peeled_commit": PEELED_COMMIT,
         "tree": TREE,
-        "archive_sha256": archive_sha256,
+        "source_archive": {
+            "basename": admitted_archive.name,
+            "byte_length": admitted_archive.stat().st_size,
+            "sha256": SOURCE_ARCHIVE_SHA256,
+            "mode": "0400",
+        },
         "wheel_sha256": wheel_sha256,
         "mcp_version": "1.28.1",
         "pymupdf_version": PYMUPDF_VERSION,
@@ -484,32 +669,25 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         "tool_inventory": list(TOOLS),
     }
     setup = build_setup_receipt(
-        source_manifest_sha256=_sha256(
-            source_root / "source-manifest-v1.json"
-        ),
+        source_manifest_sha256=_sha256(input_root / "source-manifest-v1.json"),
         active_set_fingerprint=active_set_fingerprint,
         store_seal=store_seal,
         producer=producer,
         mappings=mappings,
+        input_admission=input_admission,
+        sealed_write_rejection=sealed_write_rejection,
     )
-    seal_path = receipt_root / "mke-store-seal-receipt-v1.json"
-    setup_path = receipt_root / "mke-store-setup-receipt-v1.json"
-    write_canonical_json(seal_path, store_seal)
-    write_canonical_json(setup_path, setup)
+    write_canonical_json(receipt_path, setup)
     return {
         "schema_version": "night-voyager.evidence-loop-store-preparation-response.v1",
         "ok": True,
+        "code": "evidence_loop_store_sealed",
         "source_count": len(sources),
         "store_state": "sealed_read_only",
-        "setup_receipt": {
-            "basename": setup_path.name,
-            "byte_length": setup_path.stat().st_size,
-            "sha256": _sha256(setup_path),
-        },
-        "store_seal_receipt": {
-            "basename": seal_path.name,
-            "byte_length": seal_path.stat().st_size,
-            "sha256": _sha256(seal_path),
+        "receipt": {
+            "basename": receipt_path.name,
+            "byte_length": receipt_path.stat().st_size,
+            "sha256": _sha256(receipt_path),
         },
     }
 
@@ -546,9 +724,10 @@ def main() -> int:
     else:
         print(
             "status=passed "
+            f"code={payload['code']} "
             f"source_count={payload['source_count']} "
             f"store_state={payload['store_state']} "
-            f"setup_receipt_sha256={payload['setup_receipt']['sha256']}"
+            f"receipt_sha256={payload['receipt']['sha256']}"
         )
     return 0
 
