@@ -328,9 +328,11 @@ and requires a new independently authored sealed holdout set and new hashes.
 
 Custody is a filesystem boundary, not a promise inside one checkout. Before reveal, the evaluator
 worktree contains only the four opaque holdout identities/dimensions and separate payload/oracle
-byte lengths and SHA-256 digests. The holdout custodian's directory is not mounted, copied,
-indexed, or included in evaluator command arguments. The freeze receipt records a pre-reveal scan
-proving that no holdout bytes, answer keys, or custody path are reachable. Reveal copies the exact
+byte lengths and SHA-256 digests. The evaluator freeze records an observable bounded scan of the
+named evaluator checkout and task-owned run root: it rejects custody-bearing environment variables,
+post-reveal paths, and any regular file matching a public full-case, payload, or oracle length and
+SHA-256 commitment. It does not claim to measure global mount/index state or inspect a private
+custody root; those facts require independent custodian attestation. Reveal copies the exact
 pre-authored bytes once and verifies all hashes. A5 is one-shot reveal and execution only. No
 code, test, evaluator, oracle, threshold, mapping, or eligible-source change is permitted after
 reveal. Apart from the preregistered three fresh-process determinism runs, no retry or repair uses

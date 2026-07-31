@@ -25,9 +25,7 @@ def _unit(
         "evaluation_canonical_source_id": source * 64,
         "evaluation_canonical_evidence_id": evidence * 64,
         "decision_dimension": (
-            "application_timeline"
-            if fact_key == "application.deadline"
-            else "program_requirements"
+            "application_timeline" if fact_key == "application.deadline" else "program_requirements"
         ),
         "fact_key": fact_key,
         "value": value,
@@ -171,6 +169,31 @@ def test_removing_positive_evidence_removes_gap_closure() -> None:
 
     assert positive["target_metrics"]["pre_registered_gap_closure"] == 1
     assert ablated["target_metrics"]["pre_registered_gap_closure"] == 0
+
+
+def test_redundant_positive_evidence_does_not_fake_counterfactual_sensitivity() -> None:
+    first = _unit(
+        source="a",
+        evidence="b",
+        value="English",
+        path="mke:evidence-1",
+        access_kind="source_access",
+        origin_kind="untrusted_evidence",
+    )
+    second = _unit(
+        source="c",
+        evidence="d",
+        value="English",
+        path="mke:evidence-2",
+        access_kind="source_access",
+        origin_kind="untrusted_evidence",
+    )
+
+    result = evaluate_case_document(_case(mke_units=[first, second]))
+
+    assert result["target_metrics"]["pre_registered_gap_closure"] == 1
+    assert result["sensitivity"]["positive_evidence_count"] == 2
+    assert result["sensitivity"]["removed_positive_removes_gap_closure"] is False
 
 
 def test_forged_duplicate_has_zero_novelty_and_two_paths() -> None:
@@ -317,6 +340,7 @@ def test_four_case_counterfactual_suite_confirms_incremental_value() -> None:
     )
     decoy = _case(
         case_number=3,
+        expected_relation="exact_duplicate",
         dra_units=[
             _unit(
                 source="e",
@@ -365,13 +389,24 @@ def test_four_case_counterfactual_suite_confirms_incremental_value() -> None:
     )
 
     result = evaluate_suite(
-        {
+        suite := {
             "cases": [positive_one, positive_two, decoy, conflict],
             "expected_case_kinds": ["positive", "positive", "decoy", "conflict"],
         }
     )
 
     assert result["terminal_disposition"] == "incremental_value_confirmed"
+    decoy["mke_units"][0]["evaluation_canonical_evidence_id"] = "9" * 64
+    invalid_decoy = evaluate_suite(suite)
+    assert (
+        invalid_decoy["case_results"][2]["sensitivity"]["exact_duplicate_provenance_confirmed"]
+        is False
+    )
+    assert (
+        invalid_decoy["case_results"][2]["sensitivity"]["forged_duplicate_novelty"]
+        == 1
+    )
+    assert invalid_decoy["terminal_disposition"] == "no_incremental_value"
 
 
 def test_revealed_case_uses_one_capture_for_mke_and_combined_arms() -> None:
@@ -475,9 +510,7 @@ def test_revealed_exact_duplicate_reuses_canonical_identity_and_paths() -> None:
                         {
                             "relation": "exact_duplicate",
                             "left_dataset_source_id": "source-1",
-                            "right_typed_row_id": (
-                                "91111111-1111-4111-8111-111111111111"
-                            ),
+                            "right_typed_row_id": ("91111111-1111-4111-8111-111111111111"),
                         }
                     ],
                 },

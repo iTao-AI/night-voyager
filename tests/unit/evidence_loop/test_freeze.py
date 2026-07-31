@@ -12,9 +12,11 @@ from night_voyager.evidence_loop.dra_baseline import GovernedDraBaselineExportV1
 from night_voyager.evidence_loop.freeze import (
     POST_REVEAL_ALLOWLIST,
     build_pre_registration_receipt,
+    current_runtime_identity,
     scan_pre_reveal,
     validate_frozen_checkout,
     validate_public_commitments,
+    validate_runtime_identity,
 )
 from night_voyager.evidence_loop.receipt import verify_pre_registration_receipt
 
@@ -94,23 +96,19 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
         }
         for commitment in frozen["holdout_commitments"]
     )
-    assert frozen["post_reveal_generated_file_allowlist"] == list(
-        POST_REVEAL_ALLOWLIST
-    )
+    assert frozen["post_reveal_generated_file_allowlist"] == list(POST_REVEAL_ALLOWLIST)
     assert frozen["thresholds"]["max_search_pages"] == 4
     assert frozen["thresholds"]["max_evidence_reads"] == 32
     assert frozen["pre_reveal_scan"]["passed"] is True
     assert frozen["reveal_procedure_id"] == "nv.slice0.one-way-reveal.v1"
-    frozen_paths = {
-        item["path"]
-        for item in [*frozen["evaluator_paths"], *frozen["harness_paths"]]
-    }
+    frozen_paths = {item["path"] for item in [*frozen["evaluator_paths"], *frozen["harness_paths"]]}
     assert frozen_paths == {
         "src/night_voyager/evidence_loop/canonicalization.py",
         "src/night_voyager/evidence_loop/evaluator.py",
         "src/night_voyager/evidence_loop/freeze.py",
         "src/night_voyager/evidence_loop/mke_capture.py",
         "src/night_voyager/evidence_loop/receipt.py",
+        "src/night_voyager/evidence_loop/schema_validation.py",
         "scripts/evaluate_evidence_loop.py",
         "scripts/freeze_evidence_loop.py",
         "scripts/reveal_evidence_loop_holdouts.py",
@@ -122,22 +120,16 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
         "tests/unit/evidence_loop/test_freeze.py",
         "tests/unit/evidence_loop/test_mke_capture.py",
         "tests/unit/evidence_loop/test_receipt.py",
+        "tests/unit/evidence_loop/test_schema_validation.py",
         "tests/integration/adapters/test_mke_v2_tagged_wheel.py",
         "tests/integration/evidence_loop/test_frozen_suite.py",
     }
 
 
 def test_development_baseline_contains_complete_governed_exports() -> None:
-    baseline = json.loads(
-        (FIXTURES / "dra-governed-baseline-v1.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    baseline = json.loads((FIXTURES / "dra-governed-baseline-v1.json").read_text(encoding="utf-8"))
 
-    exports = [
-        GovernedDraBaselineExportV1.model_validate(item)
-        for item in baseline["exports"]
-    ]
+    exports = [GovernedDraBaselineExportV1.model_validate(item) for item in baseline["exports"]]
 
     assert len(exports) == 4
     assert all(export.typed_value_sha256 for export in exports)
@@ -148,11 +140,7 @@ def test_development_baseline_contains_complete_governed_exports() -> None:
 def test_pre_registration_rejects_governed_baseline_hash_drift(
     tmp_path: Path,
 ) -> None:
-    baseline = json.loads(
-        (FIXTURES / "dra-governed-baseline-v1.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    baseline = json.loads((FIXTURES / "dra-governed-baseline-v1.json").read_text(encoding="utf-8"))
     baseline["exports"][0]["typed_value_sha256"] = "0" * 64
     drifted = tmp_path / "dra-governed-baseline-v1.json"
     drifted.write_text(json.dumps(baseline), encoding="utf-8")
@@ -178,9 +166,7 @@ def test_pre_registration_rejects_governed_baseline_hash_drift(
 def test_pre_registration_rejects_setup_provider_peer_drift(
     tmp_path: Path,
 ) -> None:
-    provider_locks = json.loads(
-        (FIXTURES / "provider-locks-v1.json").read_text(encoding="utf-8")
-    )
+    provider_locks = json.loads((FIXTURES / "provider-locks-v1.json").read_text(encoding="utf-8"))
     provider_locks["mke"]["wheel_sha256"] = "0" * 64
     provider_root = tmp_path / "tests/fixtures/evidence_loop"
     provider_root.mkdir(parents=True)
@@ -302,6 +288,53 @@ def test_pre_reveal_scan_rejects_custody_environment_reachability() -> None:
         )
 
 
+def test_pre_reveal_scan_reports_only_measured_roots_and_rejects_committed_bytes(
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    run_root = tmp_path / "run"
+    checkout.mkdir()
+    run_root.mkdir()
+    content = b"mock sealed payload bytes"
+    commitment = {
+        "payload_byte_length": len(content),
+        "payload_sha256": hashlib.sha256(content).hexdigest(),
+        "oracle_byte_length": 999,
+        "oracle_sha256": "a" * 64,
+        "full_case_byte_length": 998,
+        "full_case_sha256": "b" * 64,
+    }
+
+    measured = scan_pre_reveal(
+        checkout,
+        run_roots={"task_run_root": run_root},
+        commitments=[commitment],
+        environment={},
+    )
+    assert measured["method"] == "bounded_regular_file_length_sha256_scan_v1"
+    assert measured["inspected_roots"] == ["evaluator_checkout", "task_run_root"]
+    assert "custody_root_mounted" not in measured
+    assert "custody_root_indexed" not in measured
+    assert "holdout_payload_reachable" not in measured
+
+    (run_root / "opaque.bin").write_bytes(content)
+    with pytest.raises(ValueError, match="committed holdout bytes reachable"):
+        scan_pre_reveal(
+            checkout,
+            run_roots={"task_run_root": run_root},
+            commitments=[commitment],
+            environment={},
+        )
+
+
+def test_runtime_identity_is_enforced_not_only_recorded() -> None:
+    frozen = current_runtime_identity(ROOT)
+    validate_runtime_identity(frozen, repo_root=ROOT)
+    drifted = {**frozen, "python_version": "0.0.0"}
+    with pytest.raises(ValueError, match="runtime identity drift"):
+        validate_runtime_identity(drifted, repo_root=ROOT)
+
+
 def test_pre_registration_is_mode_0600_when_written(tmp_path: Path) -> None:
     path = tmp_path / "pre-registration-v2.json"
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -337,6 +370,12 @@ def test_reveal_validator_accepts_only_exact_committed_case_bytes() -> None:
     manifest = {"holdouts": [commitment]}
 
     module.validate_revealed_dataset(dataset, manifest)
+    with pytest.raises(ValueError, match="schema validation"):
+        module.validate_revealed_dataset(
+            dataset,
+            manifest,
+            schema_root=FIXTURES,
+        )
     cases_value = dataset["cases"]
     assert isinstance(cases_value, list)
     cases = cast(list[object], cases_value)

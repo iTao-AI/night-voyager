@@ -64,9 +64,7 @@ def _units(value: object, code: str) -> list[dict[str, Any]]:
 
 def _selection_is_complete(selection: Mapping[str, Any]) -> bool:
     tools_value = selection.get("tool_calls")
-    tools = (
-        cast(list[object], tools_value) if isinstance(tools_value, list) else []
-    )
+    tools = cast(list[object], tools_value) if isinstance(tools_value, list) else []
     return bool(
         selection.get("status") == "complete"
         and selection.get("authority_state") == "active"
@@ -150,10 +148,7 @@ def evaluate_case_document(case: Mapping[str, Any]) -> dict[str, Any]:
     control = _units(case.get("control_units"), "control units invalid")
     dra = _units(case.get("dra_units"), "DRA units invalid")
     mke = _units(case.get("mke_units"), "MKE units invalid")
-    if any(
-        unit.get("origin_kind") != "night_voyager_typed_governed_row"
-        for unit in dra
-    ):
+    if any(unit.get("origin_kind") != "night_voyager_typed_governed_row" for unit in dra):
         return {
             "identity": identity,
             "status": "evaluation_invalid",
@@ -203,6 +198,54 @@ def evaluate_case_document(case: Mapping[str, Any]) -> dict[str, Any]:
         and unit["value"] == gap.get("expected_value")
         for unit in novel
     )
+    positive_units = [
+        unit
+        for unit in novel
+        if unit["decision_dimension"] == gap.get("decision_dimension")
+        and unit["fact_key"] == gap.get("fact_key")
+        and unit["value"] == gap.get("expected_value")
+    ]
+    without_exact_positive = [
+        unit
+        for unit in novel
+        if not positive_units
+        or unit["evaluation_canonical_evidence_id"]
+        != positive_units[0]["evaluation_canonical_evidence_id"]
+    ]
+    gap_closed_without_exact_positive = any(
+        unit["decision_dimension"] == gap.get("decision_dimension")
+        and unit["fact_key"] == gap.get("fact_key")
+        and unit["value"] == gap.get("expected_value")
+        for unit in without_exact_positive
+    )
+    dra_by_evidence = {
+        str(unit["evaluation_canonical_evidence_id"]): unit for unit in canonicalize_units(dra)
+    }
+    mke_by_evidence = {
+        str(unit["evaluation_canonical_evidence_id"]): unit for unit in canonicalize_units(mke)
+    }
+    duplicate_ids = sorted(set(dra_by_evidence) & set(mke_by_evidence))
+    combined_by_evidence = {
+        str(unit["evaluation_canonical_evidence_id"]): unit for unit in arms["combined"]["units"]
+    }
+    duplicate_provenance_confirmed = bool(
+        len(duplicate_ids) == 1
+        and any(
+            str(path).startswith("dra:")
+            for path in combined_by_evidence[duplicate_ids[0]]["provenance_paths"]
+        )
+        and any(
+            str(path).startswith("mke:")
+            for path in combined_by_evidence[duplicate_ids[0]]["provenance_paths"]
+        )
+    )
+    expected_relations_value = case.get("expected_relations")
+    expected_relations = (
+        cast(list[object], expected_relations_value)
+        if isinstance(expected_relations_value, list)
+        else []
+    )
+    exact_duplicate_expected = "exact_duplicate" in expected_relations
     conflicts = _conflicts(arms["combined"]["units"])
     dimensions = {str(unit["decision_dimension"]) for unit in novel}
     return {
@@ -218,12 +261,8 @@ def evaluate_case_document(case: Mapping[str, Any]) -> dict[str, Any]:
         },
         "target_metrics": {
             "novel_source_bound_units": len(novel),
-            "source_access_gain": sum(
-                unit.get("access_kind") == "source_access" for unit in novel
-            ),
-            "extraction_gain": sum(
-                unit.get("access_kind") == "extraction" for unit in novel
-            ),
+            "source_access_gain": sum(unit.get("access_kind") == "source_access" for unit in novel),
+            "extraction_gain": sum(unit.get("access_kind") == "extraction" for unit in novel),
             "pre_registered_gap_closure": int(gap_closed),
             "decision_dimension_coverage": len(dimensions),
             "advisor_rubric_relevance": int(gap_closed or bool(conflicts)),
@@ -232,8 +271,15 @@ def evaluate_case_document(case: Mapping[str, Any]) -> dict[str, Any]:
         "conflicts": conflicts,
         "actions": [],
         "sensitivity": {
-            "removed_positive_removes_gap_closure": bool(gap_closed),
-            "forged_duplicate_novelty": 0,
+            "positive_evidence_count": len(positive_units),
+            "removed_positive_removes_gap_closure": bool(
+                gap_closed and len(positive_units) == 1 and not gap_closed_without_exact_positive
+            ),
+            "forged_duplicate_novelty": (
+                len(novel) if exact_duplicate_expected else 0
+            ),
+            "exact_duplicate_canonical_identity_confirmed": len(duplicate_ids) == 1,
+            "exact_duplicate_provenance_confirmed": duplicate_provenance_confirmed,
         },
     }
 
@@ -243,9 +289,7 @@ def evaluate_suite(dataset: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(cases, list):
         raise ValueError("exactly four cases are required")
     case_values = cast(list[object], cases)
-    if len(case_values) != 4 or any(
-        not isinstance(case, dict) for case in case_values
-    ):
+    if len(case_values) != 4 or any(not isinstance(case, dict) for case in case_values):
         raise ValueError("exactly four cases are required")
     typed_cases = cast(list[dict[str, Any]], case_values)
     results = [evaluate_case_document(case) for case in typed_cases]
@@ -262,27 +306,18 @@ def evaluate_suite(dataset: Mapping[str, Any]) -> dict[str, Any]:
             confirmed = bool(
                 all(
                     result["target_metrics"]["pre_registered_gap_closure"] == 1
-                    and result["sensitivity"][
-                        "removed_positive_removes_gap_closure"
-                    ]
+                    and result["sensitivity"]["removed_positive_removes_gap_closure"]
                     for result in positives
                 )
-                and len(
-                    {
-                        result["identity"]["decision_dimension"]
-                        for result in positives
-                    }
-                )
-                == 2
+                and len({result["identity"]["decision_dimension"] for result in positives}) == 2
                 and results[2]["target_metrics"]["novel_source_bound_units"] == 0
+                and results[2]["sensitivity"]["exact_duplicate_canonical_identity_confirmed"]
+                and results[2]["sensitivity"]["exact_duplicate_provenance_confirmed"]
+                and results[2]["sensitivity"]["forged_duplicate_novelty"] == 0
                 and results[3]["mechanism_metrics"]["explicit_conflict_count"] >= 1
                 and all(result["guardrail_metrics"]["passed"] for result in results)
             )
-        disposition = (
-            "incremental_value_confirmed"
-            if confirmed
-            else "no_incremental_value"
-        )
+        disposition = "incremental_value_confirmed" if confirmed else "no_incremental_value"
     return {
         "schema_version": "night-voyager.evidence-loop-evaluation.v2",
         "terminal_disposition": disposition,
@@ -301,29 +336,39 @@ def normalize_revealed_dataset(
         raise ValueError("revealed dataset or capture invalid")
     cases = cast(list[object], cases_value)
     captures = cast(list[object], captures_value)
-    capture_by_case: dict[str, dict[str, Any]] = {}
+    if len(cases) != len(captures):
+        raise ValueError("capture source set mismatch")
+    captured_cases: list[dict[str, Any]] = []
+    identity_keys: set[tuple[object, ...]] = set()
     for item in captures:
         captured = _mapping(item, "capture invalid")
         identity = _mapping(captured.get("identity"), "capture identity invalid")
-        case_id = identity.get("case_id")
-        if not isinstance(case_id, str) or case_id in capture_by_case:
+        identity_key = tuple(
+            identity.get(key)
+            for key in (
+                "holdout_id",
+                "case_id",
+                "case_revision",
+                "query_id",
+                "decision_dimension",
+            )
+        )
+        if not isinstance(identity.get("case_id"), str) or identity_key in identity_keys:
             raise ValueError("capture identity invalid")
-        capture_by_case[case_id] = captured
+        identity_keys.add(identity_key)
+        captured_cases.append(captured)
 
     normalized: list[dict[str, Any]] = []
     kinds: list[str] = []
-    for item in cases:
+    for index, item in enumerate(cases):
         case = _mapping(item, "revealed case invalid")
         payload = _mapping(case.get("payload"), "revealed payload invalid")
         oracle = _mapping(case.get("oracle"), "revealed oracle invalid")
         identity = _mapping(payload.get("identity"), "revealed identity invalid")
-        case_id = identity.get("case_id")
-        captured = capture_by_case.get(str(case_id))
-        if captured is None or captured.get("identity") != identity:
-            raise ValueError("capture identity mismatch")
-        baseline = _mapping(
-            payload.get("governed_dra_baseline"), "revealed baseline invalid"
-        )
+        captured = captured_cases[index]
+        if captured.get("identity") != identity:
+            raise ValueError("capture identity order mismatch")
+        baseline = _mapping(payload.get("governed_dra_baseline"), "revealed baseline invalid")
         gap = _mapping(payload.get("pre_registered_gap"), "revealed gap invalid")
         relations_value = payload.get("expected_relations")
         if not isinstance(relations_value, list):
@@ -338,9 +383,7 @@ def normalize_revealed_dataset(
             (
                 _mapping(relation, "revealed relation invalid")
                 for relation in relations
-                if _mapping(
-                    relation, "revealed relation invalid"
-                ).get("relation")
+                if _mapping(relation, "revealed relation invalid").get("relation")
                 == "exact_duplicate"
             ),
             None,
@@ -404,6 +447,4 @@ def normalize_revealed_dataset(
             kinds.append("conflict")
         else:
             kinds.append("negative")
-    if len(capture_by_case) != len(normalized):
-        raise ValueError("capture source set mismatch")
     return {"cases": normalized, "expected_case_kinds": kinds}

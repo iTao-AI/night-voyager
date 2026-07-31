@@ -28,6 +28,7 @@ async def _read_complete_text(
     call_tool: ToolCaller,
     descriptor: Mapping[str, Any],
     *,
+    authority_snapshot: Mapping[str, Any],
     reads_remaining: list[int],
 ) -> tuple[str, int]:
     evidence_id = descriptor.get("evidence_id")
@@ -46,6 +47,8 @@ async def _read_complete_text(
         )
         if body.get("ok") is not True or body.get("evidence") != descriptor:
             raise NativeStoreValidationError("capture_read_invalid")
+        if body.get("authority_snapshot") != authority_snapshot:
+            raise NativeStoreValidationError("capture_read_authority_drift")
         chunk = _object(body.get("content"), "capture_read_invalid")
         text = chunk.get("text")
         encoded = text.encode("utf-8") if isinstance(text, str) else None
@@ -116,6 +119,115 @@ def verify_capture_artifact(content: bytes) -> dict[str, Any]:
     ):
         raise ValueError("capture artifact invalid")
     return artifact
+
+
+def validate_capture_for_dataset(
+    capture: Mapping[str, Any],
+    dataset: Mapping[str, Any],
+    *,
+    expected_active_set_fingerprint: str,
+    expected_store_tree_sha256: str | None = None,
+) -> None:
+    cases_value = dataset.get("cases")
+    captured_value = capture.get("cases")
+    if not isinstance(cases_value, list) or not isinstance(captured_value, list):
+        raise ValueError("capture case set invalid")
+    cases = cast(list[object], cases_value)
+    captured_cases = cast(list[object], captured_value)
+    if len(cases) != 4 or len(captured_cases) != 4:
+        raise ValueError("capture case set invalid")
+    expected_identities: list[dict[str, Any]] = []
+    actual_identities: list[dict[str, Any]] = []
+    for index, (case_value, captured_value) in enumerate(zip(cases, captured_cases, strict=True)):
+        case = _object(case_value, "capture case set invalid")
+        payload = _object(case.get("payload"), "capture case set invalid")
+        expected_identity = _object(payload.get("identity"), "capture case set invalid")
+        captured = _object(captured_value, "capture case set invalid")
+        actual_identity = _object(captured.get("identity"), "capture case identity invalid")
+        expected_identities.append(expected_identity)
+        actual_identities.append(actual_identity)
+        if actual_identity != expected_identity:
+            raise ValueError(f"capture case identity order invalid at {index}")
+
+        selection = _object(captured.get("selection"), "capture selection invalid")
+        if (
+            selection.get("status") != "complete"
+            or selection.get("authority_state") != "active"
+            or selection.get("acquisition_count") != 1
+            or selection.get("search_limit") != 20
+            or not isinstance(selection.get("search_pages"), int)
+            or not 0 <= selection["search_pages"] <= 4
+            or not isinstance(selection.get("evidence_reads"), int)
+            or not 0 <= selection["evidence_reads"] <= 32
+            or selection.get("tool_calls") != ["search_library_v2", "read_evidence_v1"]
+            or not isinstance(selection.get("combined_output_bytes"), int)
+            or not 0 <= selection["combined_output_bytes"] <= 1_048_576
+            or not isinstance(selection.get("mcp_call_seconds_max"), (int, float))
+            or selection["mcp_call_seconds_max"] > 10
+            or not isinstance(selection.get("case_seconds"), (int, float))
+            or selection["case_seconds"] > 120
+        ):
+            raise ValueError("capture selection invalid")
+        if captured.get("active_set_fingerprint") != expected_active_set_fingerprint:
+            raise ValueError("capture active set invalid")
+
+        eligible_value = payload.get("eligible_mke_sources")
+        observations_value = captured.get("observations")
+        if not isinstance(eligible_value, list) or not isinstance(observations_value, list):
+            raise ValueError("capture source set invalid")
+        eligible_sources = {
+            str(_object(item, "capture source set invalid").get("dataset_source_id"))
+            for item in cast(list[object], eligible_value)
+        }
+        observed_sources = [
+            str(_object(item, "capture source set invalid").get("dataset_source_id"))
+            for item in cast(list[object], observations_value)
+        ]
+        if (
+            len(observed_sources) != len(set(observed_sources))
+            or set(observed_sources) != eligible_sources
+            or any(
+                _object(item, "capture source set invalid").get("content_trust")
+                != "untrusted_evidence"
+                for item in cast(list[object], observations_value)
+            )
+        ):
+            raise ValueError("capture source set invalid")
+        guards = _object(captured.get("guardrails"), "capture guardrails invalid")
+        if set(guards) != {
+            "night_voyager_business_mutation",
+            "filesystem_mutation",
+            "database_mutation",
+            "instruction_executed",
+            "promotion_attempted",
+            "human_authority_granted",
+        } or any(guards.values()):
+            raise ValueError("capture guardrails invalid")
+        if expected_store_tree_sha256 is not None:
+            proof = _object(
+                captured.get("guardrail_proof"),
+                "capture guardrail proof invalid",
+            )
+            if (
+                proof.get("immutable_readback_verified") is not True
+                or proof.get("runtime_identity_verified_before_capture") is not True
+                or proof.get("allowed_read_tools_only") is not True
+                or proof.get("store_tree_sha256")
+                != expected_store_tree_sha256
+            ):
+                raise ValueError("capture guardrail proof invalid")
+    identity_keys = [
+        (
+            identity.get("holdout_id"),
+            identity.get("case_id"),
+            identity.get("case_revision"),
+            identity.get("query_id"),
+            identity.get("decision_dimension"),
+        )
+        for identity in expected_identities
+    ]
+    if len(set(identity_keys)) != 4 or actual_identities != expected_identities:
+        raise ValueError("capture case identity set invalid")
 
 
 async def capture_case(
@@ -204,6 +316,7 @@ async def capture_case(
         text, read_calls = await _read_complete_text(
             counted,
             descriptor,
+            authority_snapshot=search.authority_snapshot,
             reads_remaining=reads_remaining,
         )
         encoded = text.encode("utf-8")
@@ -286,12 +399,9 @@ async def capture_case(
         "mke_units": units,
         "observations": observations,
         "active_set_fingerprint": active_set_fingerprint,
-        "guardrails": {
-            "night_voyager_business_mutation": False,
-            "filesystem_mutation": False,
-            "database_mutation": False,
-            "instruction_executed": False,
-            "promotion_attempted": False,
-            "human_authority_granted": False,
+        "guardrail_observations": {
+            "allowed_read_tools_only": True,
+            "retrieved_content_treated_as_untrusted_data": True,
+            "authority_actions_emitted": 0,
         },
     }

@@ -79,7 +79,7 @@ def test_tagged_wheel_runner_inventories_the_frozen_holdout_lane() -> None:
 
 
 @pytest.mark.mke
-def test_tagged_wheel_executes_read_only_mock_capture_lane() -> None:
+def test_tagged_wheel_fails_closed_when_v015_creates_sqlite_sidecars() -> None:
     script = ROOT / "scripts/evaluate_evidence_loop.py"
     spec = importlib.util.spec_from_file_location("evaluate_native_lane", script)
     assert spec and spec.loader
@@ -152,16 +152,38 @@ def test_tagged_wheel_executes_read_only_mock_capture_lane() -> None:
             / "sealed-mke-store-v1.json"
         ).read_text(encoding="utf-8")
     )
-
-    capture = asyncio.run(
-        module._capture_native_dataset(
-            dataset={"cases": cases},
-            repo_root=ROOT,
-            store_root=(ROOT / "tmp/evidence-loop-a3-native-operator-final/store"),
-            expected_active_set_fingerprint=receipt["active_set_fingerprint"],
-        )
+    store_root = ROOT / "tmp/evidence-loop-a3-native-operator-final/store"
+    before_capture = module._capture_state(ROOT, store_root)
+    assert (
+        before_capture["store_tree_sha256"]
+        == receipt["store_seal"]["tree_sha256"]
     )
 
-    assert len(capture["cases"]) == 4
-    assert all(case["selection"]["status"] == "complete" for case in capture["cases"])
-    assert all(case["mke_units"] for case in capture["cases"])
+    try:
+        capture = asyncio.run(
+            module._capture_native_dataset(
+                dataset={"cases": cases},
+                repo_root=ROOT,
+                store_root=store_root,
+                expected_active_set_fingerprint=receipt[
+                    "active_set_fingerprint"
+                ],
+            )
+        )
+        after_capture = module._capture_state(ROOT, store_root)
+        assert {
+            item["basename"] for item in after_capture["store_files"]
+        } == {"store.sqlite", "store.sqlite-shm", "store.sqlite-wal"}
+        with pytest.raises(module.CliFailure) as raised:
+            module._seal_observed_capture_guardrails(
+                capture,
+                before=before_capture,
+                after=after_capture,
+            )
+        assert raised.value.exit_code == 14
+        assert raised.value.payload["code"] == "capture_mutation_prohibited"
+    finally:
+        (store_root / "store.sqlite-shm").unlink(missing_ok=True)
+        (store_root / "store.sqlite-wal").unlink(missing_ok=True)
+
+    assert module._capture_state(ROOT, store_root) == before_capture

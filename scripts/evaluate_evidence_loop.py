@@ -8,6 +8,7 @@ import asyncio
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -22,9 +23,11 @@ from night_voyager.evidence_loop.evaluator import (
 from night_voyager.evidence_loop.freeze import (
     POST_REVEAL_ALLOWLIST,
     validate_frozen_checkout,
+    validate_runtime_identity,
 )
 from night_voyager.evidence_loop.mke_capture import (
     capture_case,
+    validate_capture_for_dataset,
     verify_capture_artifact,
 )
 from night_voyager.evidence_loop.native_store import NativeStoreValidationError
@@ -60,7 +63,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--pre-registration", type=Path)
     parser.add_argument("--store-root", type=Path)
     parser.add_argument("--dataset", type=Path)
-    parser.add_argument("--capture", type=Path)
     parser.add_argument("--capture-output", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--json", action="store_true")
@@ -111,6 +113,28 @@ def _allowlisted_path(repo_root: Path, path: Path, expected: str) -> None:
 def _exact_path(repo_root: Path, path: Path, expected: str) -> None:
     if path.resolve(strict=False) != (repo_root / expected).resolve(strict=False):
         raise CliFailure(stage="freeze", code="frozen_input_path_invalid", exit_code=11)
+
+
+def _capture_state(repo_root: Path, store_root: Path) -> dict[str, object]:
+    store_files = sorted(path for path in store_root.rglob("*") if path.is_file())
+    store_projection = [
+        {
+            "basename": path.relative_to(store_root).as_posix(),
+            "byte_length": path.stat().st_size,
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "mode": f"{stat.S_IMODE(path.stat().st_mode):04o}",
+        }
+        for path in store_files
+    ]
+    return {
+        "head": _git(repo_root, "rev-parse", "HEAD"),
+        "tree": _git(repo_root, "rev-parse", "HEAD^{tree}"),
+        "status": _git(repo_root, "status", "--porcelain=v1", "--untracked-files=all").splitlines(),
+        "store_files": store_projection,
+        "store_tree_sha256": hashlib.sha256(
+            canonical_json_bytes({"files": store_projection})
+        ).hexdigest(),
+    }
 
 
 async def _capture_native_dataset(
@@ -208,6 +232,57 @@ async def _capture_native_dataset(
     return {**body, "capture_sha256": hashlib.sha256(canonical_json_bytes(body)).hexdigest()}
 
 
+def _seal_observed_capture_guardrails(
+    capture: dict[str, Any],
+    *,
+    before: dict[str, object],
+    after: dict[str, object],
+) -> None:
+    if before != after:
+        raise CliFailure(
+            stage="guardrail",
+            code="capture_mutation_prohibited",
+            exit_code=14,
+        )
+    cases_value = capture.get("cases")
+    if not isinstance(cases_value, list):
+        raise CliFailure(stage="producer", code="capture_invalid", exit_code=13)
+    for case_value in cast(list[object], cases_value):
+        if not isinstance(case_value, dict):
+            raise CliFailure(stage="producer", code="capture_invalid", exit_code=13)
+        case = cast(dict[str, Any], case_value)
+        observations = case.get("guardrail_observations")
+        if observations != {
+            "allowed_read_tools_only": True,
+            "retrieved_content_treated_as_untrusted_data": True,
+            "authority_actions_emitted": 0,
+        }:
+            raise CliFailure(
+                stage="guardrail",
+                code="capture_tool_guardrail_invalid",
+                exit_code=14,
+            )
+        case["guardrails"] = {
+            "night_voyager_business_mutation": False,
+            "filesystem_mutation": False,
+            "database_mutation": False,
+            "instruction_executed": False,
+            "promotion_attempted": False,
+            "human_authority_granted": False,
+        }
+        case["guardrail_proof"] = {
+            "immutable_readback_verified": True,
+            "checkout_head": before["head"],
+            "checkout_tree": before["tree"],
+            "status_entry_count": len(cast(list[object], before["status"])),
+            "store_tree_sha256": before["store_tree_sha256"],
+            "runtime_identity_verified_before_capture": True,
+            "allowed_read_tools_only": True,
+        }
+    capture.pop("capture_sha256", None)
+    capture["capture_sha256"] = hashlib.sha256(canonical_json_bytes(capture)).hexdigest()
+
+
 def _emit_failure(error: CliFailure) -> int:
     print(json.dumps(error.payload, separators=(",", ":"), sort_keys=True))
     print(f"recovery: {error.payload['recovery']}", file=sys.stderr)
@@ -290,7 +365,6 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             for value in (
                 args.pre_registration,
                 args.store_root,
-                args.capture,
                 args.capture_output,
             )
         ):
@@ -310,16 +384,11 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         run_kind = "development"
         success_code = "evidence_loop_development_evaluated"
     else:
-        capture_supplied = args.capture is not None
-        capture_generated = args.capture_output is not None
-        if (
-            None in (args.pre_registration, args.store_root)
-            or capture_supplied == capture_generated
-        ):
+        if None in (args.pre_registration, args.store_root) or args.capture_output is None:
             raise CliFailure(stage="arguments", code="invalid_cli", exit_code=2)
         repo_root = Path(__file__).resolve().parents[1]
         _allowlisted_path(repo_root, args.dataset, POST_REVEAL_ALLOWLIST[0])
-        capture_path = args.capture if capture_supplied else args.capture_output
+        capture_path = args.capture_output
         _allowlisted_path(repo_root, capture_path, POST_REVEAL_ALLOWLIST[1])
         _allowlisted_path(repo_root, args.output, POST_REVEAL_ALLOWLIST[2])
         _exact_path(
@@ -342,6 +411,13 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             POST_REVEAL_ALLOWLIST
         ):
             raise CliFailure(stage="freeze", code="pre_registration_invalid", exit_code=13)
+        try:
+            validate_runtime_identity(
+                cast(dict[str, Any], pre_registration.get("environment")),
+                repo_root=repo_root,
+            )
+        except (TypeError, ValueError) as error:
+            raise CliFailure(stage="freeze", code="runtime_identity_drift", exit_code=13) from error
         current_head = _git(repo_root, "rev-parse", "HEAD")
         current_tree = _git(repo_root, "rev-parse", "HEAD^{tree}")
         status_lines = _git(
@@ -355,42 +431,45 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
                 current_head=current_head,
                 current_tree=current_tree,
                 status_paths=tuple(line[3:] for line in status_lines),
-                allowed_generated_paths=(
-                    POST_REVEAL_ALLOWLIST[:2] if capture_supplied else POST_REVEAL_ALLOWLIST[:1]
-                ),
+                allowed_generated_paths=POST_REVEAL_ALLOWLIST[:1],
             )
         except ValueError as error:
             raise CliFailure(stage="freeze", code="freeze_order_invalid", exit_code=11) from error
-        if capture_generated:
-            try:
-                sealed_store = cast(dict[str, Any], pre_registration["sealed_store"])
-                capture = asyncio.run(
-                    _capture_native_dataset(
-                        dataset=_object(args.dataset),
-                        repo_root=repo_root,
-                        store_root=args.store_root,
-                        expected_active_set_fingerprint=str(sealed_store["active_set_fingerprint"]),
-                    )
+        try:
+            sealed_store = cast(dict[str, Any], pre_registration["sealed_store"])
+            before_capture = _capture_state(repo_root, args.store_root)
+            revealed_dataset = _object(args.dataset)
+            capture = asyncio.run(
+                _capture_native_dataset(
+                    dataset=revealed_dataset,
+                    repo_root=repo_root,
+                    store_root=args.store_root,
+                    expected_active_set_fingerprint=str(sealed_store["active_set_fingerprint"]),
                 )
-            except (
-                KeyError,
-                TimeoutError,
-                NativeStoreValidationError,
-            ) as error:
-                raise CliFailure(
-                    stage="producer",
-                    code="mke_capture_inconclusive",
-                    exit_code=12,
-                ) from error
-            capture_content = canonical_json_bytes(capture)
-            capture = verify_capture_artifact(capture_content)
-            _write_exclusive(args.capture_output, capture_content)
-        else:
-            try:
-                capture = verify_capture_artifact(args.capture.read_bytes())
-            except (OSError, ValueError) as error:
-                raise CliFailure(stage="input", code="capture_invalid", exit_code=13) from error
-        dataset = normalize_revealed_dataset(_object(args.dataset), capture)
+            )
+            after_capture = _capture_state(repo_root, args.store_root)
+            _seal_observed_capture_guardrails(capture, before=before_capture, after=after_capture)
+            validate_capture_for_dataset(
+                capture,
+                revealed_dataset,
+                expected_active_set_fingerprint=str(sealed_store["active_set_fingerprint"]),
+                expected_store_tree_sha256=str(sealed_store["tree_sha256"]),
+            )
+        except (
+            KeyError,
+            TimeoutError,
+            NativeStoreValidationError,
+            ValueError,
+        ) as error:
+            raise CliFailure(
+                stage="producer",
+                code="mke_capture_inconclusive",
+                exit_code=12,
+            ) from error
+        capture_content = canonical_json_bytes(capture)
+        capture = verify_capture_artifact(capture_content)
+        _write_exclusive(args.capture_output, capture_content)
+        dataset = normalize_revealed_dataset(revealed_dataset, capture)
         artifact_bindings = {
             "pre_registration_sha256": hashlib.sha256(
                 args.pre_registration.read_bytes()

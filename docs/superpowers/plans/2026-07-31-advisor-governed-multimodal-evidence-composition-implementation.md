@@ -238,6 +238,7 @@ The success codes are `evidence_loop_development_evaluated` and
 : "${EVIDENCE_LOOP_CUSTODY_ROOT:?set the unmounted custodian-owned holdout root}"
 uv run python scripts/reveal_evidence_loop_holdouts.py \
   --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
+  --expected-pre-registration-sha256 "$CAREER_REVIEWED_PREREGISTRATION_SHA256" \
   --holdout-manifest tests/fixtures/evidence_loop/holdout-manifest-v1.json \
   --custody-root "$EVIDENCE_LOOP_CUSTODY_ROOT" \
   --destination tests/fixtures/evidence_loop/holdout-dataset-v1.json \
@@ -256,11 +257,14 @@ uv run python scripts/evaluate_evidence_loop.py \
   --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
   --store-root "$EVIDENCE_LOOP_RUN_ROOT/store" \
   --dataset tests/fixtures/evidence_loop/holdout-dataset-v1.json \
-  --capture tests/fixtures/evidence_loop/mke-capture-v2.json \
+  --capture-output tests/fixtures/evidence_loop/mke-capture-v2.json \
   --output tests/fixtures/evidence_loop/slice0-receipt-v2.json \
   --json
 
 uv run python scripts/verify_evidence_loop.py \
+  --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
+  --dataset tests/fixtures/evidence_loop/holdout-dataset-v1.json \
+  --capture tests/fixtures/evidence_loop/mke-capture-v2.json \
   --receipt tests/fixtures/evidence_loop/slice0-receipt-v2.json \
   --json
 ```
@@ -659,6 +663,9 @@ uv run pytest -q tests/unit/evidence_loop tests/integration/evidence_loop \
   tests/integration/adapters/test_mke_v2_tagged_wheel.py
 uv run pytest -q tests/architecture
 uv run python scripts/verify_evidence_loop.py \
+  --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
+  --dataset tests/fixtures/evidence_loop/holdout-dataset-v1.json \
+  --capture tests/fixtures/evidence_loop/mke-capture-v2.json \
   --receipt tests/fixtures/evidence_loop/slice0-receipt-v2.json
 make check
 uv run python scripts/verify_release.py --tree-mode development

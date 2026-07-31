@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -9,6 +10,9 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+
+from night_voyager.evidence_loop.canonicalization import canonical_json_bytes
+from night_voyager.evidence_loop.receipt import build_terminal_receipt
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPTS = (
@@ -102,22 +106,18 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
         custody_observed = True
         return b"", {}
 
-    def accept_mock_path(
-        _repo_root: Path, _actual: Path, _relative: str
-    ) -> None:
+    def accept_mock_path(_repo_root: Path, _actual: Path, _relative: str) -> None:
         return None
 
     monkeypatch.setattr(module, "_require_exact_path", accept_mock_path)
     monkeypatch.setattr(module, "_read_exact_custody_input", observe_custody)
     args = SimpleNamespace(
         pre_registration=invalid_freeze,
-        holdout_manifest=ROOT
-        / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
-        store_root=ROOT
-        / "tmp/evidence-loop-a3-native-operator-final/store",
+        expected_pre_registration_sha256="0" * 64,
+        holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        store_root=ROOT / "tmp/evidence-loop-a3-native-operator-final/store",
         custody_root=tmp_path / "must-not-be-read",
-        destination=ROOT
-        / "tests/fixtures/evidence_loop/holdout-dataset-v1.json",
+        destination=ROOT / "tests/fixtures/evidence_loop/holdout-dataset-v1.json",
     )
 
     with pytest.raises(module.CliFailure) as raised:
@@ -126,6 +126,102 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
     assert raised.value.exit_code == 13
     assert raised.value.payload["code"] == "pre_registration_invalid"
     assert custody_observed is False
+
+
+def test_authoritative_holdout_cli_rejects_prebuilt_capture() -> None:
+    script = ROOT / "scripts/evaluate_evidence_loop.py"
+    spec = importlib.util.spec_from_file_location("evaluate_capture_contract", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    with pytest.raises(module.CliFailure) as raised:
+        module._parser().parse_args(["--capture", "prebuilt.json"])
+
+    assert raised.value.exit_code == 2
+    assert raised.value.payload["code"] == "invalid_cli"
+
+
+def test_terminal_verifier_rejects_self_hashed_malformed_bound_artifacts(
+    tmp_path: Path,
+) -> None:
+    pre_registration = tmp_path / "pre-registration.json"
+    dataset = tmp_path / "dataset.json"
+    capture = tmp_path / "capture.json"
+    receipt = tmp_path / "receipt.json"
+    pre_registration.write_bytes(canonical_json_bytes({"self": "consistent"}))
+    empty_cases: list[dict[str, Any]] = [{}, {}, {}, {}]
+    dataset.write_bytes(canonical_json_bytes({"cases": empty_cases}))
+    capture.write_bytes(canonical_json_bytes({"cases": empty_cases}))
+    receipt.write_bytes(
+        build_terminal_receipt(
+            {
+                "schema_version": "night-voyager.evidence-loop-evaluation.v2",
+                "terminal_disposition": "no_incremental_value",
+                "case_results": [{}, {}, {}, {}],
+            },
+            run_kind="holdout",
+            artifact_bindings={
+                "pre_registration_sha256": hashlib.sha256(
+                    pre_registration.read_bytes()
+                ).hexdigest(),
+                "holdout_dataset_sha256": hashlib.sha256(dataset.read_bytes()).hexdigest(),
+                "mke_capture_sha256": hashlib.sha256(capture.read_bytes()).hexdigest(),
+            },
+        )
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/verify_evidence_loop.py"),
+            "--pre-registration",
+            str(pre_registration),
+            "--dataset",
+            str(dataset),
+            "--capture",
+            str(capture),
+            "--receipt",
+            str(receipt),
+            "--json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 13
+    assert json.loads(result.stdout)["code"] == "receipt_invalid"
+
+
+def test_capture_state_drift_is_a_mutation_veto() -> None:
+    script = ROOT / "scripts/evaluate_evidence_loop.py"
+    spec = importlib.util.spec_from_file_location("capture_mutation_contract", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    capture = {
+        "cases": [
+            {
+                "guardrail_observations": {
+                    "allowed_read_tools_only": True,
+                    "retrieved_content_treated_as_untrusted_data": True,
+                    "authority_actions_emitted": 0,
+                }
+            }
+        ]
+    }
+
+    with pytest.raises(module.CliFailure) as raised:
+        module._seal_observed_capture_guardrails(
+            capture,
+            before={"store_tree_sha256": "a" * 64},
+            after={"store_tree_sha256": "b" * 64},
+        )
+
+    assert raised.value.exit_code == 14
+    assert "guardrails" not in capture["cases"][0]
 
 
 @pytest.mark.parametrize(
@@ -198,9 +294,7 @@ def test_development_cli_completes_the_a4_failure_taxonomy(
 ) -> None:
     dataset = ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"
     store_receipt = (
-        ROOT
-        / "tmp/evidence-loop-a3-native-operator-final/receipts"
-        / "sealed-mke-store-v1.json"
+        ROOT / "tmp/evidence-loop-a3-native-operator-final/receipts" / "sealed-mke-store-v1.json"
     )
     output = tmp_path / "evaluation.json"
     if condition == "producer":

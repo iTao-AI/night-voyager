@@ -20,6 +20,9 @@ from night_voyager.evidence_loop.freeze import (
     validate_frozen_checkout,
 )
 from night_voyager.evidence_loop.receipt import verify_pre_registration_receipt
+from night_voyager.evidence_loop.schema_validation import (
+    validate_strict_json_schema,
+)
 
 
 class CliFailure(RuntimeError):
@@ -44,6 +47,7 @@ class BoundedArgumentParser(argparse.ArgumentParser):
 def _parser() -> argparse.ArgumentParser:
     parser = BoundedArgumentParser(allow_abbrev=False)
     parser.add_argument("--pre-registration", type=Path)
+    parser.add_argument("--expected-pre-registration-sha256")
     parser.add_argument("--holdout-manifest", type=Path)
     parser.add_argument("--custody-root", type=Path)
     parser.add_argument("--destination", type=Path)
@@ -86,7 +90,10 @@ def case_commitment(case: dict[str, object]) -> dict[str, object]:
 
 
 def validate_revealed_dataset(
-    dataset: dict[str, object], manifest: dict[str, object]
+    dataset: dict[str, object],
+    manifest: dict[str, object],
+    *,
+    schema_root: Path | None = None,
 ) -> None:
     cases_value = dataset.get("cases")
     commitments_value = manifest.get("holdouts")
@@ -94,13 +101,50 @@ def validate_revealed_dataset(
         raise ValueError("revealed dataset invalid")
     cases = cast(list[object], cases_value)
     commitments = cast(list[object], commitments_value)
+    if schema_root is not None:
+        schemas = {
+            name: _object(schema_root / f"{name}-schema-v1.json")
+            for name in (
+                "holdout-dataset",
+                "holdout-case",
+                "holdout-payload",
+                "holdout-oracle",
+            )
+        }
+        validate_strict_json_schema(dataset, schemas["holdout-dataset"])
+        for index, case_value in enumerate(cases):
+            if not isinstance(case_value, dict):
+                raise ValueError("revealed dataset invalid")
+            case = cast(dict[str, object], case_value)
+            validate_strict_json_schema(case, schemas["holdout-case"], location=f"$.cases[{index}]")
+            validate_strict_json_schema(
+                case.get("payload"),
+                schemas["holdout-payload"],
+                location=f"$.cases[{index}].payload",
+            )
+            validate_strict_json_schema(
+                case.get("oracle"),
+                schemas["holdout-oracle"],
+                location=f"$.cases[{index}].oracle",
+            )
     actual = [
-        case_commitment(cast(dict[str, object], case))
-        for case in cases
-        if isinstance(case, dict)
+        case_commitment(cast(dict[str, object], case)) for case in cases if isinstance(case, dict)
     ]
     if len(actual) != len(cases) or actual != commitments:
         raise ValueError("revealed case commitment mismatch")
+    if schema_root is not None:
+        identities = [
+            (
+                item.get("holdout_id"),
+                item.get("case_id"),
+                item.get("case_revision"),
+                item.get("query_id"),
+                item.get("decision_dimension"),
+            )
+            for item in actual
+        ]
+        if len(identities) != 4 or len(set(identities)) != 4:
+            raise ValueError("revealed case identity set invalid")
 
 
 def _object(path: Path) -> dict[str, Any]:
@@ -198,6 +242,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         value is None
         for value in (
             args.pre_registration,
+            args.expected_pre_registration_sha256,
             args.holdout_manifest,
             args.custody_root,
             args.destination,
@@ -208,8 +253,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
     _require_exact_path(
         repo_root,
         args.pre_registration,
-        "tmp/evidence-loop-a3-native-operator-final/receipts/"
-        "pre-registration-v2.json",
+        "tmp/evidence-loop-a3-native-operator-final/receipts/pre-registration-v2.json",
     )
     relative = _relative_destination(repo_root, args.destination)
     if relative not in POST_REVEAL_ALLOWLIST or relative != POST_REVEAL_ALLOWLIST[0]:
@@ -217,23 +261,25 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
     if args.destination.exists():
         raise CliFailure("destination_not_fresh", 11)
     try:
-        preregistration = verify_pre_registration_receipt(
-            args.pre_registration.read_bytes()
-        )
+        pre_registration_content = args.pre_registration.read_bytes()
+        if (
+            not isinstance(args.expected_pre_registration_sha256, str)
+            or len(args.expected_pre_registration_sha256) != 64
+            or hashlib.sha256(pre_registration_content).hexdigest()
+            != args.expected_pre_registration_sha256
+        ):
+            raise ValueError("reviewed pre-registration digest mismatch")
+        preregistration = verify_pre_registration_receipt(pre_registration_content)
     except (OSError, json.JSONDecodeError, ValueError) as error:
         raise CliFailure("pre_registration_invalid", 13) from error
     current_head = _git(repo_root, "rev-parse", "HEAD")
     current_tree = _git(repo_root, "rev-parse", "HEAD^{tree}")
-    status_lines = _git(
-        repo_root, "status", "--porcelain=v1", "--untracked-files=all"
-    ).splitlines()
+    status_lines = _git(repo_root, "status", "--porcelain=v1", "--untracked-files=all").splitlines()
     if (
-        preregistration.get("reveal_procedure_id")
-        != "nv.slice0.one-way-reveal.v1"
+        preregistration.get("reveal_procedure_id") != "nv.slice0.one-way-reveal.v1"
         or preregistration.get("post_reveal_generated_file_allowlist")
         != list(POST_REVEAL_ALLOWLIST)
-        or cast(dict[str, Any], preregistration.get("pre_reveal_scan")).get("passed")
-        is not True
+        or cast(dict[str, Any], preregistration.get("pre_reveal_scan")).get("passed") is not True
         or preregistration.get("git")
         != {
             "head": current_head,
@@ -248,8 +294,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
     manifest_relative = cast(dict[str, Any], manifest_identity_value).get("path")
     if (
         not isinstance(manifest_relative, str)
-        or args.holdout_manifest.resolve()
-        != (repo_root / manifest_relative).resolve()
+        or args.holdout_manifest.resolve() != (repo_root / manifest_relative).resolve()
     ):
         raise CliFailure("freeze_order_invalid", 11)
     try:
@@ -270,15 +315,16 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         pass
     else:
         raise CliFailure("custody_root_not_separate", 11)
-    if (
-        not custody_root.is_dir()
-        or stat.S_IMODE(custody_root.stat().st_mode) != 0o700
-    ):
+    if not custody_root.is_dir() or stat.S_IMODE(custody_root.stat().st_mode) != 0o700:
         raise CliFailure("custody_mode_invalid", 11)
     content, dataset = _read_exact_custody_input(custody_root)
     manifest = _object(args.holdout_manifest)
     try:
-        validate_revealed_dataset(dataset, manifest)
+        validate_revealed_dataset(
+            dataset,
+            manifest,
+            schema_root=repo_root / "tests/fixtures/evidence_loop",
+        )
     except ValueError as error:
         raise CliFailure("holdout_commitment_mismatch", 13) from error
     _publish_exclusive(args.destination, content)

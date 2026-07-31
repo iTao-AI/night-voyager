@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import os
 import platform
@@ -36,6 +37,7 @@ EVALUATOR_PATHS = (
     "src/night_voyager/evidence_loop/freeze.py",
     "src/night_voyager/evidence_loop/mke_capture.py",
     "src/night_voyager/evidence_loop/receipt.py",
+    "src/night_voyager/evidence_loop/schema_validation.py",
 )
 
 HARNESS_PATHS = (
@@ -50,6 +52,7 @@ HARNESS_PATHS = (
     "tests/unit/evidence_loop/test_freeze.py",
     "tests/unit/evidence_loop/test_mke_capture.py",
     "tests/unit/evidence_loop/test_receipt.py",
+    "tests/unit/evidence_loop/test_schema_validation.py",
     "tests/integration/adapters/test_mke_v2_tagged_wheel.py",
     "tests/integration/evidence_loop/test_frozen_suite.py",
 )
@@ -72,6 +75,8 @@ TERMINAL_MAPPING = {
     "bounded_incomplete_or_unavailable": "inconclusive",
     "custody_hash_order_freeze_mutation_or_identity_drift": "evaluation_invalid",
 }
+
+_RUNTIME_DISTRIBUTIONS = ("anyio", "mcp", "pydantic")
 
 
 @dataclass(frozen=True)
@@ -118,15 +123,12 @@ def _validate_baseline_export(item: dict[str, Any]) -> None:
     export_sha256 = row.pop("export_sha256")
     row_sha256 = row.pop("row_sha256")
     if (
-        hashlib.sha256(export.typed_value.encode("utf-8")).hexdigest()
-        != export.typed_value_sha256
+        hashlib.sha256(export.typed_value.encode("utf-8")).hexdigest() != export.typed_value_sha256
         or hashlib.sha256(canonical_json_bytes(row)).hexdigest() != row_sha256
     ):
         raise ValueError("governed baseline hash chain invalid")
     if (
-        hashlib.sha256(
-            canonical_json_bytes({**row, "row_sha256": row_sha256})
-        ).hexdigest()
+        hashlib.sha256(canonical_json_bytes({**row, "row_sha256": row_sha256})).hexdigest()
         != export_sha256
     ):
         raise ValueError("governed baseline hash chain invalid")
@@ -142,8 +144,7 @@ def _validate_provider_peers(
     mke_lock_value = provider_locks.get("mke")
     dra_lock_value = provider_locks.get("dra")
     if not all(
-        isinstance(value, dict)
-        for value in (producer_value, mke_lock_value, dra_lock_value)
+        isinstance(value, dict) for value in (producer_value, mke_lock_value, dra_lock_value)
     ):
         raise ValueError("provider lock peer mismatch")
     producer = cast(dict[str, Any], producer_value)
@@ -163,16 +164,13 @@ def _validate_provider_peers(
         or producer.get("tag_object") != mke_lock.get("tag_object")
         or producer.get("peeled_commit") != mke_lock.get("commit")
         or producer.get("wheel_sha256") != mke_lock.get("wheel_sha256")
-        or mke_archive.get("basename")
-        != mke_lock.get("a3_source_tree_archive_basename")
-        or mke_archive.get("sha256")
-        != mke_lock.get("a3_source_tree_archive_sha256")
+        or mke_archive.get("basename") != mke_lock.get("a3_source_tree_archive_basename")
+        or mke_archive.get("sha256") != mke_lock.get("a3_source_tree_archive_sha256")
         or dra_admission.get("tag_object") != dra_lock.get("tag_object")
         or dra_admission.get("peeled_commit") != dra_lock.get("commit")
         or dra_admission.get("profile_id") != dra_lock.get("profile_id")
         or dra_admission.get("profile_version") != dra_lock.get("profile_version")
-        or dra_archive.get("basename")
-        != dra_lock.get("source_archive_basename")
+        or dra_archive.get("basename") != dra_lock.get("source_archive_basename")
         or dra_archive.get("sha256") != dra_lock.get("source_archive_sha256")
     ):
         raise ValueError("provider lock peer mismatch")
@@ -219,9 +217,8 @@ def validate_frozen_checkout(
                 raise ValueError("frozen path inventory invalid")
             identity = cast(dict[str, object], item)
             relative = identity.get("path")
-            if (
-                not isinstance(relative, str)
-                or not _matches_identity(repo_root / relative, identity)
+            if not isinstance(relative, str) or not _matches_identity(
+                repo_root / relative, identity
             ):
                 raise ValueError("frozen path drift")
 
@@ -239,10 +236,7 @@ def validate_frozen_checkout(
             raise ValueError("frozen input identity invalid")
         identity = cast(dict[str, object], identity_value)
         relative = identity.get("path")
-        if (
-            not isinstance(relative, str)
-            or not _matches_identity(repo_root / relative, identity)
-        ):
+        if not isinstance(relative, str) or not _matches_identity(repo_root / relative, identity):
             raise ValueError("frozen input drift")
 
     if store_root is not None:
@@ -254,39 +248,80 @@ def validate_frozen_checkout(
             raise ValueError("sealed store identity invalid")
         artifact = cast(dict[str, object], artifact_value)
         basename = artifact.get("basename")
-        if (
-            not isinstance(basename, str)
-            or not _matches_identity(store_root / basename, artifact)
-        ):
+        if not isinstance(basename, str) or not _matches_identity(store_root / basename, artifact):
             raise ValueError("sealed store artifact drift")
 
 
+def current_runtime_identity(repo_root: Path) -> dict[str, object]:
+    return {
+        "python_implementation": platform.python_implementation(),
+        "python_version": platform.python_version(),
+        "platform_system": platform.system(),
+        "platform_machine": platform.machine(),
+        "python_executable_basename": Path(sys.executable).name,
+        "uv_lock_sha256": _digest(repo_root / "uv.lock"),
+        "critical_distributions": {
+            name: importlib.metadata.version(name) for name in _RUNTIME_DISTRIBUTIONS
+        },
+    }
+
+
+def validate_runtime_identity(frozen: Mapping[str, object], *, repo_root: Path) -> None:
+    if dict(frozen) != current_runtime_identity(repo_root):
+        raise ValueError("runtime identity drift")
+
+
+def _bounded_regular_files(root: Path) -> list[Path]:
+    excluded = {".git", ".venv", ".next", "node_modules", "tmp"}
+    files: list[Path] = []
+    for current, directories, basenames in os.walk(root):
+        directories[:] = sorted(name for name in directories if name not in excluded)
+        for basename in sorted(basenames):
+            path = Path(current) / basename
+            if path.is_file() and not path.is_symlink():
+                files.append(path)
+    return files
+
+
 def scan_pre_reveal(
-    repo_root: Path, *, environment: Mapping[str, str] | None = None
+    repo_root: Path,
+    *,
+    run_roots: Mapping[str, Path] | None = None,
+    commitments: Sequence[Mapping[str, object]] = (),
+    environment: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     visible_environment = environment if environment is not None else os.environ
-    if any(
-        "CUSTODY" in key.upper() and value
-        for key, value in visible_environment.items()
-    ):
+    if any("CUSTODY" in key.upper() and value for key, value in visible_environment.items()):
         raise ValueError("custody environment reachable")
-    present = [
-        relative
-        for relative in POST_REVEAL_ALLOWLIST
-        if (repo_root / relative).exists()
-    ]
+    present = [relative for relative in POST_REVEAL_ALLOWLIST if (repo_root / relative).exists()]
     if present:
         raise ValueError("post-reveal generated file reachable before freeze")
+    roots = {"evaluator_checkout": repo_root, **(run_roots or {})}
+    committed_digests: set[tuple[int, str]] = set()
+    for commitment in commitments:
+        for kind in ("payload", "oracle", "full_case"):
+            length = commitment.get(f"{kind}_byte_length")
+            digest = commitment.get(f"{kind}_sha256")
+            if isinstance(length, int) and isinstance(digest, str):
+                committed_digests.add((length, digest))
+    inspected = 0
+    for root in roots.values():
+        for path in _bounded_regular_files(root):
+            inspected += 1
+            length = path.stat().st_size
+            candidates = {
+                digest for expected_length, digest in committed_digests if expected_length == length
+            }
+            if candidates and _digest(path) in candidates:
+                raise ValueError("committed holdout bytes reachable")
     return {
         "passed": True,
+        "method": "bounded_regular_file_length_sha256_scan_v1",
+        "inspected_roots": list(roots),
+        "regular_files_inspected": inspected,
         "custody_environment_reachable": False,
-        "custody_root_mounted": False,
-        "custody_root_indexed": False,
-        "holdout_payload_reachable": False,
-        "holdout_oracle_reachable": False,
-        "answer_key_reachable": False,
         "generated_paths_present": [],
-        "permitted_public_commitments_only": True,
+        "commitment_matches_present": False,
     }
 
 
@@ -370,9 +405,7 @@ def build_pre_registration_receipt(
     development = _load_object(development_dataset)
     holdouts = _load_object(holdout_manifest)
     baseline = _load_object(dra_baseline)
-    provider_locks_path = (
-        repo_root / "tests/fixtures/evidence_loop/provider-locks-v1.json"
-    )
+    provider_locks_path = repo_root / "tests/fixtures/evidence_loop/provider-locks-v1.json"
     provider_locks = _load_object(provider_locks_path)
     _validate_provider_peers(
         setup,
@@ -408,10 +441,7 @@ def build_pre_registration_receipt(
 
     development_cases_value = development.get("cases")
     holdout_cases_value = holdouts.get("holdouts")
-    if (
-        not isinstance(development_cases_value, list)
-        or not isinstance(holdout_cases_value, list)
-    ):
+    if not isinstance(development_cases_value, list) or not isinstance(holdout_cases_value, list):
         raise ValueError("case identity set invalid")
     development_cases = cast(list[object], development_cases_value)
     holdout_cases = cast(list[object], holdout_cases_value)
@@ -424,9 +454,7 @@ def build_pre_registration_receipt(
         else []
     )
     typed_baseline_exports = [
-        cast(dict[str, Any], item)
-        for item in baseline_exports
-        if isinstance(item, dict)
+        cast(dict[str, Any], item) for item in baseline_exports if isinstance(item, dict)
     ]
     if (
         baseline.get("fixture_boundary")
@@ -454,12 +482,10 @@ def build_pre_registration_receipt(
         _validate_baseline_export(item)
 
     evaluator_paths = [
-        _identity(repo_root / relative, relative=relative)
-        for relative in EVALUATOR_PATHS
+        _identity(repo_root / relative, relative=relative) for relative in EVALUATOR_PATHS
     ]
     harness_paths = [
-        _identity(repo_root / relative, relative=relative)
-        for relative in HARNESS_PATHS
+        _identity(repo_root / relative, relative=relative) for relative in HARNESS_PATHS
     ]
     development_identities = [
         cast(dict[str, Any], item).get("identity") for item in development_cases
@@ -551,14 +577,7 @@ def build_pre_registration_receipt(
         "holdout_commitments": holdout_commitments,
         "evaluator_paths": evaluator_paths,
         "harness_paths": harness_paths,
-        "environment": {
-            "python_implementation": platform.python_implementation(),
-            "python_version": platform.python_version(),
-            "platform_system": platform.system(),
-            "platform_machine": platform.machine(),
-            "python_executable_basename": Path(sys.executable).name,
-            "uv_lock_sha256": _digest(repo_root / "uv.lock"),
-        },
+        "environment": current_runtime_identity(repo_root),
         "thresholds": THRESHOLDS,
         "metric_families": {
             "mechanism": [
@@ -589,7 +608,10 @@ def build_pre_registration_receipt(
         },
         "terminal_mapping": TERMINAL_MAPPING,
         "pre_reveal_scan": scan_pre_reveal(
-            repo_root, environment=environment
+            repo_root,
+            run_roots={"task_run_root": store_receipt.parents[1]},
+            commitments=holdout_commitments,
+            environment=environment,
         ),
         "reveal_procedure_id": "nv.slice0.one-way-reveal.v1",
         "post_reveal_generated_file_allowlist": list(POST_REVEAL_ALLOWLIST),
