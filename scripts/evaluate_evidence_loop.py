@@ -130,6 +130,7 @@ def _capture_state(repo_root: Path, store_root: Path) -> dict[str, object]:
         "head": _git(repo_root, "rev-parse", "HEAD"),
         "tree": _git(repo_root, "rev-parse", "HEAD^{tree}"),
         "status": _git(repo_root, "status", "--porcelain=v1", "--untracked-files=all").splitlines(),
+        "store_root_mode": f"{stat.S_IMODE(store_root.stat().st_mode):04o}",
         "store_files": store_projection,
         "store_tree_sha256": hashlib.sha256(
             canonical_json_bytes({"files": store_projection})

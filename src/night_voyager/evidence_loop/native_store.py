@@ -5,12 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Never, cast
 
 ToolCaller = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+STORE_AUTHORITY_BASENAMES = (
+    "store.sqlite",
+    "store.sqlite-shm",
+    "store.sqlite-wal",
+)
 
 
 class NativeStoreValidationError(ValueError):
@@ -59,9 +65,7 @@ async def collect_search_pages(
         )
         if body.get("ok") is not True:
             _fail("search_unavailable")
-        page_snapshot = _object(
-            body.get("authority_snapshot"), "search_authority_invalid"
-        )
+        page_snapshot = _object(body.get("authority_snapshot"), "search_authority_invalid")
         if snapshot is None:
             snapshot = page_snapshot
         elif page_snapshot != snapshot:
@@ -173,9 +177,7 @@ def validate_native_descriptors(
         required = {
             "publication_revision": expected["expected_publication_revision"],
             "content_fingerprint": f"sha256:{expected['content_sha256']}",
-            "evidence_text_sha256": (
-                f"sha256:{expected['expected_extracted_text_sha256']}"
-            ),
+            "evidence_text_sha256": (f"sha256:{expected['expected_extracted_text_sha256']}"),
             "original_utf8_bytes": expected["expected_extracted_utf8_bytes"],
             "locator": expected["expected_locator"],
         }
@@ -220,9 +222,7 @@ def validate_native_vertical(
             if not isinstance(value, str) or not value or value in values:
                 _fail("native_trace_identity_ambiguous")
             values.add(value)
-    ingest_by_path = {
-        str(item.get("relative_path")): item for item in ingest_receipts
-    }
+    ingest_by_path = {str(item.get("relative_path")): item for item in ingest_receipts}
     if len(ingest_by_path) != 4:
         _fail("native_ingest_identity_mismatch")
 
@@ -251,8 +251,7 @@ def validate_native_vertical(
         read = reads.get(evidence_id)
         if (
             read is None
-            or read.get("terminal_sha256")
-            != str(expected["expected_extracted_text_sha256"])
+            or read.get("terminal_sha256") != str(expected["expected_extracted_text_sha256"])
             or read.get("utf8_bytes") != expected["expected_extracted_utf8_bytes"]
         ):
             _fail("native_read_identity_mismatch")
@@ -260,18 +259,16 @@ def validate_native_vertical(
             {
                 "relative_path": path,
                 "dataset_source_id": expected["dataset_source_id"],
-                "evaluation_canonical_source_id": expected[
-                    "evaluation_canonical_source_id"
-                ],
+                "evaluation_canonical_source_id": expected["evaluation_canonical_source_id"],
                 "content_sha256": digest,
                 "source_id": descriptor["source_id"],
                 "publication_id": descriptor["publication_id"],
                 "run_id": descriptor["run_id"],
                 "evidence_id": evidence_id,
                 "publication_revision": descriptor["publication_revision"],
-                "evidence_text_sha256": str(
-                    descriptor["evidence_text_sha256"]
-                ).removeprefix("sha256:"),
+                "evidence_text_sha256": str(descriptor["evidence_text_sha256"]).removeprefix(
+                    "sha256:"
+                ),
                 "original_utf8_bytes": descriptor["original_utf8_bytes"],
                 "locator": descriptor["locator"],
                 "media_type": "application/pdf",
@@ -291,54 +288,77 @@ def _sha256(path: Path) -> str:
 
 def _canonical_bytes(value: Mapping[str, Any]) -> bytes:
     return (
-        json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
-        + "\n"
+        json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True) + "\n"
     ).encode()
 
 
 def seal_store(store_root: Path, database: Path) -> dict[str, Any]:
-    if database.parent != store_root or not database.is_file():
+    paths = tuple(store_root / basename for basename in STORE_AUTHORITY_BASENAMES)
+    if (
+        database != paths[0]
+        or database.parent != store_root
+        or stat.S_IMODE(store_root.stat().st_mode) != 0o700
+        or tuple(path.name for path in sorted(store_root.iterdir())) != STORE_AUTHORITY_BASENAMES
+    ):
         _fail("store_artifact_invalid")
-    database.chmod(0o400)
+    for path in paths:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            _fail("store_artifact_invalid")
+    if paths[1].stat().st_size != 32_768 or paths[2].stat().st_size != 0:
+        _fail("store_artifact_invalid")
+    for path in paths:
+        path.chmod(0o400)
     files = [
         {
-            "basename": database.name,
-            "byte_length": database.stat().st_size,
-            "sha256": _sha256(database),
+            "basename": path.name,
+            "byte_length": path.stat().st_size,
+            "sha256": _sha256(path),
             "mode": "0400",
         }
+        for path in paths
     ]
     tree_sha256 = hashlib.sha256(_canonical_bytes({"files": files})).hexdigest()
+    store_root.chmod(0o500)
     return {
         "schema_version": "night-voyager.evidence-loop-store-seal.v1",
         "tree_sha256": tree_sha256,
         "files": files,
-        "store_root_mode": "0700",
+        "store_root_mode": "0500",
         "lifecycle_state": "sealed_read_only",
     }
 
 
-def verify_store_seal(
-    store_root: Path, receipt: Mapping[str, Any]
-) -> Mapping[str, Any]:
+def verify_store_seal(store_root: Path, receipt: Mapping[str, Any]) -> Mapping[str, Any]:
+    if (
+        receipt.get("schema_version") != "night-voyager.evidence-loop-store-seal.v1"
+        or receipt.get("lifecycle_state") != "sealed_read_only"
+        or receipt.get("store_root_mode") != "0500"
+        or stat.S_IMODE(store_root.stat().st_mode) != 0o500
+    ):
+        _fail("store_artifact_drift")
     files_raw = receipt.get("files")
     if not isinstance(files_raw, list):
         _fail("store_artifact_drift")
     files = cast(list[object], files_raw)
-    if len(files) != 1:
+    if len(files) != len(STORE_AUTHORITY_BASENAMES):
         _fail("store_artifact_drift")
-    entry = _object(files[0], "store_artifact_drift")
-    basename = entry.get("basename")
-    if not isinstance(basename, str) or Path(basename).name != basename:
+    if tuple(path.name for path in sorted(store_root.iterdir())) != STORE_AUTHORITY_BASENAMES:
         _fail("store_artifact_drift")
-    path = store_root / basename
-    if (
-        not path.is_file()
-        or path.stat().st_size != entry.get("byte_length")
-        or _sha256(path) != entry.get("sha256")
-        or oct(path.stat().st_mode & 0o777) != "0o400"
-    ):
-        _fail("store_artifact_drift")
+    for expected_basename, item in zip(STORE_AUTHORITY_BASENAMES, files, strict=True):
+        entry = _object(item, "store_artifact_drift")
+        path = store_root / expected_basename
+        metadata = path.lstat()
+        if (
+            entry.get("basename") != expected_basename
+            or not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_nlink != 1
+            or metadata.st_size != entry.get("byte_length")
+            or _sha256(path) != entry.get("sha256")
+            or stat.S_IMODE(metadata.st_mode) != 0o400
+            or entry.get("mode") != "0400"
+        ):
+            _fail("store_artifact_drift")
     expected_tree = hashlib.sha256(_canonical_bytes({"files": files})).hexdigest()
     if receipt.get("tree_sha256") != expected_tree:
         _fail("store_artifact_drift")
@@ -352,6 +372,8 @@ def build_setup_receipt(
     store_seal: Mapping[str, Any],
     producer: Mapping[str, Any],
     mappings: Sequence[Mapping[str, Any]],
+    sqlite_authority_image: Mapping[str, Any],
+    fresh_process_verification_runs: int,
     input_admission: Mapping[str, Any] | None = None,
     sealed_write_rejection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -364,6 +386,8 @@ def build_setup_receipt(
         "producer": dict(producer),
         "source_mappings": [dict(item) for item in mappings],
         "store_seal": dict(store_seal),
+        "sqlite_authority_image": dict(sqlite_authority_image),
+        "fresh_process_verification_runs": fresh_process_verification_runs,
         "mutation_capability": "closed_after_preparation",
         "read_only_reopen_verified": True,
     }

@@ -94,9 +94,7 @@ async def test_search_follows_every_cursor_and_requires_complete() -> None:
         ("read_evidence_id", "search_match_invalid"),
     ],
 )
-async def test_search_rejects_native_match_contradictions(
-    mutation: str, code: str
-) -> None:
+async def test_search_rejects_native_match_contradictions(mutation: str, code: str) -> None:
     match = _match(_descriptor("a"))
     response = _search("complete", [match])
     if mutation == "returned":
@@ -108,23 +106,15 @@ async def test_search_rejects_native_match_contradictions(
     else:
         match["read"]["evidence_id"] = "ev_other"
     with pytest.raises(native_store.NativeStoreValidationError, match=code):
-        await native_store.collect_search_pages(
-            FakeCaller([response]), query="public source probe"
-        )
+        await native_store.collect_search_pages(FakeCaller([response]), query="public source probe")
 
 
 @pytest.mark.asyncio
 async def test_search_rejects_intermediate_returned_mismatch() -> None:
-    first = _search(
-        "more_available", [_match(_descriptor("a"))], cursor="next"
-    )
+    first = _search("more_available", [_match(_descriptor("a"))], cursor="next")
     first["selection"]["returned"] = 2
-    with pytest.raises(
-        native_store.NativeStoreValidationError, match="search_selection_invalid"
-    ):
-        await native_store.collect_search_pages(
-            FakeCaller([first]), query="public source probe"
-        )
+    with pytest.raises(native_store.NativeStoreValidationError, match="search_selection_invalid"):
+        await native_store.collect_search_pages(FakeCaller([first]), query="public source probe")
 
 
 @pytest.mark.asyncio
@@ -146,9 +136,7 @@ async def test_search_rejects_incomplete_or_invalid_cursor_graph(
     responses: list[dict[str, Any]], code: str
 ) -> None:
     with pytest.raises(native_store.NativeStoreValidationError, match=code):
-        await native_store.collect_search_pages(
-            FakeCaller(responses), query="public source probe"
-        )
+        await native_store.collect_search_pages(FakeCaller(responses), query="public source probe")
 
 
 def _read(
@@ -269,9 +257,7 @@ def test_vertical_maps_exactly_four_sources_in_manifest_order() -> None:
         ("wrong_media", "native_ingest_identity_mismatch"),
     ],
 )
-def test_vertical_rejects_missing_extra_duplicate_and_wrong_media(
-    mutation: str, code: str
-) -> None:
+def test_vertical_rejects_missing_extra_duplicate_and_wrong_media(mutation: str, code: str) -> None:
     expected = [_expected(seed, str(index)) for index, seed in enumerate("abcd", start=1)]
     descriptors = [_descriptor(seed, trace=str(index)) for index, seed in enumerate("abcd", 1)]
     ingests = [_ingest(str(index), str(index)) for index in range(1, 5)]
@@ -291,27 +277,80 @@ def test_vertical_rejects_missing_extra_duplicate_and_wrong_media(
     else:
         ingests[0]["media_type"] = "text/plain"
     with pytest.raises(native_store.NativeStoreValidationError, match=code):
-        native_store.validate_native_vertical(
-            expected, ingests, descriptors, reads, _snapshot()
-        )
+        native_store.validate_native_vertical(expected, ingests, descriptors, reads, _snapshot())
 
 
-def test_seal_is_byte_stable_read_only_and_detects_drift(tmp_path: Path) -> None:
-    store = tmp_path / "store"
+def _write_wal_store(store: Path) -> Path:
     store.mkdir(mode=0o700)
     database = store / "store.sqlite"
     database.write_bytes(b"sealed")
+    (store / "store.sqlite-shm").write_bytes(b"s" * 32_768)
+    (store / "store.sqlite-wal").write_bytes(b"")
+    return database
+
+
+def test_seal_is_exact_three_file_read_only_wal_authority(tmp_path: Path) -> None:
+    store = tmp_path / "store"
+    database = _write_wal_store(store)
+    try:
+        receipt = native_store.seal_store(store, database)
+        assert store.stat().st_mode & 0o777 == 0o500
+        assert [item["basename"] for item in receipt["files"]] == [
+            "store.sqlite",
+            "store.sqlite-shm",
+            "store.sqlite-wal",
+        ]
+        assert [item["mode"] for item in receipt["files"]] == ["0400"] * 3
+        assert receipt["store_root_mode"] == "0500"
+        assert native_store.verify_store_seal(store, receipt) == receipt
+    finally:
+        store.chmod(0o700)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "extra", "tampered", "writable", "root_mode"],
+)
+def test_verify_store_seal_rejects_every_wal_authority_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    store = tmp_path / "store"
+    database = _write_wal_store(store)
     receipt = native_store.seal_store(store, database)
-    assert database.stat().st_mode & 0o777 == 0o400
-    assert native_store.verify_store_seal(store, receipt) == receipt
-    with pytest.raises(PermissionError):
-        database.open("ab")
-    database.chmod(0o600)
-    database.write_bytes(b"drift")
-    with pytest.raises(
-        native_store.NativeStoreValidationError, match="store_artifact_drift"
-    ):
+    store.chmod(0o700)
+    if mutation == "missing":
+        (store / "store.sqlite-wal").unlink()
+    elif mutation == "extra":
+        (store / "extra").write_bytes(b"extra")
+    elif mutation == "tampered":
+        peer = store / "store.sqlite-shm"
+        peer.chmod(0o600)
+        peer.write_bytes(b"t" * 32_768)
+        peer.chmod(0o400)
+    elif mutation == "writable":
+        (store / "store.sqlite-shm").chmod(0o600)
+    else:
+        pass
+    with pytest.raises(native_store.NativeStoreValidationError, match="store_artifact_drift"):
         native_store.verify_store_seal(store, receipt)
+
+
+@pytest.mark.parametrize("invalid_kind", ["symlink", "hardlink"])
+def test_seal_rejects_linked_wal_authority_peers(
+    tmp_path: Path,
+    invalid_kind: str,
+) -> None:
+    store = tmp_path / "store"
+    database = _write_wal_store(store)
+    peer = store / "store.sqlite-shm"
+    peer.unlink()
+    if invalid_kind == "symlink":
+        peer.symlink_to(database.name)
+    else:
+        peer.hardlink_to(database)
+    with pytest.raises(native_store.NativeStoreValidationError, match="store_artifact_invalid"):
+        native_store.seal_store(store, database)
 
 
 def test_setup_receipt_excludes_paths_queries_cursors_and_raw_evidence() -> None:
@@ -336,7 +375,24 @@ def test_setup_receipt_excludes_paths_queries_cursors_and_raw_evidence() -> None
                 "evidence_id": "ev_trace",
             },
         ),
+        sqlite_authority_image={
+            "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+            "materialization_phase": "task_owned_preparation_mutation",
+            "ordered_basenames": [
+                "store.sqlite",
+                "store.sqlite-shm",
+                "store.sqlite-wal",
+            ],
+            "wal_byte_length": 0,
+            "shm_byte_length": 32_768,
+        },
+        fresh_process_verification_runs=3,
     )
+    assert receipt["sqlite_authority_image"]["materialization_phase"] == (
+        "task_owned_preparation_mutation"
+    )
+    assert receipt["fresh_process_verification_runs"] == 3
+    assert receipt["sealed_evaluation_window_started"] is False
     encoded = str(receipt)
     for forbidden in ("/private/", "query", "cursor", "raw_evidence", "text"):
         assert forbidden not in encoded
@@ -388,9 +444,7 @@ def test_sealed_write_rejection_fails_closed_on_any_mutation(mutation: str) -> N
         after["tree_sha256"] = "c" * 64
     else:
         after_fingerprint = f"sha256:{'d' * 64}"
-    with pytest.raises(
-        native_store.NativeStoreValidationError, match="sealed_mutation_not_closed"
-    ):
+    with pytest.raises(native_store.NativeStoreValidationError, match="sealed_mutation_not_closed"):
         native_store.validate_sealed_write_rejection(
             response=response,
             before_seal=before,

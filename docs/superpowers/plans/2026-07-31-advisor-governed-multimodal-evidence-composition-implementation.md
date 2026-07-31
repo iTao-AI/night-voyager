@@ -201,8 +201,13 @@ uv run python scripts/prepare_evidence_loop_store.py \
 
 Success prints one JSON object whose `code` is `evidence_loop_store_sealed`. It verifies source
 archive/tree identity, builds the MKE wheel in `work_root`, ingests only allowlisted bytes, closes
-write capability, and records the task-owned archive basenames/digests plus wheel/store/active-set
-identities. It never records the caller's external archive path.
+write capability, materializes the exact read-only WAL peers while the preparation root is `0700`,
+then seals `store.sqlite`, `store.sqlite-shm`, and `store.sqlite-wal` as one immutable authority
+image with all files `0400` and `store_root` `0500`. Three fresh exact tagged Search/Read plus
+rejected-write processes must preserve its bytes, modes, tree digest, and active-set identity. The
+receipt records WAL materialization as task-owned preparation mutation plus the task-owned archive
+basenames/digests and wheel/store/active-set identities. It never records the caller's external
+archive path.
 
 The evaluator implementer first completes and tests the evaluator, reveal validator, tagged-wheel
 lane, frozen-suite harness, terminal verifier, and runner using development or mock structural
@@ -479,11 +484,17 @@ trace.
 2. creates a task-owned disposable store;
 3. ingests only manifest-listed sources;
 4. records library/ingest receipts and active-set fingerprint;
-5. writes a read-only sealed-store receipt;
-6. closes mutation capability before evaluation.
+5. closes ingestion and, while `store_root` is still `0700`, uses one exact tagged native read to
+   materialize zero-byte `store.sqlite-wal` and regular 32768-byte `store.sqlite-shm`;
+6. seals the exact ordered `store.sqlite`, `store.sqlite-shm`, and `store.sqlite-wal` inventory as
+   one immutable SQLite authority image with all files `0400` and `store_root` `0500`;
+7. proves three fresh exact tagged Search/Read plus rejected-write processes preserve the complete
+   store tree and active-set identity;
+8. writes the read-only sealed-store receipt and closes mutation capability before evaluation.
 
-The setup receipt records the bounded store mutation. The later zero-mutation claim applies only to
-the sealed evaluation window.
+The setup receipt records ingestion and WAL-peer materialization as bounded store preparation
+mutations. The later zero-mutation claim applies only after the exact three-file seal and setup
+receipt begin the sealed evaluation window.
 
 `freeze_evidence_loop.py` implements the closed final-freeze validator and canonical receipt
 builder, but A3 does not issue `PreRegistrationReceiptV2`. A3 tests that the future receipt binds
@@ -504,6 +515,8 @@ The future receipt binds that scan, the three role identities, and
 - source bytes or URL drift;
 - duplicate `evaluation_canonical_source_id`;
 - store artifact drift;
+- missing, extra, linked, writable, or tampered SQLite WAL authority peer;
+- store-root mode drift from sealed `0500`;
 - ingest after seal;
 - active-set mismatch;
 - receipt created after observation;

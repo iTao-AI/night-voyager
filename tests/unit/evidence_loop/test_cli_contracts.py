@@ -224,6 +224,45 @@ def test_capture_state_drift_is_a_mutation_veto() -> None:
     assert "guardrails" not in capture["cases"][0]
 
 
+def test_capture_state_binds_sealed_store_root_mode_and_three_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = ROOT / "scripts/evaluate_evidence_loop.py"
+    spec = importlib.util.spec_from_file_location("capture_state_contract", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o700)
+    for basename, content in {
+        "store.sqlite": b"sealed",
+        "store.sqlite-shm": b"s" * 32_768,
+        "store.sqlite-wal": b"",
+    }.items():
+        path = store_root / basename
+        path.write_bytes(content)
+        path.chmod(0o400)
+    store_root.chmod(0o500)
+
+    def empty_git_identity(*args: object) -> str:
+        return ""
+
+    monkeypatch.setattr(module, "_git", empty_git_identity)
+
+    try:
+        state = module._capture_state(tmp_path, store_root)
+    finally:
+        store_root.chmod(0o700)
+
+    assert state["store_root_mode"] == "0500"
+    assert [item["basename"] for item in state["store_files"]] == [
+        "store.sqlite",
+        "store.sqlite-shm",
+        "store.sqlite-wal",
+    ]
+
+
 @pytest.mark.parametrize(
     ("mutation", "exit_code", "code"),
     [

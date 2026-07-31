@@ -59,14 +59,33 @@ def test_exact_tagged_mke_store_is_sealed_and_reopened_read_only(
     assert payload["source_count"] == 4
     database = run_root / "store/store.sqlite"
     assert database.stat().st_mode & 0o777 == 0o400
+    assert (run_root / "store").stat().st_mode & 0o777 == 0o500
     setup = receipt.read_text()
     assert "/private/" not in setup
     assert "query" not in setup
     assert "cursor" not in setup
     assert "INERT_RETRIEVED_INSTRUCTION_V1" not in setup
-    assert not (run_root / "store/store.sqlite-wal").exists()
-    assert not (run_root / "store/store.sqlite-shm").exists()
+    assert [path.name for path in sorted((run_root / "store").iterdir())] == [
+        "store.sqlite",
+        "store.sqlite-shm",
+        "store.sqlite-wal",
+    ]
+    assert (run_root / "store/store.sqlite-shm").stat().st_size == 32_768
+    assert (run_root / "store/store.sqlite-wal").stat().st_size == 0
+    assert all(path.stat().st_mode & 0o777 == 0o400 for path in (run_root / "store").iterdir())
     setup_payload = json.loads(setup)
+    assert setup_payload["fresh_process_verification_runs"] == 3
+    assert setup_payload["sqlite_authority_image"] == {
+        "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+        "materialization_phase": "task_owned_preparation_mutation",
+        "ordered_basenames": [
+            "store.sqlite",
+            "store.sqlite-shm",
+            "store.sqlite-wal",
+        ],
+        "shm_byte_length": 32_768,
+        "wal_byte_length": 0,
+    }
     assert setup_payload["sealed_write_rejection"] == {
         "active_publication_impact": "unchanged",
         "active_set_unchanged": True,
@@ -76,16 +95,7 @@ def test_exact_tagged_mke_store_is_sealed_and_reopened_read_only(
         "store_tree_unchanged": True,
     }
     assert setup_payload["input_admission"]["root_mode"] == "0700"
-    assert all(
-        item["mode"] == "0400"
-        for item in setup_payload["input_admission"]["files"]
-    )
-    admitted = {
-        item["logical_name"]: item
-        for item in setup_payload["input_admission"]["files"]
-    }
+    assert all(item["mode"] == "0400" for item in setup_payload["input_admission"]["files"])
+    admitted = {item["logical_name"]: item for item in setup_payload["input_admission"]["files"]}
     assert admitted["mke_a3_source_tree_archive"]["basename"] == "mke-v0.1.5.tar"
-    assert (
-        admitted["dra_source_archive"]["basename"]
-        == "dra-v0.1.8-source.tar.gz"
-    )
+    assert admitted["dra_source_archive"]["basename"] == "dra-v0.1.8-source.tar.gz"

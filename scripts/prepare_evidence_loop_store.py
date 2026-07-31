@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -16,6 +17,7 @@ from pathlib import Path
 from typing import Any, NoReturn, cast
 
 from night_voyager.evidence_loop.native_store import (
+    STORE_AUTHORITY_BASENAMES,
     NativeStoreValidationError,
     build_setup_receipt,
     collect_read_chunks,
@@ -33,32 +35,22 @@ PEELED_COMMIT = "d258c10dc40bd9eccd67c858b56f4e4cf5fe4610"
 TREE = "22756fdfa8ef131d3e28fc2a44acc3f2b6fa32f0"
 MKE_SOURCE_ARCHIVE_BASENAME = "mke-v0.1.5.tar"
 SOURCE_ARCHIVE_BYTES = 14_643_200
-SOURCE_ARCHIVE_SHA256 = (
-    "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
-)
+SOURCE_ARCHIVE_SHA256 = "12e0dc785723bd35e4f1ba40d3935fd4d906ae360b1e99fcecb43d24a009aa5a"
 DRA_TAG = "v0.1.8"
 DRA_TAG_OBJECT = "f828606741f636bca7ddbb66244ca60019eaa3c8"
 DRA_PEELED_COMMIT = "cb1f4660ee4ac7d81b04ffea014362e933487e61"
 DRA_SOURCE_ARCHIVE_BASENAME = "dra-v0.1.8-source.tar.gz"
 DRA_SOURCE_ARCHIVE_BYTES = 1_687_802
-DRA_SOURCE_ARCHIVE_SHA256 = (
-    "ab9deaf7678571b2dda6e8275fcfe2ff69d6baab04f3ab66f84c6abdcb2a6e7f"
-)
+DRA_SOURCE_ARCHIVE_SHA256 = "ab9deaf7678571b2dda6e8275fcfe2ff69d6baab04f3ab66f84c6abdcb2a6e7f"
 DRA_PROFILE_ID = "generic-strict-citation"
 DRA_PROFILE_VERSION = "1"
-SOURCE_FRAGMENT_SHA256 = (
-    "d9926321da8c244e93d93afd4e8a5c4571aa14ceac4a7913644a887f195c0793"
-)
+SOURCE_FRAGMENT_SHA256 = "d9926321da8c244e93d93afd4e8a5c4571aa14ceac4a7913644a887f195c0793"
 SOURCE_FRAGMENT_BYTES = 11549
-SOURCE_MANIFEST_SHA256 = (
-    "8d6559feb891f5509fe25f034b97c77ed825a60d3ba682f110bfa50517ba8e75"
-)
+SOURCE_MANIFEST_SHA256 = "8d6559feb891f5509fe25f034b97c77ed825a60d3ba682f110bfa50517ba8e75"
 SOURCE_MANIFEST_BYTES = 3992
 PYMUPDF_VERSION = "1.27.2.3"
 PYMUPDF_WHEEL = "pymupdf-1.27.2.3-cp310-abi3-macosx_11_0_arm64.whl"
-PYMUPDF_WHEEL_SHA256 = (
-    "660d93cb6da5bbddf11d3982ae27745dd3a9902d9f24cdb69adab83962294b5a"
-)
+PYMUPDF_WHEEL_SHA256 = "660d93cb6da5bbddf11d3982ae27745dd3a9902d9f24cdb69adab83962294b5a"
 TOOLS = (
     "list_libraries",
     "ingest_file",
@@ -155,13 +147,7 @@ def _run(
 
 def _verify_cached_pymupdf(uv: str) -> None:
     cache = Path(_run([uv, "cache", "dir"]))
-    proof = (
-        cache
-        / "wheels-v6"
-        / "pypi"
-        / "pymupdf"
-        / "1.27.2.3-cp310-abi3-macosx_11_0_arm64.http"
-    )
+    proof = cache / "wheels-v6" / "pypi" / "pymupdf" / "1.27.2.3-cp310-abi3-macosx_11_0_arm64.http"
     if not proof.is_file():
         raise PreparationFailure(
             "producer",
@@ -172,10 +158,7 @@ def _verify_cached_pymupdf(uv: str) -> None:
             10,
         )
     data = proof.read_bytes()
-    if (
-        PYMUPDF_WHEEL.encode() not in data
-        or PYMUPDF_WHEEL_SHA256.encode() not in data
-    ):
+    if PYMUPDF_WHEEL.encode() not in data or PYMUPDF_WHEEL_SHA256.encode() not in data:
         raise PreparationFailure(
             "producer",
             "producer_dependency_mismatch",
@@ -202,9 +185,7 @@ def _verify_archive_tree(extracted: Path) -> None:
         )
 
 
-def _prepare_wheel(
-    source_archive: Path, work_root: Path
-) -> tuple[Path, str]:
+def _prepare_wheel(source_archive: Path, work_root: Path) -> tuple[Path, str]:
     uv = shutil.which("uv")
     if uv is None:
         raise PreparationFailure(
@@ -354,9 +335,7 @@ def _load_manifest(
             "expected_extracted_utf8_bytes",
             "expected_locator",
         )
-        stable_sources = [
-            {key: source[key] for key in stable_keys} for source in sources
-        ]
+        stable_sources = [{key: source[key] for key in stable_keys} for source in sources]
         native_proof = sources[0]["producer_native_proof_commitment"]
         exact_top_keys = {
             "schema_version",
@@ -369,8 +348,7 @@ def _load_manifest(
         }
         valid = (
             set(manifest) == exact_top_keys
-            and manifest.get("schema_version")
-            == "night-voyager.evidence-loop-source-manifest.v1"
+            and manifest.get("schema_version") == "night-voyager.evidence-loop-source-manifest.v1"
             and manifest.get("author_revision") == 3
             and manifest.get("canonicalization_id")
             == "night-voyager.slice0.compact-sorted-utf8-lf.v1"
@@ -389,8 +367,7 @@ def _load_manifest(
                 for source in sources
             )
             and all(
-                source["producer_native_proof_commitment"] == native_proof
-                for source in sources
+                source["producer_native_proof_commitment"] == native_proof for source in sources
             )
             and manifest.get("producer_lock") == expected_producer_lock
             and manifest.get("producer_native_proof_commitment") == native_proof
@@ -534,11 +511,7 @@ def _prepare_input_root(
 
 
 def _prepare_run_root(run_root: Path) -> dict[str, Path]:
-    if (
-        not run_root.is_dir()
-        or run_root.stat().st_mode & 0o777 != 0o700
-        or any(run_root.iterdir())
-    ):
+    if not run_root.is_dir() or run_root.stat().st_mode & 0o777 != 0o700 or any(run_root.iterdir()):
         raise PreparationFailure(
             "arguments",
             "destination_exists",
@@ -547,9 +520,7 @@ def _prepare_run_root(run_root: Path) -> dict[str, Path]:
             "Create one fresh mode-0700 run root without child directories.",
             11,
         )
-    roots = {
-        name: run_root / name for name in ("input", "work", "store", "receipts")
-    }
+    roots = {name: run_root / name for name in ("input", "work", "store", "receipts")}
     for root in roots.values():
         root.mkdir(mode=0o700)
     return roots
@@ -627,8 +598,7 @@ def _validate_receipt_archive_peers(receipt: dict[str, Any]) -> None:
         files = cast(list[dict[str, Any]], admission["files"])
         by_logical_name = {
             str(entry["logical_name"]): {
-                key: entry[key]
-                for key in ("basename", "byte_length", "sha256", "mode")
+                key: entry[key] for key in ("basename", "byte_length", "sha256", "mode")
             }
             for entry in files
         }
@@ -676,9 +646,7 @@ async def _native_observation(
                 if inventory != TOOLS:
                     raise NativeStoreValidationError("producer_tool_inventory_mismatch")
 
-                async def call_tool(
-                    tool: str, arguments: dict[str, Any]
-                ) -> dict[str, Any]:
+                async def call_tool(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
                     result = await session.call_tool(tool, arguments)
                     if result.isError or not isinstance(result.structuredContent, dict):
                         raise NativeStoreValidationError("native_tool_call_failed")
@@ -687,9 +655,7 @@ async def _native_observation(
                 if ingest:
                     for source in sources:
                         relative = str(source["relative_path"])
-                        result = await call_tool(
-                            "ingest_file", {"path": Path(relative).name}
-                        )
+                        result = await call_tool("ingest_file", {"path": Path(relative).name})
                         ingests.append({"relative_path": relative, **result})
                 if sealed_write_probe:
                     write_response = await call_tool(
@@ -697,9 +663,7 @@ async def _native_observation(
                         {"path": Path(str(sources[0]["relative_path"])).name},
                     )
                 search = await collect_search_pages(call_tool, query=PROBE_QUERY)
-                descriptors = [
-                    dict(match["evidence"]) for match in search.matches
-                ]
+                descriptors = [dict(match["evidence"]) for match in search.matches]
                 reads: dict[str, dict[str, Any]] = {}
                 for descriptor in descriptors:
                     read_result = await collect_read_chunks(call_tool, descriptor)
@@ -731,9 +695,7 @@ async def _native_observation(
                     reads,
                     search.authority_snapshot,
                 )
-                fingerprint = str(
-                    search.authority_snapshot["active_set_fingerprint"]
-                )
+                fingerprint = str(search.authority_snapshot["active_set_fingerprint"])
                 return mappings, fingerprint, write_response
 
 
@@ -741,6 +703,54 @@ def _remove_sqlite_runtime_files(database: Path) -> None:
     for suffix in ("-wal", "-shm"):
         candidate = database.with_name(database.name + suffix)
         candidate.unlink(missing_ok=True)
+
+
+def _validate_materialized_wal_peers(database: Path) -> dict[str, Any]:
+    store_root = database.parent
+    paths = tuple(store_root / basename for basename in STORE_AUTHORITY_BASENAMES)
+    if (
+        database != paths[0]
+        or tuple(path.name for path in sorted(store_root.iterdir())) != STORE_AUTHORITY_BASENAMES
+    ):
+        raise NativeStoreValidationError("store_artifact_invalid")
+    for path in paths:
+        metadata = path.lstat()
+        if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+            raise NativeStoreValidationError("store_artifact_invalid")
+    if paths[1].stat().st_size != 32_768 or paths[2].stat().st_size != 0:
+        raise NativeStoreValidationError("store_artifact_invalid")
+    return {
+        "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+        "materialization_phase": "task_owned_preparation_mutation",
+        "ordered_basenames": list(STORE_AUTHORITY_BASENAMES),
+        "wal_byte_length": 0,
+        "shm_byte_length": 32_768,
+    }
+
+
+def _materialize_wal_authority(
+    executable: Path,
+    database: Path,
+    corpus: Path,
+    sources: list[dict[str, Any]],
+    *,
+    expected_mappings: tuple[dict[str, Any], ...],
+    expected_active_set_fingerprint: str,
+) -> dict[str, Any]:
+    _remove_sqlite_runtime_files(database)
+    database.chmod(0o400)
+    reopened, reopened_fingerprint, _ = asyncio.run(
+        _native_observation(
+            executable,
+            database,
+            corpus,
+            sources,
+            ingest=False,
+        )
+    )
+    if reopened != expected_mappings or reopened_fingerprint != expected_active_set_fingerprint:
+        raise NativeStoreValidationError("read_only_reopen_drift")
+    return _validate_materialized_wal_peers(database)
 
 
 def _prepare(args: argparse.Namespace) -> dict[str, Any]:
@@ -804,32 +814,43 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     mappings, active_set_fingerprint, _ = asyncio.run(
         _native_observation(executable, database, corpus, sources, ingest=True)
     )
-    _remove_sqlite_runtime_files(database)
+    sqlite_authority_image = _materialize_wal_authority(
+        executable,
+        database,
+        corpus,
+        sources,
+        expected_mappings=mappings,
+        expected_active_set_fingerprint=active_set_fingerprint,
+    )
     store_seal = seal_store(store_root, database)
     verify_store_seal(store_root, store_seal)
-    reopened, reopened_fingerprint, write_response = asyncio.run(
-        _native_observation(
-            executable,
-            database,
-            corpus,
-            sources,
-            ingest=False,
-            sealed_write_probe=True,
+    sealed_write_rejection: dict[str, Any] | None = None
+    for _ in range(3):
+        before_seal = dict(verify_store_seal(store_root, store_seal))
+        reopened, reopened_fingerprint, write_response = asyncio.run(
+            _native_observation(
+                executable,
+                database,
+                corpus,
+                sources,
+                ingest=False,
+                sealed_write_probe=True,
+            )
         )
-    )
-    if reopened != mappings or reopened_fingerprint != active_set_fingerprint:
-        raise NativeStoreValidationError("read_only_reopen_drift")
-    _remove_sqlite_runtime_files(database)
-    after_seal = dict(verify_store_seal(store_root, store_seal))
-    if write_response is None:
+        if reopened != mappings or reopened_fingerprint != active_set_fingerprint:
+            raise NativeStoreValidationError("read_only_reopen_drift")
+        after_seal = dict(verify_store_seal(store_root, store_seal))
+        if write_response is None:
+            raise NativeStoreValidationError("sealed_mutation_not_closed")
+        sealed_write_rejection = validate_sealed_write_rejection(
+            response=write_response,
+            before_seal=before_seal,
+            after_seal=after_seal,
+            before_active_set_fingerprint=active_set_fingerprint,
+            after_active_set_fingerprint=reopened_fingerprint,
+        )
+    if sealed_write_rejection is None:
         raise NativeStoreValidationError("sealed_mutation_not_closed")
-    sealed_write_rejection = validate_sealed_write_rejection(
-        response=write_response,
-        before_seal=store_seal,
-        after_seal=after_seal,
-        before_active_set_fingerprint=active_set_fingerprint,
-        after_active_set_fingerprint=reopened_fingerprint,
-    )
     producer = {
         "name": "multimodal-knowledge-engine",
         "version": "0.1.5",
@@ -860,9 +881,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
             "execution": "not_executed_admission_only",
             "source_archive": {
                 "basename": DRA_SOURCE_ARCHIVE_BASENAME,
-                "byte_length": (
-                    input_root / DRA_SOURCE_ARCHIVE_BASENAME
-                ).stat().st_size,
+                "byte_length": (input_root / DRA_SOURCE_ARCHIVE_BASENAME).stat().st_size,
                 "sha256": DRA_SOURCE_ARCHIVE_SHA256,
                 "mode": "0400",
             },
@@ -874,6 +893,8 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         store_seal=store_seal,
         producer=producer,
         mappings=mappings,
+        sqlite_authority_image=sqlite_authority_image,
+        fresh_process_verification_runs=3,
         input_admission=input_admission,
         sealed_write_rejection=sealed_write_rejection,
     )
@@ -902,17 +923,13 @@ def _emit_failure(payload: dict[str, Any], exit_code: int) -> int:
 def _native_failure_exit_code(code: str) -> int:
     if code in {"sealed_mutation_not_closed", "store_artifact_drift"}:
         return 14
-    if (
-        code.startswith(("search_", "read_", "native_"))
-        or code
-        in {
-            "native descriptor count mismatch",
-            "native descriptor identity mismatch",
-            "native descriptor trace identity missing",
-            "producer_tool_inventory_mismatch",
-            "store_artifact_invalid",
-        }
-    ):
+    if code.startswith(("search_", "read_", "native_")) or code in {
+        "native descriptor count mismatch",
+        "native descriptor identity mismatch",
+        "native descriptor trace identity missing",
+        "producer_tool_inventory_mismatch",
+        "store_artifact_invalid",
+    }:
         return 10
     return 13
 

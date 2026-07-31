@@ -195,20 +195,12 @@ def test_manifest_accepts_fresh_checkout_0644_and_copies_both_archives_0400(
     )
     assert manifest["author_revision"] == 3
     committed_corpus = manifest_path.parent / "mke-corpus"
-    assert all(
-        (path.stat().st_mode & 0o777) == 0o644
-        for path in committed_corpus.iterdir()
-    )
+    assert all((path.stat().st_mode & 0o777) == 0o644 for path in committed_corpus.iterdir())
     assert input_root.stat().st_mode & 0o777 == 0o700
     assert all(item["mode"] == "0400" for item in admitted["files"])
-    assert all(
-        (path.stat().st_mode & 0o777) == 0o400
-        for path in (input_root / "corpus").iterdir()
-    )
+    assert all((path.stat().st_mode & 0o777) == 0o400 for path in (input_root / "corpus").iterdir())
     assert {
-        item["basename"]
-        for item in admitted["files"]
-        if item["logical_name"].endswith("_archive")
+        item["basename"] for item in admitted["files"] if item["logical_name"].endswith("_archive")
     } == {"mke-v0.1.5.tar", "dra-v0.1.8-source.tar.gz"}
 
 
@@ -222,6 +214,86 @@ def test_fresh_run_root_exclusively_creates_children(tmp_path: Path) -> None:
     assert set(roots) == {"input", "work", "store", "receipts"}
     assert all(path.parent == run_root for path in roots.values())
     assert all(path.stat().st_mode & 0o777 == 0o700 for path in roots.values())
+
+
+def test_wal_peers_are_materialized_by_native_read_before_seal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_script()
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o700)
+    database = store_root / "store.sqlite"
+    database.write_bytes(b"sealed")
+    corpus = tmp_path / "corpus"
+    corpus.mkdir()
+    mappings = ({"relative_path": "mke-corpus/source.pdf"},)
+    active_set = f"sha256:{'a' * 64}"
+
+    async def native_read(*args: Any, **kwargs: Any) -> tuple[Any, str, None]:
+        assert database.stat().st_mode & 0o777 == 0o400
+        assert store_root.stat().st_mode & 0o777 == 0o700
+        (store_root / "store.sqlite-shm").write_bytes(b"s" * 32_768)
+        (store_root / "store.sqlite-wal").write_bytes(b"")
+        return mappings, active_set, None
+
+    monkeypatch.setattr(module, "_native_observation", native_read)
+    result = module._materialize_wal_authority(
+        Path("mke"),
+        database,
+        corpus,
+        [],
+        expected_mappings=mappings,
+        expected_active_set_fingerprint=active_set,
+    )
+
+    assert result == {
+        "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+        "materialization_phase": "task_owned_preparation_mutation",
+        "ordered_basenames": [
+            "store.sqlite",
+            "store.sqlite-shm",
+            "store.sqlite-wal",
+        ],
+        "wal_byte_length": 0,
+        "shm_byte_length": 32_768,
+    }
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["missing", "extra", "wal_nonempty", "shm_wrong_size", "symlink", "hardlink"],
+)
+def test_materialized_wal_authority_rejects_each_invalid_peer(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    module = _load_script()
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o700)
+    database = store_root / "store.sqlite"
+    database.write_bytes(b"sealed")
+    shm = store_root / "store.sqlite-shm"
+    shm.write_bytes(b"s" * 32_768)
+    wal = store_root / "store.sqlite-wal"
+    wal.write_bytes(b"")
+    if mutation == "missing":
+        wal.unlink()
+    elif mutation == "extra":
+        (store_root / "extra").write_bytes(b"extra")
+    elif mutation == "wal_nonempty":
+        wal.write_bytes(b"w")
+    elif mutation == "shm_wrong_size":
+        shm.write_bytes(b"s")
+    elif mutation == "symlink":
+        shm.unlink()
+        shm.symlink_to(database.name)
+    else:
+        shm.unlink()
+        shm.hardlink_to(database)
+
+    with pytest.raises(module.NativeStoreValidationError, match="store_artifact_invalid"):
+        module._validate_materialized_wal_peers(database)
 
 
 def test_precreated_run_child_fails_closed(tmp_path: Path) -> None:
@@ -502,9 +574,7 @@ def test_copy_time_public_input_swap_fails_closed(
     if swapped == "manifest":
         manifest_path.write_bytes(b"swapped")
     elif swapped == "fragment":
-        (manifest_path.parent / "source-manifest-fragment-v1.json").write_bytes(
-            b"swapped"
-        )
+        (manifest_path.parent / "source-manifest-fragment-v1.json").write_bytes(b"swapped")
     else:
         (manifest_path.parent / sources[0]["relative_path"]).write_bytes(b"swapped")
     input_root = tmp_path / "input"
@@ -582,9 +652,7 @@ def test_receipt_archive_entries_must_equal_provider_and_admission_peers() -> No
         "source_list",
     ],
 )
-def test_manifest_rejects_each_closed_identity_drift(
-    tmp_path: Path, mutation: str
-) -> None:
+def test_manifest_rejects_each_closed_identity_drift(tmp_path: Path, mutation: str) -> None:
     module = _load_script()
     manifest_path = _copy_public_sources(tmp_path / "package")
     manifest: dict[str, Any] = json.loads(manifest_path.read_text())

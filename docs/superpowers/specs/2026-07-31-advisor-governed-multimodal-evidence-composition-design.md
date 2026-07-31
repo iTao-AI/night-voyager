@@ -274,7 +274,7 @@ does not claim a production or historical-user receipt.
 | --- | --- | --- | --- |
 | `input_root` | execution owner, `0700`; admitted files become `0400` | exact tagged source archives, source manifest, governed baseline export | created before setup; read-only after producer lock |
 | `work_root` | execution owner, `0700` | extracted source, locally built wheel, bounded logs, intermediate captures | task-owned; never committed; deleted at teardown |
-| `store_root` | execution owner during preparation, then evaluation reader; `0700` then files `0400` | disposable MKE database/library and active-set metadata only | mutable only during preparation; sealed before pre-registration; deleted at teardown |
+| `store_root` | execution owner during preparation, then evaluation reader; root `0700` during preparation, exact authority files `0400` and root `0500` after seal | disposable MKE database/library and active-set metadata only | mutable only during preparation; sealed as one three-file read-only WAL authority image before pre-registration; deleted at teardown |
 | `receipt_root` | execution owner, `0700`; public-safe files `0600` | setup, pre-registration, evaluation, and diagnostic receipts without raw Evidence or local paths | copied into a committed fixture only when the plan names that exact public artifact |
 | `custody_root` | holdout custodian only, `0700`; files `0600` | unrevealed holdout bytes and oracle | repo-external, unmounted and unindexed before freeze; never logged or committed as a path |
 
@@ -351,12 +351,19 @@ After T0 source eligibility is frozen, the execution owner:
 1. creates one task-owned disposable MKE store;
 2. ingests only the allowlisted public-safe corpus through the exact v0.1.5 contract;
 3. records library creation and ingest receipts;
-4. freezes store artifact, corpus manifest, active-set fingerprint, startup arguments, and tool
-   schema digests;
-5. closes write capability and reopens the store for read-only Search/Read;
-6. records cleanup ownership.
+4. while the preparation root remains `0700`, closes ingestion, makes the main database read-only,
+   performs one exact tagged native read, and materializes the required zero-byte
+   `store.sqlite-wal` plus 32768-byte `store.sqlite-shm` peers;
+5. freezes the exact ordered `store.sqlite`, `store.sqlite-shm`, and `store.sqlite-wal` inventory
+   as one immutable SQLite authority image, makes all three files `0400`, and transitions the root
+   to `0500`;
+6. proves three fresh exact tagged Search/Read processes plus rejected `ingest_file` leave every
+   authority byte, mode, tree digest, and active-set identity unchanged;
+7. records corpus manifest, active-set fingerprint, startup arguments, tool schema digests, and
+   cleanup ownership.
 
-The sealed evaluation window begins only after that receipt. During the window there is:
+WAL-peer materialization is a bounded task-owned preparation mutation. The sealed evaluation
+window begins only after the three-file seal and setup receipt. During the window there is:
 
 - zero MKE store mutation;
 - zero Night Voyager business/domain mutation;

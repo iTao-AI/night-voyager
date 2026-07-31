@@ -17,6 +17,7 @@ from night_voyager.evidence_loop.canonicalization import (
     canonical_json_bytes,
 )
 from night_voyager.evidence_loop.dra_baseline import GovernedDraBaselineExportV1
+from night_voyager.evidence_loop.native_store import verify_store_seal
 from night_voyager.evidence_loop.receipt import seal_pre_registration_receipt
 
 POST_REVEAL_ALLOWLIST = (
@@ -176,6 +177,25 @@ def _validate_provider_peers(
         raise ValueError("provider lock peer mismatch")
 
 
+def validate_sqlite_authority_image(setup: Mapping[str, object]) -> None:
+    if (
+        setup.get("sqlite_authority_image")
+        != {
+            "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+            "materialization_phase": "task_owned_preparation_mutation",
+            "ordered_basenames": [
+                "store.sqlite",
+                "store.sqlite-shm",
+                "store.sqlite-wal",
+            ],
+            "shm_byte_length": 32_768,
+            "wal_byte_length": 0,
+        }
+        or setup.get("fresh_process_verification_runs") != 3
+    ):
+        raise ValueError("sqlite authority image invalid")
+
+
 def _matches_identity(path: Path, identity: Mapping[str, object]) -> bool:
     return bool(
         path.is_file()
@@ -243,13 +263,18 @@ def validate_frozen_checkout(
         sealed_store_value = receipt.get("sealed_store")
         if not isinstance(sealed_store_value, dict):
             raise ValueError("sealed store identity invalid")
-        artifact_value = cast(dict[str, object], sealed_store_value).get("artifact")
-        if not isinstance(artifact_value, dict):
-            raise ValueError("sealed store identity invalid")
-        artifact = cast(dict[str, object], artifact_value)
-        basename = artifact.get("basename")
-        if not isinstance(basename, str) or not _matches_identity(store_root / basename, artifact):
-            raise ValueError("sealed store artifact drift")
+        sealed_store = cast(dict[str, Any], sealed_store_value)
+        seal = {
+            key: sealed_store.get(key)
+            for key in (
+                "schema_version",
+                "tree_sha256",
+                "files",
+                "store_root_mode",
+                "lifecycle_state",
+            )
+        }
+        verify_store_seal(store_root, seal)
 
 
 def current_runtime_identity(repo_root: Path) -> dict[str, object]:
@@ -412,6 +437,7 @@ def build_pre_registration_receipt(
         provider_locks,
         source_manifest_sha256=_digest(source_manifest),
     )
+    validate_sqlite_authority_image(setup)
 
     if (
         setup.get("mutation_capability") != "closed_after_preparation"
@@ -425,19 +451,11 @@ def build_pre_registration_receipt(
     store_seal = cast(dict[str, Any], store_seal_value)
     if store_seal.get("lifecycle_state") != "sealed_read_only":
         raise ValueError("sealed store receipt invalid")
-    store_path = store_receipt.parents[1] / "store" / "store.sqlite"
+    store_root = store_receipt.parents[1] / "store"
     store_files_value = store_seal.get("files")
     if not isinstance(store_files_value, list):
         raise ValueError("sealed store receipt invalid")
-    store_files = cast(list[dict[str, Any]], store_files_value)
-    if (
-        len(store_files) != 1
-        or not store_path.is_file()
-        or _digest(store_path) != store_files[0].get("sha256")
-        or store_path.stat().st_size != store_files[0].get("byte_length")
-        or _mode(store_path) != "0400"
-    ):
-        raise ValueError("sealed store artifact drift")
+    verify_store_seal(store_root, store_seal)
 
     development_cases_value = development.get("cases")
     holdout_cases_value = holdouts.get("holdouts")
@@ -546,12 +564,17 @@ def build_pre_registration_receipt(
         ),
         "setup_receipt": _identity(store_receipt),
         "sealed_store": {
-            "artifact": _identity(store_path),
+            "schema_version": store_seal["schema_version"],
+            "files": store_seal["files"],
+            "store_root_mode": store_seal["store_root_mode"],
             "tree_sha256": store_seal["tree_sha256"],
+            "lifecycle_state": store_seal["lifecycle_state"],
             "active_set_fingerprint": setup["active_set_fingerprint"],
             "mutation_capability": setup["mutation_capability"],
             "read_only_reopen_verified": True,
             "sealed_evaluation_window_started": True,
+            "sqlite_authority_image": setup["sqlite_authority_image"],
+            "fresh_process_verification_runs": setup["fresh_process_verification_runs"],
         },
         "source_manifest": _identity(
             source_manifest,

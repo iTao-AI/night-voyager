@@ -17,11 +17,35 @@ from night_voyager.evidence_loop.freeze import (
     validate_frozen_checkout,
     validate_public_commitments,
     validate_runtime_identity,
+    validate_sqlite_authority_image,
 )
 from night_voyager.evidence_loop.receipt import verify_pre_registration_receipt
 
 ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = ROOT / "tests/fixtures/evidence_loop"
+
+
+def _sealed_store_projection(store_files: dict[str, bytes]) -> dict[str, object]:
+    files = [
+        {
+            "basename": basename,
+            "byte_length": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "mode": "0400",
+        }
+        for basename, content in store_files.items()
+    ]
+    canonical = (
+        json.dumps({"files": files}, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        + "\n"
+    ).encode()
+    return {
+        "schema_version": "night-voyager.evidence-loop-store-seal.v1",
+        "files": files,
+        "store_root_mode": "0500",
+        "tree_sha256": hashlib.sha256(canonical).hexdigest(),
+        "lifecycle_state": "sealed_read_only",
+    }
 
 
 def test_public_commitments_admit_only_revision_three() -> None:
@@ -101,6 +125,18 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
     assert frozen["thresholds"]["max_evidence_reads"] == 32
     assert frozen["pre_reveal_scan"]["passed"] is True
     assert frozen["reveal_procedure_id"] == "nv.slice0.one-way-reveal.v1"
+    assert frozen["sealed_store"]["fresh_process_verification_runs"] == 3
+    assert frozen["sealed_store"]["sqlite_authority_image"] == {
+        "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+        "materialization_phase": "task_owned_preparation_mutation",
+        "ordered_basenames": [
+            "store.sqlite",
+            "store.sqlite-shm",
+            "store.sqlite-wal",
+        ],
+        "shm_byte_length": 32_768,
+        "wal_byte_length": 0,
+    }
     frozen_paths = {item["path"] for item in [*frozen["evaluator_paths"], *frozen["harness_paths"]]}
     assert frozen_paths == {
         "src/night_voyager/evidence_loop/canonicalization.py",
@@ -124,6 +160,33 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
         "tests/integration/adapters/test_mke_v2_tagged_wheel.py",
         "tests/integration/evidence_loop/test_frozen_suite.py",
     }
+
+
+@pytest.mark.parametrize("mutation", ["missing_image", "wrong_files", "wrong_runs"])
+def test_freeze_rejects_incomplete_sqlite_authority_proof(mutation: str) -> None:
+    setup: dict[str, Any] = {
+        "sqlite_authority_image": {
+            "authority_image": "sqlite_read_only_wal_atomic_snapshot",
+            "materialization_phase": "task_owned_preparation_mutation",
+            "ordered_basenames": [
+                "store.sqlite",
+                "store.sqlite-shm",
+                "store.sqlite-wal",
+            ],
+            "shm_byte_length": 32_768,
+            "wal_byte_length": 0,
+        },
+        "fresh_process_verification_runs": 3,
+    }
+    if mutation == "missing_image":
+        setup.pop("sqlite_authority_image")
+    elif mutation == "wrong_files":
+        setup["sqlite_authority_image"]["ordered_basenames"] = ["store.sqlite"]
+    else:
+        setup["fresh_process_verification_runs"] = 2
+
+    with pytest.raises(ValueError, match="sqlite authority image invalid"):
+        validate_sqlite_authority_image(setup)
 
 
 def test_development_baseline_contains_complete_governed_exports() -> None:
@@ -196,9 +259,18 @@ def test_pre_registration_rejects_setup_provider_peer_drift(
 def test_frozen_checkout_rejects_path_and_store_drift(tmp_path: Path) -> None:
     tracked = tmp_path / "evaluator.py"
     tracked.write_text("frozen\n", encoding="utf-8")
-    store = tmp_path / "store.sqlite"
-    store.write_bytes(b"sealed")
-    store.chmod(0o600)
+    store_files = {
+        "store.sqlite": b"sealed",
+        "store.sqlite-shm": b"s" * 32_768,
+        "store.sqlite-wal": b"",
+    }
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o700)
+    for basename, content in store_files.items():
+        path = store_root / basename
+        path.write_bytes(content)
+        path.chmod(0o400)
+    store_root.chmod(0o500)
     receipt: dict[str, object] = {
         "git": {"head": "1" * 40, "tree": "2" * 40, "clean": True},
         "evaluator_paths": [
@@ -210,74 +282,75 @@ def test_frozen_checkout_rejects_path_and_store_drift(tmp_path: Path) -> None:
             }
         ],
         "harness_paths": [],
-        "sealed_store": {
-            "artifact": {
-                "basename": "store.sqlite",
-                "byte_length": store.stat().st_size,
-                "sha256": hashlib.sha256(store.read_bytes()).hexdigest(),
-                "mode": "0600",
-            }
-        },
+        "sealed_store": _sealed_store_projection(store_files),
     }
 
-    validate_frozen_checkout(
-        receipt,
-        repo_root=tmp_path,
-        store_root=tmp_path,
-        current_head="1" * 40,
-        current_tree="2" * 40,
-        status_paths=(),
-    )
-    tracked.write_text("drift\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="frozen path drift"):
+    try:
         validate_frozen_checkout(
             receipt,
             repo_root=tmp_path,
-            store_root=tmp_path,
+            store_root=store_root,
             current_head="1" * 40,
             current_tree="2" * 40,
             status_paths=(),
         )
+        tracked.write_text("drift\n", encoding="utf-8")
+        with pytest.raises(ValueError, match="frozen path drift"):
+            validate_frozen_checkout(
+                receipt,
+                repo_root=tmp_path,
+                store_root=store_root,
+                current_head="1" * 40,
+                current_tree="2" * 40,
+                status_paths=(),
+            )
+    finally:
+        store_root.chmod(0o700)
 
 
 def test_frozen_checkout_allows_only_exact_post_reveal_paths(
     tmp_path: Path,
 ) -> None:
+    store_files = {
+        "store.sqlite": b"",
+        "store.sqlite-shm": b"s" * 32_768,
+        "store.sqlite-wal": b"",
+    }
     receipt: dict[str, object] = {
         "git": {"head": "1" * 40, "tree": "2" * 40, "clean": True},
         "evaluator_paths": [],
         "harness_paths": [],
-        "sealed_store": {
-            "artifact": {
-                "basename": "store.sqlite",
-                "byte_length": 0,
-                "sha256": hashlib.sha256(b"").hexdigest(),
-                "mode": "0600",
-            }
-        },
+        "sealed_store": _sealed_store_projection(store_files),
     }
-    (tmp_path / "store.sqlite").touch()
-    (tmp_path / "store.sqlite").chmod(0o600)
-
-    validate_frozen_checkout(
-        receipt,
-        repo_root=tmp_path,
-        store_root=tmp_path,
-        current_head="1" * 40,
-        current_tree="2" * 40,
-        status_paths=(POST_REVEAL_ALLOWLIST[0],),
-        allowed_generated_paths=(POST_REVEAL_ALLOWLIST[0],),
-    )
-    with pytest.raises(ValueError, match="post-freeze write set invalid"):
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o700)
+    for basename, content in store_files.items():
+        path = store_root / basename
+        path.write_bytes(content)
+        path.chmod(0o400)
+    store_root.chmod(0o500)
+    try:
         validate_frozen_checkout(
             receipt,
             repo_root=tmp_path,
-            store_root=tmp_path,
+            store_root=store_root,
             current_head="1" * 40,
             current_tree="2" * 40,
-            status_paths=("src/night_voyager/evidence_loop/evaluator.py",),
-            allowed_generated_paths=POST_REVEAL_ALLOWLIST,
+            status_paths=(POST_REVEAL_ALLOWLIST[0],),
+            allowed_generated_paths=(POST_REVEAL_ALLOWLIST[0],),
         )
+        with pytest.raises(ValueError, match="post-freeze write set invalid"):
+            validate_frozen_checkout(
+                receipt,
+                repo_root=tmp_path,
+                store_root=store_root,
+                current_head="1" * 40,
+                current_tree="2" * 40,
+                status_paths=("src/night_voyager/evidence_loop/evaluator.py",),
+                allowed_generated_paths=POST_REVEAL_ALLOWLIST,
+            )
+    finally:
+        store_root.chmod(0o700)
 
 
 def test_pre_reveal_scan_rejects_custody_environment_reachability() -> None:
