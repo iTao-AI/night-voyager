@@ -335,8 +335,13 @@ After a holdout has been revealed, it can never become sealed again. Any evaluat
 mapping, eligible-source, or oracle change retires the revealed holdouts into the development set
 and requires a new independently authored sealed holdout set and new hashes.
 
-Custody is a filesystem boundary, not a promise inside one checkout. Before reveal, the evaluator
-worktree contains only the four opaque holdout identities/dimensions and separate payload/oracle
+Custody is a filesystem boundary, not a promise inside one checkout. All preparation, freeze,
+reveal, development evaluation, and native runner commands use one explicit, fresh, task-owned
+`EVIDENCE_LOOP_RUN_ROOT` with mode `0700` and exactly four fixed children: `input`, `work`, `store`,
+and `receipts`. Every child path is validated as a non-symlink descendant of that root; missing,
+extra, escaped, cross-root, or repository-local retained-artifact paths fail closed. Public receipts
+record only relative basenames and byte identities, never the physical run-root path. Before
+reveal, the evaluator worktree contains only the four opaque holdout identities/dimensions and separate payload/oracle
 byte lengths and SHA-256 digests. The evaluator freeze records an observable bounded scan of the
 named evaluator checkout and task-owned run root: it rejects custody-bearing environment variables,
 post-reveal paths, and any regular file matching a public full-case, payload, or oracle length and
@@ -1545,11 +1550,15 @@ ordinary non-force push
 ```
 
 After exact-head proof, the Draft PR body carries `StageReadinessCandidateV1` bound to the reviewed
-HEAD/tree and committed proof artifact. Only after squash merge, exact-merge checks, tree equality,
-main sync, and terminal body reconciliation does it become `StageReadinessReceiptV1` with merge
-identity and cleanup state. The next stage mechanically verifies that persisted terminal receipt.
-A local pass, candidate, Draft/Ready PR, unmerged receipt, or successful check on a different SHA
-does not unlock work.
+HEAD/tree and committed proof artifact. Each contract freezes the exact hosted checks `python`,
+`frontend`, and `compose`, and every stage after Slice 0 binds the complete predecessor stage,
+merged commit/tree, merged receipt digest, and legal predecessor disposition. Only after squash
+merge, exact-merge checks, tree equality, main sync, and terminal body reconciliation does it become
+`StageReadinessReceiptV1` with merge identity and cleanup state. The next stage mechanically
+canonicalizes unordered check readback, rejects missing/duplicate/extra/non-pass/URL-mismatched
+checks, and recursively verifies the complete merged predecessor chain. A local pass, candidate,
+Draft/Ready PR, unmerged receipt, `evaluation_invalid`, `no_incremental_value`, `inconclusive`,
+or successful check on a different SHA does not unlock work.
 
 There is no v0.1.6 release when Slice 0 stops. The full version is prepared only after Slice 2 is
 merged and verified. Publication remains a separate annotated-tag/GitHub-Release authority gate.

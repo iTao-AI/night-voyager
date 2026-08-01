@@ -3,7 +3,9 @@
   "stage": "slice0",
   "proof_path": "tests/fixtures/evidence_loop/slice0-receipt-v2.json",
   "allowed_terminal_dispositions": ["incremental_value_confirmed"],
-  "required_hosted_checks": ["python", "frontend"],
+  "required_hosted_checks": ["python", "frontend", "compose"],
+  "predecessor_stage": null,
+  "predecessor_terminal_disposition": null,
   "next_stage_unlock": "candidate-authority",
   "non_claims": [
     "source_truth",

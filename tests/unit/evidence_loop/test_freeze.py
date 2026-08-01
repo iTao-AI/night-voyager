@@ -92,7 +92,8 @@ def _copy_pre_reveal_checkout_and_run_root(tmp_path: Path) -> tuple[Path, Path]:
     checkout = tmp_path / "pre-reveal-checkout"
     run_root = tmp_path / "pre-reveal-run"
     checkout.mkdir()
-    run_root.mkdir()
+    run_root.mkdir(mode=0o700)
+    (run_root / "input").mkdir(mode=0o700)
 
     frozen_paths = (*EVALUATOR_PATHS, *HARNESS_PATHS, "uv.lock")
     for relative in frozen_paths:
@@ -130,6 +131,9 @@ def _copy_pre_reveal_checkout_and_run_root(tmp_path: Path) -> tuple[Path, Path]:
         else:
             target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             shutil.copy2(source, target)
+    for child in ("input", "work", "receipts"):
+        (run_root / child).chmod(0o700)
+    (run_root / "store").chmod(0o500)
     return checkout, run_root
 
 
@@ -516,6 +520,7 @@ def test_reveal_plan_requires_store_authority_and_only_measured_custody_claims()
         "uv run python scripts/reveal_evidence_loop_holdouts.py",
         1,
     )[1].split("```", 1)[0]
+    assert '--run-root "$EVIDENCE_LOOP_RUN_ROOT"' in reveal_command
     assert '--store-root "$EVIDENCE_LOOP_RUN_ROOT/store"' in reveal_command
     assert "proves the root was not mounted or indexed" not in plan
     assert "holdout source mounted or indexed by evaluator." not in plan

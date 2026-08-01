@@ -39,8 +39,13 @@ artifact, authority, optional-dependency, or cleanup rules.
 7. Slice 0 records exactly one terminal disposition:
    `incremental_value_confirmed`, `no_incremental_value`, `inconclusive`, or
    `evaluation_invalid`. Only an exact merged `incremental_value_confirmed`
-   `StageReadinessReceiptV1` may unlock candidate authority. A local result,
-   unmerged candidate, or receipt bound to another tree cannot unlock later work.
+   `StageReadinessReceiptV1` may unlock candidate authority. Slice 0 has no predecessor;
+   every later stage receipt must bind the exact prior merged stage, merge commit/tree, receipt
+   digest, legal disposition, and the complete recursively verified predecessor chain. The verifier
+   canonicalizes the exact hosted checks `python`, `frontend`, and `compose` and rejects missing,
+   duplicate, extra, non-pass, or URL-mismatched readback. A local result, unmerged candidate,
+   evaluation-invalid/non-confirming predecessor, or receipt bound to another tree cannot unlock
+   later work.
 8. Slice 1, if unlocked, is MKE-specific and requires one assigned-advisor terminal
    decision. Slice 2, if unlocked, composes accepted input through one Night
    Voyager-owned PostgreSQL authority and generation-guarded worker finalization.

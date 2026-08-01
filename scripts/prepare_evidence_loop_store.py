@@ -517,7 +517,19 @@ def _prepare_input_root(
 
 
 def _prepare_run_root(run_root: Path) -> dict[str, Path]:
-    if not run_root.is_dir() or run_root.stat().st_mode & 0o777 != 0o700 or any(run_root.iterdir()):
+    try:
+        metadata = run_root.lstat()
+        fresh = not any(run_root.iterdir())
+    except OSError:
+        fresh = False
+        metadata = None
+    if (
+        metadata is None
+        or stat.S_ISLNK(metadata.st_mode)
+        or not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or not fresh
+    ):
         raise PreparationFailure(
             "arguments",
             "destination_exists",
@@ -786,7 +798,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     mke_source_archive = Path(args.mke_source_archive).resolve()
     dra_source_archive = Path(args.dra_source_archive).resolve()
     manifest_path = Path(args.source_manifest).resolve()
-    run_root = Path(args.run_root).resolve()
+    run_root = Path(args.run_root)
     _validate_producer_inputs(
         mke_source_archive=mke_source_archive,
         mke_tag_object=args.mke_tag_object,

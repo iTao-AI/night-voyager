@@ -185,7 +185,18 @@ def test_development_lane_binds_the_exact_tagged_wheel_and_sealed_store() -> Non
 def test_tagged_wheel_runner_executes_the_development_structural_lane(
     tmp_path: Path,
 ) -> None:
-    output = tmp_path / "development-evaluation-v2.json"
+    run_root = tmp_path / "evidence-loop-run"
+    run_root.mkdir(mode=0o700)
+    for child in ("input", "work", "store", "receipts"):
+        (run_root / child).mkdir(mode=0o700)
+    (run_root / "store").chmod(0o500)
+    store_receipt = run_root / "receipts" / "sealed-mke-store-v1.json"
+    store_receipt.write_bytes(
+        b'{"mutation_capability":"closed_after_preparation",'
+        b'"read_only_reopen_verified":true,'
+        b'"store_seal":{"lifecycle_state":"sealed_read_only"}}'
+    )
+    output = run_root / "receipts" / "development-evaluation-v2.json"
     result = subprocess.run(
         [
             str(ROOT / "scripts/run_mke_lane.sh"),
@@ -193,11 +204,9 @@ def test_tagged_wheel_runner_executes_the_development_structural_lane(
             "--development-dataset",
             str(ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"),
             "--store-receipt",
-            str(
-                ROOT
-                / "tmp/evidence-loop-a3-native-operator-final/receipts"
-                / "sealed-mke-store-v1.json"
-            ),
+            str(store_receipt),
+            "--run-root",
+            str(run_root),
             "--output",
             str(output),
             "--json",
@@ -218,6 +227,7 @@ def test_tagged_wheel_runner_inventories_the_frozen_holdout_lane() -> None:
 
     assert '"evidence-loop-holdout"' in runner
     assert "scripts/evaluate_evidence_loop.py" in runner
+    assert "EVIDENCE_LOOP_RUN_ROOT" in runner
     assert "work/venv/bin/python" in runner
     assert "PYTHONDONTWRITEBYTECODE=1" in runner
     assert "PYTHONNOUSERSITE=1" in runner

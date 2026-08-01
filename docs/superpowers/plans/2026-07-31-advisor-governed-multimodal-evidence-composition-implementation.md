@@ -209,6 +209,13 @@ receipt records WAL materialization as task-owned preparation mutation plus the 
 basenames/digests and wheel/store/active-set identities. It never records the caller's external
 archive path.
 
+The explicit external `EVIDENCE_LOOP_RUN_ROOT` is the sole authority root for this lane. It must be
+a fresh `0700` directory whose only children are `input`, `work`, `store`, and `receipts`; the
+scripts create and validate those children and reject missing, extra, symlinked, escaped, or
+cross-root paths. Public receipts record only relative basenames and digests, never the physical
+run-root path. The retained repository `tmp` directory is not an execution input and is never
+implicitly selected by a CLI or runner.
+
 The evaluator implementer first completes and tests the evaluator, reveal validator, tagged-wheel
 lane, frozen-suite harness, terminal verifier, and runner using development or mock structural
 fixtures without access to holdout payload/oracle bytes. Development-only evaluation does not
@@ -218,6 +225,7 @@ consume a final pre-registration receipt:
 uv run python scripts/evaluate_evidence_loop.py \
   --development-dataset tests/fixtures/evidence_loop/development-dataset-v1.json \
   --store-receipt "$EVIDENCE_LOOP_RUN_ROOT/receipts/sealed-mke-store-v1.json" \
+  --run-root "$EVIDENCE_LOOP_RUN_ROOT" \
   --output "$EVIDENCE_LOOP_RUN_ROOT/receipts/development-evaluation-v2.json" \
   --json
 ```
@@ -228,6 +236,7 @@ implementer issue `PreRegistrationReceiptV2`:
 ```bash
 uv run python scripts/freeze_evidence_loop.py \
   --store-receipt "$EVIDENCE_LOOP_RUN_ROOT/receipts/sealed-mke-store-v1.json" \
+  --run-root "$EVIDENCE_LOOP_RUN_ROOT" \
   --source-manifest tests/fixtures/evidence_loop/source-manifest-v1.json \
   --development-dataset tests/fixtures/evidence_loop/development-dataset-v1.json \
   --holdout-manifest tests/fixtures/evidence_loop/holdout-manifest-v1.json \
@@ -245,6 +254,7 @@ uv run python scripts/reveal_evidence_loop_holdouts.py \
   --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
   --expected-pre-registration-sha256 "$CAREER_REVIEWED_PREREGISTRATION_SHA256" \
   --holdout-manifest tests/fixtures/evidence_loop/holdout-manifest-v1.json \
+  --run-root "$EVIDENCE_LOOP_RUN_ROOT" \
   --store-root "$EVIDENCE_LOOP_RUN_ROOT/store" \
   --custody-root "$EVIDENCE_LOOP_CUSTODY_ROOT" \
   --destination tests/fixtures/evidence_loop/holdout-dataset-v1.json \
@@ -263,6 +273,7 @@ The execution owner then runs the exact tagged native evaluation and terminal ve
 ```bash
 uv run python scripts/evaluate_evidence_loop.py \
   --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
+  --run-root "$EVIDENCE_LOOP_RUN_ROOT" \
   --store-root "$EVIDENCE_LOOP_RUN_ROOT/store" \
   --dataset tests/fixtures/evidence_loop/holdout-dataset-v1.json \
   --capture-output tests/fixtures/evidence_loop/mke-capture-v2.json \
@@ -310,8 +321,9 @@ tests/fixtures/evidence_loop/stage-contracts/composition-journey-v1.json
 ```
 
 Each contract freezes stage name, canonical committed proof artifact path, allowed terminal
-disposition, required hosted check names discovered from the active main ruleset, next-stage
-unlock, and non-claims. Each implementation PR commits its own byte-stable proof artifact:
+disposition, the exact required hosted checks `python`, `frontend`, and `compose`, its predecessor
+stage/disposition (Slice 0 has none), next-stage unlock, and non-claims. Each implementation PR
+commits its own byte-stable proof artifact:
 
 ```text
 tests/fixtures/evidence_loop/slice0-receipt-v2.json
@@ -324,8 +336,9 @@ tests/fixtures/evidence_loop/c2-composition-journey-proof-v1.json
 The readiness artifacts are not self-referential repository files. After exact-head checks pass,
 the publication owner first generates and persists `StageReadinessCandidateV1` in the Draft PR
 body. It binds stage, reviewed HEAD/tree, committed proof path/digest, terminal disposition,
-actual required hosted contexts and URLs, next-stage unlock, and non-claims. That exact candidate
-is a Ready/merge precondition.
+the exact required hosted contexts and URLs, next-stage unlock, non-claims, and (for every later
+stage) the complete predecessor merge commit/tree, merged receipt digest, and legal predecessor
+disposition. That exact candidate is a Ready/merge precondition.
 
 After squash merge and exact-merge checks, one terminal body reconciliation replaces the candidate
 with `StageReadinessReceiptV1`, adding merge SHA/tree/time, reviewed-tree equality, post-merge
@@ -345,11 +358,16 @@ uv run python scripts/verify_stage_readiness.py \
 ```
 
 The verifier reads the committed stage contract/proof, resolves the unique merged PR for that
-merge commit through authenticated read-only GitHub API, validates persisted receipt bytes,
-reviewed/merge tree equality, required checks, disposition, and exact current main ancestry, then
-prints `stage_readiness_verified`. Exit 10 means identity mismatch, 12 means required check or
-disposition did not unlock, 13 means malformed/contradictory receipt, and 20 means external
-readback unavailable. No local or unmerged receipt unlocks work.
+merge commit through authenticated read-only GitHub API, canonicalizes unordered required-check
+readback to `python`, `frontend`, `compose`, and rejects missing, duplicate, extra, non-pass, or
+URL-mismatched checks. It validates persisted receipt bytes, reviewed/merge tree equality,
+disposition, exact current-main ancestry, and recursively verifies the complete merged predecessor
+receipt chain in the declared order. Missing, duplicated, cyclic, unmerged, local, or
+`evaluation_invalid`/`no_incremental_value`/`inconclusive` predecessor evidence cannot unlock a
+later stage. Proof paths are canonical repository-relative POSIX files with no symlinked component.
+Exit 10 means identity mismatch, 12 means required check, disposition, or predecessor chain did
+not unlock, 13 means malformed/contradictory receipt, and 20 means external readback unavailable.
+No local or unmerged receipt unlocks work.
 
 ## 2. PR A — Slice 0 frozen-suite falsification gate
 

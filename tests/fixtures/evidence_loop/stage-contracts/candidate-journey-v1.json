@@ -4,6 +4,8 @@
   "proof_path": "tests/fixtures/evidence_loop/b2-candidate-journey-proof-v1.json",
   "allowed_terminal_dispositions": ["journey_verified"],
   "required_hosted_checks": ["python", "frontend", "compose"],
+  "predecessor_stage": "candidate-authority",
+  "predecessor_terminal_disposition": "authority_verified",
   "next_stage_unlock": "composition-authority",
   "non_claims": ["source_truth", "production_deployment", "real_user_outcomes"]
 }

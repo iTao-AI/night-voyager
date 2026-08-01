@@ -17,11 +17,17 @@ if [ "$mode" = "evidence-loop-development" ]; then
   exec uv run python scripts/evaluate_evidence_loop.py "$@"
 fi
 if [ "$mode" = "evidence-loop-holdout" ]; then
+  : "${EVIDENCE_LOOP_RUN_ROOT:?set the validated external evidence-loop run root}"
+  native_python="$EVIDENCE_LOOP_RUN_ROOT/work/venv/bin/python"
+  if [ ! -x "$native_python" ]; then
+    echo "evidence-loop native runtime is unavailable under the validated run root" >&2
+    exit 11
+  fi
   export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}src"
   export PYTHONDONTWRITEBYTECODE=1
   export PYTHONNOUSERSITE=1
   export PYTHONSAFEPATH=1
-  exec tmp/evidence-loop-a3-native-operator-final/work/venv/bin/python \
+  exec "$native_python" \
     scripts/evaluate_evidence_loop.py "$@"
 fi
 

@@ -29,6 +29,10 @@ POST_REVEAL_ALLOWLIST = (
     "tests/fixtures/evidence_loop/slice0-receipt-v2.json",
 )
 
+RUN_ROOT_CHILDREN = ("input", "work", "store", "receipts")
+RUN_ROOT_SETUP_RECEIPT = "receipts/sealed-mke-store-v1.json"
+RUN_ROOT_PREREGISTRATION = "receipts/pre-registration-v2.json"
+
 _ROLES = (
     "independent-dataset-author-v3",
     "night-voyager-slice0-evaluator-v1",
@@ -105,6 +109,80 @@ def _digest(path: Path) -> str:
 
 def _mode(path: Path) -> str:
     return f"{stat.S_IMODE(path.stat().st_mode):04o}"
+
+
+def validate_run_root(run_root: Path, *, sealed_store: bool = True) -> Path:
+    """Validate the task-owned run-root shape without exposing its physical path."""
+
+    try:
+        root_metadata = run_root.lstat()
+    except OSError as error:
+        raise ValueError("run root invalid") from error
+    if (
+        stat.S_ISLNK(root_metadata.st_mode)
+        or not stat.S_ISDIR(root_metadata.st_mode)
+        or stat.S_IMODE(root_metadata.st_mode) != 0o700
+    ):
+        raise ValueError("run root invalid")
+    try:
+        entries = sorted(run_root.iterdir(), key=lambda path: path.name)
+    except OSError as error:
+        raise ValueError("run root invalid") from error
+    if tuple(path.name for path in entries) != tuple(sorted(RUN_ROOT_CHILDREN)):
+        raise ValueError("run root inventory invalid")
+    for path in entries:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            raise ValueError("run root inventory invalid") from error
+        expected_mode = 0o500 if path.name == "store" and sealed_store else 0o700
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or stat.S_IMODE(metadata.st_mode) != expected_mode
+        ):
+            raise ValueError("run root child invalid")
+    return run_root
+
+
+def validate_run_root_path(
+    run_root: Path,
+    path: Path,
+    relative: str,
+    *,
+    require_regular_file: bool = False,
+    allow_missing: bool = False,
+) -> Path:
+    """Require a path to stay under one canonical run-root child without symlinks."""
+
+    validate_run_root(run_root)
+    expected = run_root / PurePosixPath(relative)
+    if os.path.abspath(path) != os.path.abspath(expected):
+        raise ValueError("run-root path invalid")
+    current = run_root
+    for part in PurePosixPath(relative).parts:
+        current /= part
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError:
+            if current == expected and allow_missing:
+                break
+            raise ValueError("run-root path invalid") from None
+        except OSError as error:
+            raise ValueError("run-root path invalid") from error
+        if stat.S_ISLNK(metadata.st_mode):
+            raise ValueError("run-root path symlink invalid")
+        if current != expected and not stat.S_ISDIR(metadata.st_mode):
+            raise ValueError("run-root path parent invalid")
+    if expected.exists():
+        metadata = expected.lstat()
+        if require_regular_file and (
+            not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1
+        ):
+            raise ValueError("run-root file invalid")
+    elif not allow_missing:
+        raise ValueError("run-root file missing")
+    return expected
 
 
 def _identity(path: Path, *, relative: str | None = None) -> dict[str, object]:
@@ -201,11 +279,16 @@ def validate_sqlite_authority_image(setup: Mapping[str, object]) -> None:
 
 
 def _matches_identity(path: Path, identity: Mapping[str, object]) -> bool:
+    try:
+        metadata = path.lstat()
+    except OSError:
+        return False
     return bool(
-        path.is_file()
-        and path.stat().st_size == identity.get("byte_length")
+        stat.S_ISREG(metadata.st_mode)
+        and metadata.st_nlink == 1
+        and metadata.st_size == identity.get("byte_length")
         and _digest(path) == identity.get("sha256")
-        and _mode(path) == identity.get("mode")
+        and f"{stat.S_IMODE(metadata.st_mode):04o}" == identity.get("mode")
     )
 
 
@@ -455,7 +538,15 @@ def build_pre_registration_receipt(
     store_seal = cast(dict[str, Any], store_seal_value)
     if store_seal.get("lifecycle_state") != "sealed_read_only":
         raise ValueError("sealed store receipt invalid")
-    store_root = store_receipt.parents[1] / "store"
+    run_root = store_receipt.parents[1]
+    validate_run_root(run_root)
+    validate_run_root_path(
+        run_root,
+        store_receipt,
+        RUN_ROOT_SETUP_RECEIPT,
+        require_regular_file=True,
+    )
+    store_root = run_root / "store"
     store_files_value = store_seal.get("files")
     if not isinstance(store_files_value, list):
         raise ValueError("sealed store receipt invalid")
@@ -470,7 +561,7 @@ def build_pre_registration_receipt(
         raise ValueError("native runtime identity invalid")
     validate_native_runtime_identity(
         cast(dict[str, object], native_runtime_value),
-        run_root=store_receipt.parents[1],
+        run_root=run_root,
         wheel_sha256=wheel_sha256,
     )
 
@@ -650,7 +741,7 @@ def build_pre_registration_receipt(
         "terminal_mapping": TERMINAL_MAPPING,
         "pre_reveal_scan": scan_pre_reveal(
             repo_root,
-            run_roots={"task_run_root": store_receipt.parents[1]},
+            run_roots={"task_run_root": run_root},
             commitments=holdout_commitments,
             environment=environment,
         ),

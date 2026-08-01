@@ -12,7 +12,13 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
-from night_voyager.evidence_loop.freeze import build_pre_registration_receipt
+from night_voyager.evidence_loop.freeze import (
+    RUN_ROOT_PREREGISTRATION,
+    RUN_ROOT_SETUP_RECEIPT,
+    build_pre_registration_receipt,
+    validate_run_root,
+    validate_run_root_path,
+)
 
 
 class CliFailure(RuntimeError):
@@ -41,6 +47,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--development-dataset", type=Path)
     parser.add_argument("--holdout-manifest", type=Path)
     parser.add_argument("--dra-baseline", type=Path)
+    parser.add_argument("--run-root", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--json", action="store_true")
     return parser
@@ -74,7 +81,7 @@ def _write_exclusive(path: Path, content: bytes) -> None:
         stream.write(content)
 
 
-def _require_exact_path(repo_root: Path, actual: Path, relative: str) -> None:
+def _require_repo_exact_path(repo_root: Path, actual: Path, relative: str) -> None:
     if actual.resolve(strict=False) != (repo_root / relative).resolve(strict=False):
         raise CliFailure("freeze_input_path_invalid", 11)
 
@@ -86,24 +93,43 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         args.development_dataset,
         args.holdout_manifest,
         args.dra_baseline,
+        args.run_root,
         args.output,
     )
     if any(path is None for path in required):
         raise CliFailure("invalid_cli", 2)
-    paths = [path for path in required[:-1] if isinstance(path, Path)]
+    paths = [
+        path
+        for path in (
+            args.store_receipt,
+            args.source_manifest,
+            args.development_dataset,
+            args.holdout_manifest,
+            args.dra_baseline,
+        )
+        if isinstance(path, Path)
+    ]
     if any(not path.is_file() for path in paths):
         raise CliFailure("input_unreadable", 2)
     repo_root = Path(__file__).resolve().parents[1]
-    for actual, relative in (
-        (
+    try:
+        run_root = validate_run_root(args.run_root)
+        store_receipt = validate_run_root_path(
+            run_root,
             args.store_receipt,
-            "tmp/evidence-loop-a3-native-operator-final/receipts/"
-            "sealed-mke-store-v1.json",
-        ),
-        (
-            args.source_manifest,
-            "tests/fixtures/evidence_loop/source-manifest-v1.json",
-        ),
+            RUN_ROOT_SETUP_RECEIPT,
+            require_regular_file=True,
+        )
+        output = validate_run_root_path(
+            run_root,
+            args.output,
+            RUN_ROOT_PREREGISTRATION,
+            allow_missing=True,
+        )
+    except ValueError as error:
+        raise CliFailure("run_root_invalid", 11) from error
+    for actual, relative in (
+        (args.source_manifest, "tests/fixtures/evidence_loop/source-manifest-v1.json"),
         (
             args.development_dataset,
             "tests/fixtures/evidence_loop/development-dataset-v1.json",
@@ -116,13 +142,8 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             args.dra_baseline,
             "tests/fixtures/evidence_loop/dra-governed-baseline-v1.json",
         ),
-        (
-            args.output,
-            "tmp/evidence-loop-a3-native-operator-final/receipts/"
-            "pre-registration-v2.json",
-        ),
     ):
-        _require_exact_path(repo_root, actual, relative)
+        _require_repo_exact_path(repo_root, actual, relative)
     if _git(repo_root, "status", "--porcelain"):
         raise CliFailure("candidate_not_clean", 11)
     head = _git(repo_root, "rev-parse", "HEAD")
@@ -132,7 +153,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             repo_root=repo_root,
             exact_head=head,
             exact_tree=tree,
-            store_receipt=args.store_receipt,
+            store_receipt=store_receipt,
             source_manifest=args.source_manifest,
             development_dataset=args.development_dataset,
             holdout_manifest=args.holdout_manifest,
@@ -148,13 +169,13 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             else 13
         )
         raise CliFailure("pre_registration_invalid", exit_code) from error
-    _write_exclusive(args.output, receipt)
+    _write_exclusive(output, receipt)
     return {
         "schema_version": "night-voyager.evidence-loop-freeze-response.v2",
         "ok": True,
         "code": "evidence_loop_preregistered",
         "receipt": {
-            "basename": args.output.name,
+            "basename": output.name,
             "byte_length": len(receipt),
             "sha256": hashlib.sha256(receipt).hexdigest(),
             "mode": "0600",

@@ -3,7 +3,9 @@
   "stage": "candidate-authority",
   "proof_path": "tests/fixtures/evidence_loop/b1-candidate-authority-proof-v1.json",
   "allowed_terminal_dispositions": ["authority_verified"],
-  "required_hosted_checks": ["python", "frontend"],
+  "required_hosted_checks": ["python", "frontend", "compose"],
+  "predecessor_stage": "slice0",
+  "predecessor_terminal_disposition": "incremental_value_confirmed",
   "next_stage_unlock": "candidate-journey",
   "non_claims": ["source_truth", "production_deployment", "real_user_outcomes"]
 }

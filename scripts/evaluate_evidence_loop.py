@@ -22,7 +22,11 @@ from night_voyager.evidence_loop.evaluator import (
 )
 from night_voyager.evidence_loop.freeze import (
     POST_REVEAL_ALLOWLIST,
+    RUN_ROOT_PREREGISTRATION,
+    RUN_ROOT_SETUP_RECEIPT,
     validate_frozen_checkout,
+    validate_run_root,
+    validate_run_root_path,
     validate_runtime_identity,
 )
 from night_voyager.evidence_loop.mke_capture import (
@@ -67,6 +71,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--store-receipt", type=Path)
     parser.add_argument("--pre-registration", type=Path)
     parser.add_argument("--store-root", type=Path)
+    parser.add_argument("--run-root", type=Path)
     parser.add_argument("--dataset", type=Path)
     parser.add_argument("--capture-output", type=Path)
     parser.add_argument("--output", type=Path)
@@ -115,9 +120,13 @@ def _allowlisted_path(repo_root: Path, path: Path, expected: str) -> None:
         raise CliFailure(stage="freeze", code="post_reveal_path_invalid", exit_code=11)
 
 
-def _exact_path(repo_root: Path, path: Path, expected: str) -> None:
-    if path.resolve(strict=False) != (repo_root / expected).resolve(strict=False):
-        raise CliFailure(stage="freeze", code="frozen_input_path_invalid", exit_code=11)
+def _validate_run_root_argument(args: argparse.Namespace) -> Path:
+    if args.run_root is None:
+        raise CliFailure(stage="arguments", code="invalid_cli", exit_code=2)
+    try:
+        return validate_run_root(args.run_root)
+    except ValueError as error:
+        raise CliFailure(stage="freeze", code="run_root_invalid", exit_code=11) from error
 
 
 def _capture_state(repo_root: Path, store_root: Path) -> dict[str, object]:
@@ -397,6 +406,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
     revealed = args.dataset is not None
     if development == revealed:
         raise CliFailure(stage="arguments", code="invalid_cli", exit_code=2)
+    run_root = _validate_run_root_argument(args)
     artifact_bindings: dict[str, Any] | None = None
     if development:
         if args.store_receipt is None or any(
@@ -408,7 +418,22 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             )
         ):
             raise CliFailure(stage="arguments", code="invalid_cli", exit_code=2)
-        store_receipt = _object(args.store_receipt)
+        try:
+            store_receipt_path = validate_run_root_path(
+                run_root,
+                args.store_receipt,
+                RUN_ROOT_SETUP_RECEIPT,
+                require_regular_file=True,
+            )
+            output_path = validate_run_root_path(
+                run_root,
+                args.output,
+                "receipts/development-evaluation-v2.json",
+                allow_missing=True,
+            )
+        except ValueError as error:
+            raise CliFailure(stage="freeze", code="run_root_path_invalid", exit_code=11) from error
+        store_receipt = _object(store_receipt_path)
         store_seal_value = store_receipt.get("store_seal")
         store_seal = (
             cast(dict[str, Any], store_seal_value) if isinstance(store_seal_value, dict) else {}
@@ -420,6 +445,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         ):
             raise CliFailure(stage="producer", code="store_receipt_invalid", exit_code=10)
         dataset = _object(args.development_dataset)
+        args.output = output_path
         run_kind = "development"
         success_code = "evidence_loop_development_evaluated"
     else:
@@ -430,16 +456,16 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         capture_path = args.capture_output
         _allowlisted_path(repo_root, capture_path, POST_REVEAL_ALLOWLIST[1])
         _allowlisted_path(repo_root, args.output, POST_REVEAL_ALLOWLIST[2])
-        _exact_path(
-            repo_root,
-            args.pre_registration,
-            "tmp/evidence-loop-a3-native-operator-final/receipts/pre-registration-v2.json",
-        )
-        _exact_path(
-            repo_root,
-            args.store_root,
-            "tmp/evidence-loop-a3-native-operator-final/store",
-        )
+        try:
+            validate_run_root_path(
+                run_root,
+                args.pre_registration,
+                RUN_ROOT_PREREGISTRATION,
+                require_regular_file=True,
+            )
+            validate_run_root_path(run_root, args.store_root, "store")
+        except ValueError as error:
+            raise CliFailure(stage="freeze", code="run_root_path_invalid", exit_code=11) from error
         try:
             pre_registration = verify_pre_registration_receipt(args.pre_registration.read_bytes())
         except (OSError, json.JSONDecodeError, ValueError) as error:

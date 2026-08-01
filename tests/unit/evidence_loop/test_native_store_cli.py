@@ -224,6 +224,19 @@ def test_fresh_run_root_exclusively_creates_children(tmp_path: Path) -> None:
     assert all(path.stat().st_mode & 0o777 == 0o700 for path in roots.values())
 
 
+def test_fresh_run_root_rejects_a_symlink(tmp_path: Path) -> None:
+    module = _load_script()
+    target = tmp_path / "target"
+    target.mkdir(mode=0o700)
+    link = tmp_path / "run"
+    link.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(module.PreparationFailure) as captured:
+        module._prepare_run_root(link)
+
+    assert captured.value.payload["code"] == "destination_exists"
+
+
 def test_wal_peers_are_materialized_by_native_read_before_seal(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

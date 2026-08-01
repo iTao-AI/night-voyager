@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,65 @@ SCRIPTS = (
 )
 
 
+def test_lifecycle_scripts_use_an_explicit_external_run_root() -> None:
+    for script in (
+        "freeze_evidence_loop.py",
+        "evaluate_evidence_loop.py",
+        "reveal_evidence_loop_holdouts.py",
+        "run_mke_lane.sh",
+    ):
+        source = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+        assert "tmp/evidence-loop-a3-native-operator-final" not in source
+    assert "--run-root" in (ROOT / "scripts/freeze_evidence_loop.py").read_text(
+        encoding="utf-8"
+    )
+    assert "--run-root" in (ROOT / "scripts/evaluate_evidence_loop.py").read_text(
+        encoding="utf-8"
+    )
+    assert "--run-root" in (ROOT / "scripts/reveal_evidence_loop_holdouts.py").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_development_cli_accepts_a_fresh_external_run_root_without_retained_artifacts(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "evidence-loop-run"
+    run_root.mkdir(mode=0o700)
+    for child in ("input", "work", "store", "receipts"):
+        (run_root / child).mkdir(mode=0o700)
+    (run_root / "store").chmod(0o500)
+    (run_root / "receipts" / "sealed-mke-store-v1.json").write_bytes(
+        b'{"mutation_capability":"closed_after_preparation",'
+        b'"read_only_reopen_verified":true,'
+        b'"store_seal":{"lifecycle_state":"sealed_read_only"}}'
+    )
+    output = run_root / "receipts" / "development-evaluation-v2.json"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/evaluate_evidence_loop.py"),
+            "--development-dataset",
+            str(ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"),
+            "--store-receipt",
+            str(run_root / "receipts" / "sealed-mke-store-v1.json"),
+            "--run-root",
+            str(run_root),
+            "--output",
+            str(output),
+            "--json",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["code"] == "evidence_loop_development_evaluated"
+    assert output.is_file()
+
+
 def _ignore_call(*_args: object, **_kwargs: object) -> None:
     return None
 
@@ -41,6 +101,24 @@ def _mock_frozen_git(_root: Path, *args: str) -> str:
 
 def _mock_custody_dataset(_root: Path) -> tuple[bytes, dict[str, Any]]:
     return b"{}\n", {}
+
+
+def _make_run_root(tmp_path: Path) -> Path:
+    run_root = tmp_path / "run-root"
+    run_root.mkdir(mode=0o700)
+    for child in ("input", "work", "store", "receipts"):
+        (run_root / child).mkdir(mode=0o700)
+    (run_root / "store").chmod(0o500)
+    return run_root
+
+
+def _copy_retained_setup_receipt(run_root: Path) -> Path:
+    receipt = run_root / "receipts/sealed-mke-store-v1.json"
+    shutil.copyfile(
+        ROOT / "tmp/evidence-loop-a3-native-operator-final/receipts/sealed-mke-store-v1.json",
+        receipt,
+    )
+    return receipt
 
 
 @pytest.mark.parametrize("script", SCRIPTS)
@@ -79,7 +157,14 @@ def test_a4_cli_unknown_argument_is_one_bounded_diagnostic(script: str) -> None:
 
 @pytest.mark.mke
 def test_development_cli_emits_canonical_receipt(tmp_path: Path) -> None:
-    output = tmp_path / "development-evaluation-v2.json"
+    run_root = _make_run_root(tmp_path)
+    store_receipt = run_root / "receipts" / "sealed-mke-store-v1.json"
+    store_receipt.write_bytes(
+        b'{"mutation_capability":"closed_after_preparation",'
+        b'"read_only_reopen_verified":true,'
+        b'"store_seal":{"lifecycle_state":"sealed_read_only"}}'
+    )
+    output = run_root / "receipts" / "development-evaluation-v2.json"
     result = subprocess.run(
         [
             sys.executable,
@@ -87,11 +172,9 @@ def test_development_cli_emits_canonical_receipt(tmp_path: Path) -> None:
             "--development-dataset",
             str(ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"),
             "--store-receipt",
-            str(
-                ROOT
-                / "tmp/evidence-loop-a3-native-operator-final/receipts"
-                / "sealed-mke-store-v1.json"
-            ),
+            str(store_receipt),
+            "--run-root",
+            str(run_root),
             "--output",
             str(output),
             "--json",
@@ -118,7 +201,8 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    invalid_freeze = tmp_path / "pre-registration-v2.json"
+    run_root = _make_run_root(tmp_path)
+    invalid_freeze = run_root / "receipts/pre-registration-v2.json"
     invalid_freeze.write_text("{}", encoding="utf-8")
     custody_observed = False
 
@@ -127,17 +211,14 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
         custody_observed = True
         return b"", {}
 
-    def accept_mock_path(_repo_root: Path, _actual: Path, _relative: str) -> None:
-        return None
-
-    monkeypatch.setattr(module, "_require_exact_path", accept_mock_path)
     monkeypatch.setattr(module, "_relative_destination", _mock_reveal_destination)
     monkeypatch.setattr(module, "_read_exact_custody_input", observe_custody)
     args = SimpleNamespace(
         pre_registration=invalid_freeze,
         expected_pre_registration_sha256="0" * 64,
         holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
-        store_root=ROOT / "tmp/evidence-loop-a3-native-operator-final/store",
+        run_root=run_root,
+        store_root=run_root / "store",
         custody_root=tmp_path / "must-not-be-read",
         destination=tmp_path / "holdout-dataset-v1.json",
     )
@@ -159,7 +240,8 @@ def test_reveal_rejects_retired_dataset_reuse_before_custody_access(
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    invalid_freeze = tmp_path / "pre-registration-v2.json"
+    run_root = _make_run_root(tmp_path)
+    invalid_freeze = run_root / "receipts/pre-registration-v2.json"
     invalid_freeze.write_text("{}", encoding="utf-8")
     custody_observed = False
 
@@ -168,13 +250,13 @@ def test_reveal_rejects_retired_dataset_reuse_before_custody_access(
         custody_observed = True
         return b"", {}
 
-    monkeypatch.setattr(module, "_require_exact_path", _ignore_call)
     monkeypatch.setattr(module, "_read_exact_custody_input", observe_custody)
     args = SimpleNamespace(
         pre_registration=invalid_freeze,
         expected_pre_registration_sha256="0" * 64,
         holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
-        store_root=ROOT / "tmp/evidence-loop-a3-native-operator-final/store",
+        run_root=run_root,
+        store_root=run_root / "store",
         custody_root=tmp_path / "must-not-be-read",
         destination=ROOT / "tests/fixtures/evidence_loop/holdout-dataset-v1.json",
     )
@@ -200,12 +282,12 @@ def test_reveal_requires_store_root_and_checks_drift_before_custody_access(
     spec.loader.exec_module(module)
     assert "--store-root" in module._parser().format_help()
 
-    preregistration_path = tmp_path / "pre-registration-v2.json"
+    run_root = _make_run_root(tmp_path)
+    preregistration_path = run_root / "receipts/pre-registration-v2.json"
     preregistration_content = b"reviewed\n"
     preregistration_path.write_bytes(preregistration_content)
     destination = tmp_path / "holdout-dataset-v1.json"
-    store_root = tmp_path / "store"
-    store_root.mkdir(mode=0o500)
+    store_root = run_root / "store"
     custody_observed = False
     preregistration = {
         "reveal_procedure_id": "nv.slice0.one-way-reveal.v1",
@@ -227,7 +309,6 @@ def test_reveal_requires_store_root_and_checks_drift_before_custody_access(
         "verify_pre_registration_receipt",
         reviewed_receipt,
     )
-    monkeypatch.setattr(module, "_require_exact_path", _ignore_call)
     monkeypatch.setattr(
         module,
         "_relative_destination",
@@ -241,7 +322,7 @@ def test_reveal_requires_store_root_and_checks_drift_before_custody_access(
         store_root: Path | None,
         **_kwargs: object,
     ) -> None:
-        assert store_root == tmp_path / "store"
+        assert store_root == run_root / "store"
         if drift == "store":
             raise ValueError("store_artifact_drift")
 
@@ -267,6 +348,7 @@ def test_reveal_requires_store_root_and_checks_drift_before_custody_access(
             preregistration_content
         ).hexdigest(),
         holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        run_root=run_root,
         store_root=store_root,
         custody_root=tmp_path / "custody-must-not-be-read",
         destination=destination,
@@ -289,12 +371,12 @@ def test_reveal_rechecks_store_after_validation_before_atomic_publish(
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    preregistration_path = tmp_path / "pre-registration-v2.json"
+    run_root = _make_run_root(tmp_path)
+    preregistration_path = run_root / "receipts/pre-registration-v2.json"
     preregistration_content = b"reviewed\n"
     preregistration_path.write_bytes(preregistration_content)
     destination = tmp_path / "holdout-dataset-v1.json"
-    store_root = tmp_path / "store"
-    store_root.mkdir(mode=0o500)
+    store_root = run_root / "store"
     custody_root = tmp_path / "custody"
     custody_root.mkdir(mode=0o700)
     checks = 0
@@ -319,7 +401,6 @@ def test_reveal_rechecks_store_after_validation_before_atomic_publish(
         "verify_pre_registration_receipt",
         reviewed_receipt,
     )
-    monkeypatch.setattr(module, "_require_exact_path", _ignore_call)
     monkeypatch.setattr(
         module,
         "_relative_destination",
@@ -357,6 +438,7 @@ def test_reveal_rechecks_store_after_validation_before_atomic_publish(
             preregistration_content
         ).hexdigest(),
         holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        run_root=run_root,
         store_root=store_root,
         custody_root=custody_root,
         destination=destination,
@@ -571,7 +653,9 @@ def test_development_cli_persists_each_terminal_disposition(
     dataset["cases"][0][parent][key] = value
     dataset_path = tmp_path / "dataset.json"
     dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
-    output = tmp_path / "must-not-exist.json"
+    run_root = _make_run_root(tmp_path)
+    store_receipt = _copy_retained_setup_receipt(run_root)
+    output = run_root / "receipts/development-evaluation-v2.json"
 
     result = subprocess.run(
         [
@@ -580,11 +664,9 @@ def test_development_cli_persists_each_terminal_disposition(
             "--development-dataset",
             str(dataset_path),
             "--store-receipt",
-            str(
-                ROOT
-                / "tmp/evidence-loop-a3-native-operator-final/receipts"
-                / "sealed-mke-store-v1.json"
-            ),
+            str(store_receipt),
+            "--run-root",
+            str(run_root),
             "--output",
             str(output),
             "--json",
@@ -621,12 +703,10 @@ def test_development_cli_completes_the_a4_failure_taxonomy(
     code: str,
 ) -> None:
     dataset = ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"
-    store_receipt = (
-        ROOT / "tmp/evidence-loop-a3-native-operator-final/receipts" / "sealed-mke-store-v1.json"
-    )
-    output = tmp_path / "evaluation.json"
+    run_root = _make_run_root(tmp_path)
+    store_receipt = _copy_retained_setup_receipt(run_root)
+    output = run_root / "receipts/development-evaluation-v2.json"
     if condition == "producer":
-        store_receipt = tmp_path / "store-receipt.json"
         store_receipt.write_text("{}", encoding="utf-8")
     elif condition == "order":
         output.write_text("occupied", encoding="utf-8")
@@ -642,6 +722,8 @@ def test_development_cli_completes_the_a4_failure_taxonomy(
             str(dataset),
             "--store-receipt",
             str(store_receipt),
+            "--run-root",
+            str(run_root),
             "--output",
             str(output),
             "--json",

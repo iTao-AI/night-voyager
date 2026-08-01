@@ -17,7 +17,10 @@ from typing import Any, NoReturn, cast
 from night_voyager.evidence_loop.canonicalization import canonical_json_bytes
 from night_voyager.evidence_loop.freeze import (
     POST_REVEAL_ALLOWLIST,
+    RUN_ROOT_PREREGISTRATION,
     validate_frozen_checkout,
+    validate_run_root,
+    validate_run_root_path,
 )
 from night_voyager.evidence_loop.native_store import validate_native_runtime_identity
 from night_voyager.evidence_loop.receipt import verify_pre_registration_receipt
@@ -50,6 +53,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--pre-registration", type=Path)
     parser.add_argument("--expected-pre-registration-sha256")
     parser.add_argument("--holdout-manifest", type=Path)
+    parser.add_argument("--run-root", type=Path)
     parser.add_argument("--store-root", type=Path)
     parser.add_argument("--custody-root", type=Path)
     parser.add_argument("--destination", type=Path)
@@ -234,11 +238,6 @@ def _relative_destination(repo_root: Path, destination: Path) -> str:
         raise CliFailure("destination_not_allowlisted", 11) from error
 
 
-def _require_exact_path(repo_root: Path, actual: Path, relative: str) -> None:
-    if actual.resolve(strict=False) != (repo_root / relative).resolve(strict=False):
-        raise CliFailure("freeze_order_invalid", 11)
-
-
 def _validate_reveal_authority(
     preregistration: dict[str, Any],
     *,
@@ -288,6 +287,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             args.pre_registration,
             args.expected_pre_registration_sha256,
             args.holdout_manifest,
+            args.run_root,
             args.store_root,
             args.custody_root,
             args.destination,
@@ -295,16 +295,17 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
     ):
         raise CliFailure("invalid_cli", 2)
     repo_root = Path(__file__).resolve().parents[1]
-    _require_exact_path(
-        repo_root,
-        args.pre_registration,
-        "tmp/evidence-loop-a3-native-operator-final/receipts/pre-registration-v2.json",
-    )
-    _require_exact_path(
-        repo_root,
-        args.store_root,
-        "tmp/evidence-loop-a3-native-operator-final/store",
-    )
+    try:
+        run_root = validate_run_root(args.run_root)
+        validate_run_root_path(
+            run_root,
+            args.pre_registration,
+            RUN_ROOT_PREREGISTRATION,
+            require_regular_file=True,
+        )
+        validate_run_root_path(run_root, args.store_root, "store")
+    except ValueError as error:
+        raise CliFailure("run_root_path_invalid", 11) from error
     relative = _relative_destination(repo_root, args.destination)
     if relative not in POST_REVEAL_ALLOWLIST or relative != POST_REVEAL_ALLOWLIST[0]:
         raise CliFailure("destination_not_allowlisted", 11)

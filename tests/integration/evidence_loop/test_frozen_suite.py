@@ -9,9 +9,6 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 DATASET = ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"
-STORE_RECEIPT = (
-    ROOT / "tmp/evidence-loop-a3-native-operator-final/receipts/sealed-mke-store-v1.json"
-)
 
 
 @pytest.mark.mke
@@ -19,8 +16,20 @@ def test_three_fresh_development_processes_are_byte_identical(
     tmp_path: Path,
 ) -> None:
     outputs: list[bytes] = []
+    run_roots: list[Path] = []
     for index in range(3):
-        output = tmp_path / f"evaluation-{index}.json"
+        run_root = tmp_path / f"evidence-loop-run-{index}"
+        run_root.mkdir(mode=0o700)
+        for child in ("input", "work", "store", "receipts"):
+            (run_root / child).mkdir(mode=0o700)
+        (run_root / "store").chmod(0o500)
+        store_receipt = run_root / "receipts" / "sealed-mke-store-v1.json"
+        store_receipt.write_bytes(
+            b'{"mutation_capability":"closed_after_preparation",'
+            b'"read_only_reopen_verified":true,'
+            b'"store_seal":{"lifecycle_state":"sealed_read_only"}}'
+        )
+        output = run_root / "receipts/development-evaluation-v2.json"
         result = subprocess.run(
             [
                 sys.executable,
@@ -28,7 +37,9 @@ def test_three_fresh_development_processes_are_byte_identical(
                 "--development-dataset",
                 str(DATASET),
                 "--store-receipt",
-                str(STORE_RECEIPT),
+                str(store_receipt),
+                "--run-root",
+                str(run_root),
                 "--output",
                 str(output),
                 "--json",
@@ -40,6 +51,7 @@ def test_three_fresh_development_processes_are_byte_identical(
         )
         assert result.returncode == 0, result.stderr
         outputs.append(output.read_bytes())
+        run_roots.append(run_root)
 
     assert outputs[0] == outputs[1] == outputs[2]
 
@@ -48,7 +60,7 @@ def test_three_fresh_development_processes_are_byte_identical(
             sys.executable,
             str(ROOT / "scripts/verify_evidence_loop.py"),
             "--receipt",
-            str(tmp_path / "evaluation-0.json"),
+            str(run_roots[0] / "receipts/development-evaluation-v2.json"),
             "--json",
         ],
         cwd=ROOT,
