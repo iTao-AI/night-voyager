@@ -145,6 +145,16 @@ def test_tagged_wheel_runner_inventories_the_frozen_holdout_lane() -> None:
     assert '"evidence-loop-holdout"' in runner
     assert "scripts/evaluate_evidence_loop.py" in runner
     assert "work/venv/bin/python" in runner
+    assert "PYTHONDONTWRITEBYTECODE=1" in runner
+    assert "PYTHONNOUSERSITE=1" in runner
+    assert "PYTHONSAFEPATH=1" in runner
+
+
+@pytest.mark.mke
+def test_retained_native_runtime_has_no_unbound_bytecode() -> None:
+    venv = ROOT / "tmp/evidence-loop-a3-native-operator-final/work/venv"
+    assert not list(venv.rglob("*.pyc"))
+    assert not list(venv.rglob("__pycache__"))
 
 
 @pytest.mark.mke

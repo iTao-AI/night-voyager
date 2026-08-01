@@ -24,6 +24,7 @@ from night_voyager.evidence_loop.native_store import (
     collect_read_chunks,
     collect_search_pages,
     native_mcp_environment,
+    remove_runtime_bytecode,
     seal_store,
     validate_native_vertical,
     validate_sealed_write_rejection,
@@ -126,6 +127,7 @@ def _run(
     argv: list[str],
     *,
     cwd: Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> str:
     result = subprocess.run(
         argv,
@@ -133,7 +135,7 @@ def _run(
         check=False,
         capture_output=True,
         text=True,
-        env={**os.environ, "UV_OFFLINE": "1"},
+        env=env if env is not None else {**os.environ, "UV_OFFLINE": "1"},
     )
     if result.returncode != 0:
         raise PreparationFailure(
@@ -281,7 +283,8 @@ def _prepare_wheel(source_archive: Path, work_root: Path) -> tuple[Path, str]:
                     "print(json.dumps({'mke':m.version('multimodal-knowledge-engine'),"
                     "'pymupdf':m.version('PyMuPDF'),'mcp':m.version('mcp')}))"
                 ),
-            ]
+            ],
+            env={**native_mcp_environment(), "UV_OFFLINE": "1"},
         )
     )
     if versions != {"mke": "0.1.5", "pymupdf": "1.27.2.3", "mcp": "1.28.1"}:
@@ -293,6 +296,7 @@ def _prepare_wheel(source_archive: Path, work_root: Path) -> tuple[Path, str]:
             "Restore the approved cached producer dependencies.",
             10,
         )
+    remove_runtime_bytecode(venv)
     return venv / "bin/mke", _sha256(wheels[0])
 
 

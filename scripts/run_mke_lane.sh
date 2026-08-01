@@ -18,6 +18,9 @@ if [ "$mode" = "evidence-loop-development" ]; then
 fi
 if [ "$mode" = "evidence-loop-holdout" ]; then
   export PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}src"
+  export PYTHONDONTWRITEBYTECODE=1
+  export PYTHONNOUSERSITE=1
+  export PYTHONSAFEPATH=1
   exec tmp/evidence-loop-a3-native-operator-final/work/venv/bin/python \
     scripts/evaluate_evidence_loop.py "$@"
 fi

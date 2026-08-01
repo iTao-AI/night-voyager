@@ -306,7 +306,9 @@ exist and before any eligible holdout producer observation:
   native runtime identity for Python/platform, SQLite source, the complete installed runtime
   distribution closure (exact distribution name/version inventory, RECORD identities, hashed
   regular non-linked files and aggregate trees), executed bootstrap files, installed package,
-  and entrypoint;
+  and entrypoint; task-owned `*.pyc` and `__pycache__` entries are removed before freeze and
+  any remaining or reappearing bytecode fails validation; every later native child uses the
+  frozen no-bytecode, no-user-site, safe-path policy;
 - historical DRA-baseline export identity and provenance;
 - exact clean HEAD and tree plus evaluator and harness path digests;
 - environment and dependency identities;

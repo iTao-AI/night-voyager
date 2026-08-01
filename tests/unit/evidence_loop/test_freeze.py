@@ -153,6 +153,11 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
         "mcp",
         "multimodal-knowledge-engine",
     }
+    assert native_runtime["child_environment_policy"] == {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONSAFEPATH": "1",
+    }
     runtime_bootstrap = cast(dict[str, Any], native_runtime["runtime_bootstrap"])
     assert runtime_bootstrap["file_count"] >= 0
     frozen_paths = {item["path"] for item in [*frozen["evaluator_paths"], *frozen["harness_paths"]]}

@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
 import subprocess
 from collections.abc import Awaitable, Callable, Mapping, Sequence
@@ -24,6 +25,11 @@ STORE_AUTHORITY_BASENAMES = (
 )
 _RUNTIME_BOOTSTRAP_PATHS = frozenset({"_virtualenv.pth", "_virtualenv.py"})
 _NATIVE_MCP_ENVIRONMENT_KEYS = ("HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER")
+_NATIVE_NO_BYTECODE_POLICY = {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONNOUSERSITE": "1",
+    "PYTHONSAFEPATH": "1",
+}
 
 
 class NativeStoreValidationError(ValueError):
@@ -399,9 +405,49 @@ def _record_sha256(value: str) -> str:
     return digest
 
 
-def _is_generated_runtime_path(relative: str) -> bool:
+def _is_runtime_bytecode_path(relative: str) -> bool:
     posix = PurePosixPath(relative)
     return posix.suffix == ".pyc" or "__pycache__" in posix.parts
+
+
+def _runtime_bytecode_paths(root: Path) -> tuple[Path, ...]:
+    found: list[Path] = []
+    try:
+        for current, directories, filenames in os.walk(root, topdown=True, followlinks=False):
+            current_path = Path(current)
+            for directory in list(directories):
+                if directory == "__pycache__":
+                    found.append(current_path / directory)
+                    directories.remove(directory)
+            for filename in filenames:
+                if filename.endswith(".pyc"):
+                    found.append(current_path / filename)
+    except OSError:
+        _fail("native_runtime_artifact_invalid")
+    return tuple(sorted(found, key=lambda path: path.as_posix()))
+
+
+def remove_runtime_bytecode(venv: Path) -> None:
+    """Remove task-owned bytecode before the native runtime is frozen."""
+
+    for path in _runtime_bytecode_paths(venv):
+        try:
+            metadata = path.lstat()
+            if stat.S_ISDIR(metadata.st_mode) and not stat.S_ISLNK(metadata.st_mode):
+                shutil.rmtree(path)
+            elif stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+                path.unlink()
+            else:
+                _fail("native_runtime_artifact_invalid")
+        except OSError:
+            _fail("native_runtime_artifact_invalid")
+    if _runtime_bytecode_paths(venv):
+        _fail("native_runtime_artifact_invalid")
+
+
+def _reject_runtime_bytecode(venv: Path) -> None:
+    if _runtime_bytecode_paths(venv):
+        _fail("native_runtime_artifact_invalid")
 
 
 def _normalized_distribution_name(value: str) -> str:
@@ -497,9 +543,8 @@ def _runtime_distribution_files(
             saw_record = True
             continue
         path, logical = _record_path(site_root, venv, relative)
-        generated = _is_generated_runtime_path(relative)
-        if generated and not record_digest and not record_length:
-            continue
+        if _is_runtime_bytecode_path(relative):
+            _fail("native_runtime_artifact_invalid")
         if not record_digest or not record_length:
             _fail("native_runtime_artifact_invalid")
         identity = _runtime_file_identity(path, label=logical)
@@ -549,14 +594,16 @@ def _validate_runtime_site_inventory(
             for directory in directories:
                 path = root_path / directory
                 metadata = path.lstat()
+                if directory == "__pycache__":
+                    _fail("native_runtime_artifact_invalid")
                 if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
                     _fail("native_runtime_artifact_invalid")
             for filename in filenames:
                 path = root_path / filename
                 relative = path.relative_to(site_root).as_posix()
-                if _is_generated_runtime_path(relative) or (
-                    path.name == "RECORD" and path.parent.name.endswith(".dist-info")
-                ):
+                if _is_runtime_bytecode_path(relative):
+                    _fail("native_runtime_artifact_invalid")
+                if path.name == "RECORD" and path.parent.name.endswith(".dist-info"):
                     continue
                 metadata = path.lstat()
                 if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
@@ -576,11 +623,13 @@ def _validate_runtime_site_inventory(
 def native_mcp_environment() -> dict[str, str]:
     """Return the bounded stdio environment allowed for the tagged MCP child."""
 
-    return {
+    environment = {
         key: value
         for key in _NATIVE_MCP_ENVIRONMENT_KEYS
         if (value := os.environ.get(key)) is not None
     }
+    environment.update(_NATIVE_NO_BYTECODE_POLICY)
+    return environment
 
 
 def _probe_native_python(python: Path) -> dict[str, object]:
@@ -600,10 +649,11 @@ def _probe_native_python(python: Path) -> dict[str, object]:
     )
     try:
         result = subprocess.run(
-            [str(python), "-c", program],
+            [str(python), "-B", "-s", "-P", "-c", program],
             check=False,
             capture_output=True,
             text=True,
+            env=native_mcp_environment(),
             timeout=10,
         )
         value = json.loads(result.stdout)
@@ -658,6 +708,7 @@ def build_native_runtime_identity(
         or resolved_metadata.st_nlink != 1
     ):
         _fail("native_runtime_artifact_invalid")
+    _reject_runtime_bytecode(venv)
 
     site_roots = sorted((venv / "lib").glob("python*/site-packages"))
     if len(site_roots) != 1 or not site_roots[0].is_dir() or site_roots[0].is_symlink():
@@ -788,6 +839,7 @@ def build_native_runtime_identity(
         "runtime_distribution_count": len(public_runtime_distributions),
         "runtime_distributions_tree_sha256": runtime_distributions_tree_sha256,
         "runtime_distributions": public_runtime_distributions,
+        "child_environment_policy": dict(_NATIVE_NO_BYTECODE_POLICY),
         "runtime_bootstrap": {
             "file_count": len(bootstrap_files),
             "files_tree_sha256": bootstrap_tree_sha256,

@@ -496,8 +496,9 @@ trace.
 8. records a RECORD-driven identity of the complete installed runtime distribution closure actually
    available to the retained MKE venv, including exact distribution name/version inventory, each
    RECORD identity, hashed regular non-linked runtime files, aggregate file trees, Python/platform,
-   SQLite source identity, exact wheel, and entrypoint bytes; generated cache/pyc files are excluded
-   only when they are not executed authority, while any executed bootstrap files are bound explicitly;
+   SQLite source identity, exact wheel, and entrypoint bytes; task-owned `*.pyc` and `__pycache__`
+   entries are deleted before the runtime seal, any remaining or reappearing bytecode fails closed,
+   and every later native Python/MCP child uses the frozen no-bytecode, no-user-site, safe-path policy;
 9. writes the read-only sealed-store receipt and closes mutation capability before evaluation.
 
 The setup receipt records ingestion and WAL-peer materialization as bounded store preparation

@@ -3,7 +3,11 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
+import py_compile
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any, cast
 
@@ -551,6 +555,11 @@ def test_native_runtime_identity_rejects_transitive_dependency_drift(
     ]
     bootstrap = cast(dict[str, Any], frozen["runtime_bootstrap"])
     assert bootstrap["file_count"] == 0
+    assert frozen["child_environment_policy"] == {
+        "PYTHONDONTWRITEBYTECODE": "1",
+        "PYTHONNOUSERSITE": "1",
+        "PYTHONSAFEPATH": "1",
+    }
 
     site_root = run_root / "work/venv/lib/python3.12/site-packages"
     runtime_file = site_root / "mcp/runtime.py"
@@ -591,6 +600,49 @@ def test_native_runtime_identity_rejects_unrecorded_runtime_file(tmp_path: Path)
         match="native_runtime_artifact_invalid",
     ):
         native_store.build_native_runtime_identity(run_root, wheel_sha256="4" * 64)
+
+
+def test_native_runtime_identity_rejects_auto_executed_sitecustomize_pyc(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    _write_synthetic_runtime_dependency(run_root)
+    frozen = native_store.build_native_runtime_identity(
+        run_root,
+        wheel_sha256="4" * 64,
+    )
+    site_root = run_root / "work/venv/lib/python3.12/site-packages"
+    source = tmp_path / "sitecustomize.py"
+    source.write_text(
+        "import builtins\n"
+        "builtins.PYC_AUTHORITY_MARKER = 'mutated-unbound-code'\n",
+        encoding="utf-8",
+    )
+    pyc = site_root / "sitecustomize.pyc"
+    py_compile.compile(str(source), cfile=str(pyc), doraise=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import builtins; print(getattr(builtins, 'PYC_AUTHORITY_MARKER', 'absent'))",
+        ],
+        env={"PATH": os.environ["PATH"], "PYTHONPATH": str(site_root)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == "mutated-unbound-code"
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_artifact_invalid",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
 
 
 @pytest.mark.parametrize("mutation", ["missing", "duplicate", "unhashed"])
@@ -655,7 +707,20 @@ def test_native_mcp_environment_does_not_forward_python_import_redirectors(
     monkeypatch.setenv("PYTHONPATH", "/untrusted/import/root")
     environment = native_store.native_mcp_environment()
     assert "PYTHONPATH" not in environment
-    assert set(environment) <= {"HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"}
+    assert environment["PYTHONDONTWRITEBYTECODE"] == "1"
+    assert environment["PYTHONNOUSERSITE"] == "1"
+    assert environment["PYTHONSAFEPATH"] == "1"
+    assert set(environment) <= {
+        "HOME",
+        "LOGNAME",
+        "PATH",
+        "SHELL",
+        "TERM",
+        "USER",
+        "PYTHONDONTWRITEBYTECODE",
+        "PYTHONNOUSERSITE",
+        "PYTHONSAFEPATH",
+    }
 
 
 def test_tagged_mcp_default_stdio_environment_excludes_pythonpath() -> None:
