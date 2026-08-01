@@ -28,6 +28,12 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --locked --extra mke
+      - name: Run hermetic A4 CLI contracts (provider-free)
+        run: |
+          PYTHONDONTWRITEBYTECODE=1 uv run pytest -p no:cacheprovider -o addopts= -q \
+            tests/unit/evidence_loop/test_cli_contracts.py::test_development_cli_accepts_a_fresh_external_run_root_without_retained_artifacts \
+            tests/unit/evidence_loop/test_cli_contracts.py::test_development_cli_persists_each_terminal_disposition \
+            tests/unit/evidence_loop/test_cli_contracts.py::test_development_cli_completes_the_a4_failure_taxonomy
       - run: uv lock --check
       - run: uv run pytest -q -m "not database and not mke"
       - run: make dra-check

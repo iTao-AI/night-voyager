@@ -33,7 +33,8 @@ assertions 才是 acceptance authority；screenshots are review evidence。
 - **Browser to database：** v0.1.3 `/demo/collaboration` 现在可在不创建 task 的情况下，把已确认的同一 Case 交给 `/demo`；advisor 随后显式启动真实 pinned task、SSE、review、parent decision、receipt 与 timeline 路径。整条 provider-free chain 在真实 Chromium 与 PostgreSQL 上运行，同时两个 route 仍可独立使用。
 - **Planning revision journey：** v0.1.4 发布 provider-free `request revision`、controlled student preferred-country change、retained predecessor lineage、successor PlanningRun、deterministic old/new comparison、fresh advisor authorization，以及 only the current family decision。blocked budget counterfactual 不会到达 approval 或 decision。
 - **Governed timeline execution：** v0.1.5 发布 provider-free `/demo/plan` vertical、closed Happy/Blocked scenario、structured family attestation、assigned-advisor verification、immutable receipt recovery、PostgreSQL-owned risk/date authority、reassessment stop，以及 bilingual responsive/action-hierarchy proof；不创建新 `AgentTask`、provider call、successor business row 或 deployment。
-- **Portfolio 与 dependency boundary：** v0.1.5 包含 PR #78 合并的 frontend dependency maintenance。Dependabot #8 与 #9 已修复；optional/transitive runtime `sharp` Dependabot #7 仍以 `GHSA-f88m-g3jw-g9cj` 保持 open，full development audit 仍包含 dev-only `brace-expansion` / `minimatch` -> ESLint chain，因此不能声称 audit-zero。
+- **Portfolio 与 dependency boundary：** v0.1.5 包含 PR #78 合并的 frontend dependency maintenance。Dependabot #8 与 #9 已修复；optional/transitive runtime `sharp 0.34.5` / `GHSA-f88m-g3jw-g9cj` 明确 deferred，full development audit 仍包含 dev-only `brace-expansion` / `minimatch` -> ESLint chain，因此不能声称 audit-zero。Recovery triggers 仍仅为 public deployment、untrusted image path、compatible upstream support for sharp >=0.35 或 advisory change。
+- **Complementary-evidence Slice 0 status：** Slice 0 已永久以 local `evaluation_invalid` safe stop 结束。它没有 `MkeCaptureArtifactV2`、Slice 0 terminal receipt、information-gain conclusion、candidate persistence、Slice 1/2 work 或 v0.1.6 release。PR #87 已 merged；hosted CI 与 publication cleanup 已完成，且没有解锁后续阶段。
 
 ## 验证 release
 
@@ -62,9 +63,10 @@ make down
 
 v0.1.5 发布的 governed execution path 位于 `/demo/plan`，操作步骤见
 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md)。
-PR #80、PR #83、PR #84 与 PR #85 均已合并；release candidate 包含
-governed authority、recovery/reassessment closure、reconciliation，以及
-professional presentation/evaluator-first DX。
+PR #80、PR #83、PR #84 与 PR #85 均已合并并纳入已发布的 v0.1.5；release
+包含 governed authority、recovery/reassessment closure、reconciliation，以及
+professional presentation/evaluator-first DX。PR #87 已 merged；其 hosted CI 与
+publication cleanup 已完成。
 
 `make doctor` 检查 Docker、Compose capability、本地端口、host project filesystem 至少 5 GiB，以及 Docker VM filesystem 至少 8 GiB。运维人员只能通过 `NIGHT_VOYAGER_DOCKER_MINIMUM_KB` 调整 Docker VM 门槛；检查会 fail closed，且绝不会自动删除 Docker 资源。`make demo` 迁移并 seed fresh synthetic stack。`make proof` 验证配置、public hygiene 与隔离 installed wheel，不要求 host Python、uv、Node.js 或 npm。`make compose-proof` 还会在真实 Chromium 中执行 browser-to-database flow。
 

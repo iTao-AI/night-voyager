@@ -1,0 +1,8 @@
+{
+  "fixture_scope": "hermetic_development_cli_contract_only",
+  "mutation_capability": "closed_after_preparation",
+  "read_only_reopen_verified": true,
+  "store_seal": {
+    "lifecycle_state": "sealed_read_only"
+  }
+}

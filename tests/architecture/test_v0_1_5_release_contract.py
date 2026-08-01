@@ -171,8 +171,11 @@ def test_v0_1_5_current_authority_and_public_claims_are_unambiguous() -> None:
     )
     normalized_adr = " ".join(adr.split())
 
-    assert "v0.1.4 remains migration `0013`" in normalized_adr
-    assert "v0.1.5 release candidate current head is `0015`" in normalized_adr
+    assert "Historical v0.1.4 ended at migration `0013`" in normalized_adr
+    assert (
+        "the released v0.1.5 current migration graph ends at migration `0015`"
+        in normalized_adr
+    )
     assert (
         "timeline transition authority remains owned by migration `0014`"
         in normalized_adr

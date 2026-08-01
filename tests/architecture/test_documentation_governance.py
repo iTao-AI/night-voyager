@@ -12,17 +12,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
-TERMINAL_SLICE_0_STATUS = (
+CURRENT_SLICE_0_STATUS = (
+    "Slice 0 permanently ended as local `evaluation_invalid` safe stop; no "
+    "`MkeCaptureArtifactV2`, terminal receipt, information-gain conclusion, candidate "
+    "persistence, Slice 1/2 unlock, or v0.1.6; PR #87 merged; hosted CI/publication "
+    "cleanup completed"
+)
+HISTORICAL_SLICE_0_STATUS = (
     "Slice 0 ended in local `evaluation_invalid` safe stop; retired holdout retained; "
     "no later stage unlocked; merged PR/hosted CI/publication pending"
 )
 PLAN_STATUS_BINDINGS = (
-    (
-        "Advisor-Governed Multimodal Evidence Composition",
-        TERMINAL_SLICE_0_STATUS,
-        "2026-07-31-advisor-governed-multimodal-evidence-composition-implementation.md",
-        f"**Status:** {TERMINAL_SLICE_0_STATUS}",
-    ),
     (
         "M2 identity, session, and RLS",
         "Implemented",
@@ -215,6 +215,25 @@ def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
         assert required in combined
     assert "distinct acknowledgement" in combined
     assert "governed-live success claim" in combined
+
+
+def test_current_slice_zero_status_is_separate_from_historical_plan_wording() -> None:
+    index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    row = next(
+        line
+        for line in index.splitlines()
+        if line.startswith("| Advisor-Governed Multimodal Evidence Composition |")
+    )
+    assert f"| {CURRENT_SLICE_0_STATUS} |" in row
+    assert "pending" not in row.lower()
+    assert "release candidate" not in row.lower()
+
+    historical_plan = (
+        ROOT
+        / "docs/superpowers/plans/"
+        "2026-07-31-advisor-governed-multimodal-evidence-composition-implementation.md"
+    ).read_text(encoding="utf-8")
+    assert f"**Status:** {HISTORICAL_SLICE_0_STATUS}" in historical_plan
 
 
 def test_dra_strict_prerequisite_current_docs_are_truthful() -> None:
@@ -700,14 +719,50 @@ def test_root_readmes_bind_current_development_migration_head() -> None:
         assert "v0.1.3 migration `0009`" in source, relative
 
 
+def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -> None:
+    readmes = [
+        (ROOT / "README.md").read_text(encoding="utf-8"),
+        (ROOT / "README_CN.md").read_text(encoding="utf-8"),
+    ]
+    for source in readmes:
+        assert "v0.1.5" in source
+        assert "PR #87" in source
+        assert "evaluation_invalid" in source
+        assert "`0015`" in source
+        assert "release candidate" not in source.lower()
+        assert "sharp 0.34.5" in source
+        assert "GHSA-f88m-g3jw-g9cj" in source
+        assert "explicitly deferred" in source or "明确 deferred" in source
+        for trigger in (
+            "public deployment",
+            "untrusted image path",
+            "compatible upstream support for sharp >=0.35",
+            "advisory change",
+        ):
+            assert trigger in source
+
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    assert "PR #87 is merged; hosted CI and publication cleanup are complete" in docs_index
+    assert "release candidate" not in docs_index.lower()
+
+    adr = (
+        ROOT / "docs/decisions/0014-advisor-governed-multimodal-evidence-composition.md"
+    ).read_text(encoding="utf-8")
+    assert "PR #87 is merged; hosted CI and publication cleanup are complete" in adr
+    assert "still-pending" not in adr
+
+    operations = (ROOT / "docs/operations/database-roles.md").read_text(encoding="utf-8")
+    assert "The released v0.1.5 migration graph ends at exact head `0015`" in operations
+
+
 def test_timeline_execution_adr_separates_release_history_from_current_head() -> None:
     adr = (
         ROOT / "docs/decisions/0013-governed-timeline-execution-authority.md"
     ).read_text(encoding="utf-8")
     normalized = " ".join(adr.split())
 
-    assert "v0.1.4 remains migration `0013`" in normalized
-    assert "v0.1.5 release candidate current head is `0015`" in normalized
+    assert "Historical v0.1.4 ended at migration `0013`" in normalized
+    assert "the released v0.1.5 current migration graph ends at migration `0015`" in normalized
     assert "timeline transition authority remains owned by migration `0014`" in normalized
     assert "migration `0015` only closes deterministic demo identity" in normalized
 

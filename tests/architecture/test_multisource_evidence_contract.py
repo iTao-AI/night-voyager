@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -16,6 +17,17 @@ PLAN = (
 ADR = (
     ROOT
     / "docs/decisions/0014-advisor-governed-multimodal-evidence-composition.md"
+)
+HERMETIC_CLI_FIXTURE = (
+    ROOT / "tests/fixtures/evidence_loop/hermetic-development-cli-contract-v1.json"
+)
+A4_CLI_CONTRACT_TEST_NODES = (
+    "tests/unit/evidence_loop/test_cli_contracts.py::"
+    "test_development_cli_accepts_a_fresh_external_run_root_without_retained_artifacts",
+    "tests/unit/evidence_loop/test_cli_contracts.py::"
+    "test_development_cli_persists_each_terminal_disposition",
+    "tests/unit/evidence_loop/test_cli_contracts.py::"
+    "test_development_cli_completes_the_a4_failure_taxonomy",
 )
 
 
@@ -74,6 +86,42 @@ def test_slice_zero_documents_preserve_zero_product_mutation() -> None:
         assert prohibited not in governance
     assert "creates no product candidate" in governance
     assert "writes no Night Voyager business table" in governance
+
+
+def test_hermetic_development_cli_fixture_has_no_native_authority_claim() -> None:
+    fixture = json.loads(HERMETIC_CLI_FIXTURE.read_text(encoding="utf-8"))
+
+    assert set(fixture) == {
+        "fixture_scope",
+        "mutation_capability",
+        "read_only_reopen_verified",
+        "store_seal",
+    }
+    assert fixture["fixture_scope"] == "hermetic_development_cli_contract_only"
+    assert fixture["mutation_capability"] == "closed_after_preparation"
+    assert fixture["read_only_reopen_verified"] is True
+    assert fixture["store_seal"] == {"lifecycle_state": "sealed_read_only"}
+    serialized = json.dumps(fixture)
+    for forbidden in ("native_runtime", "source_archive", "store_tree"):
+        assert forbidden not in serialized
+
+
+def test_python_ci_runs_exact_provider_free_a4_cli_contract_nodes() -> None:
+    workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    python_job = workflow.split("  python:", 1)[1].split("  frontend:", 1)[0]
+    step = "      - name: Run hermetic A4 CLI contracts (provider-free)\n        run: |\n"
+    command = (
+        "PYTHONDONTWRITEBYTECODE=1 uv run pytest -p no:cacheprovider "
+        "-o addopts= -q"
+    )
+
+    assert step in python_job
+    step_body = python_job[python_job.index(step) :]
+    assert command in step_body
+    for node in A4_CLI_CONTRACT_TEST_NODES:
+        assert f"            {node}" in step_body
+    assert step_body.count("tests/unit/evidence_loop/test_cli_contracts.py::") == 3
+    assert python_job.index("uv sync --locked --extra mke") < python_job.index(step)
 
 
 def test_complementary_evidence_plan_has_one_index_entry() -> None:
