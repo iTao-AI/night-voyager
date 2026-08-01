@@ -94,6 +94,7 @@ def test_make_exposes_only_explicit_mke_gates() -> None:
 def test_python_ci_has_artifact_free_optional_process_step() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     python_job = workflow.split("  python:", 1)[1].split("  frontend:", 1)[0]
+    assert "uv sync --locked --extra mke" in python_job
     assert 'uv run pytest -q -m "not database and not mke"' in python_job
     assert (
         "scripts/run_mke_lane.sh test tests/integration/adapters/test_mke_readonly_smoke.py"
