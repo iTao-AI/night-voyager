@@ -55,6 +55,9 @@ def test_complementary_evidence_governance_closes_slice_zero_contract() -> None:
         "six ordered PRs",
         "Draft PR",
         "zero product tables/routes in Slice 0",
+        "`pyvenv.cfg`",
+        "include-system-site-packages=false",
+        "no external/base site-packages are active",
     ):
         assert required in governance
 

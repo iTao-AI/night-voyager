@@ -30,6 +30,10 @@ _NATIVE_NO_BYTECODE_POLICY = {
     "PYTHONNOUSERSITE": "1",
     "PYTHONSAFEPATH": "1",
 }
+_PYVENV_REQUIRED_KEYS = frozenset(
+    {"home", "implementation", "version_info", "include-system-site-packages"}
+)
+_PYVENV_OPTIONAL_KEYS = frozenset({"uv"})
 
 
 class NativeStoreValidationError(ValueError):
@@ -450,6 +454,50 @@ def _reject_runtime_bytecode(venv: Path) -> None:
         _fail("native_runtime_artifact_invalid")
 
 
+def _parse_pyvenv_cfg(venv: Path) -> dict[str, object]:
+    """Bind the task-owned venv configuration without exposing host paths."""
+
+    path = venv / "pyvenv.cfg"
+    file_identity = _runtime_file_identity(path, label="pyvenv.cfg")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        _fail("native_runtime_artifact_invalid")
+    values: dict[str, str] = {}
+    for line in text.splitlines():
+        if not line.strip() or "=" not in line:
+            _fail("native_runtime_artifact_invalid")
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if (
+            not key
+            or not value
+            or key not in _PYVENV_REQUIRED_KEYS | _PYVENV_OPTIONAL_KEYS
+            or key in values
+        ):
+            _fail("native_runtime_artifact_invalid")
+        values[key] = value
+    required_keys = set(_PYVENV_REQUIRED_KEYS)
+    allowed_keys = required_keys | set(_PYVENV_OPTIONAL_KEYS)
+    if set(values) not in (required_keys, allowed_keys):
+        _fail("native_runtime_artifact_invalid")
+    if values["include-system-site-packages"].lower() != "false":
+        _fail("native_runtime_identity_drift")
+    return {
+        "file": {
+            key: file_identity[key]
+            for key in ("path", "byte_length", "sha256", "mode")
+        },
+        "keys": sorted(values),
+        "home_configured": bool(values["home"]),
+        "implementation": values["implementation"],
+        "version_info": values["version_info"],
+        "uv_metadata_present": "uv" in values,
+        "include_system_site_packages": False,
+    }
+
+
 def _normalized_distribution_name(value: str) -> str:
     normalized = re.sub(r"[-_.]+", "-", value).lower()
     if not normalized:
@@ -634,8 +682,14 @@ def native_mcp_environment() -> dict[str, str]:
 
 def _probe_native_python(python: Path) -> dict[str, object]:
     program = (
-        "import importlib.metadata,json,platform,sqlite3;"
+        "import importlib.metadata,json,os,platform,site,sqlite3,sys;"
         "connection=sqlite3.connect(':memory:');"
+        "version_key=f'{sys.version_info.major}.{sys.version_info.minor}';"
+        "venv_site=os.path.normpath(os.path.join(sys.prefix,'lib',f'python{version_key}','site-packages'));"
+        "base_site=os.path.normpath(os.path.join(sys.base_prefix,'lib',f'python{version_key}','site-packages'));"
+        "site_entries=[os.path.normpath(entry) for entry in sys.path "
+        "if entry and 'site-packages' in entry.split(os.sep)];"
+        "external=[entry for entry in site_entries if entry != venv_site];"
         "print(json.dumps({"
         "'python_implementation':platform.python_implementation(),"
         "'python_version':platform.python_version(),"
@@ -644,7 +698,15 @@ def _probe_native_python(python: Path) -> dict[str, object]:
         "'sqlite_version':sqlite3.sqlite_version,"
         "'sqlite_source_id':connection.execute('select sqlite_source_id()').fetchone()[0],"
         "'sqlite_threadsafety':sqlite3.threadsafety,"
-        "'distribution_version':importlib.metadata.version('multimodal-knowledge-engine')"
+        "'distribution_version':importlib.metadata.version('multimodal-knowledge-engine'),"
+        "'sys_prefix_is_venv':sys.prefix != sys.base_prefix,"
+        "'venv_site_packages_relative':os.path.relpath(venv_site,sys.prefix),"
+        "'active_site_packages_count':len(site_entries),"
+        "'external_site_packages_count':len(external),"
+        "'external_site_packages_present':bool(external),"
+        "'base_site_packages_present':base_site in site_entries,"
+        "'only_frozen_venv_site':bool(site_entries) and all("
+        "entry == venv_site for entry in site_entries)"
         "},separators=(',',':'),sort_keys=True))"
     )
     try:
@@ -671,14 +733,47 @@ def _probe_native_python(python: Path) -> dict[str, object]:
         "sqlite_source_id",
         "sqlite_threadsafety",
         "distribution_version",
+        "sys_prefix_is_venv",
+        "venv_site_packages_relative",
+        "active_site_packages_count",
+        "external_site_packages_count",
+        "external_site_packages_present",
+        "base_site_packages_present",
+        "only_frozen_venv_site",
     }
     if set(probe) != expected_keys or any(
         not isinstance(probe[key], str)
-        for key in expected_keys - {"sqlite_threadsafety"}
+        for key in expected_keys
+        - {
+            "sqlite_threadsafety",
+            "sys_prefix_is_venv",
+            "active_site_packages_count",
+            "external_site_packages_count",
+            "external_site_packages_present",
+            "base_site_packages_present",
+            "only_frozen_venv_site",
+        }
     ):
         _fail("native_runtime_probe_invalid")
-    if not isinstance(probe["sqlite_threadsafety"], int):
+    if (
+        not isinstance(probe["sqlite_threadsafety"], int)
+        or not isinstance(probe["sys_prefix_is_venv"], bool)
+        or not isinstance(probe["active_site_packages_count"], int)
+        or not isinstance(probe["external_site_packages_count"], int)
+        or not isinstance(probe["external_site_packages_present"], bool)
+        or not isinstance(probe["base_site_packages_present"], bool)
+        or not isinstance(probe["only_frozen_venv_site"], bool)
+    ):
         _fail("native_runtime_probe_invalid")
+    if not (
+        probe["sys_prefix_is_venv"] is True
+        and probe["active_site_packages_count"] == 1
+        and probe["external_site_packages_count"] == 0
+        and probe["external_site_packages_present"] is False
+        and probe["base_site_packages_present"] is False
+        and probe["only_frozen_venv_site"] is True
+    ):
+        _fail("native_runtime_identity_drift")
     return probe
 
 
@@ -708,6 +803,7 @@ def build_native_runtime_identity(
         or resolved_metadata.st_nlink != 1
     ):
         _fail("native_runtime_artifact_invalid")
+    pyvenv_identity = _parse_pyvenv_cfg(venv)
     _reject_runtime_bytecode(venv)
 
     site_roots = sorted((venv / "lib").glob("python*/site-packages"))
@@ -773,7 +869,11 @@ def build_native_runtime_identity(
     if not isinstance(entrypoint_identity, dict):
         _fail("native_runtime_artifact_invalid")
     probe = _probe_native_python(python)
-    if probe["distribution_version"] != "0.1.5":
+    if (
+        probe["distribution_version"] != "0.1.5"
+        or probe["python_implementation"] != pyvenv_identity["implementation"]
+        or probe["python_version"] != pyvenv_identity["version_info"]
+    ):
         _fail("native_runtime_identity_drift")
     python_identity = {
         "launcher_kind": (
@@ -813,6 +913,15 @@ def build_native_runtime_identity(
             "version": probe["python_version"],
             "platform_system": probe["platform_system"],
             "platform_machine": probe["platform_machine"],
+        },
+        "pyvenv_cfg": pyvenv_identity,
+        "site_packages": {
+            "venv_relative": probe["venv_site_packages_relative"],
+            "active_count": probe["active_site_packages_count"],
+            "external_present": probe["external_site_packages_present"],
+            "external_count": probe["external_site_packages_count"],
+            "base_present": probe["base_site_packages_present"],
+            "only_frozen_venv_site": probe["only_frozen_venv_site"],
         },
         "sqlite": {
             "version": probe["sqlite_version"],

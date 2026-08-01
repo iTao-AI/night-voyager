@@ -308,7 +308,10 @@ exist and before any eligible holdout producer observation:
   regular non-linked files and aggregate trees), executed bootstrap files, installed package,
   and entrypoint; task-owned `*.pyc` and `__pycache__` entries are removed before freeze and
   any remaining or reappearing bytecode fails validation; every later native child uses the
-  frozen no-bytecode, no-user-site, safe-path policy;
+  frozen no-bytecode, no-user-site, safe-path policy; the exact task-owned `pyvenv.cfg` file
+  identity (relative basename, byte length, SHA-256, and mode) and closed configuration semantics
+  (`include-system-site-packages=false`) are bound, while a native probe proves `sys.prefix`
+  selects only the frozen venv site-packages root and no external/base site-packages are active;
 - historical DRA-baseline export identity and provenance;
 - exact clean HEAD and tree plus evaluator and harness path digests;
 - environment and dependency identities;

@@ -3,12 +3,16 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
+
+from night_voyager.evidence_loop import native_store
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -72,6 +76,76 @@ def _capture_cases() -> list[dict[str, Any]]:
             }
         )
     return cases
+
+
+def _compact_native_venv_with_system_site_packages(
+    tmp_path: Path,
+) -> Path:
+    retained = ROOT / "tmp/evidence-loop-a3-native-operator-final/work/venv"
+    source_python = (retained / "bin/python").resolve()
+    base_root = source_python.parent.parent
+    target = tmp_path / "venv"
+    (target / "bin").mkdir(parents=True)
+    (target / "lib").mkdir()
+    shutil.copy2(source_python, target / "bin/python", follow_symlinks=True)
+    (target / "bin/python3.12").symlink_to("python")
+    (target / "lib/libpython3.12.dylib").symlink_to(
+        base_root / "lib/libpython3.12.dylib"
+    )
+    (target / "lib/python3.12").symlink_to(
+        retained / "lib/python3.12",
+        target_is_directory=True,
+    )
+    config = (retained / "pyvenv.cfg").read_text(encoding="utf-8").replace(
+        "include-system-site-packages = false",
+        "include-system-site-packages = true",
+    )
+    (target / "pyvenv.cfg").write_text(config, encoding="utf-8")
+    return target
+
+
+@pytest.mark.mke
+def test_tagged_native_rejects_external_site_packages_from_pyvenv_config(
+    tmp_path: Path,
+) -> None:
+    python = _compact_native_venv_with_system_site_packages(tmp_path) / "bin/python"
+    env = native_store.native_mcp_environment()
+    probe = subprocess.run(
+        [
+            str(python),
+            "-B",
+            "-s",
+            "-P",
+            "-c",
+            (
+                "import json,sys;"
+                "print(json.dumps({'prefix':sys.prefix,'base_prefix':sys.base_prefix,"
+                "'sys_path':sys.path},sort_keys=True))"
+            ),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert probe.returncode == 0, probe.stderr
+    observed = json.loads(probe.stdout)
+    venv_site = str(python.parent.parent / "lib/python3.12/site-packages")
+    external = [
+        path
+        for path in observed["sys_path"]
+        if "site-packages" in path and os.path.normpath(path) != os.path.normpath(venv_site)
+    ]
+    assert external
+    probe_native_python = cast(
+        Callable[[Path], dict[str, object]],
+        native_store.__dict__["_probe_native_python"],
+    )
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_identity_drift",
+    ):
+        probe_native_python(python)
 
 
 @pytest.mark.mke

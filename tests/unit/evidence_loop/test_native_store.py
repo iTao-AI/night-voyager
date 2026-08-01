@@ -402,6 +402,14 @@ def _write_synthetic_native_runtime(run_root: Path) -> None:
     executable_root.mkdir(parents=True, exist_ok=True)
     package_root.mkdir(parents=True, exist_ok=True)
     dist_root.mkdir(exist_ok=True)
+    (venv / "pyvenv.cfg").write_text(
+        "home = /synthetic/base/bin\n"
+        "implementation = CPython\n"
+        "uv = 0.11.7\n"
+        "version_info = 3.12.13\n"
+        "include-system-site-packages = false\n",
+        encoding="utf-8",
+    )
     probe = {
         "python_implementation": "CPython",
         "python_version": "3.12.13",
@@ -411,6 +419,13 @@ def _write_synthetic_native_runtime(run_root: Path) -> None:
         "sqlite_source_id": "mock-source-id",
         "sqlite_threadsafety": 3,
         "distribution_version": "0.1.5",
+        "sys_prefix_is_venv": True,
+        "venv_site_packages_relative": "lib/python3.12/site-packages",
+        "active_site_packages_count": 1,
+        "external_site_packages_count": 0,
+        "external_site_packages_present": False,
+        "base_site_packages_present": False,
+        "only_frozen_venv_site": True,
     }
     python = executable_root / "python"
     python.write_text(
@@ -535,6 +550,94 @@ def test_native_runtime_identity_closes_executable_package_and_runtime_drift(
         )
 
 
+def test_native_runtime_identity_rejects_pyvenv_system_site_drift(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    frozen = native_store.build_native_runtime_identity(
+        run_root,
+        wheel_sha256="4" * 64,
+    )
+    cfg = run_root / "work/venv/pyvenv.cfg"
+    cfg.write_text(
+        cfg.read_text(encoding="utf-8").replace(
+            "include-system-site-packages = false",
+            "include-system-site-packages = true",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_identity_drift",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "expected_code"),
+    [
+        ("missing", "native_runtime_artifact_invalid"),
+        ("symlink", "native_runtime_artifact_invalid"),
+        ("hardlink", "native_runtime_artifact_invalid"),
+        ("malformed", "native_runtime_artifact_invalid"),
+        ("unknown", "native_runtime_artifact_invalid"),
+        ("include_true", "native_runtime_identity_drift"),
+    ],
+)
+def test_native_runtime_identity_rejects_pyvenv_cfg_boundaries(
+    tmp_path: Path,
+    mutation: str,
+    expected_code: str,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    frozen = native_store.build_native_runtime_identity(
+        run_root,
+        wheel_sha256="4" * 64,
+    )
+    cfg = run_root / "work/venv/pyvenv.cfg"
+    if mutation == "missing":
+        cfg.unlink()
+    elif mutation == "symlink":
+        replacement = tmp_path / "pyvenv-replacement.cfg"
+        replacement.write_bytes(cfg.read_bytes())
+        cfg.unlink()
+        cfg.symlink_to(replacement)
+    elif mutation == "hardlink":
+        replacement = tmp_path / "pyvenv-hardlink.cfg"
+        replacement.write_bytes(cfg.read_bytes())
+        cfg.unlink()
+        cfg.hardlink_to(replacement)
+    elif mutation == "malformed":
+        cfg.write_text("not-a-key-value-line\n", encoding="utf-8")
+    elif mutation == "unknown":
+        cfg.write_text(cfg.read_text(encoding="utf-8") + "unknown = value\n", encoding="utf-8")
+    else:
+        cfg.write_text(
+            cfg.read_text(encoding="utf-8").replace(
+                "include-system-site-packages = false",
+                "include-system-site-packages = true",
+            ),
+            encoding="utf-8",
+        )
+
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match=expected_code,
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
+
+
 @pytest.mark.parametrize("mutation", ["file", "record", "version"])
 def test_native_runtime_identity_rejects_transitive_dependency_drift(
     tmp_path: Path,
@@ -559,6 +662,26 @@ def test_native_runtime_identity_rejects_transitive_dependency_drift(
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONNOUSERSITE": "1",
         "PYTHONSAFEPATH": "1",
+    }
+    pyvenv_identity = cast(dict[str, Any], frozen["pyvenv_cfg"])
+    pyvenv_file = cast(dict[str, Any], pyvenv_identity["file"])
+    assert pyvenv_file["path"] == "pyvenv.cfg"
+    assert pyvenv_file["byte_length"] == (
+        run_root / "work/venv/pyvenv.cfg"
+    ).stat().st_size
+    assert pyvenv_file["sha256"] == hashlib.sha256(
+        (run_root / "work/venv/pyvenv.cfg").read_bytes()
+    ).hexdigest()
+    assert pyvenv_file["mode"] == "0644"
+    assert pyvenv_identity["include_system_site_packages"] is False
+    assert "/synthetic/base" not in json.dumps(frozen, sort_keys=True)
+    assert frozen["site_packages"] == {
+        "venv_relative": "lib/python3.12/site-packages",
+        "active_count": 1,
+        "external_present": False,
+        "external_count": 0,
+        "base_present": False,
+        "only_frozen_venv_site": True,
     }
 
     site_root = run_root / "work/venv/lib/python3.12/site-packages"

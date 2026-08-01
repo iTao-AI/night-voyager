@@ -499,6 +499,9 @@ trace.
    SQLite source identity, exact wheel, and entrypoint bytes; task-owned `*.pyc` and `__pycache__`
    entries are deleted before the runtime seal, any remaining or reappearing bytecode fails closed,
    and every later native Python/MCP child uses the frozen no-bytecode, no-user-site, safe-path policy;
+   it also binds the exact relative `pyvenv.cfg` file byte identity/mode and closed
+   `include-system-site-packages=false` semantics, with a native probe proving `sys.prefix` selects
+   only the frozen venv site-packages root and no external/base site-packages are active;
 9. writes the read-only sealed-store receipt and closes mutation capability before evaluation.
 
 The setup receipt records ingestion and WAL-peer materialization as bounded store preparation
