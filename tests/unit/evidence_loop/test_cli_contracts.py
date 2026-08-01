@@ -16,6 +16,9 @@ from night_voyager.evidence_loop.canonicalization import canonical_json_bytes
 from night_voyager.evidence_loop.receipt import build_terminal_receipt
 
 ROOT = Path(__file__).resolve().parents[3]
+HERMETIC_DEVELOPMENT_CLI_CONTRACT_FIXTURE = (
+    ROOT / "tests/fixtures/evidence_loop/hermetic-development-cli-contract-v1.json"
+)
 SCRIPTS = (
     "evaluate_evidence_loop.py",
     "freeze_evidence_loop.py",
@@ -47,16 +50,8 @@ def test_lifecycle_scripts_use_an_explicit_external_run_root() -> None:
 def test_development_cli_accepts_a_fresh_external_run_root_without_retained_artifacts(
     tmp_path: Path,
 ) -> None:
-    run_root = tmp_path / "evidence-loop-run"
-    run_root.mkdir(mode=0o700)
-    for child in ("input", "work", "store", "receipts"):
-        (run_root / child).mkdir(mode=0o700)
-    (run_root / "store").chmod(0o500)
-    (run_root / "receipts" / "sealed-mke-store-v1.json").write_bytes(
-        b'{"mutation_capability":"closed_after_preparation",'
-        b'"read_only_reopen_verified":true,'
-        b'"store_seal":{"lifecycle_state":"sealed_read_only"}}'
-    )
+    run_root = _make_run_root(tmp_path)
+    store_receipt = _copy_hermetic_development_cli_contract_fixture(run_root)
     output = run_root / "receipts" / "development-evaluation-v2.json"
     result = subprocess.run(
         [
@@ -65,7 +60,7 @@ def test_development_cli_accepts_a_fresh_external_run_root_without_retained_arti
             "--development-dataset",
             str(ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"),
             "--store-receipt",
-            str(run_root / "receipts" / "sealed-mke-store-v1.json"),
+            str(store_receipt),
             "--run-root",
             str(run_root),
             "--output",
@@ -112,12 +107,9 @@ def _make_run_root(tmp_path: Path) -> Path:
     return run_root
 
 
-def _copy_retained_setup_receipt(run_root: Path) -> Path:
+def _copy_hermetic_development_cli_contract_fixture(run_root: Path) -> Path:
     receipt = run_root / "receipts/sealed-mke-store-v1.json"
-    shutil.copyfile(
-        ROOT / "tmp/evidence-loop-a3-native-operator-final/receipts/sealed-mke-store-v1.json",
-        receipt,
-    )
+    shutil.copyfile(HERMETIC_DEVELOPMENT_CLI_CONTRACT_FIXTURE, receipt)
     return receipt
 
 
@@ -158,12 +150,7 @@ def test_a4_cli_unknown_argument_is_one_bounded_diagnostic(script: str) -> None:
 @pytest.mark.mke
 def test_development_cli_emits_canonical_receipt(tmp_path: Path) -> None:
     run_root = _make_run_root(tmp_path)
-    store_receipt = run_root / "receipts" / "sealed-mke-store-v1.json"
-    store_receipt.write_bytes(
-        b'{"mutation_capability":"closed_after_preparation",'
-        b'"read_only_reopen_verified":true,'
-        b'"store_seal":{"lifecycle_state":"sealed_read_only"}}'
-    )
+    store_receipt = _copy_hermetic_development_cli_contract_fixture(run_root)
     output = run_root / "receipts" / "development-evaluation-v2.json"
     result = subprocess.run(
         [
@@ -654,7 +641,7 @@ def test_development_cli_persists_each_terminal_disposition(
     dataset_path = tmp_path / "dataset.json"
     dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
     run_root = _make_run_root(tmp_path)
-    store_receipt = _copy_retained_setup_receipt(run_root)
+    store_receipt = _copy_hermetic_development_cli_contract_fixture(run_root)
     output = run_root / "receipts/development-evaluation-v2.json"
 
     result = subprocess.run(
@@ -704,7 +691,7 @@ def test_development_cli_completes_the_a4_failure_taxonomy(
 ) -> None:
     dataset = ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"
     run_root = _make_run_root(tmp_path)
-    store_receipt = _copy_retained_setup_receipt(run_root)
+    store_receipt = _copy_hermetic_development_cli_contract_fixture(run_root)
     output = run_root / "receipts/development-evaluation-v2.json"
     if condition == "producer":
         store_receipt.write_text("{}", encoding="utf-8")
