@@ -12,7 +12,17 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
+TERMINAL_SLICE_0_STATUS = (
+    "Slice 0 ended in local `evaluation_invalid` safe stop; retired holdout retained; "
+    "no later stage unlocked; merged PR/hosted CI/publication pending"
+)
 PLAN_STATUS_BINDINGS = (
+    (
+        "Advisor-Governed Multimodal Evidence Composition",
+        TERMINAL_SLICE_0_STATUS,
+        "2026-07-31-advisor-governed-multimodal-evidence-composition-implementation.md",
+        f"**Status:** {TERMINAL_SLICE_0_STATUS}",
+    ),
     (
         "M2 identity, session, and RLS",
         "Implemented",

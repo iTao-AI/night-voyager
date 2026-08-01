@@ -266,6 +266,16 @@ def test_root_browser_proof_context_ignores_local_playwright_artifacts() -> None
     assert "**/test-results" in ignored
 
 
+def test_root_proof_context_excludes_only_root_task_local_tmp() -> None:
+    ignored = Path(".dockerignore").read_text(encoding="utf-8").splitlines()
+    proof = Path("Dockerfile.proof").read_text(encoding="utf-8")
+
+    assert "tmp" in ignored
+    assert "**/tmp" not in ignored
+    assert "COPY . ." in proof
+    assert "--tree-mode snapshot" in proof
+
+
 def test_compose_proof_runs_governed_dra_closure_and_closed_outcome_inspector() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
     governed = Path("scripts/verify_dra_governed_flow.py").read_text(
