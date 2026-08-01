@@ -10,7 +10,7 @@ runtime URLs.
 non-owner runtime roles with no migration membership and no direct access to
 `auth` tables. Only the API may execute the required authentication functions.
 
-Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013` migration,
+Use `make db-check` for a disposable fresh-volume `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015` migration,
 explicit synthetic seed, catalog, role, RLS, downgrade/re-upgrade, and
 connection-pool cleanup proof. The target uses
 an isolated Compose project and removes its volumes on every exit. Do not run a
@@ -175,6 +175,13 @@ transactional rollback, downgrade, and re-upgrade. Historical-head seed calls
 explicitly exclude planning-revision fixtures; current-head demo and journey
 lanes retain the complete deterministic fixture.
 
+Migration `0014` is the current timeline-execution authority: it adds the
+PostgreSQL-owned execution, checkpoint, family-attestation, advisor-verification,
+reassessment, and immutable-receipt boundary without introducing a worker or
+provider authority. Migration `0015` closes the plan-execution demo identity
+rotation and same-scenario constraints; it does not add transition authority.
+The released v0.1.5 migration graph ends at exact head `0015`.
+
 Use the focused planning-revision modes:
 
 ```bash
@@ -199,6 +206,8 @@ Run the focused strict migration mode with:
 scripts/run_db_tests.sh dra-strict-migration
 ```
 
+The `0011` head in the following paragraph is an intentional historical
+compatibility lane and does not override the released current head `0015`.
 The `dra-strict-migration` mode uses one disposable task-owned Compose project,
 upgrades from the historical `0009` seed through current head `0011`, and runs
 only the existing live-migration compatibility test, strict migration

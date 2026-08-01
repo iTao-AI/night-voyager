@@ -33,7 +33,8 @@ assertions remain the acceptance authority; screenshots are review evidence.
 - **Browser to database:** v0.1.3 `/demo/collaboration` hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
 - **Planning revision journey:** v0.1.4 releases provider-free `request revision`, a controlled student preferred-country change, retained predecessor lineage, a successor PlanningRun, deterministic old/new comparison, fresh advisor authorization, and only the current family decision. The blocked budget counterfactual reaches neither approval nor decision.
 - **Governed timeline execution:** v0.1.5 releases a provider-free `/demo/plan` vertical, closed Happy/Blocked scenarios, structured family attestations, assigned-advisor verification, immutable receipt recovery, PostgreSQL-owned risk/date authority, a reassessment stop, and a bilingual responsive/action-hierarchy proof. It creates no new `AgentTask`, provider call, successor business row, or deployment.
-- **Portfolio and dependency boundary:** v0.1.5 includes the frontend dependency maintenance merged in PR #78. Dependabot #8 and #9 are fixed; optional/transitive runtime `sharp` Dependabot #7 remains open at `GHSA-f88m-g3jw-g9cj`, and the full development audit retains the dev-only `brace-expansion` / `minimatch` -> ESLint chain. This is not an audit-zero claim.
+- **Portfolio and dependency boundary:** v0.1.5 includes the frontend dependency maintenance merged in PR #78. Dependabot #8 and #9 are fixed; optional/transitive runtime `sharp 0.34.5` / `GHSA-f88m-g3jw-g9cj` remains explicitly deferred, and the full development audit retains the dev-only `brace-expansion` / `minimatch` -> ESLint chain. This is not an audit-zero claim. Recovery triggers are public deployment, an untrusted image path, compatible upstream support for sharp >=0.35, or an advisory change.
+- **Complementary-evidence Slice 0 status:** Slice 0 permanently ended as local `evaluation_invalid` safe stop. It has no `MkeCaptureArtifactV2`, Slice 0 terminal receipt, information-gain conclusion, candidate persistence, Slice 1/2 work, or v0.1.6 release. PR #87 is merged; hosted CI and publication cleanup are complete, and no later stage was unlocked.
 
 ## Evaluate the release
 
@@ -62,9 +63,10 @@ captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
 
 For the governed execution path released in v0.1.5, open `/demo/plan` and follow
 the [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md).
-PR #80, PR #83, PR #84, and PR #85 are merged; the release candidate includes
-the governed authority, recovery/reassessment closure, reconciliation, and
-professional presentation/evaluator-first DX.
+PR #80, PR #83, PR #84, and PR #85 are merged and included in released v0.1.5;
+the release contains the governed authority, recovery/reassessment closure,
+reconciliation, and professional presentation/evaluator-first DX. PR #87 is merged;
+its hosted CI and publication cleanup are complete.
 
 `make doctor` checks Docker, Compose capability, local ports, at least 5 GiB on the host project filesystem, and at least 8 GiB on the Docker VM filesystem. Operators may override only the Docker VM threshold with `NIGHT_VOYAGER_DOCKER_MINIMUM_KB`; the check fails closed and never removes Docker resources. `make demo` migrates and seeds a fresh synthetic stack. `make proof` verifies configuration, public hygiene, and an isolated installed wheel without requiring host Python, uv, Node.js, or npm. `make compose-proof` additionally exercises the browser-to-database flow in real Chromium.
 
