@@ -77,6 +77,7 @@ def test_a4_cli_unknown_argument_is_one_bounded_diagnostic(script: str) -> None:
         assert forbidden not in combined
 
 
+@pytest.mark.mke
 def test_development_cli_emits_canonical_receipt(tmp_path: Path) -> None:
     output = tmp_path / "development-evaluation-v2.json"
     result = subprocess.run(
@@ -130,6 +131,44 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
         return None
 
     monkeypatch.setattr(module, "_require_exact_path", accept_mock_path)
+    monkeypatch.setattr(module, "_relative_destination", _mock_reveal_destination)
+    monkeypatch.setattr(module, "_read_exact_custody_input", observe_custody)
+    args = SimpleNamespace(
+        pre_registration=invalid_freeze,
+        expected_pre_registration_sha256="0" * 64,
+        holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        store_root=ROOT / "tmp/evidence-loop-a3-native-operator-final/store",
+        custody_root=tmp_path / "must-not-be-read",
+        destination=tmp_path / "holdout-dataset-v1.json",
+    )
+
+    with pytest.raises(module.CliFailure) as raised:
+        module._prepare(args)
+
+    assert raised.value.exit_code == 13
+    assert raised.value.payload["code"] == "pre_registration_invalid"
+    assert custody_observed is False
+
+
+def test_reveal_rejects_retired_dataset_reuse_before_custody_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = ROOT / "scripts/reveal_evidence_loop_holdouts.py"
+    spec = importlib.util.spec_from_file_location("reveal_retired_dataset_test", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    invalid_freeze = tmp_path / "pre-registration-v2.json"
+    invalid_freeze.write_text("{}", encoding="utf-8")
+    custody_observed = False
+
+    def observe_custody(_root: Path) -> tuple[bytes, dict[str, Any]]:
+        nonlocal custody_observed
+        custody_observed = True
+        return b"", {}
+
+    monkeypatch.setattr(module, "_require_exact_path", _ignore_call)
     monkeypatch.setattr(module, "_read_exact_custody_input", observe_custody)
     args = SimpleNamespace(
         pre_registration=invalid_freeze,
@@ -143,8 +182,8 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
     with pytest.raises(module.CliFailure) as raised:
         module._prepare(args)
 
-    assert raised.value.exit_code == 13
-    assert raised.value.payload["code"] == "pre_registration_invalid"
+    assert raised.value.exit_code == 11
+    assert raised.value.payload["code"] == "destination_not_fresh"
     assert custody_observed is False
 
 
@@ -518,6 +557,7 @@ def test_capture_authority_rejects_same_byte_hardlink_replacement(
         (("guardrails", "filesystem_mutation", True), 14, "mutation_prohibited"),
     ],
 )
+@pytest.mark.mke
 def test_development_cli_persists_each_terminal_disposition(
     tmp_path: Path,
     mutation: tuple[str, str, object],
@@ -573,6 +613,7 @@ def test_development_cli_persists_each_terminal_disposition(
         ("validation", 13, "evaluation_invalid"),
     ],
 )
+@pytest.mark.mke
 def test_development_cli_completes_the_a4_failure_taxonomy(
     tmp_path: Path,
     condition: str,

@@ -46,7 +46,7 @@ PRODUCTION_ASSETS = (
     ),
 )
 LOCKED_DEPENDENCY_IDENTITIES = {
-    "pyproject.toml": "8eabfc4c5dc2cabd9f4465ffb90e01c8e58964ffb7d1c33e78f21405a1e21bb0",
+    "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
     "uv.lock": "6ca925427796a88f37ac764ed7857ca5524d49d4d84b4ef7accd317fdc3a4fe8",
     "web/package.json": "c43763f9502a68f6c470f12da5fa59a0834d3ca3e25b597d135773a625fd1fec",
     "web/package-lock.json": (

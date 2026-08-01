@@ -1,6 +1,6 @@
 # Advisor-Governed Multimodal Evidence Composition Design
 
-**Status:** Re-audited and ready for implementation mandate
+**Status:** Slice 0 ended in local `evaluation_invalid` safe stop; retired holdout retained; no later stage unlocked; merged PR/hosted CI/publication pending
 **Consumer and system of record:** Night Voyager
 **Read-only evidence producers:** Multimodal Knowledge Engine (MKE) and Decision Research Agent
 (DRA)

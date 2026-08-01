@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Any, cast
 
@@ -10,6 +11,8 @@ import pytest
 
 from night_voyager.evidence_loop.dra_baseline import GovernedDraBaselineExportV1
 from night_voyager.evidence_loop.freeze import (
+    EVALUATOR_PATHS,
+    HARNESS_PATHS,
     POST_REVEAL_ALLOWLIST,
     build_pre_registration_receipt,
     current_runtime_identity,
@@ -85,20 +88,68 @@ def test_post_reveal_allowlist_is_exact() -> None:
     assert manifest["oracle_content_included"] is False
 
 
-def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
+def _copy_pre_reveal_checkout_and_run_root(tmp_path: Path) -> tuple[Path, Path]:
+    checkout = tmp_path / "pre-reveal-checkout"
+    run_root = tmp_path / "pre-reveal-run"
+    checkout.mkdir()
+    run_root.mkdir()
+
+    frozen_paths = (*EVALUATOR_PATHS, *HARNESS_PATHS, "uv.lock")
+    for relative in frozen_paths:
+        source = ROOT / relative
+        target = checkout / relative
+        target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+    excluded = {
+        Path(relative).relative_to("tests/fixtures/evidence_loop")
+        for relative in POST_REVEAL_ALLOWLIST
+    }
+    for source in FIXTURES.rglob("*"):
+        relative = source.relative_to(FIXTURES)
+        if relative in excluded:
+            continue
+        target = checkout / "tests/fixtures/evidence_loop" / relative
+        if source.is_dir():
+            target.mkdir(mode=source.stat().st_mode & 0o777, parents=True, exist_ok=True)
+        else:
+            target.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+    retained = ROOT / "tmp/evidence-loop-a3-native-operator-final"
+    shutil.copytree(
+        retained / "work/venv",
+        run_root / "work/venv",
+        symlinks=True,
+    )
+    for relative in ("receipts/sealed-mke-store-v1.json", "store"):
+        source = retained / relative
+        target = run_root / relative
+        if source.is_dir():
+            shutil.copytree(source, target, symlinks=True)
+        else:
+            target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    return checkout, run_root
+
+
+@pytest.mark.mke
+def test_pre_registration_binds_complete_public_freeze_boundary(tmp_path: Path) -> None:
+    checkout, run_root = _copy_pre_reveal_checkout_and_run_root(tmp_path)
     receipt = build_pre_registration_receipt(
-        repo_root=ROOT,
+        repo_root=checkout,
         exact_head="1" * 40,
         exact_tree="2" * 40,
         store_receipt=(
-            ROOT
-            / "tmp/evidence-loop-a3-native-operator-final/receipts"
+            run_root
+            / "receipts"
             / "sealed-mke-store-v1.json"
         ),
-        source_manifest=FIXTURES / "source-manifest-v1.json",
-        development_dataset=FIXTURES / "development-dataset-v1.json",
-        holdout_manifest=FIXTURES / "holdout-manifest-v1.json",
-        dra_baseline=FIXTURES / "dra-governed-baseline-v1.json",
+        source_manifest=checkout / "tests/fixtures/evidence_loop/source-manifest-v1.json",
+        development_dataset=checkout
+        / "tests/fixtures/evidence_loop/development-dataset-v1.json",
+        holdout_manifest=checkout / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        dra_baseline=checkout / "tests/fixtures/evidence_loop/dra-governed-baseline-v1.json",
         environment={},
     )
 
@@ -186,6 +237,26 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
     }
 
 
+@pytest.mark.mke
+def test_pre_registration_rejects_post_reveal_checkout() -> None:
+    with pytest.raises(ValueError, match="post-reveal generated file reachable before freeze"):
+        build_pre_registration_receipt(
+            repo_root=ROOT,
+            exact_head="1" * 40,
+            exact_tree="2" * 40,
+            store_receipt=(
+                ROOT
+                / "tmp/evidence-loop-a3-native-operator-final/receipts"
+                / "sealed-mke-store-v1.json"
+            ),
+            source_manifest=FIXTURES / "source-manifest-v1.json",
+            development_dataset=FIXTURES / "development-dataset-v1.json",
+            holdout_manifest=FIXTURES / "holdout-manifest-v1.json",
+            dra_baseline=FIXTURES / "dra-governed-baseline-v1.json",
+            environment={},
+        )
+
+
 @pytest.mark.parametrize("mutation", ["missing_image", "wrong_files", "wrong_runs"])
 def test_freeze_rejects_incomplete_sqlite_authority_proof(mutation: str) -> None:
     setup: dict[str, Any] = {
@@ -224,6 +295,7 @@ def test_development_baseline_contains_complete_governed_exports() -> None:
     assert all(export.row_sha256 and export.export_sha256 for export in exports)
 
 
+@pytest.mark.mke
 def test_pre_registration_rejects_governed_baseline_hash_drift(
     tmp_path: Path,
 ) -> None:
@@ -250,6 +322,7 @@ def test_pre_registration_rejects_governed_baseline_hash_drift(
         )
 
 
+@pytest.mark.mke
 def test_pre_registration_rejects_setup_provider_peer_drift(
     tmp_path: Path,
 ) -> None:
@@ -424,6 +497,7 @@ def test_pre_reveal_scan_reports_only_measured_roots_and_rejects_committed_bytes
         )
 
 
+@pytest.mark.mke
 def test_runtime_identity_is_enforced_not_only_recorded() -> None:
     frozen = current_runtime_identity(ROOT)
     validate_runtime_identity(frozen, repo_root=ROOT)

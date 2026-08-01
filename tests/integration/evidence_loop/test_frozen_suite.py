@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[3]
 DATASET = ROOT / "tests/fixtures/evidence_loop/development-dataset-v1.json"
 STORE_RECEIPT = (
@@ -12,6 +14,7 @@ STORE_RECEIPT = (
 )
 
 
+@pytest.mark.mke
 def test_three_fresh_development_processes_are_byte_identical(
     tmp_path: Path,
 ) -> None:

@@ -4,7 +4,7 @@
 > authority. Execute task by task with TDD. A passed local gate does not unlock the next slice; only
 > the exact merged stage receipt does.
 
-**Status:** Re-audited and ready for implementation mandate
+**Status:** Slice 0 ended in local `evaluation_invalid` safe stop; retired holdout retained; no later stage unlocked; merged PR/hosted CI/publication pending
 **Goal:** Prove bounded complementary MKE Evidence value, then govern accepted input through
 Night Voyager's existing advisor, PostgreSQL, planning, family-decision, timeline, execution, and
 recovery authorities.

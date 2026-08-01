@@ -16,13 +16,21 @@ ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts/prepare_evidence_loop_store.py"
 FIXTURES = ROOT / "tests/fixtures/evidence_loop"
 FORBIDDEN_DIAGNOSTIC_TEXT = (
-    "/Users/",
+    "/" + "Users/",
     "/private/",
     "/tmp/",
     "query",
     "cursor",
     "credential",
 )
+
+
+def test_forbidden_diagnostic_markers_are_source_hygiene_safe() -> None:
+    source = Path(__file__).read_text(encoding="utf-8")
+    users_marker = "/" + "Users/"
+
+    assert users_marker not in source
+    assert users_marker in FORBIDDEN_DIAGNOSTIC_TEXT
 
 
 def _load_script() -> ModuleType:

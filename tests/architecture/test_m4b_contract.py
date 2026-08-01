@@ -7,6 +7,53 @@ from pathlib import Path
 
 ROOT = Path(__file__).parents[2]
 
+MKE_ARTIFACT_TESTS = {
+    "tests/unit/evidence_loop/test_cli_contracts.py": {
+        "test_development_cli_emits_canonical_receipt",
+        "test_development_cli_persists_each_terminal_disposition",
+        "test_development_cli_completes_the_a4_failure_taxonomy",
+    },
+    "tests/unit/evidence_loop/test_freeze.py": {
+        "test_pre_registration_binds_complete_public_freeze_boundary",
+        "test_pre_registration_rejects_post_reveal_checkout",
+        "test_pre_registration_rejects_governed_baseline_hash_drift",
+        "test_pre_registration_rejects_setup_provider_peer_drift",
+        "test_runtime_identity_is_enforced_not_only_recorded",
+    },
+    "tests/integration/evidence_loop/test_frozen_suite.py": {
+        "test_three_fresh_development_processes_are_byte_identical",
+    },
+}
+
+
+def _mke_marked_functions(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    marked: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        for decorator in node.decorator_list:
+            if (
+                isinstance(decorator, ast.Attribute)
+                and decorator.attr == "mke"
+                and isinstance(decorator.value, ast.Attribute)
+                and decorator.value.attr == "mark"
+            ):
+                marked.add(node.name)
+    return marked
+
+
+def test_sdist_excludes_only_task_local_tmp_boundary() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    sdist = pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]
+    assert sdist["exclude"] == ["/tmp"]
+
+
+def test_task_local_native_evidence_tests_are_explicitly_mke_marked() -> None:
+    for relative, expected in MKE_ARTIFACT_TESTS.items():
+        marked = _mke_marked_functions(ROOT / relative)
+        assert expected <= marked, (relative, sorted(expected - marked))
+
 
 def test_pytest_and_default_lanes_exclude_optional_mke() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
