@@ -2,8 +2,9 @@
 
 Status: Accepted
 
-Implementation status: Slice 0 is approved for implementation; later slices remain
-gated by exact merged readiness receipts.
+Implementation status: Slice 0 ended in a local `evaluation_invalid` safe stop after its
+one-way reveal; later slices remain locked and no readiness receipt exists. The approved
+architecture and its historical execution record remain the public contract.
 
 ADR 0014 extends the read-only Evidence boundary in ADR 0005 without weakening its
 artifact, authority, optional-dependency, or cleanup rules.
@@ -59,6 +60,21 @@ The only eligible public claim is the exact frozen-suite result and its stated
 limits. This ADR does not establish source truth, citation correctness, provider
 quality, statistical generalization, real-user impact, production deployment, or
 admissions outcomes.
+
+## Slice 0 execution disposition
+
+The local Slice 0 execution ended with terminal status `evaluation_invalid`. The one-way
+reveal succeeded once. The frozen evaluator then rejected a noncanonical input path before
+MKE capture because the operator invocation did not expand its temporary run-root variable
+for the evaluator command. No `MkeCaptureArtifactV2`, Slice 0 terminal receipt, or
+information-gain result exists.
+
+The revealed holdout suite is retained as retired evidence and MUST NOT be reused. This is a
+fail-closed operator/evaluation-protocol safe stop; it is neither evidence of
+`no_incremental_value` nor evidence about MKE or DRA quality. No candidate or product
+persistence, Slice 1/2 work, v0.1.6 release, provider action, production claim, or
+incremental-value claim is authorized for this direction. Local safe-stop closeout is
+separate from the still-pending merged PR, hosted CI, and publication cleanup gates.
 
 ## Rejected alternatives
 

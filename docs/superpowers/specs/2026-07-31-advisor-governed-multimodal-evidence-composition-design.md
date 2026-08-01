@@ -1611,7 +1611,7 @@ must execute the same idempotent cleanup path.
 
 ## 19. Success and safe-stop statements
 
-If Slice 0 stops:
+If a completed Slice 0 evaluation stops with `no_incremental_value`:
 
 > Night Voyager evaluated a second read-only Evidence producer under a pre-registered, adversarial,
 > zero-mutation suite and found no sufficient incremental value for product integration. The team
@@ -1626,3 +1626,18 @@ If all slices complete:
 > its existing planning, family decision, timeline, execution, and recovery authorities end to end.
 
 Both statements are technically defensible. Only the second authorizes a v0.1.6 feature release.
+
+### 19.1 Actual local Slice 0 disposition
+
+The executed Slice 0 ended with terminal status `evaluation_invalid`. The one-way reveal
+succeeded once, after which the frozen evaluator rejected a noncanonical input path before
+MKE capture because the temporary run-root assignment was not available to that command's
+argument expansion. No `MkeCaptureArtifactV2`, Slice 0 terminal receipt, or information-gain
+result exists.
+
+The revealed holdout suite is retired evidence and cannot be reused. This is a fail-closed
+operator/evaluation-protocol safe stop, not evidence of `no_incremental_value` and not
+evidence about MKE or DRA quality. No candidate or product persistence, Slice 1/2 work,
+v0.1.6 release, provider action, production claim, or incremental-value claim follows from
+this run. Local safe-stop closeout is complete only as a local record; merged PR, hosted CI,
+and publication cleanup remain separate pending gates.

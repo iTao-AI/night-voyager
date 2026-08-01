@@ -716,6 +716,21 @@ Persist exactly one disposition:
 Only a merged `incremental_value_confirmed` receipt unlocks B1. Otherwise close the phase, clean
 task-owned resources, document the safe-stop result, and do not create v0.1.6 for this direction.
 
+#### Actual local A6 disposition (2026-08-01)
+
+The executed Slice 0 ended with terminal status `evaluation_invalid`. The one-way reveal
+succeeded once, but the frozen evaluator rejected a noncanonical input path before MKE capture
+because the temporary run-root assignment was not available to that command's argument
+expansion. No `MkeCaptureArtifactV2`, Slice 0 terminal receipt, or information-gain result
+exists. The revealed holdout suite is retained as retired evidence and cannot be reused.
+
+This is a fail-closed operator/evaluation-protocol safe stop, not evidence of
+`no_incremental_value` and not evidence about MKE or DRA quality. No candidate or product
+persistence, Slice 1/2 work, v0.1.6 release, provider action, production claim, or
+incremental-value claim follows. The verifier was not run because its required capture and
+terminal receipt do not exist; no evaluator, verifier, or reveal retry is permitted. Local
+safe-stop closeout is separate from the pending merged PR, hosted CI, and publication cleanup.
+
 ## 3. PR B1 — Slice 1 candidate database and API authority
 
 ### Entry receipt
@@ -2000,12 +2015,14 @@ Full completion requires:
 - [ ] merged-main Gate C, Git-free Gate D, annotated Release, and public archive Gate E;
 - [ ] exact task-owned Git/Docker/temp/execution-window cleanup.
 
-Safe early completion requires:
+Safe early local closeout for this run requires:
 
-- [ ] merged PR A terminal outcome other than confirmation;
-- [ ] no candidate/product/release work;
-- [ ] truthful safe-stop documentation;
-- [ ] zero task-owned residue.
+- [x] `evaluation_invalid` recorded after the one-way reveal and pre-capture evaluator stop;
+- [x] no candidate, product persistence, Slice 1/2, v0.1.6, provider, or publication work;
+- [x] truthful safe-stop documentation in the ADR, index, spec, and plan;
+- [x] the exact revealed holdout retained as retired evidence, with capture and terminal receipt
+      absent;
+- [ ] merged PR A, hosted CI, and publication cleanup reviewed and completed.
 
 ## 13. Implementation mandate summary
 
