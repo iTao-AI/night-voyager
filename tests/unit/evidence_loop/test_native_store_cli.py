@@ -596,6 +596,7 @@ def test_receipt_archive_entries_must_equal_provider_and_admission_peers() -> No
     module = _load_script()
     receipt: dict[str, Any] = {
         "producer": {
+            "wheel_sha256": "4" * 64,
             "source_archive": {
                 "basename": "mke-v0.1.5.tar",
                 "byte_length": 14_643_200,
@@ -611,6 +612,7 @@ def test_receipt_archive_entries_must_equal_provider_and_admission_peers() -> No
                 }
             },
         },
+        "native_runtime_identity": {"mke": {"wheel_sha256": "4" * 64}},
         "input_admission": {
             "files": [
                 {
@@ -633,6 +635,16 @@ def test_receipt_archive_entries_must_equal_provider_and_admission_peers() -> No
     module._validate_receipt_archive_peers(receipt)
     receipt["producer"]["dra_admission"]["source_archive"]["sha256"] = "0" * 64
 
+    with pytest.raises(
+        module.NativeStoreValidationError,
+        match="receipt_archive_identity_mismatch",
+    ):
+        module._validate_receipt_archive_peers(receipt)
+
+    receipt["producer"]["dra_admission"]["source_archive"]["sha256"] = (
+        module.DRA_SOURCE_ARCHIVE_SHA256
+    )
+    receipt["native_runtime_identity"]["mke"]["wheel_sha256"] = "0" * 64
     with pytest.raises(
         module.NativeStoreValidationError,
         match="receipt_archive_identity_mismatch",
