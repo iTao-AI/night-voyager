@@ -143,6 +143,18 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
     assert frozen["native_runtime_identity"]["mke"]["wheel_sha256"] == (
         frozen["provider_locks"]["mke"]["wheel_sha256"]
     )
+    native_runtime = cast(dict[str, Any], frozen["native_runtime_identity"])
+    runtime_distributions = cast(
+        list[dict[str, Any]], native_runtime["runtime_distributions"]
+    )
+    assert native_runtime["runtime_distribution_count"] == len(runtime_distributions)
+    assert {item["distribution_name"] for item in runtime_distributions} >= {
+        "anyio",
+        "mcp",
+        "multimodal-knowledge-engine",
+    }
+    runtime_bootstrap = cast(dict[str, Any], native_runtime["runtime_bootstrap"])
+    assert runtime_bootstrap["file_count"] >= 0
     frozen_paths = {item["path"] for item in [*frozen["evaluator_paths"], *frozen["harness_paths"]]}
     assert frozen_paths == {
         "src/night_voyager/evidence_loop/canonicalization.py",

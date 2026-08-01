@@ -303,7 +303,10 @@ exist and before any eligible holdout producer observation:
 
 - Night Voyager, MKE, and DRA identities;
 - MKE wheel, MCP schema, tool-name, corpus/active-set digests, and the RECORD-driven retained
-  native runtime identity for Python/platform, SQLite source, installed package, and entrypoint;
+  native runtime identity for Python/platform, SQLite source, the complete installed runtime
+  distribution closure (exact distribution name/version inventory, RECORD identities, hashed
+  regular non-linked files and aggregate trees), executed bootstrap files, installed package,
+  and entrypoint;
 - historical DRA-baseline export identity and provenance;
 - exact clean HEAD and tree plus evaluator and harness path digests;
 - environment and dependency identities;

@@ -23,6 +23,7 @@ from night_voyager.evidence_loop.native_store import (
     build_setup_receipt,
     collect_read_chunks,
     collect_search_pages,
+    native_mcp_environment,
     seal_store,
     validate_native_vertical,
     validate_sealed_write_rejection,
@@ -639,6 +640,7 @@ async def _native_observation(
             "--allowed-root",
             str(corpus),
         ],
+        env=native_mcp_environment(),
     )
     ingests: list[dict[str, Any]] = []
     write_response: dict[str, Any] | None = None

@@ -3,8 +3,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -441,6 +442,30 @@ def _write_synthetic_native_runtime(run_root: Path) -> None:
     (dist_root / "RECORD").write_text("\n".join(record_lines) + "\n", encoding="utf-8")
 
 
+def _write_synthetic_runtime_dependency(run_root: Path) -> None:
+    site_root = run_root / "work/venv/lib/python3.12/site-packages"
+    package_root = site_root / "mcp"
+    dist_root = site_root / "mcp-1.28.1.dist-info"
+    package_root.mkdir(parents=True, exist_ok=True)
+    dist_root.mkdir(exist_ok=True)
+    files = {
+        "mcp/runtime.py": b"RUNTIME_VERSION = '1.28.1'\n",
+        "mcp-1.28.1.dist-info/METADATA": (
+            b"Metadata-Version: 2.4\nName: mcp\nVersion: 1.28.1\n"
+        ),
+    }
+    for relative, content in files.items():
+        path = site_root / relative
+        path.write_bytes(content)
+        path.chmod(0o644)
+    record_lines = [
+        f"{relative},{_record_hash(content)},{len(content)}"
+        for relative, content in sorted(files.items())
+    ]
+    record_lines.append("mcp-1.28.1.dist-info/RECORD,,")
+    (dist_root / "RECORD").write_text("\n".join(record_lines) + "\n", encoding="utf-8")
+
+
 def test_native_runtime_identity_closes_executable_package_and_runtime_drift(
     tmp_path: Path,
 ) -> None:
@@ -504,6 +529,143 @@ def test_native_runtime_identity_closes_executable_package_and_runtime_drift(
             run_root=run_root,
             wheel_sha256="5" * 64,
         )
+
+
+@pytest.mark.parametrize("mutation", ["file", "record", "version"])
+def test_native_runtime_identity_rejects_transitive_dependency_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    _write_synthetic_runtime_dependency(run_root)
+    frozen = native_store.build_native_runtime_identity(
+        run_root,
+        wheel_sha256="4" * 64,
+    )
+    assert frozen["runtime_distribution_count"] == 2
+    distributions = cast(list[dict[str, Any]], frozen["runtime_distributions"])
+    assert [item["distribution_name"] for item in distributions] == [
+        "mcp",
+        "multimodal-knowledge-engine",
+    ]
+    bootstrap = cast(dict[str, Any], frozen["runtime_bootstrap"])
+    assert bootstrap["file_count"] == 0
+
+    site_root = run_root / "work/venv/lib/python3.12/site-packages"
+    runtime_file = site_root / "mcp/runtime.py"
+    metadata_file = site_root / "mcp-1.28.1.dist-info/METADATA"
+    record_file = site_root / "mcp-1.28.1.dist-info/RECORD"
+    if mutation == "file":
+        runtime_file.write_bytes(runtime_file.read_bytes() + b"# drift\n")
+    elif mutation == "record":
+        record_file.write_text(
+            record_file.read_text(encoding="utf-8").replace("sha256=", "sha256=" + "A"),
+            encoding="utf-8",
+        )
+    else:
+        metadata_file.write_bytes(
+            metadata_file.read_bytes().replace(b"1.28.1", b"1.28.2")
+        )
+
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_(identity_drift|artifact_invalid)",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
+
+
+def test_native_runtime_identity_rejects_unrecorded_runtime_file(tmp_path: Path) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    _write_synthetic_runtime_dependency(run_root)
+    extra = run_root / "work/venv/lib/python3.12/site-packages/mcp/extra.py"
+    extra.write_bytes(b"UNRECORDED = True\n")
+
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_artifact_invalid",
+    ):
+        native_store.build_native_runtime_identity(run_root, wheel_sha256="4" * 64)
+
+
+@pytest.mark.parametrize("mutation", ["missing", "duplicate", "unhashed"])
+def test_native_runtime_identity_rejects_dependency_inventory_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    _write_synthetic_runtime_dependency(run_root)
+    site_root = run_root / "work/venv/lib/python3.12/site-packages"
+    dist_root = site_root / "mcp-1.28.1.dist-info"
+    if mutation == "missing":
+        shutil.rmtree(dist_root)
+    elif mutation == "duplicate":
+        shutil.copytree(dist_root, site_root / "mcp-1.28.2.dist-info")
+    else:
+        record = dist_root / "RECORD"
+        record.write_text(
+            record.read_text(encoding="utf-8").replace(
+                "mcp/runtime.py,",
+                "mcp/runtime.py,,",
+            ),
+            encoding="utf-8",
+        )
+
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_artifact_invalid",
+    ):
+        native_store.build_native_runtime_identity(run_root, wheel_sha256="4" * 64)
+
+
+@pytest.mark.parametrize("link_kind", ["symlink", "hardlink"])
+def test_native_runtime_identity_rejects_dependency_link_replacement(
+    tmp_path: Path,
+    link_kind: str,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    _write_synthetic_runtime_dependency(run_root)
+    site_root = run_root / "work/venv/lib/python3.12/site-packages"
+    runtime_file = site_root / "mcp/runtime.py"
+    replacement = tmp_path / "replacement.py"
+    replacement.write_bytes(runtime_file.read_bytes())
+    runtime_file.unlink()
+    if link_kind == "symlink":
+        runtime_file.symlink_to(replacement)
+    else:
+        runtime_file.hardlink_to(replacement)
+
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_artifact_invalid",
+    ):
+        native_store.build_native_runtime_identity(run_root, wheel_sha256="4" * 64)
+
+
+def test_native_mcp_environment_does_not_forward_python_import_redirectors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PYTHONPATH", "/untrusted/import/root")
+    environment = native_store.native_mcp_environment()
+    assert "PYTHONPATH" not in environment
+    assert set(environment) <= {"HOME", "LOGNAME", "PATH", "SHELL", "TERM", "USER"}
+
+
+def test_tagged_mcp_default_stdio_environment_excludes_pythonpath() -> None:
+    pytest.importorskip("mcp")
+    from importlib import metadata
+
+    from mcp.client.stdio import get_default_environment
+
+    assert metadata.version("mcp") == "1.28.1"
+    assert "PYTHONPATH" not in get_default_environment()
 
 
 def test_setup_receipt_excludes_paths_queries_cursors_and_raw_evidence() -> None:

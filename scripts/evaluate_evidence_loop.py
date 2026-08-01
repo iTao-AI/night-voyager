@@ -32,6 +32,7 @@ from night_voyager.evidence_loop.mke_capture import (
 )
 from night_voyager.evidence_loop.native_store import (
     NativeStoreValidationError,
+    native_mcp_environment,
     validate_native_runtime_identity,
     verify_store_seal,
 )
@@ -216,6 +217,7 @@ async def _capture_native_dataset(
                 "--allowed-root",
                 str(corpus),
             ],
+            env=native_mcp_environment(),
         )
         output_bytes = 0
         with tempfile.TemporaryFile(mode="w+") as errlog:
