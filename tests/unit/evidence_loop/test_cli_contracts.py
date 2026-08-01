@@ -23,6 +23,26 @@ SCRIPTS = (
 )
 
 
+def _ignore_call(*_args: object, **_kwargs: object) -> None:
+    return None
+
+
+def _mock_reveal_destination(*_args: object) -> str:
+    return "tests/fixtures/evidence_loop/holdout-dataset-v1.json"
+
+
+def _mock_frozen_git(_root: Path, *args: str) -> str:
+    if args[-1] == "HEAD":
+        return "1" * 40
+    if args[-1] == "HEAD^{tree}":
+        return "2" * 40
+    return ""
+
+
+def _mock_custody_dataset(_root: Path) -> tuple[bytes, dict[str, Any]]:
+    return b"{}\n", {}
+
+
 @pytest.mark.parametrize("script", SCRIPTS)
 def test_a4_cli_help_is_public_and_successful(script: str) -> None:
     result = subprocess.run(
@@ -126,6 +146,189 @@ def test_reveal_rejects_invalid_freeze_before_custody_access(
     assert raised.value.exit_code == 13
     assert raised.value.payload["code"] == "pre_registration_invalid"
     assert custody_observed is False
+
+
+@pytest.mark.parametrize("drift", ["store", "runtime"])
+def test_reveal_requires_store_root_and_checks_drift_before_custody_access(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    drift: str,
+) -> None:
+    script = ROOT / "scripts/reveal_evidence_loop_holdouts.py"
+    spec = importlib.util.spec_from_file_location("reveal_store_order_test", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert "--store-root" in module._parser().format_help()
+
+    preregistration_path = tmp_path / "pre-registration-v2.json"
+    preregistration_content = b"reviewed\n"
+    preregistration_path.write_bytes(preregistration_content)
+    destination = tmp_path / "holdout-dataset-v1.json"
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o500)
+    custody_observed = False
+    preregistration = {
+        "reveal_procedure_id": "nv.slice0.one-way-reveal.v1",
+        "post_reveal_generated_file_allowlist": list(module.POST_REVEAL_ALLOWLIST),
+        "pre_reveal_scan": {"passed": True},
+        "git": {"head": "1" * 40, "tree": "2" * 40, "clean": True},
+        "holdout_manifest": {
+            "path": "tests/fixtures/evidence_loop/holdout-manifest-v1.json"
+        },
+        "native_runtime_identity": {},
+        "provider_locks": {"mke": {"wheel_sha256": "4" * 64}},
+    }
+
+    def reviewed_receipt(_content: bytes) -> dict[str, Any]:
+        return preregistration
+
+    monkeypatch.setattr(
+        module,
+        "verify_pre_registration_receipt",
+        reviewed_receipt,
+    )
+    monkeypatch.setattr(module, "_require_exact_path", _ignore_call)
+    monkeypatch.setattr(
+        module,
+        "_relative_destination",
+        _mock_reveal_destination,
+    )
+    monkeypatch.setattr(module, "_git", _mock_frozen_git)
+
+    def reject_drift(
+        _receipt: dict[str, Any],
+        *,
+        store_root: Path | None,
+        **_kwargs: object,
+    ) -> None:
+        assert store_root == tmp_path / "store"
+        if drift == "store":
+            raise ValueError("store_artifact_drift")
+
+    def reject_runtime(*_args: object, **_kwargs: object) -> None:
+        if drift == "runtime":
+            raise ValueError("native_runtime_identity_drift")
+
+    def observe_custody(_root: Path) -> tuple[bytes, dict[str, Any]]:
+        nonlocal custody_observed
+        custody_observed = True
+        return b"", {}
+
+    monkeypatch.setattr(module, "validate_frozen_checkout", reject_drift)
+    monkeypatch.setattr(
+        module,
+        "validate_native_runtime_identity",
+        reject_runtime,
+    )
+    monkeypatch.setattr(module, "_read_exact_custody_input", observe_custody)
+    args = SimpleNamespace(
+        pre_registration=preregistration_path,
+        expected_pre_registration_sha256=hashlib.sha256(
+            preregistration_content
+        ).hexdigest(),
+        holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        store_root=store_root,
+        custody_root=tmp_path / "custody-must-not-be-read",
+        destination=destination,
+    )
+
+    with pytest.raises(module.CliFailure) as raised:
+        module._prepare(args)
+
+    assert raised.value.payload["code"] == "freeze_order_invalid"
+    assert custody_observed is False
+    assert destination.exists() is False
+
+
+def test_reveal_rechecks_store_after_validation_before_atomic_publish(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script = ROOT / "scripts/reveal_evidence_loop_holdouts.py"
+    spec = importlib.util.spec_from_file_location("reveal_store_toctou_test", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    preregistration_path = tmp_path / "pre-registration-v2.json"
+    preregistration_content = b"reviewed\n"
+    preregistration_path.write_bytes(preregistration_content)
+    destination = tmp_path / "holdout-dataset-v1.json"
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o500)
+    custody_root = tmp_path / "custody"
+    custody_root.mkdir(mode=0o700)
+    checks = 0
+    published = False
+    preregistration = {
+        "reveal_procedure_id": "nv.slice0.one-way-reveal.v1",
+        "post_reveal_generated_file_allowlist": list(module.POST_REVEAL_ALLOWLIST),
+        "pre_reveal_scan": {"passed": True},
+        "git": {"head": "1" * 40, "tree": "2" * 40, "clean": True},
+        "holdout_manifest": {
+            "path": "tests/fixtures/evidence_loop/holdout-manifest-v1.json"
+        },
+        "native_runtime_identity": {},
+        "provider_locks": {"mke": {"wheel_sha256": "4" * 64}},
+    }
+
+    def reviewed_receipt(_content: bytes) -> dict[str, Any]:
+        return preregistration
+
+    monkeypatch.setattr(
+        module,
+        "verify_pre_registration_receipt",
+        reviewed_receipt,
+    )
+    monkeypatch.setattr(module, "_require_exact_path", _ignore_call)
+    monkeypatch.setattr(
+        module,
+        "_relative_destination",
+        _mock_reveal_destination,
+    )
+    monkeypatch.setattr(module, "_git", _mock_frozen_git)
+
+    def check_store(*_args: object, **_kwargs: object) -> None:
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            raise ValueError("store_artifact_drift")
+
+    monkeypatch.setattr(module, "validate_frozen_checkout", check_store)
+    monkeypatch.setattr(
+        module,
+        "validate_native_runtime_identity",
+        _ignore_call,
+    )
+    monkeypatch.setattr(
+        module,
+        "_read_exact_custody_input",
+        _mock_custody_dataset,
+    )
+    monkeypatch.setattr(module, "validate_revealed_dataset", _ignore_call)
+
+    def publish(_destination: Path, _content: bytes) -> None:
+        nonlocal published
+        published = True
+
+    monkeypatch.setattr(module, "_publish_exclusive", publish)
+    args = SimpleNamespace(
+        pre_registration=preregistration_path,
+        expected_pre_registration_sha256=hashlib.sha256(
+            preregistration_content
+        ).hexdigest(),
+        holdout_manifest=ROOT / "tests/fixtures/evidence_loop/holdout-manifest-v1.json",
+        store_root=store_root,
+        custody_root=custody_root,
+        destination=destination,
+    )
+
+    with pytest.raises(module.CliFailure) as raised:
+        module._prepare(args)
+
+    assert raised.value.payload["code"] == "freeze_order_invalid"
+    assert checks == 2
+    assert published is False
 
 
 def test_authoritative_holdout_cli_rejects_prebuilt_capture() -> None:
@@ -261,6 +464,51 @@ def test_capture_state_binds_sealed_store_root_mode_and_three_files(
         "store.sqlite-shm",
         "store.sqlite-wal",
     ]
+
+
+def test_capture_authority_rejects_same_byte_hardlink_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from night_voyager.evidence_loop.native_store import seal_store
+
+    script = ROOT / "scripts/evaluate_evidence_loop.py"
+    spec = importlib.util.spec_from_file_location("capture_link_contract", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    store_root = tmp_path / "store"
+    store_root.mkdir(mode=0o700)
+    database = store_root / "store.sqlite"
+    database.write_bytes(b"sealed")
+    (store_root / "store.sqlite-shm").write_bytes(b"s" * 32_768)
+    (store_root / "store.sqlite-wal").write_bytes(b"")
+    seal = seal_store(store_root, database)
+    replacement = tmp_path / "same-bytes"
+    replacement.write_bytes((store_root / "store.sqlite-shm").read_bytes())
+    replacement.chmod(0o400)
+    store_root.chmod(0o700)
+    (store_root / "store.sqlite-shm").unlink()
+    (store_root / "store.sqlite-shm").hardlink_to(replacement)
+    store_root.chmod(0o500)
+    monkeypatch.setattr(
+        module,
+        "validate_native_runtime_identity",
+        _ignore_call,
+        raising=False,
+    )
+
+    with pytest.raises(module.CliFailure) as raised:
+        module._verify_capture_authority(
+            store_root=store_root,
+            sealed_store=seal,
+            native_runtime_identity={},
+            wheel_sha256="4" * 64,
+        )
+
+    assert raised.value.exit_code == 14
+    assert raised.value.payload["code"] == "capture_mutation_prohibited"
+    store_root.chmod(0o700)
 
 
 @pytest.mark.parametrize(

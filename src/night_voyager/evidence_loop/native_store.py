@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import csv
 import hashlib
 import json
 import os
 import stat
+import subprocess
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Never, cast
 
 ToolCaller = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
@@ -365,6 +368,244 @@ def verify_store_seal(store_root: Path, receipt: Mapping[str, Any]) -> Mapping[s
     return receipt
 
 
+def _runtime_file_identity(path: Path, *, label: str) -> dict[str, object]:
+    try:
+        metadata = path.lstat()
+    except OSError:
+        _fail("native_runtime_artifact_invalid")
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        _fail("native_runtime_artifact_invalid")
+    return {
+        "path": label,
+        "byte_length": metadata.st_size,
+        "sha256": _sha256(path),
+        "mode": f"{stat.S_IMODE(metadata.st_mode):04o}",
+    }
+
+
+def _record_sha256(value: str) -> str:
+    try:
+        algorithm, encoded = value.split("=", 1)
+        padding = "=" * (-len(encoded) % 4)
+        digest = base64.urlsafe_b64decode(encoded + padding).hex()
+    except (ValueError, TypeError):
+        _fail("native_runtime_artifact_invalid")
+    if algorithm != "sha256" or len(digest) != 64:
+        _fail("native_runtime_artifact_invalid")
+    return digest
+
+
+def _probe_native_python(python: Path) -> dict[str, object]:
+    program = (
+        "import importlib.metadata,json,platform,sqlite3;"
+        "connection=sqlite3.connect(':memory:');"
+        "print(json.dumps({"
+        "'python_implementation':platform.python_implementation(),"
+        "'python_version':platform.python_version(),"
+        "'platform_system':platform.system(),"
+        "'platform_machine':platform.machine(),"
+        "'sqlite_version':sqlite3.sqlite_version,"
+        "'sqlite_source_id':connection.execute('select sqlite_source_id()').fetchone()[0],"
+        "'sqlite_threadsafety':sqlite3.threadsafety,"
+        "'distribution_version':importlib.metadata.version('multimodal-knowledge-engine')"
+        "},separators=(',',':'),sort_keys=True))"
+    )
+    try:
+        result = subprocess.run(
+            [str(python), "-c", program],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        value = json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
+        _fail("native_runtime_probe_invalid")
+    if result.returncode != 0 or result.stderr or not isinstance(value, dict):
+        _fail("native_runtime_probe_invalid")
+    probe = cast(dict[str, object], value)
+    expected_keys = {
+        "python_implementation",
+        "python_version",
+        "platform_system",
+        "platform_machine",
+        "sqlite_version",
+        "sqlite_source_id",
+        "sqlite_threadsafety",
+        "distribution_version",
+    }
+    if set(probe) != expected_keys or any(
+        not isinstance(probe[key], str)
+        for key in expected_keys - {"sqlite_threadsafety"}
+    ):
+        _fail("native_runtime_probe_invalid")
+    if not isinstance(probe["sqlite_threadsafety"], int):
+        _fail("native_runtime_probe_invalid")
+    return probe
+
+
+def build_native_runtime_identity(
+    run_root: Path,
+    *,
+    wheel_sha256: str,
+) -> dict[str, object]:
+    """Bind the retained tagged MKE runtime without hashing unrelated venv files."""
+
+    if len(wheel_sha256) != 64 or any(
+        character not in "0123456789abcdef" for character in wheel_sha256
+    ):
+        _fail("native_runtime_identity_drift")
+    venv = run_root / "work/venv"
+    python = venv / "bin/python"
+    entrypoint = venv / "bin/mke"
+    try:
+        launcher_metadata = python.lstat()
+        resolved_python = python.resolve(strict=True)
+        resolved_metadata = resolved_python.lstat()
+    except OSError:
+        _fail("native_runtime_artifact_invalid")
+    if (
+        not (stat.S_ISREG(launcher_metadata.st_mode) or stat.S_ISLNK(launcher_metadata.st_mode))
+        or not stat.S_ISREG(resolved_metadata.st_mode)
+        or launcher_metadata.st_nlink != 1
+        or resolved_metadata.st_nlink != 1
+    ):
+        _fail("native_runtime_artifact_invalid")
+
+    site_roots = sorted((venv / "lib").glob("python*/site-packages"))
+    distribution_roots = [
+        path
+        for site_root in site_roots
+        for path in site_root.glob("multimodal_knowledge_engine-*.dist-info")
+        if path.is_dir() and not path.is_symlink()
+    ]
+    if len(distribution_roots) != 1:
+        _fail("native_runtime_artifact_invalid")
+    distribution_root = distribution_roots[0]
+    site_root = distribution_root.parent
+    record = distribution_root / "RECORD"
+    record_identity = _runtime_file_identity(record, label="distribution/RECORD")
+    try:
+        rows = list(csv.reader(record.read_text(encoding="utf-8").splitlines()))
+    except (OSError, UnicodeDecodeError, csv.Error):
+        _fail("native_runtime_artifact_invalid")
+
+    distribution_prefix = f"{distribution_root.name}/"
+    selected: list[dict[str, object]] = []
+    saw_entrypoint = False
+    saw_package = False
+    saw_metadata = False
+    for row in rows:
+        if len(row) != 3:
+            _fail("native_runtime_artifact_invalid")
+        relative, record_digest, record_length = row
+        posix = PurePosixPath(relative)
+        is_entrypoint = relative == "../../../bin/mke"
+        is_package = relative.startswith("mke/") and not (
+            relative.endswith(".pyc") or "__pycache__" in posix.parts
+        )
+        is_distribution = relative.startswith(distribution_prefix) and posix.name != "RECORD"
+        if not (is_entrypoint or is_package or is_distribution):
+            continue
+        if not record_digest or not record_length:
+            _fail("native_runtime_artifact_invalid")
+        if is_entrypoint:
+            path = entrypoint
+            label = "entrypoint/mke"
+            saw_entrypoint = True
+        else:
+            if posix.is_absolute() or ".." in posix.parts:
+                _fail("native_runtime_artifact_invalid")
+            path = site_root.joinpath(*posix.parts)
+            label = relative
+            saw_package = saw_package or is_package
+            saw_metadata = saw_metadata or posix.name == "METADATA"
+        identity = _runtime_file_identity(path, label=label)
+        try:
+            expected_length = int(record_length)
+        except ValueError:
+            _fail("native_runtime_artifact_invalid")
+        if (
+            identity["byte_length"] != expected_length
+            or identity["sha256"] != _record_sha256(record_digest)
+        ):
+            _fail("native_runtime_artifact_invalid")
+        selected.append(identity)
+    selected_labels = [cast(str, item["path"]) for item in selected]
+    if (
+        not (saw_entrypoint and saw_package and saw_metadata)
+        or not selected
+        or len(selected_labels) != len(set(selected_labels))
+    ):
+        _fail("native_runtime_artifact_invalid")
+    selected.sort(key=lambda item: cast(str, item["path"]))
+    entrypoint_identity = next(
+        item for item in selected if item["path"] == "entrypoint/mke"
+    )
+    probe = _probe_native_python(python)
+    if probe["distribution_version"] != "0.1.5":
+        _fail("native_runtime_identity_drift")
+    python_identity = {
+        "launcher_kind": (
+            "symlink" if stat.S_ISLNK(launcher_metadata.st_mode) else "regular"
+        ),
+        "resolved_basename": resolved_python.name,
+        "resolved_byte_length": resolved_metadata.st_size,
+        "resolved_sha256": _sha256(resolved_python),
+        "resolved_mode": f"{stat.S_IMODE(resolved_metadata.st_mode):04o}",
+    }
+    files_tree_sha256 = hashlib.sha256(
+        _canonical_bytes({"files": selected})
+    ).hexdigest()
+    return {
+        "schema_version": "night-voyager.evidence-loop-native-runtime.v1",
+        "python": {
+            **python_identity,
+            "implementation": probe["python_implementation"],
+            "version": probe["python_version"],
+            "platform_system": probe["platform_system"],
+            "platform_machine": probe["platform_machine"],
+        },
+        "sqlite": {
+            "version": probe["sqlite_version"],
+            "source_id": probe["sqlite_source_id"],
+            "threadsafety": probe["sqlite_threadsafety"],
+        },
+        "mke": {
+            "distribution_name": "multimodal-knowledge-engine",
+            "distribution_version": probe["distribution_version"],
+            "wheel_sha256": wheel_sha256,
+            "entrypoint": {
+                key: entrypoint_identity[key]
+                for key in ("byte_length", "sha256", "mode")
+            },
+            "record": {
+                key: record_identity[key]
+                for key in ("byte_length", "sha256", "mode")
+            },
+            "record_driven_file_count": len(selected),
+            "record_driven_files_tree_sha256": files_tree_sha256,
+        },
+    }
+
+
+def validate_native_runtime_identity(
+    frozen: Mapping[str, object],
+    *,
+    run_root: Path,
+    wheel_sha256: str,
+) -> None:
+    try:
+        current = build_native_runtime_identity(
+            run_root,
+            wheel_sha256=wheel_sha256,
+        )
+    except NativeStoreValidationError:
+        raise
+    if dict(frozen) != current:
+        _fail("native_runtime_identity_drift")
+
+
 def build_setup_receipt(
     *,
     source_manifest_sha256: str,
@@ -374,6 +615,7 @@ def build_setup_receipt(
     mappings: Sequence[Mapping[str, Any]],
     sqlite_authority_image: Mapping[str, Any],
     fresh_process_verification_runs: int,
+    native_runtime_identity: Mapping[str, Any],
     input_admission: Mapping[str, Any] | None = None,
     sealed_write_rejection: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -388,6 +630,7 @@ def build_setup_receipt(
         "store_seal": dict(store_seal),
         "sqlite_authority_image": dict(sqlite_authority_image),
         "fresh_process_verification_runs": fresh_process_verification_runs,
+        "native_runtime_identity": dict(native_runtime_identity),
         "mutation_capability": "closed_after_preparation",
         "read_only_reopen_verified": True,
     }

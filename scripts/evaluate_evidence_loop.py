@@ -30,7 +30,11 @@ from night_voyager.evidence_loop.mke_capture import (
     validate_capture_for_dataset,
     verify_capture_artifact,
 )
-from night_voyager.evidence_loop.native_store import NativeStoreValidationError
+from night_voyager.evidence_loop.native_store import (
+    NativeStoreValidationError,
+    validate_native_runtime_identity,
+    verify_store_seal,
+)
 from night_voyager.evidence_loop.receipt import (
     build_terminal_receipt,
     verify_pre_registration_receipt,
@@ -136,6 +140,38 @@ def _capture_state(repo_root: Path, store_root: Path) -> dict[str, object]:
             canonical_json_bytes({"files": store_projection})
         ).hexdigest(),
     }
+
+
+def _verify_capture_authority(
+    *,
+    store_root: Path,
+    sealed_store: dict[str, Any],
+    native_runtime_identity: dict[str, Any],
+    wheel_sha256: str,
+) -> None:
+    seal = {
+        key: sealed_store.get(key)
+        for key in (
+            "schema_version",
+            "tree_sha256",
+            "files",
+            "store_root_mode",
+            "lifecycle_state",
+        )
+    }
+    try:
+        verify_store_seal(store_root, seal)
+        validate_native_runtime_identity(
+            native_runtime_identity,
+            run_root=store_root.parent,
+            wheel_sha256=wheel_sha256,
+        )
+    except NativeStoreValidationError as error:
+        raise CliFailure(
+            stage="guardrail",
+            code="capture_mutation_prohibited",
+            exit_code=14,
+        ) from error
 
 
 async def _capture_native_dataset(
@@ -438,6 +474,19 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             raise CliFailure(stage="freeze", code="freeze_order_invalid", exit_code=11) from error
         try:
             sealed_store = cast(dict[str, Any], pre_registration["sealed_store"])
+            native_runtime_identity = cast(
+                dict[str, Any],
+                pre_registration["native_runtime_identity"],
+            )
+            provider_locks = cast(dict[str, Any], pre_registration["provider_locks"])
+            mke_lock = cast(dict[str, Any], provider_locks["mke"])
+            wheel_sha256 = str(mke_lock["wheel_sha256"])
+            _verify_capture_authority(
+                store_root=args.store_root,
+                sealed_store=sealed_store,
+                native_runtime_identity=native_runtime_identity,
+                wheel_sha256=wheel_sha256,
+            )
             before_capture = _capture_state(repo_root, args.store_root)
             revealed_dataset = _object(args.dataset)
             capture = asyncio.run(
@@ -447,6 +496,12 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
                     store_root=args.store_root,
                     expected_active_set_fingerprint=str(sealed_store["active_set_fingerprint"]),
                 )
+            )
+            _verify_capture_authority(
+                store_root=args.store_root,
+                sealed_store=sealed_store,
+                native_runtime_identity=native_runtime_identity,
+                wheel_sha256=wheel_sha256,
             )
             after_capture = _capture_state(repo_root, args.store_root)
             _seal_observed_capture_guardrails(capture, before=before_capture, after=after_capture)

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import base64
 import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -332,8 +334,11 @@ def test_verify_store_seal_rejects_every_wal_authority_drift(
         (store / "store.sqlite-shm").chmod(0o600)
     else:
         pass
+    if mutation != "root_mode":
+        store.chmod(0o500)
     with pytest.raises(native_store.NativeStoreValidationError, match="store_artifact_drift"):
         native_store.verify_store_seal(store, receipt)
+    store.chmod(0o700)
 
 
 @pytest.mark.parametrize("invalid_kind", ["symlink", "hardlink"])
@@ -351,6 +356,154 @@ def test_seal_rejects_linked_wal_authority_peers(
         peer.hardlink_to(database)
     with pytest.raises(native_store.NativeStoreValidationError, match="store_artifact_invalid"):
         native_store.seal_store(store, database)
+
+
+@pytest.mark.parametrize("invalid_kind", ["symlink", "hardlink"])
+def test_verify_store_seal_rejects_post_seal_link_replacement(
+    tmp_path: Path,
+    invalid_kind: str,
+) -> None:
+    store = tmp_path / "store"
+    database = _write_wal_store(store)
+    receipt = native_store.seal_store(store, database)
+    external = tmp_path / "replacement"
+    external.write_bytes((store / "store.sqlite-shm").read_bytes())
+    external.chmod(0o400)
+    store.chmod(0o700)
+    peer = store / "store.sqlite-shm"
+    peer.unlink()
+    if invalid_kind == "symlink":
+        peer.symlink_to(external)
+    else:
+        peer.hardlink_to(external)
+    store.chmod(0o500)
+
+    with pytest.raises(native_store.NativeStoreValidationError, match="store_artifact_drift"):
+        native_store.verify_store_seal(store, receipt)
+    store.chmod(0o700)
+
+
+def _record_hash(content: bytes) -> str:
+    digest = base64.urlsafe_b64encode(hashlib.sha256(content).digest()).rstrip(b"=")
+    return f"sha256={digest.decode()}"
+
+
+def _write_synthetic_native_runtime(run_root: Path) -> None:
+    venv = run_root / "work/venv"
+    executable_root = venv / "bin"
+    site_root = venv / "lib/python3.12/site-packages"
+    package_root = site_root / "mke"
+    dist_root = site_root / "multimodal_knowledge_engine-0.1.5.dist-info"
+    executable_root.mkdir(parents=True, exist_ok=True)
+    package_root.mkdir(parents=True, exist_ok=True)
+    dist_root.mkdir(exist_ok=True)
+    probe = {
+        "python_implementation": "CPython",
+        "python_version": "3.12.13",
+        "platform_system": "Darwin",
+        "platform_machine": "arm64",
+        "sqlite_version": "3.50.4",
+        "sqlite_source_id": "mock-source-id",
+        "sqlite_threadsafety": 3,
+        "distribution_version": "0.1.5",
+    }
+    python = executable_root / "python"
+    python.write_text(
+        "#!/bin/sh\n"
+        + "printf '%s\\n' "
+        + repr(json.dumps(probe, separators=(",", ":"), sort_keys=True))
+        + "\n",
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    files = {
+        "../../../bin/mke": b"#!/bin/sh\nexit 0\n",
+        "mke/__init__.py": b'__version__ = "0.1.5"\n',
+        "multimodal_knowledge_engine-0.1.5.dist-info/METADATA": (
+            b"Metadata-Version: 2.4\nName: multimodal-knowledge-engine\nVersion: 0.1.5\n"
+        ),
+        "multimodal_knowledge_engine-0.1.5.dist-info/entry_points.txt": (
+            b"[console_scripts]\nmke = mke.cli:main\n"
+        ),
+    }
+    for relative, content in files.items():
+        path = site_root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+        path.chmod(0o755 if relative == "../../../bin/mke" else 0o644)
+    record_lines = [
+        f"{relative},{_record_hash(content)},{len(content)}"
+        for relative, content in sorted(files.items())
+    ]
+    record_lines.append(
+        "multimodal_knowledge_engine-0.1.5.dist-info/RECORD,,"
+    )
+    (dist_root / "RECORD").write_text("\n".join(record_lines) + "\n", encoding="utf-8")
+
+
+def test_native_runtime_identity_closes_executable_package_and_runtime_drift(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "run"
+    _write_synthetic_native_runtime(run_root)
+    frozen = native_store.build_native_runtime_identity(
+        run_root,
+        wheel_sha256="4" * 64,
+    )
+    native_store.validate_native_runtime_identity(
+        frozen,
+        run_root=run_root,
+        wheel_sha256="4" * 64,
+    )
+
+    python = run_root / "work/venv/bin/python"
+    python.write_bytes(python.read_bytes() + b"\n")
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_identity_drift",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
+
+    _write_synthetic_native_runtime(run_root)
+    entrypoint = run_root / "work/venv/bin/mke"
+    entrypoint.write_bytes(entrypoint.read_bytes() + b"# drift\n")
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_artifact_invalid",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
+
+    _write_synthetic_native_runtime(run_root)
+    package = run_root / "work/venv/lib/python3.12/site-packages/mke/__init__.py"
+    package.write_bytes(package.read_bytes() + b"# drift\n")
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_artifact_invalid",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="4" * 64,
+        )
+
+    _write_synthetic_native_runtime(run_root)
+    with pytest.raises(
+        native_store.NativeStoreValidationError,
+        match="native_runtime_identity_drift",
+    ):
+        native_store.validate_native_runtime_identity(
+            frozen,
+            run_root=run_root,
+            wheel_sha256="5" * 64,
+        )
 
 
 def test_setup_receipt_excludes_paths_queries_cursors_and_raw_evidence() -> None:
@@ -387,6 +540,9 @@ def test_setup_receipt_excludes_paths_queries_cursors_and_raw_evidence() -> None
             "shm_byte_length": 32_768,
         },
         fresh_process_verification_runs=3,
+        native_runtime_identity={
+            "schema_version": "night-voyager.evidence-loop-native-runtime.v1"
+        },
     )
     assert receipt["sqlite_authority_image"]["materialization_phase"] == (
         "task_owned_preparation_mutation"

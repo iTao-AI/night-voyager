@@ -302,7 +302,8 @@ A `PreRegistrationReceiptV2` freezes after the complete evaluator and reveal/ver
 exist and before any eligible holdout producer observation:
 
 - Night Voyager, MKE, and DRA identities;
-- MKE wheel, MCP schema, tool-name, and corpus/active-set digests;
+- MKE wheel, MCP schema, tool-name, corpus/active-set digests, and the RECORD-driven retained
+  native runtime identity for Python/platform, SQLite source, installed package, and entrypoint;
 - historical DRA-baseline export identity and provenance;
 - exact clean HEAD and tree plus evaluator and harness path digests;
 - environment and dependency identities;

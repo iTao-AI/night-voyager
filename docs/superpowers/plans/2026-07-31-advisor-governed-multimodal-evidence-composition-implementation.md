@@ -245,14 +245,17 @@ uv run python scripts/reveal_evidence_loop_holdouts.py \
   --pre-registration "$EVIDENCE_LOOP_RUN_ROOT/receipts/pre-registration-v2.json" \
   --expected-pre-registration-sha256 "$CAREER_REVIEWED_PREREGISTRATION_SHA256" \
   --holdout-manifest tests/fixtures/evidence_loop/holdout-manifest-v1.json \
+  --store-root "$EVIDENCE_LOOP_RUN_ROOT/store" \
   --custody-root "$EVIDENCE_LOOP_CUSTODY_ROOT" \
   --destination tests/fixtures/evidence_loop/holdout-dataset-v1.json \
   --json
 ```
 
 The reveal command is the only command allowed to receive `custody_root`; it runs outside the
-evaluator process, requires the frozen evaluator/tree hashes, proves the root was not mounted or
-indexed, verifies every byte/hash, and copies once atomically. Success code:
+evaluator process, requires the frozen evaluator/tree hashes, validates the exact sealed store and
+retained native runtime before custody access and again before publication, verifies the measured
+custody mode plus every committed byte/hash, and copies once atomically. Global mount/index state
+remains an independent custodian attestation rather than an evaluator claim. Success code:
 `evidence_loop_holdouts_revealed`.
 
 The execution owner then runs the exact tagged native evaluation and terminal verifier:
@@ -282,7 +285,7 @@ Success codes are `evidence_loop_evaluated` with one terminal disposition and
 | 0 | exact success |
 | 2 | invalid CLI or unreadable input |
 | 10 | producer/artifact identity mismatch |
-| 11 | custody, mode, mount, or reveal-order violation |
+| 11 | custody, mode, measured reachability, or reveal-order violation |
 | 12 | capped/incomplete/budget-exhausted evaluation |
 | 13 | evaluator, holdout, receipt, or canonicalization invalid |
 | 14 | prohibited store/domain mutation or tool use |
@@ -490,7 +493,9 @@ trace.
    one immutable SQLite authority image with all files `0400` and `store_root` `0500`;
 7. proves three fresh exact tagged Search/Read plus rejected-write processes preserve the complete
    store tree and active-set identity;
-8. writes the read-only sealed-store receipt and closes mutation capability before evaluation.
+8. records a RECORD-driven identity of the retained MKE runtime, including Python/platform,
+   SQLite source identity, exact wheel, installed package bytes, and entrypoint bytes;
+9. writes the read-only sealed-store receipt and closes mutation capability before evaluation.
 
 The setup receipt records ingestion and WAL-peer materialization as bounded store preparation
 mutations. The later zero-mutation claim applies only after the exact three-file seal and setup
@@ -502,9 +507,10 @@ all identities, cases, source access, metrics, thresholds, evaluator/harness inp
 logical roles, separate payload/oracle commitments, pre-reveal scan, one-way reveal procedure, and
 post-reveal generated-file allowlist.
 
-Holdout content and answer keys live outside the evaluator checkout in a custodian-owned,
-non-mounted source. Before freeze, scan the evaluator worktree and command environment for the
-holdout byte digests and answer-key markers; only opaque identity/dimension plus separate
+Holdout content and answer keys live outside the evaluator checkout in a custodian-owned source
+whose mount/index state is independently attested. Before freeze, scan the evaluator worktree and
+command environment for the holdout byte digests and answer-key markers; only opaque
+identity/dimension plus separate
 `payload_byte_length`, `payload_sha256`, `oracle_byte_length`, and `oracle_sha256` may be present.
 The future receipt binds that scan, the three role identities, and
 `nv.slice0.one-way-reveal.v1`.
@@ -523,7 +529,8 @@ The future receipt binds that scan, the three role identities, and
 - holdout content present before freeze;
 - baseline export missing verification;
 - wrong role/reveal ordering.
-- holdout source mounted or indexed by evaluator.
+- custody-bearing environment input, a post-reveal path, or committed holdout bytes observed in
+  the named evaluator checkout/task run roots.
 
 **Commit:** `test: freeze the complementary evidence suite`
 

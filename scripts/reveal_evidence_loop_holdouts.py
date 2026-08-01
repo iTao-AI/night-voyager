@@ -19,6 +19,7 @@ from night_voyager.evidence_loop.freeze import (
     POST_REVEAL_ALLOWLIST,
     validate_frozen_checkout,
 )
+from night_voyager.evidence_loop.native_store import validate_native_runtime_identity
 from night_voyager.evidence_loop.receipt import verify_pre_registration_receipt
 from night_voyager.evidence_loop.schema_validation import (
     validate_strict_json_schema,
@@ -49,6 +50,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--pre-registration", type=Path)
     parser.add_argument("--expected-pre-registration-sha256")
     parser.add_argument("--holdout-manifest", type=Path)
+    parser.add_argument("--store-root", type=Path)
     parser.add_argument("--custody-root", type=Path)
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--json", action="store_true")
@@ -237,6 +239,48 @@ def _require_exact_path(repo_root: Path, actual: Path, relative: str) -> None:
         raise CliFailure("freeze_order_invalid", 11)
 
 
+def _validate_reveal_authority(
+    preregistration: dict[str, Any],
+    *,
+    repo_root: Path,
+    store_root: Path,
+) -> None:
+    current_head = _git(repo_root, "rev-parse", "HEAD")
+    current_tree = _git(repo_root, "rev-parse", "HEAD^{tree}")
+    status_lines = _git(
+        repo_root,
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+    ).splitlines()
+    try:
+        validate_frozen_checkout(
+            preregistration,
+            repo_root=repo_root,
+            store_root=store_root,
+            current_head=current_head,
+            current_tree=current_tree,
+            status_paths=tuple(line[3:] for line in status_lines),
+        )
+        runtime_value = preregistration.get("native_runtime_identity")
+        provider_locks_value = preregistration.get("provider_locks")
+        if not isinstance(runtime_value, dict) or not isinstance(provider_locks_value, dict):
+            raise ValueError("native runtime identity invalid")
+        mke_lock_value = cast(dict[str, Any], provider_locks_value).get("mke")
+        if not isinstance(mke_lock_value, dict):
+            raise ValueError("native runtime identity invalid")
+        wheel_sha256 = cast(dict[str, Any], mke_lock_value).get("wheel_sha256")
+        if not isinstance(wheel_sha256, str):
+            raise ValueError("native runtime identity invalid")
+        validate_native_runtime_identity(
+            cast(dict[str, object], runtime_value),
+            run_root=store_root.parent,
+            wheel_sha256=wheel_sha256,
+        )
+    except ValueError as error:
+        raise CliFailure("freeze_order_invalid", 11) from error
+
+
 def _prepare(args: argparse.Namespace) -> dict[str, object]:
     if any(
         value is None
@@ -244,6 +288,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
             args.pre_registration,
             args.expected_pre_registration_sha256,
             args.holdout_manifest,
+            args.store_root,
             args.custody_root,
             args.destination,
         )
@@ -254,6 +299,11 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         repo_root,
         args.pre_registration,
         "tmp/evidence-loop-a3-native-operator-final/receipts/pre-registration-v2.json",
+    )
+    _require_exact_path(
+        repo_root,
+        args.store_root,
+        "tmp/evidence-loop-a3-native-operator-final/store",
     )
     relative = _relative_destination(repo_root, args.destination)
     if relative not in POST_REVEAL_ALLOWLIST or relative != POST_REVEAL_ALLOWLIST[0]:
@@ -274,7 +324,6 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         raise CliFailure("pre_registration_invalid", 13) from error
     current_head = _git(repo_root, "rev-parse", "HEAD")
     current_tree = _git(repo_root, "rev-parse", "HEAD^{tree}")
-    status_lines = _git(repo_root, "status", "--porcelain=v1", "--untracked-files=all").splitlines()
     if (
         preregistration.get("reveal_procedure_id") != "nv.slice0.one-way-reveal.v1"
         or preregistration.get("post_reveal_generated_file_allowlist")
@@ -297,17 +346,11 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         or args.holdout_manifest.resolve() != (repo_root / manifest_relative).resolve()
     ):
         raise CliFailure("freeze_order_invalid", 11)
-    try:
-        validate_frozen_checkout(
-            preregistration,
-            repo_root=repo_root,
-            store_root=None,
-            current_head=current_head,
-            current_tree=current_tree,
-            status_paths=tuple(line[3:] for line in status_lines),
-        )
-    except ValueError as error:
-        raise CliFailure("freeze_order_invalid", 11) from error
+    _validate_reveal_authority(
+        preregistration,
+        repo_root=repo_root,
+        store_root=args.store_root,
+    )
     custody_root = args.custody_root.resolve()
     try:
         custody_root.relative_to(repo_root.resolve())
@@ -327,6 +370,11 @@ def _prepare(args: argparse.Namespace) -> dict[str, object]:
         )
     except ValueError as error:
         raise CliFailure("holdout_commitment_mismatch", 13) from error
+    _validate_reveal_authority(
+        preregistration,
+        repo_root=repo_root,
+        store_root=args.store_root,
+    )
     _publish_exclusive(args.destination, content)
     return {
         "schema_version": "night-voyager.evidence-loop-reveal-response.v1",

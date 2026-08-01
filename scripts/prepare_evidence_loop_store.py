@@ -19,6 +19,7 @@ from typing import Any, NoReturn, cast
 from night_voyager.evidence_loop.native_store import (
     STORE_AUTHORITY_BASENAMES,
     NativeStoreValidationError,
+    build_native_runtime_identity,
     build_setup_receipt,
     collect_read_chunks,
     collect_search_pages,
@@ -594,6 +595,8 @@ def _validate_receipt_archive_peers(receipt: dict[str, Any]) -> None:
     try:
         producer = cast(dict[str, Any], receipt["producer"])
         dra = cast(dict[str, Any], producer["dra_admission"])
+        native_runtime = cast(dict[str, Any], receipt["native_runtime_identity"])
+        native_mke = cast(dict[str, Any], native_runtime["mke"])
         admission = cast(dict[str, Any], receipt["input_admission"])
         files = cast(list[dict[str, Any]], admission["files"])
         by_logical_name = {
@@ -605,6 +608,7 @@ def _validate_receipt_archive_peers(receipt: dict[str, Any]) -> None:
         valid = (
             producer["source_archive"] == expected_mke
             and dra["source_archive"] == expected_dra
+            and native_mke["wheel_sha256"] == producer["wheel_sha256"]
             and by_logical_name["mke_a3_source_tree_archive"] == expected_mke
             and by_logical_name["dra_source_archive"] == expected_dra
         )
@@ -887,6 +891,10 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
             },
         },
     }
+    native_runtime_identity = build_native_runtime_identity(
+        run_root,
+        wheel_sha256=wheel_sha256,
+    )
     setup = build_setup_receipt(
         source_manifest_sha256=_sha256(input_root / "source-manifest-v1.json"),
         active_set_fingerprint=active_set_fingerprint,
@@ -895,6 +903,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
         mappings=mappings,
         sqlite_authority_image=sqlite_authority_image,
         fresh_process_verification_runs=3,
+        native_runtime_identity=native_runtime_identity,
         input_admission=input_admission,
         sealed_write_rejection=sealed_write_rejection,
     )

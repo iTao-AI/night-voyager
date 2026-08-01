@@ -17,7 +17,10 @@ from night_voyager.evidence_loop.canonicalization import (
     canonical_json_bytes,
 )
 from night_voyager.evidence_loop.dra_baseline import GovernedDraBaselineExportV1
-from night_voyager.evidence_loop.native_store import verify_store_seal
+from night_voyager.evidence_loop.native_store import (
+    validate_native_runtime_identity,
+    verify_store_seal,
+)
 from night_voyager.evidence_loop.receipt import seal_pre_registration_receipt
 
 POST_REVEAL_ALLOWLIST = (
@@ -37,6 +40,7 @@ EVALUATOR_PATHS = (
     "src/night_voyager/evidence_loop/evaluator.py",
     "src/night_voyager/evidence_loop/freeze.py",
     "src/night_voyager/evidence_loop/mke_capture.py",
+    "src/night_voyager/evidence_loop/native_store.py",
     "src/night_voyager/evidence_loop/receipt.py",
     "src/night_voyager/evidence_loop/schema_validation.py",
 )
@@ -456,6 +460,19 @@ def build_pre_registration_receipt(
     if not isinstance(store_files_value, list):
         raise ValueError("sealed store receipt invalid")
     verify_store_seal(store_root, store_seal)
+    native_runtime_value = setup.get("native_runtime_identity")
+    producer_value = setup.get("producer")
+    if not isinstance(native_runtime_value, dict) or not isinstance(producer_value, dict):
+        raise ValueError("native runtime identity invalid")
+    producer = cast(dict[str, Any], producer_value)
+    wheel_sha256 = producer.get("wheel_sha256")
+    if not isinstance(wheel_sha256, str):
+        raise ValueError("native runtime identity invalid")
+    validate_native_runtime_identity(
+        cast(dict[str, object], native_runtime_value),
+        run_root=store_receipt.parents[1],
+        wheel_sha256=wheel_sha256,
+    )
 
     development_cases_value = development.get("cases")
     holdout_cases_value = holdouts.get("holdouts")
@@ -576,6 +593,7 @@ def build_pre_registration_receipt(
             "sqlite_authority_image": setup["sqlite_authority_image"],
             "fresh_process_verification_runs": setup["fresh_process_verification_runs"],
         },
+        "native_runtime_identity": native_runtime_value,
         "source_manifest": _identity(
             source_manifest,
             relative="tests/fixtures/evidence_loop/source-manifest-v1.json",

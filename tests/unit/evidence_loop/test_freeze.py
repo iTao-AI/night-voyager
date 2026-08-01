@@ -137,12 +137,19 @@ def test_pre_registration_binds_complete_public_freeze_boundary() -> None:
         "shm_byte_length": 32_768,
         "wal_byte_length": 0,
     }
+    assert frozen["native_runtime_identity"]["schema_version"] == (
+        "night-voyager.evidence-loop-native-runtime.v1"
+    )
+    assert frozen["native_runtime_identity"]["mke"]["wheel_sha256"] == (
+        frozen["provider_locks"]["mke"]["wheel_sha256"]
+    )
     frozen_paths = {item["path"] for item in [*frozen["evaluator_paths"], *frozen["harness_paths"]]}
     assert frozen_paths == {
         "src/night_voyager/evidence_loop/canonicalization.py",
         "src/night_voyager/evidence_loop/evaluator.py",
         "src/night_voyager/evidence_loop/freeze.py",
         "src/night_voyager/evidence_loop/mke_capture.py",
+        "src/night_voyager/evidence_loop/native_store.py",
         "src/night_voyager/evidence_loop/receipt.py",
         "src/night_voyager/evidence_loop/schema_validation.py",
         "scripts/evaluate_evidence_loop.py",
@@ -406,6 +413,22 @@ def test_runtime_identity_is_enforced_not_only_recorded() -> None:
     drifted = {**frozen, "python_version": "0.0.0"}
     with pytest.raises(ValueError, match="runtime identity drift"):
         validate_runtime_identity(drifted, repo_root=ROOT)
+
+
+def test_reveal_plan_requires_store_authority_and_only_measured_custody_claims() -> None:
+    plan = (
+        ROOT
+        / "docs/superpowers/plans/"
+        "2026-07-31-advisor-governed-multimodal-evidence-composition-implementation.md"
+    ).read_text(encoding="utf-8")
+    reveal_command = plan.split(
+        "uv run python scripts/reveal_evidence_loop_holdouts.py",
+        1,
+    )[1].split("```", 1)[0]
+    assert '--store-root "$EVIDENCE_LOOP_RUN_ROOT/store"' in reveal_command
+    assert "proves the root was not mounted or indexed" not in plan
+    assert "holdout source mounted or indexed by evaluator." not in plan
+    assert "Global mount/index state" in plan
 
 
 def test_pre_registration_is_mode_0600_when_written(tmp_path: Path) -> None:
