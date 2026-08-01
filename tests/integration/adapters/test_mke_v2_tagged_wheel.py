@@ -213,6 +213,12 @@ def test_tagged_wheel_reads_sealed_wal_snapshot_without_mutation() -> None:
     retained = ROOT / "tmp/evidence-loop-a3-native-operator-final"
     receipt = json.loads((retained / "receipts/sealed-mke-store-v1.json").read_text())
     store_root = retained / "store"
+    module._verify_capture_authority(
+        store_root=store_root,
+        sealed_store=receipt["store_seal"],
+        native_runtime_identity=receipt["native_runtime_identity"],
+        wheel_sha256=receipt["producer"]["wheel_sha256"],
+    )
     before = module._capture_state(ROOT, store_root)
     capture = asyncio.run(
         module._capture_native_dataset(
@@ -221,6 +227,12 @@ def test_tagged_wheel_reads_sealed_wal_snapshot_without_mutation() -> None:
             store_root=store_root,
             expected_active_set_fingerprint=receipt["active_set_fingerprint"],
         )
+    )
+    module._verify_capture_authority(
+        store_root=store_root,
+        sealed_store=receipt["store_seal"],
+        native_runtime_identity=receipt["native_runtime_identity"],
+        wheel_sha256=receipt["producer"]["wheel_sha256"],
     )
     after = module._capture_state(ROOT, store_root)
 
