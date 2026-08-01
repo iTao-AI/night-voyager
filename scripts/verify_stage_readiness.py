@@ -275,6 +275,20 @@ def _merged_tree_and_ancestry(merge_commit: str, expected_main: str) -> str:
     return git("rev-parse", f"{merge_commit}^{{tree}}")
 
 
+def _commit_is_ancestor(ancestor: str, descendant: str) -> bool:
+    """Require both exact commit identities and their ordered ancestry."""
+
+    try:
+        if git("rev-parse", f"{ancestor}^{{commit}}") != ancestor:
+            return False
+        if git("rev-parse", f"{descendant}^{{commit}}") != descendant:
+            return False
+        run(["git", "merge-base", "--is-ancestor", ancestor, descendant])
+    except VerificationFailure:
+        return False
+    return True
+
+
 def _validate_receipt_identity(
     contract: StageReadinessContractV1,
     receipt: StageReadinessReceiptV1,
@@ -287,13 +301,16 @@ def _validate_receipt_identity(
 ) -> None:
     proof_path = _safe_proof_path(receipt.proof_path)
     proof_sha256 = hashlib.sha256(proof_path.read_bytes()).hexdigest()
+    main_sync_valid = _commit_is_ancestor(
+        merge_commit, receipt.main_sync_commit
+    ) and _commit_is_ancestor(receipt.main_sync_commit, expected_main)
     if not (
         receipt.stage == contract.stage
         and receipt.merge_commit == merge_commit
         and receipt.merge_tree == merge_tree
         and receipt.reviewed_tree == merge_tree
         and receipt.reviewed_tree_equals_merge_tree
-        and receipt.main_sync_commit == expected_main
+        and main_sync_valid
         and receipt.proof_path == contract.proof_path
         and receipt.proof_sha256 == proof_sha256
         and receipt.terminal_disposition in contract.allowed_terminal_dispositions
