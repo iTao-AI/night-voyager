@@ -159,6 +159,26 @@ def test_pre_reveal_ordering_freezes_complete_harness_before_observation() -> No
         assert required in governance
 
 
+def test_publication_readiness_is_distinct_from_stage_unlock() -> None:
+    governance = " ".join(_governance_text().split())
+
+    for required in (
+        "Only a PR that intends to unlock the next stage and has an allowed terminal "
+        "disposition plus its committed proof artifact carries `StageReadinessCandidateV1`.",
+        "After merge, that candidate becomes `StageReadinessReceiptV1`.",
+        "GitHub `Ready` means code is merge-ready; it does not mean the next stage is unlocked.",
+        "A terminal safe-stop PR with `evaluation_invalid`, `no_incremental_value`, or "
+        "`inconclusive` (or missing required proof) may be marked `Ready` and merged after "
+        "exact-head CI, platform review, and format gates pass.",
+        "Its body must state `no stage unlock` and must not contain `StageReadinessCandidateV1`, "
+        "`StageReadinessReceiptV1`, or fabricated proof.",
+        "Only an exact merged `incremental_value_confirmed` `StageReadinessReceiptV1` unlocks "
+        "the next stage.",
+        "The executed `evaluation_invalid` Slice 0 follows the safe-stop publication path.",
+    ):
+        assert required in governance
+
+
 def test_governance_documents_have_no_trailing_whitespace() -> None:
     for path in (DESIGN, PLAN):
         for line_number, line in enumerate(

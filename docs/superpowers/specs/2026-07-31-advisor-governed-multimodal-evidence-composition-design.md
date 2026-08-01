@@ -1543,22 +1543,32 @@ ordinary non-force push
 -> Draft PR create/update
 -> persisted title/body/head/base readback
 -> exact reviewed HEAD + required checks/platform review binding
--> mark Ready only after merge gates pass
+-> mark Ready after exact-head merge gates pass (candidate only for unlock-intending PRs)
 -> conditional non-admin squash merge
 -> post-merge exact-SHA readback
 -> task-owned cleanup
 ```
 
-After exact-head proof, the Draft PR body carries `StageReadinessCandidateV1` bound to the reviewed
-HEAD/tree and committed proof artifact. Each contract freezes the exact hosted checks `python`,
-`frontend`, and `compose`, and every stage after Slice 0 binds the complete predecessor stage,
-merged commit/tree, merged receipt digest, and legal predecessor disposition. Only after squash
-merge, exact-merge checks, tree equality, main sync, and terminal body reconciliation does it become
-`StageReadinessReceiptV1` with merge identity and cleanup state. The next stage mechanically
-canonicalizes unordered check readback, rejects missing/duplicate/extra/non-pass/URL-mismatched
-checks, and recursively verifies the complete merged predecessor chain. A local pass, candidate,
-Draft/Ready PR, unmerged receipt, `evaluation_invalid`, `no_incremental_value`, `inconclusive`,
-or successful check on a different SHA does not unlock work.
+Only a PR that intends to unlock the next stage and has an allowed terminal disposition plus its
+committed proof artifact carries `StageReadinessCandidateV1`. After exact-head proof, that candidate
+is bound to the reviewed HEAD/tree, committed proof path/digest, exact hosted checks `python`,
+`frontend`, and `compose`, non-claims, and (for every stage after Slice 0) the complete predecessor
+stage, merged commit/tree, merged receipt digest, and legal predecessor disposition. After squash
+merge, exact-merge checks, tree equality, main sync, and terminal body reconciliation, that candidate
+becomes `StageReadinessReceiptV1` with merge identity and cleanup state. GitHub `Ready` means code is
+merge-ready; it does not mean the next stage is unlocked.
+
+A terminal safe-stop PR with `evaluation_invalid`, `no_incremental_value`, or `inconclusive` (or
+missing required proof) may be marked `Ready` and merged after exact-head CI, platform review, and
+format gates pass so that code, tests, and failure evidence remain reviewable. Its body must state
+`no stage unlock` and must not contain `StageReadinessCandidateV1`, `StageReadinessReceiptV1`, or
+fabricated proof; its merged terminal body records only actual merge/tree/check/main-sync/cleanup
+facts and safe-stop non-claims. Only an exact merged `incremental_value_confirmed`
+`StageReadinessReceiptV1` unlocks the next stage. The verifier canonicalizes unordered check
+readback, rejects missing/duplicate/extra/non-pass/URL-mismatched checks, and recursively verifies
+the complete merged predecessor chain. A local pass, candidate, Draft/Ready PR, unmerged receipt,
+`evaluation_invalid`, `no_incremental_value`, `inconclusive`, or successful check on a different
+SHA does not unlock work.
 
 There is no v0.1.6 release when Slice 0 stops. The full version is prepared only after Slice 2 is
 merged and verified. Publication remains a separate annotated-tag/GitHub-Release authority gate.
@@ -1648,5 +1658,6 @@ The revealed holdout suite is retired evidence and cannot be reused. This is a f
 operator/evaluation-protocol safe stop, not evidence of `no_incremental_value` and not
 evidence about MKE or DRA quality. No candidate or product persistence, Slice 1/2 work,
 v0.1.6 release, provider action, production claim, or incremental-value claim follows from
-this run. Local safe-stop closeout is complete only as a local record; merged PR, hosted CI,
-and publication cleanup remain separate pending gates.
+this run. The executed `evaluation_invalid` Slice 0 follows the safe-stop publication path.
+Local safe-stop closeout is complete only as a local record; merged PR, hosted CI, and publication
+cleanup remain separate pending gates.

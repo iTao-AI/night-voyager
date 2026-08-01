@@ -150,8 +150,15 @@ gh pr checks "$PR" --required --json name,state,bucket,link
 ```
 
 Require persisted title/body format, Draft state, exact head/base, all dynamically required checks
-bound to `REVIEWED_HEAD`, no unresolved platform review, clean mergeability, and the
-`StageReadinessCandidateV1` body block before `gh pr ready "$PR"`. Merge only with:
+bound to `REVIEWED_HEAD`, no unresolved platform review, and clean mergeability. Only a PR that
+intends to unlock the next stage and has an allowed terminal disposition plus its committed proof
+artifact carries `StageReadinessCandidateV1`; that block is required before `gh pr ready "$PR"` only
+for that unlock-intending path. A terminal safe-stop PR with `evaluation_invalid`,
+`no_incremental_value`, or `inconclusive` (or missing required proof) may be marked `Ready` and
+merged after exact-head CI, platform review, and format gates pass. Its body must state `no stage
+unlock` and must not contain `StageReadinessCandidateV1`, `StageReadinessReceiptV1`, or fabricated
+proof. GitHub `Ready` means code is merge-ready; it does not mean the next stage is unlocked. Merge
+only with:
 
 ```bash
 gh pr merge "$PR" --squash --match-head-commit "$REVIEWED_HEAD"
@@ -333,17 +340,25 @@ tests/fixtures/evidence_loop/c1-composition-authority-proof-v1.json
 tests/fixtures/evidence_loop/c2-composition-journey-proof-v1.json
 ```
 
-The readiness artifacts are not self-referential repository files. After exact-head checks pass,
-the publication owner first generates and persists `StageReadinessCandidateV1` in the Draft PR
-body. It binds stage, reviewed HEAD/tree, committed proof path/digest, terminal disposition,
-the exact required hosted contexts and URLs, next-stage unlock, non-claims, and (for every later
-stage) the complete predecessor merge commit/tree, merged receipt digest, and legal predecessor
-disposition. That exact candidate is a Ready/merge precondition.
+The readiness artifacts are not self-referential repository files. For a PR that intends to unlock
+the next stage, after exact-head checks pass, the publication owner generates and persists
+`StageReadinessCandidateV1` in the Draft PR body. It binds stage, reviewed HEAD/tree, committed
+proof path/digest, allowed terminal disposition, the exact required hosted contexts and URLs,
+next-stage unlock, non-claims, and (for every later stage) the complete predecessor merge
+commit/tree, merged receipt digest, and legal predecessor disposition. That exact candidate is a
+Ready/merge precondition only for the unlock-intending path. After squash merge and exact-merge
+checks, one terminal body reconciliation replaces the candidate with `StageReadinessReceiptV1`,
+adding merge SHA/tree/time, reviewed-tree equality, post-merge required contexts, main-sync
+identity, and cleanup state; a later execution trusts only this terminal receipt.
 
-After squash merge and exact-merge checks, one terminal body reconciliation replaces the candidate
-with `StageReadinessReceiptV1`, adding merge SHA/tree/time, reviewed-tree equality, post-merge
-required contexts, main-sync identity, and cleanup state. The final persisted readback must contain
-the receipt and no candidate/pending wording. A later execution trusts only this terminal receipt.
+A terminal safe-stop PR with `evaluation_invalid`, `no_incremental_value`, or `inconclusive` (or
+missing required proof) follows the safe-stop publication path: it may retain code, tests, and
+failure evidence and be marked `Ready` and merged after the exact-head CI, platform review, and
+format gates pass, but it must state `no stage unlock` and must not contain
+`StageReadinessCandidateV1`, `StageReadinessReceiptV1`, or fabricated proof. Its merged terminal
+body records only the actual merge/tree/check/main-sync/cleanup facts and the safe-stop
+non-claims. Only an exact merged `incremental_value_confirmed` `StageReadinessReceiptV1` unlocks
+the next stage.
 
 Before the next branch is created, run:
 
@@ -747,7 +762,8 @@ This is a fail-closed operator/evaluation-protocol safe stop, not evidence of
 persistence, Slice 1/2 work, v0.1.6 release, provider action, production claim, or
 incremental-value claim follows. The verifier was not run because its required capture and
 terminal receipt do not exist; no evaluator, verifier, or reveal retry is permitted. Local
-safe-stop closeout is separate from the pending merged PR, hosted CI, and publication cleanup.
+safe-stop closeout is separate from the pending merged PR, hosted CI, and publication cleanup. The
+executed `evaluation_invalid` Slice 0 follows the safe-stop publication path.
 
 ## 3. PR B1 — Slice 1 candidate database and API authority
 
