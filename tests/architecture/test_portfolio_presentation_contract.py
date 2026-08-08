@@ -48,9 +48,9 @@ PRODUCTION_ASSETS = (
 LOCKED_DEPENDENCY_IDENTITIES = {
     "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
     "uv.lock": "6ca925427796a88f37ac764ed7857ca5524d49d4d84b4ef7accd317fdc3a4fe8",
-    "web/package.json": "3cd0d88df3595646ceb77015e1ef2eae3f924b4e26078bae8dcc01388fca4992",
+    "web/package.json": "4cfef58fd5ae42dede2984558ddd6541709b7021f34ddbbde50f22b027b163d0",
     "web/package-lock.json": (
-        "c8644d3e1755c20395d57d5635a2cf15985ceb4eac2a8e1e7d7f0975dd10cfad"
+        "0399a0c0493a4b91e153c2f939200000bb05a15b6e3dcbd6d38c09186b1202f3"
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
