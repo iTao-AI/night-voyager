@@ -740,10 +740,15 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "postcss@8.5.18" not in source
         assert "nanoid@3.3.16" not in source
         assert "zero advisory objects" in source
-        assert "js-yaml" in source
-        assert "dev-only" in source
-        assert "brace-expansion" in source
-        assert "minimatch" in source
+        assert "js-yaml" not in source
+        assert "brace-expansion" not in source
+        assert "minimatch" not in source
+        assert (
+            "Fresh full and runtime/omit-dev npm audits report zero advisory objects"
+            in source
+            or "Fresh full 与 runtime/omit-dev npm audits 均报告 zero advisory objects"
+            in source
+        )
         assert "direct" in source
         assert "override" in source
         assert "0.34.5" not in source
@@ -789,10 +794,10 @@ def test_current_security_policy_tracks_the_development_dependency_path() -> Non
     assert "postcss@8.5.18" not in security
     assert "nanoid@3.3.16" not in security
     assert "zero advisory objects" in security
-    assert "js-yaml" in security
-    assert "dev-only" in security
-    assert "brace-expansion" in security
-    assert "minimatch" in security
+    assert "js-yaml" not in security
+    assert "brace-expansion" not in security
+    assert "minimatch" not in security
+    assert "Fresh full and runtime/omit-dev npm audits report zero advisory objects" in security
     assert "0.34.5" not in security
 
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
