@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { PlanningSkillInspector } from "../skill-inspector/contracts";
 
 import { ConnectedDemoApiError, createConnectedDemoApi } from "../connected-demo/api";
@@ -29,9 +30,13 @@ const PROPOSAL_REQUEST = { schema_version: 1 as const, case_revision: 1, proposa
 const identity = createConnectedDemoApi();
 const api = createCollaborationDemoApi();
 
+type CollaborationRouter = {
+  push: (href: string) => void;
+};
+
 export const collaborationNavigation = {
-  toPlanning(): void {
-    window.location.assign("/demo");
+  toPlanning(router: CollaborationRouter): void {
+    router.push("/demo");
   },
 };
 
@@ -93,6 +98,7 @@ function envelope(context: CollaborationContext, csrf: string, phase: Collaborat
 }
 
 export function useCollaborationDemo() {
+  const router = useRouter();
   const [state, dispatch] = useReducer(collaborationReducer, COLLABORATION_CASE_ID, initialCollaborationState);
   const [journeyConflict, setJourneyConflict] = useState<"advisor-family" | null>(() => {
     if (typeof window === "undefined") return null;
@@ -549,7 +555,7 @@ export function useCollaborationDemo() {
         });
         saveRecoveryMetadata(converted);
         retryAction.current = null;
-        collaborationNavigation.toPlanning();
+        collaborationNavigation.toPlanning(router);
       } catch (error) {
         const mapped = handoffFailure(error);
         if (mapped === "stale" || mapped === "session_recovery_required") retryAction.current = null;
@@ -565,7 +571,7 @@ export function useCollaborationDemo() {
     };
     retryAction.current = attempt;
     await attempt();
-  }, [fail, refreshHandoffInspector, state]);
+  }, [fail, refreshHandoffInspector, router, state]);
 
   const retry = useCallback(async () => { if (retryAction.current) await retryAction.current(); else await recover(); }, [recover]);
 

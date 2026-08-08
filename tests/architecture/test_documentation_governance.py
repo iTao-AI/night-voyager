@@ -730,16 +730,58 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "evaluation_invalid" in source
         assert "`0015`" in source
         assert "release candidate" not in source.lower()
-        assert "sharp 0.34.5" in source
+        assert "sharp 0.35.3" in source
         assert "GHSA-f88m-g3jw-g9cj" in source
-        assert "explicitly deferred" in source or "明确 deferred" in source
+        assert "16.3.0" in source
+        assert "after merge" in source
+        assert "audit-zero" in source
+        assert "postcss@8.5.23" in source
+        assert "nanoid@3.3.18" in source
+        assert "postcss@8.5.18" not in source
+        assert "nanoid@3.3.16" not in source
+        assert "zero advisory objects" in source
+        assert "js-yaml" in source
+        assert "dev-only" in source
+        assert "brace-expansion" in source
+        assert "minimatch" in source
+        assert "direct" in source
+        assert "override" in source
+        assert "0.34.5" not in source
+        assert not re.search(r"Dependabot #7[^.\n]{0,100}FIXED", source, re.IGNORECASE)
+        assert "immutable" in source or "不可变" in source
         for trigger in (
             "public deployment",
             "untrusted image path",
-            "compatible upstream support for sharp >=0.35",
             "advisory change",
         ):
             assert trigger in source
+        assert "compatible upstream support for sharp >=0.35" not in source
+
+
+def test_current_security_policy_tracks_the_development_dependency_path() -> None:
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+
+    assert "16.3.0" in security
+    assert "sharp 0.35.3" in security
+    assert "GHSA-f88m-g3jw-g9cj" in security
+    assert "no direct postcss, nanoid, or sharp dependency" in security
+    assert "no npm override" in security
+    assert "Dependabot #7" in security
+    assert "after merge" in security
+    assert not re.search(r"Dependabot #7[^.\n]{0,100}FIXED", security, re.IGNORECASE)
+    assert "v0.1.5" in security
+    assert "immutable" in security
+    assert "not an audit-zero claim" in security
+    assert "postcss@8.5.23" in security
+    assert "nanoid@3.3.18" in security
+    assert "postcss@8.5.18" not in security
+    assert "nanoid@3.3.16" not in security
+    assert "zero advisory objects" in security
+    assert "js-yaml" in security
+    assert "dev-only" in security
+    assert "brace-expansion" in security
+    assert "minimatch" in security
+    assert "0.34.5" not in security
 
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
     assert "PR #87 is merged; hosted CI and publication cleanup are complete" in docs_index

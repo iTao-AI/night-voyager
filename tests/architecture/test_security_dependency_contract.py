@@ -5,11 +5,12 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.2.12"
-POSTCSS_VERSION = "8.5.18"
+NEXT_VERSION = "16.3.0"
+POSTCSS_VERSION = "8.5.23"
+NANOID_VERSION = "3.3.18"
 REACT_VERSION = "19.2.8"
 PROJECT_VERSION = "0.1.5"
-SHARP_VERSION = "0.34.5"
+SHARP_MINIMUM_VERSION = (0, 35, 3)
 
 
 def _locked_version(packages: list[dict[str, object]], name: str) -> tuple[int, ...]:
@@ -52,9 +53,10 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert package["dependencies"]["react"] == REACT_VERSION
     assert package["dependencies"]["react-dom"] == REACT_VERSION
     assert package["devDependencies"]["eslint-config-next"] == NEXT_VERSION
-    assert package["overrides"] == {"postcss": POSTCSS_VERSION}
-    assert "sharp" not in package["dependencies"]
-    assert "sharp" not in package["devDependencies"]
+    for dependency in ("postcss", "nanoid", "sharp"):
+        assert dependency not in package["dependencies"]
+        assert dependency not in package["devDependencies"]
+    assert "overrides" not in package
 
     locked_packages = package_lock["packages"]
     locked_root = locked_packages[""]
@@ -65,6 +67,8 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert locked_packages["node_modules/next"]["version"] == NEXT_VERSION
     assert locked_packages["node_modules/eslint-config-next"]["version"] == NEXT_VERSION
     assert locked_packages["node_modules/postcss"]["version"] == POSTCSS_VERSION
+    assert locked_packages["node_modules/nanoid"]["version"] == NANOID_VERSION
+    assert "overrides" not in locked_root
 
     next_family = {
         path: locked["version"]
@@ -75,7 +79,10 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert set(next_family.values()) == {NEXT_VERSION}
 
     locked_next = locked_packages["node_modules/next"]
-    assert locked_next["optionalDependencies"]["sharp"] == "^0.34.5"
+    assert locked_next["optionalDependencies"]["sharp"] == "^0.35.3"
     locked_sharp = locked_packages["node_modules/sharp"]
-    assert locked_sharp["version"] == SHARP_VERSION
+    sharp_version = tuple(
+        int(part) for part in locked_sharp["version"].split(".")
+    )
+    assert sharp_version >= SHARP_MINIMUM_VERSION
     assert locked_sharp["optional"] is True

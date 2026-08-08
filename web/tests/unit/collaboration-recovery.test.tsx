@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
     candidates: vi.fn(), verifyCandidate: vi.fn(), confirmedFacts: vi.fn(), planningSkillInspector: vi.fn(),
   },
 }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 vi.mock("../../lib/connected-demo/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/connected-demo/api")>();
