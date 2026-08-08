@@ -735,8 +735,12 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "16.3.0" in source
         assert "after merge" in source
         assert "audit-zero" in source
-        assert "postcss@8.5.18" in source
-        assert "nanoid@3.3.16" in source
+        assert "postcss@8.5.23" in source
+        assert "nanoid@3.3.18" in source
+        assert "postcss@8.5.18" not in source
+        assert "nanoid@3.3.16" not in source
+        assert "zero advisory objects" in source
+        assert "js-yaml" in source
         assert "dev-only" in source
         assert "brace-expansion" in source
         assert "minimatch" in source
@@ -748,10 +752,10 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         for trigger in (
             "public deployment",
             "untrusted image path",
-            "compatible upstream support for sharp >=0.35",
             "advisory change",
         ):
             assert trigger in source
+        assert "compatible upstream support for sharp >=0.35" not in source
 
 
 def test_current_security_policy_tracks_the_development_dependency_path() -> None:
@@ -760,15 +764,20 @@ def test_current_security_policy_tracks_the_development_dependency_path() -> Non
     assert "16.3.0" in security
     assert "sharp 0.35.3" in security
     assert "GHSA-f88m-g3jw-g9cj" in security
-    assert "no direct sharp dependency or override" in security
+    assert "no direct postcss, nanoid, or sharp dependency" in security
+    assert "no npm override" in security
     assert "Dependabot #7" in security
     assert "after merge" in security
     assert not re.search(r"Dependabot #7[^.\n]{0,100}FIXED", security, re.IGNORECASE)
     assert "v0.1.5" in security
     assert "immutable" in security
     assert "not an audit-zero claim" in security
-    assert "postcss@8.5.18" in security
-    assert "nanoid@3.3.16" in security
+    assert "postcss@8.5.23" in security
+    assert "nanoid@3.3.18" in security
+    assert "postcss@8.5.18" not in security
+    assert "nanoid@3.3.16" not in security
+    assert "zero advisory objects" in security
+    assert "js-yaml" in security
     assert "dev-only" in security
     assert "brace-expansion" in security
     assert "minimatch" in security
