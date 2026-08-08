@@ -774,6 +774,18 @@ def test_current_security_policy_tracks_the_development_dependency_path() -> Non
     assert "not an audit-zero claim" in security
     assert "postcss@8.5.23" in security
     assert "nanoid@3.3.18" in security
+    assert "cryptography==50.0.0" in security
+    assert "mcp" in security
+    assert "PyJWT[crypto]" in security
+    assert "first patched version" in security
+    assert (
+        "The local graph is outside the affected range; hosted alert closure is "
+        "evaluated only after merge and is not claimed by local validation."
+    ) in security
+    assert "the alert remains open until post-merge" not in security
+    assert "Post-merge GitHub readback" in security
+    assert "no Night Voyager use of cryptography's PKCS#7 decryption" in security
+    assert "finite-field Diffie-Hellman APIs" in security
     assert "postcss@8.5.18" not in security
     assert "nanoid@3.3.16" not in security
     assert "zero advisory objects" in security
