@@ -50,7 +50,7 @@ LOCKED_DEPENDENCY_IDENTITIES = {
     "uv.lock": "42ed354a51331efb9c7566dcdce628f78baff1723a494741cf7fe78bdab9823f",
     "web/package.json": "4cfef58fd5ae42dede2984558ddd6541709b7021f34ddbbde50f22b027b163d0",
     "web/package-lock.json": (
-        "0399a0c0493a4b91e153c2f939200000bb05a15b6e3dcbd6d38c09186b1202f3"
+        "00abdf8c8818dee085a428e21673969d6badcce3c6fbc46f974e2a1fa34697cc"
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
