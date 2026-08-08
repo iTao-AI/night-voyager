@@ -4,6 +4,9 @@ import { afterEach, expect, it, vi } from "vitest";
 import { loadDemoJourneyEnvelope } from "../../lib/connected-demo/session-storage";
 import { collaborationNavigation, useCollaborationDemo } from "../../lib/collaboration-demo/use-collaboration-demo";
 
+const router = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
+
 const CASE = "41000000-0000-0000-0000-000000000001";
 const THREAD = "42000000-0000-0000-0000-000000000001";
 const MESSAGE = "43000000-0000-0000-0000-000000000001";
@@ -13,6 +16,15 @@ const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 
 afterEach(() => { sessionStorage.clear(); localStorage.clear(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+it("delegates internal planning navigation to the provided App Router push", () => {
+  const push = vi.fn();
+
+  collaborationNavigation.toPlanning({ push });
+
+  expect(push).toHaveBeenCalledOnce();
+  expect(push).toHaveBeenCalledWith("/demo");
+});
 
 it("proves parent message through advisor confirmation and authoritative fact/revision reload", async () => {
   let role: "parent" | "advisor" = "parent";

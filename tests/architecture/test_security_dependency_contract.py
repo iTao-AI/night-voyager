@@ -5,11 +5,11 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.2.12"
+NEXT_VERSION = "16.3.0"
 POSTCSS_VERSION = "8.5.18"
 REACT_VERSION = "19.2.8"
 PROJECT_VERSION = "0.1.5"
-SHARP_VERSION = "0.34.5"
+SHARP_MINIMUM_VERSION = (0, 35, 3)
 
 
 def _locked_version(packages: list[dict[str, object]], name: str) -> tuple[int, ...]:
@@ -55,6 +55,7 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert package["overrides"] == {"postcss": POSTCSS_VERSION}
     assert "sharp" not in package["dependencies"]
     assert "sharp" not in package["devDependencies"]
+    assert "sharp" not in package["overrides"]
 
     locked_packages = package_lock["packages"]
     locked_root = locked_packages[""]
@@ -75,7 +76,10 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert set(next_family.values()) == {NEXT_VERSION}
 
     locked_next = locked_packages["node_modules/next"]
-    assert locked_next["optionalDependencies"]["sharp"] == "^0.34.5"
+    assert locked_next["optionalDependencies"]["sharp"] == "^0.35.3"
     locked_sharp = locked_packages["node_modules/sharp"]
-    assert locked_sharp["version"] == SHARP_VERSION
+    sharp_version = tuple(
+        int(part) for part in locked_sharp["version"].split(".")
+    )
+    assert sharp_version >= SHARP_MINIMUM_VERSION
     assert locked_sharp["optional"] is True
