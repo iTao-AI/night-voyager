@@ -17,6 +17,7 @@ UPDATE_COLLABORATION_SCREENSHOT=${UPDATE_COLLABORATION_SCREENSHOT:-0}
 UPDATE_PORTFOLIO_SCREENSHOTS=${UPDATE_PORTFOLIO_SCREENSHOTS:-0}
 UPDATE_PLANNING_REVISION_SCREENSHOT=${UPDATE_PLANNING_REVISION_SCREENSHOT:-0}
 PLANNING_REVISION_REVIEW_DIR=${PLANNING_REVISION_REVIEW_DIR:-tmp/planning-revision-review}
+PRESENTATION_AUDIT_OUTPUT_DIR=${PRESENTATION_AUDIT_OUTPUT_DIR:-/tmp/night-voyager-presentation-audit}
 FACT_TO_PLAN_ZH_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-proof.json
 FACT_TO_PLAN_ZH_WORKER_READY_FILE=docs/assets/.fact-to-plan-zh-CN-worker-ready
 FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json
@@ -229,6 +230,18 @@ run_plan_execution_recovery_lane() {
         --recovery-proof-file /tmp/plan-execution-recovery-proof.json
     rm -f "$PLAN_EXECUTION_RECOVERY_PROOF_FILE"
     printf 'compose-proof: plan execution recovery browser and database proof passed\n'
+}
+
+run_presentation_audit_lane() {
+    docker compose down --volumes --remove-orphans
+    docker compose up --no-build --wait
+    printf 'compose-proof: fresh presentation audit stack seeded\n'
+    docker compose --profile browser-proof run --rm --no-deps \
+        -e PRESENTATION_AUDIT=1 \
+        -e PRESENTATION_AUDIT_OUTPUT_DIR="$PRESENTATION_AUDIT_OUTPUT_DIR" \
+        browser-proof npx playwright test \
+            --config playwright.compose.config.ts presentation.spec.ts
+    printf 'compose-proof: 58-cell presentation audit passed\n'
 }
 
 run_plan_execution_lane() {
@@ -526,6 +539,7 @@ fi
 docker compose down --volumes --remove-orphans
 docker compose up --no-build --wait
 printf 'compose-proof: fresh browser stack seeded\n'
+run_presentation_audit_lane
 docker compose stop worker
 docker compose --profile browser-proof run --rm --no-deps -e M5_TERMINAL_PROOF=1 browser-proof
 printf 'compose-proof: native reconnect and terminal browser proof passed\n'

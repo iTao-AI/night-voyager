@@ -1,5 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
+const presentationAudit = process.env.PRESENTATION_AUDIT === "1";
+
 export default defineConfig({
   testDir: "./e2e",
   testMatch: [
@@ -9,6 +11,7 @@ export default defineConfig({
     "planning-revision.spec.ts",
     "plan-execution-minimal.spec.ts",
     "plan-execution.spec.ts",
+    ...(presentationAudit ? ["presentation.spec.ts"] : []),
   ],
   timeout: 120_000,
   expect: { timeout: 15_000 },

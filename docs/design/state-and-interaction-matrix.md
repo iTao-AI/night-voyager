@@ -23,6 +23,14 @@ evidence limitations remain byte-for-byte unchanged. Technical terms remain in
 the disclosure layer while the first layer uses the corresponding Chinese
 business vocabulary.
 
+On `/demo/collaboration`, the six-fact authority path is an accessible native
+technical disclosure placed after the shared message, candidate, and confirmed
+fact business panels. It remains available without competing with the first
+screen journey or hiding any existing action. A collaboration `recoverable_error`
+projects its existing `resumePhase`; connected `role_switching` and
+`recoverable_error` project only their existing prior state. Missing or unknown
+resume/prior state remains fail-closed.
+
 | Phase | Visible truth | Primary action | Forbidden action |
 | --- | --- | --- | --- |
 | `task_ready` | current Case and canonical inputs; no task/run | create task | approve or derive pins |

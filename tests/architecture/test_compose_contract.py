@@ -233,14 +233,17 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "profiles: [browser-proof]" in compose
     assert "web/Dockerfile.e2e" in compose
     assert "connected-demo.spec.ts" in Path("web/e2e/connected-demo.spec.ts").read_text()
-    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 7
+    assert script.count("docker compose --profile browser-proof run --rm --no-deps") == 8
+    assert "PRESENTATION_AUDIT=1" in script
+    assert "PRESENTATION_AUDIT_OUTPUT_DIR" in script
+    assert "presentation.spec.ts" in script
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     assert script.count("docker compose --profile browser-proof build") == 1
-    assert script.count("docker compose up --no-build --wait") == 8
+    assert script.count("docker compose up --no-build --wait") == 9
     assert "docker compose up --build --wait" not in script
     assert "run --rm --build" not in script
 

@@ -115,8 +115,13 @@ The closed stage is mapped only from existing UI state; unknown values render no
 journey. The journey has no fetch, mutation, storage, session, or authority
 responsibility. Each route keeps its existing primary action, business content,
 raw server-owned message/reason/limitation, and technical evidence disclosure.
-Desktop uses a horizontal journey and mobile uses a vertical journey; the root
-portfolio remains outside this presentation-only change.
+The collaboration authority path remains six exact technical facts, but is now
+an accessible native disclosure after the message, candidate, and confirmed-fact
+business content rather than a competing first-layer process strip. Known
+recoverable or role-switching states retain only the existing resume/prior stage
+as a read-only projection; unknown state still renders no journey. Desktop uses a
+horizontal journey and mobile uses a vertical journey; the root portfolio remains
+outside this presentation-only change.
 
 ## Accessibility
 

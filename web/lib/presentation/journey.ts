@@ -10,6 +10,11 @@ export type JourneyStage = (typeof JOURNEY_STAGES)[number];
 
 type StageMap = Readonly<Record<string, JourneyStage>>;
 
+export type JourneyStateReference = {
+  value: string;
+  prior?: JourneyStateReference;
+};
+
 function mapStage(value: string, stages: StageMap): JourneyStage | null {
   return stages[value] ?? null;
 }
@@ -57,11 +62,15 @@ const PLAN_EXECUTION_STAGES: StageMap = {
   recoverable_error: "plan_execution",
 };
 
-export function collaborationJourneyStage(value: string): JourneyStage | null {
+export function collaborationJourneyStage(value: string, resumePhase?: string | null): JourneyStage | null {
+  if (value === "recoverable_error") return resumePhase ? mapStage(resumePhase, COLLABORATION_STAGES) : null;
   return mapStage(value, COLLABORATION_STAGES);
 }
 
-export function connectedJourneyStage(value: string): JourneyStage | null {
+export function connectedJourneyStage(value: string, prior?: JourneyStateReference | null): JourneyStage | null {
+  if (value === "role_switching" || value === "recoverable_error") {
+    return prior ? connectedJourneyStage(prior.value, prior.prior) : null;
+  }
   return mapStage(value, CONNECTED_STAGES);
 }
 

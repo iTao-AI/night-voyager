@@ -26,7 +26,7 @@ export function DecisionJourney({ currentStage, copy }: DecisionJourneyProps) {
           <p>{copy("journeyDescription")}</p>
         </div>
         <p className="decision-journey-current">
-          {copy("journeyCurrentLabel")}：<strong>{copy(STAGE_COPY[currentStage].label)}</strong>
+          {copy("journeyCurrentLabel")}{copy("journeyCurrentSeparator")}<strong>{copy(STAGE_COPY[currentStage].label)}</strong>
         </p>
       </header>
       <ol className="decision-journey-track">

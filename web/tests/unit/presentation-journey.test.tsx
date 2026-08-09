@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { CollaborationDemo } from "../../components/collaboration-demo/CollaborationDemo";
@@ -11,6 +11,10 @@ import { MemoryCandidateCard } from "../../components/collaboration-demo/MemoryC
 import { SharedThread } from "../../components/collaboration-demo/SharedThread";
 import { PlanExecutionWorkspace } from "../../components/plan-execution/PlanExecutionWorkspace";
 import { PresentationProvider } from "../../lib/presentation/context";
+import {
+  collaborationJourneyStage,
+  connectedJourneyStage,
+} from "../../lib/presentation/journey";
 import { en, zhCN } from "../../lib/presentation/catalog";
 import type { CollaborationMessage, MemoryCandidateProjection } from "../../lib/collaboration-demo/contracts";
 import { brief, ledger as ledgerFixture, status } from "./connected-demo-test-data";
@@ -200,6 +204,14 @@ it("maps advisor confirmation and route review from existing route state", () =>
   expect(routeReview.container.querySelector("[data-current-stage='route_review']")).not.toBeNull();
 });
 
+it("retains a known stage through recoverable and role-switching projections", () => {
+  expect(collaborationJourneyStage("recoverable_error", "replan_required")).toBe("route_review");
+  expect(collaborationJourneyStage("recoverable_error", "future_state_secret")).toBeNull();
+  expect(connectedJourneyStage("role_switching", { value: "advisor_review" })).toBe("advisor_confirmation");
+  expect(connectedJourneyStage("recoverable_error", { value: "family_review" })).toBe("family_decision");
+  expect(connectedJourneyStage("recoverable_error", { value: "future_state_secret" })).toBeNull();
+});
+
 it("fails closed for unknown UI state without exposing the raw state", () => {
   collaborationState("future_state_secret");
   const collaboration = renderPresentation(<CollaborationDemo />);
@@ -234,6 +246,32 @@ it("keeps business vocabulary and exact contract terms in the intended layers", 
   expect(en.factVersionDisclosureLabel).toBe("Fact version");
   expect(en.skillPinDisclosureLabel).toBe("Skill pin");
   expect(en.checkpointDisclosureLabel).toBe("checkpoint");
+  expect(en.messageOriginalLabel).toBe("Original message");
+  expect(en.advisorReasonOriginalLabel).toBe("Original advisor confirmation");
+  expect(en.journeyCurrentSeparator).toBe(": ");
+  expect(zhCN.journeyCurrentSeparator).toBe("：");
+  expect(zhCN).not.toHaveProperty("journeyCompletedLabel");
+  expect(zhCN).not.toHaveProperty("journeyUpcomingLabel");
+});
+
+it("renders an English-natural current-stage label and keeps technical facts secondary", async () => {
+  planState("ready_to_start");
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  const plan = renderPresentation(<PlanExecutionWorkspace />);
+  await waitFor(() => expect(plan.container.querySelector(".decision-journey-current")).toHaveTextContent("Current stage: Plan execution"));
+  plan.unmount();
+
+  collaborationState("thread_ready");
+  const collaboration = renderPresentation(<CollaborationDemo />);
+  const journey = collaboration.container.querySelector(".decision-journey");
+  const thread = collaboration.container.querySelector(".shared-thread");
+  const technical = collaboration.container.querySelector("details.authority-steps-disclosure");
+  expect(journey).not.toBeNull();
+  expect(thread).not.toBeNull();
+  expect(technical).not.toBeNull();
+  expect(technical?.querySelectorAll(".authority-steps > li")).toHaveLength(6);
+  expect(journey!.compareDocumentPosition(thread!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(thread!.compareDocumentPosition(technical!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
 it("preserves server-owned message, advisor reason, and evidence limitation exactly", () => {

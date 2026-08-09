@@ -55,7 +55,10 @@ export function ConnectedDemo() {
         )
       : null;
   const ledger = retainedLedger(state);
-  const journeyStage = connectedJourneyStage(state.value);
+  const journeyStage = connectedJourneyStage(
+    state.value,
+    "prior" in state ? state.prior : undefined,
+  );
   const busy = ["task_creating", "task_streaming", "review_submitting", "role_switching", "recoverable_error"].includes(state.value);
   const primaryFor = (current: Ledger) => {
     switch (current.phase) {

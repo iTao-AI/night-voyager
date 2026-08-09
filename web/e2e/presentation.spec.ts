@@ -223,6 +223,12 @@ async function renderedMetrics(page: Page) {
           width: rect.width,
         };
       });
+    const journeyCopy = visible
+      .filter((element) => element.matches(".decision-journey-current, .decision-journey-track li > span:last-child"))
+      .map((element) => ({
+        fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+        text: element.textContent?.trim().slice(0, 120),
+      }));
     const longCopy = visible
       .filter((element) => (
         (element.textContent?.trim().length ?? 0) >= 80
@@ -254,6 +260,7 @@ async function renderedMetrics(page: Page) {
       headings: visible
         .filter((element) => /^H[1-6]$/.test(element.tagName))
         .map((element) => ({ level: element.tagName, text: element.textContent?.trim() })),
+      journeyCopy,
       landmarks: visible
         .filter((element) => element.matches("header, nav, main, aside, footer, [role='main'], [role='navigation']"))
         .map((element) => element.getAttribute("role") ?? element.tagName.toLowerCase()),
@@ -289,7 +296,8 @@ async function assertSemanticPresentation(page: Page) {
   expect(metrics["long-copy"].filter((entry) => entry.clipped)).toEqual([]);
   expect(metrics.headings.filter((heading) => heading.level === "H1")).toHaveLength(1);
   expect(metrics.landmarks).toContain("main");
-  expect(metrics.targets.filter((target) => target.height < 24 || target.width < 24)).toEqual([]);
+  expect(metrics.targets.filter((target) => target.height < 44 || target.width < 44)).toEqual([]);
+  expect(metrics.journeyCopy.filter((copy) => copy.fontSize < 16)).toEqual([]);
   const journeyStage = page.url().includes("/demo/collaboration")
     ? "family_input"
     : page.url().includes("/demo/plan")

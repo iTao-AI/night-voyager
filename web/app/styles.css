@@ -6,6 +6,7 @@
   --muted: #5f6b66;
   --trust: #0f5c55;
   --attention: #c96855;
+  --journey-current-text: #8f3b30;
   --warning: #9a6500;
   --danger: #a33a32;
   --border: #d9d4c8;
@@ -130,6 +131,9 @@ summary:focus-visible,
 }
 
 .product-mark {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
   color: var(--ink);
   font-family: var(--editorial);
   font-size: 1.4rem;
@@ -714,12 +718,12 @@ summary:focus-visible,
   padding: .55rem .7rem;
   border: 1px solid var(--attention);
   color: var(--ink) !important;
-  font-size: .88rem;
+  font-size: 1rem;
   white-space: nowrap;
 }
 
 .decision-journey-current strong {
-  color: var(--attention);
+  color: var(--journey-current-text);
 }
 
 .decision-journey-track {
@@ -768,7 +772,7 @@ summary:focus-visible,
 
 .decision-journey-track li > span:last-child {
   color: var(--muted);
-  font-size: .9rem;
+  font-size: 1rem;
   line-height: 1.45;
 }
 
@@ -1163,8 +1167,8 @@ thead th {
 }
 
 .confirmation-summary input {
-  width: 24px;
-  height: 24px;
+  width: 44px;
+  height: 44px;
   flex: 0 0 auto;
 }
 

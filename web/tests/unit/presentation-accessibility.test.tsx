@@ -43,4 +43,34 @@ describe("presentation accessibility contract", () => {
     expect(css).toMatch(/@media\s*\(max-width:\s*767px\)[\s\S]*\.revision-comparison-table/);
     expect(css).not.toMatch(/-webkit-line-clamp|line-clamp/);
   });
+
+  it("freezes the presentation audit contrast, target, copy-size, and canonical Compose gate", () => {
+    const css = readFileSync(resolve(process.cwd(), "app/styles.css"), "utf8");
+    const e2e = readFileSync(resolve(process.cwd(), "e2e/presentation.spec.ts"), "utf8");
+    const composeConfig = readFileSync(resolve(process.cwd(), "playwright.compose.config.ts"), "utf8");
+    const composeProof = readFileSync(resolve(process.cwd(), "../scripts/verify_compose.sh"), "utf8");
+    const currentText = css.match(/--journey-current-text:\s*(#[0-9a-f]{6})/i)?.[1];
+    const rgb = (value: string) => value.match(/[0-9a-f]{2}/gi)!.map((channel) => Number.parseInt(channel, 16) / 255);
+    const luminance = (value: string) => rgb(value).reduce((sum, channel, index) => {
+      const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+    const contrast = (foreground: string, background: string) => {
+      const light = Math.max(luminance(foreground), luminance(background));
+      const dark = Math.min(luminance(foreground), luminance(background));
+      return (light + 0.05) / (dark + 0.05);
+    };
+
+    expect(currentText).toBeDefined();
+    expect(contrast(currentText!, "#fffdf8")).toBeGreaterThanOrEqual(4.5);
+    expect(css).toMatch(/\.decision-journey-current\s*\{[^}]*font-size:\s*1rem/);
+    expect(css).toMatch(/\.decision-journey-current\s+strong\s*\{[^}]*color:\s*var\(--journey-current-text\)/);
+    expect(css).toMatch(/\.decision-journey-track li > span:last-child\s*\{[^}]*font-size:\s*1rem/);
+    expect(css).toMatch(/\.confirmation-summary input\s*\{[^}]*width:\s*44px[^}]*height:\s*44px/);
+    expect(css).toMatch(/\.product-mark\s*\{[^}]*min-height:\s*44px/);
+    expect(e2e).toContain("target.height < 44 || target.width < 44");
+    expect(composeConfig).toContain("presentation.spec.ts");
+    expect(composeProof).toContain("PRESENTATION_AUDIT_OUTPUT_DIR");
+    expect(composeProof).toContain("presentation.spec.ts");
+  });
 });
