@@ -640,12 +640,12 @@
   }
 
   .portfolio-workflow-list {
-    grid-template-columns: repeat(5, minmax(10rem, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     overflow-x: auto;
   }
 
   .portfolio-workflow-list li {
-    min-width: 10rem;
+    min-width: 0;
   }
 }
 

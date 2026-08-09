@@ -255,6 +255,10 @@ async function capture(page: Page, state: "happy" | "blocked") {
           document.documentElement.clientWidth,
       ),
     ).toBe(true);
+    const skipLink = page.locator(".skip-link");
+    await expect(skipLink).toHaveCount(1);
+    await skipLink.evaluate((node) => node.setAttribute("hidden", ""));
+    await expect(skipLink).toBeHidden();
     const filename =
       `planning-revision-${locale}-${viewport.width}-${state}.png`;
     await page.screenshot({

@@ -104,7 +104,10 @@ async function expectPortfolioEntry(page: Page) {
     /留学顾问的 AI 协作工作台|AI collaboration workspace for study-abroad advisors/,
   );
   await expect(page.locator(".portfolio-workflow")).toContainText(
-    /同一 Case|same Case/,
+    /同一产品模型|one product model/,
+  );
+  await expect(page.locator(".portfolio-workflow")).toContainText(
+    /独立播种|independently seeded/,
   );
   await expect(
     page.locator(".portfolio-primary-action"),
@@ -190,6 +193,10 @@ async function capturePublicScreenshot(page: Page, filename: string) {
     return box.left < 0 || box.right > document.documentElement.clientWidth + 0.5;
   }).length);
   expect(clipped).toBe(0);
+  const skipLink = page.locator(".skip-link");
+  await expect(skipLink).toHaveCount(1);
+  await skipLink.evaluate((node) => node.setAttribute("hidden", ""));
+  await expect(skipLink).toBeHidden();
   await page.screenshot({ path: `/workspace/docs/assets/${filename}`, fullPage: true });
 }
 
@@ -438,10 +445,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
   await expectPortfolioEntry(page);
-  await expect(page.locator(".portfolio-route-path").first()).toHaveCSS(
-    "stroke-dashoffset",
-    "0px",
-  );
+  await expect(page.locator("html")).toHaveCSS("scroll-behavior", "auto");
   expect(rootApiRequests).toHaveLength(0);
   expect(storageReplacements).toHaveLength(0);
   if (presentationLocale === "zh-CN" && updatePortfolioScreenshots) {
@@ -571,11 +575,14 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     await captureFactToPlanApprovalDiagnostic(page, beforeReload.caseId, beforeReload.taskId);
     throw error;
   }
-  await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
+  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  await technicalEvidence.locator(":scope > summary").click();
+  await expect(technicalEvidence.getByText(presentationCopy.pinMatched)).toBeVisible();
   const reloadEventStart = eventRequests.length;
   await page.reload();
   await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled();
-  await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
+  await technicalEvidence.locator(":scope > summary").click();
+  await expect(technicalEvidence.getByText(presentationCopy.pinMatched)).toBeVisible();
   const afterReload = await page.evaluate(() => {
     const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
     if (typeof metadata !== "object" || metadata === null) {
