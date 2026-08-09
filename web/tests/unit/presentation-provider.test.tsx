@@ -25,7 +25,7 @@ function Probe({ onMount = () => undefined }: { onMount?: () => void }) {
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.lang = "zh-CN";
-  document.title = "Night Voyager｜你的留学路线应该从你出发";
+  document.title = "Night Voyager｜留学顾问的 AI 协作工作台";
   document.head.innerHTML = '<meta name="description" content="中文默认描述">';
 });
 
@@ -42,7 +42,7 @@ describe("PresentationProvider", () => {
       </PresentationProvider>,
     );
     expect(html).toContain("zh-CN");
-    expect(html).toContain("你的留学路线应该从你出发");
+    expect(html).toContain("留学顾问的 AI 协作工作台");
     expect(html).not.toContain("navigator.language");
   });
 
@@ -53,11 +53,11 @@ describe("PresentationProvider", () => {
     await waitFor(() => expect(screen.getByText("en")).toBeInTheDocument());
     expect(document.documentElement.lang).toBe("en");
     expect(document.title).toBe(
-      "Night Voyager | A study-abroad route that starts with you",
+      "Night Voyager | AI Collaboration Workspace for Study-Abroad Advisors",
     );
     expect(document.querySelector('meta[name="description"]')).toHaveAttribute(
       "content",
-      "Start with the student, understand each route and trade-off, then turn a local synthetic comparison into an actionable plan.",
+      "Turn fragmented conversations, evidence, and route research into a reviewable client plan.",
     );
   });
 
@@ -107,10 +107,10 @@ describe("PresentationProvider", () => {
     expect(() => render(<PresentationProvider><Probe /></PresentationProvider>)).not.toThrow();
     await waitFor(() => expect(screen.getByText("zh-CN")).toBeInTheDocument());
     expect(document.documentElement.lang).toBe("zh-CN");
-    expect(document.title).toBe("Night Voyager｜你的留学路线应该从你出发");
+    expect(document.title).toBe("Night Voyager｜留学顾问的 AI 协作工作台");
     expect(document.querySelector('meta[name="description"]')).toHaveAttribute(
       "content",
-      "从学生条件出发，看懂推荐、备选与取舍，再把本地合成路线比较变成可执行计划。",
+      "把分散在聊天、资料和研究中的信息，整理成可核对、可沟通、可推进的留学方案。",
     );
   });
 
@@ -130,7 +130,7 @@ describe("PresentationProvider", () => {
     expect(screen.getByText("en")).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("en");
     expect(document.title).toBe(
-      "Night Voyager | A study-abroad route that starts with you",
+      "Night Voyager | AI Collaboration Workspace for Study-Abroad Advisors",
     );
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();

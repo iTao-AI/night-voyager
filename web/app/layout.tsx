@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { PresentationProvider } from "../lib/presentation/context";
 import "./styles.css";
+import "./portfolio.css";
+import "./workspace.css";
 
 export const metadata: Metadata = {
-  title: "Night Voyager｜你的留学路线应该从你出发",
-  description: "从学生条件出发，看懂推荐、备选与取舍，再把本地合成路线比较变成可执行计划。",
+  title: "Night Voyager｜留学顾问的 AI 协作工作台",
+  description: "把分散在聊天、资料和研究中的信息，整理成可核对、可沟通、可推进的留学方案。",
   icons: {
     icon: "/icon.svg",
   },

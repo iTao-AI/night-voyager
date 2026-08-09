@@ -26,13 +26,13 @@ describe("portfolio route contract", () => {
       }
     }
 
-    expect(zhCN.rootOriginBudget).toBe("预算 30–40 万元");
+    expect(zhCN.rootOriginBudget).toBe("预算 ¥340,000–400,000");
     expect(zhCN.rootRouteAtlasDescription).toBe(
-      "学生希望学习数据科学，预算 30–40 万元。澳大利亚为推荐路线，日本为备选路线，马来西亚暂不推荐。",
+      "当前档案的 intended field 为 computing，预算为 CNY 340,000–400,000。澳大利亚在预算条件下推荐，日本为有条件备选，马来西亚暂不可选。",
     );
-    expect(en.rootOriginBudget).toBe("Budget CNY 300,000–400,000");
+    expect(en.rootOriginBudget).toBe("Budget CNY 340,000–400,000");
     expect(en.rootRouteAtlasDescription).toBe(
-      "The student plans to study data science with a budget of CNY 300,000–400,000. Australia is recommended, Japan is the reserve route, and Malaysia is not recommended at present.",
+      "The current case has intended field computing and a CNY 340,000–400,000 budget. Australia is recommended with a budget condition, Japan is a conditional alternative, and Malaysia is blocked.",
     );
     expect(
       [
@@ -41,7 +41,7 @@ describe("portfolio route contract", () => {
         en.rootOriginBudget,
         en.rootRouteAtlasDescription,
       ].join(" "),
-    ).not.toMatch(/30\.55|305,500/);
+    ).not.toMatch(/30\.55|305,500|300,000/);
   });
 
   it("keeps governed-flow money formatting exact", () => {

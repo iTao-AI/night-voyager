@@ -9,41 +9,23 @@ test("shows the Chinese-first portfolio entry without API side effects", async (
   });
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await page.waitForFunction(() => {
-    const image = document.querySelector(".portfolio-backdrop img");
-    return (
-      image instanceof HTMLImageElement &&
-      image.complete &&
-      image.naturalWidth > 0
-    );
-  });
-  expect(
-    await page
-      .locator(".portfolio-backdrop img")
-      .evaluate((image) => (image as HTMLImageElement).currentSrc),
-  ).toContain("night-voyager-voyage-1680.avif");
+  await expect(page.locator(".advisor-workspace-preview")).toBeVisible();
   await expect(page.getByRole("link", { name: "Night Voyager" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "你的留学路线 应该从你出发" }),
+    page.getByRole("heading", { name: "把零散咨询，整理成可以推进的留学方案" }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "查看示例方案" })).toHaveAttribute(
+  await expect(page.locator(".portfolio-primary-action")).toHaveAttribute(
     "href",
     "/demo/collaboration",
   );
-  await expect(page.getByRole("link", { name: "查看路线依据" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "了解方案如何被核对" })).toHaveAttribute(
     "href",
-    "#route-atlas",
+    "/demo",
   );
-  await expect(
-    page.locator('.portfolio-atlas-graphic [data-route-stop="australia"]'),
-  ).toContainText("澳大利亚");
-  await expect(
-    page.locator('.portfolio-atlas-graphic [data-route-stop="japan"]'),
-  ).toContainText("日本");
-  await expect(
-    page.locator('.portfolio-atlas-graphic [data-route-stop="malaysia"]'),
-  ).toContainText("马来西亚");
-  await expect(page.getByText("本地合成演示", { exact: true })).toBeVisible();
+  await expect(page.locator(".advisor-workspace-preview .workspace-route-list")).toContainText("澳大利亚");
+  await expect(page.locator(".advisor-workspace-preview .workspace-route-list")).toContainText("日本");
+  await expect(page.locator(".advisor-workspace-preview .workspace-route-list")).toContainText("马来西亚");
+  await expect(page.getByText(/本地合成演示/)).toBeVisible();
   await expect(page.getByText("M0 · Local bootstrap")).toHaveCount(0);
   expect(await page.evaluate(() => sessionStorage.getItem("night-voyager:m5"))).toBeNull();
   expect(apiRequests).toEqual([]);
@@ -51,6 +33,7 @@ test("shows the Chinese-first portfolio entry without API side effects", async (
 
   for (const viewport of [
     { width: 1440, height: 1000 },
+    { width: 1024, height: 900 },
     { width: 768, height: 1024 },
     { width: 390, height: 844 },
     { width: 320, height: 720 },
@@ -70,22 +53,12 @@ test("shows the Chinese-first portfolio entry without API side effects", async (
           document.documentElement.clientWidth + 0.5
       );
     });
-    const primaryAction = page.getByRole("link", { name: "查看示例方案" });
+    const primaryAction = page.locator(".portfolio-primary-action");
     await expect(primaryAction).toBeVisible();
-    const routeSurface = page.locator(
-      viewport.width >= 1024
-        ? ".portfolio-atlas-graphic"
-        : ".portfolio-route-summary",
-    );
-    await expect(routeSurface.locator('[data-route-stop="australia"]')).toContainText(
-      "推荐",
-    );
-    await expect(routeSurface.locator('[data-route-stop="japan"]')).toContainText(
-      "备选",
-    );
-    await expect(routeSurface.locator('[data-route-stop="malaysia"]')).toContainText(
-      "暂不推荐",
-    );
+    const routeSurface = page.locator(".advisor-workspace-preview .workspace-route-list");
+    await expect(routeSurface.locator('[data-route-id="australia"]')).toContainText("在预算条件下推荐");
+    await expect(routeSurface.locator('[data-route-id="japan"]')).toContainText("有条件备选");
+    await expect(routeSurface.locator('[data-route-id="malaysia"]')).toContainText("暂不可选");
     expect(
       await page.evaluate(
         () =>
@@ -94,7 +67,7 @@ test("shows the Chinese-first portfolio entry without API side effects", async (
       ),
     ).toBe(true);
     const undersized = await page
-      .locator(".portfolio-button:visible, .locale-switch button:visible")
+      .locator(".portfolio-primary-action:visible, .portfolio-secondary-action:visible, .locale-switch button:visible")
       .evaluateAll(
         (nodes) =>
           nodes.filter((node) => {
@@ -117,12 +90,16 @@ test("shows the Chinese-first portfolio entry without API side effects", async (
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(
     page.getByRole("heading", {
-      name: "Your study-abroad route should start with you",
+      name: "Turn scattered consultations into a client plan you can move forward",
     }),
   ).toBeVisible();
-  await expect(page.getByRole("link", { name: "View the example plan" })).toHaveAttribute(
+  await expect(page.locator(".portfolio-primary-action")).toHaveAttribute(
     "href",
     "/demo/collaboration",
+  );
+  await expect(page.getByRole("link", { name: "See how the proposal is verified" })).toHaveAttribute(
+    "href",
+    "/demo",
   );
   expect(apiRequests).toEqual([]);
   expect(eventRequests).toEqual([]);

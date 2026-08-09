@@ -1,12 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
-const DESKTOP_ROUTE_TEXT =
-  ".portfolio-route-destination .portfolio-svg-route-label, " +
-  ".portfolio-route-destination .portfolio-svg-route-reason";
-const MOBILE_ROUTE_TEXT =
-  ".portfolio-route-summary li strong, " +
-  ".portfolio-route-summary li em, " +
-  ".portfolio-route-summary li small";
+const ROUTES = [
+  ["australia", "澳大利亚", "在预算条件下推荐"],
+  ["japan", "日本", "有条件备选"],
+  ["malaysia", "马来西亚", "暂不可选"],
+] as const;
 
 function relativeLuminance(rgb: readonly number[]) {
   const [red, green, blue] = rgb.map((value) => {
@@ -27,234 +25,44 @@ function contrastRatio(foreground: readonly number[], background: readonly numbe
   );
 }
 
-async function waitForPortfolioBackdrop(page: Page) {
-  await expect
-    .poll(() =>
-      page
-        .locator(".portfolio-backdrop img")
-        .evaluate(
-          (image) =>
-            (image as HTMLImageElement).complete &&
-            (image as HTMLImageElement).naturalWidth > 0,
-        ),
-    )
-    .toBe(true);
-}
-
-async function renderedTextContrast(
-  page: Page,
-  selector: string,
-  paintProperty: "color" | "fill",
-) {
-  const targets = await page.locator(selector).evaluateAll(
-    (elements, property) =>
-      elements
-        .map((element) => {
-          const rect = element.getBoundingClientRect();
-          const values = (
-            property === "fill"
-              ? getComputedStyle(element).fill
-              : getComputedStyle(element).color
-          ).match(/[\d.]+/g);
-          if (!values || values.length < 3 || rect.width === 0 || rect.height === 0) {
-            return null;
-          }
-
-          let inheritedOpacity = 1;
-          for (
-            let current: Element | null = element;
-            current;
-            current = current.parentElement
-          ) {
-            inheritedOpacity *= Number.parseFloat(
-              getComputedStyle(current).opacity || "1",
-            );
-          }
-
-          const routeStop =
-            element.closest("[data-route-stop]")?.getAttribute("data-route-stop") ??
-            "unknown";
-          const role = element.matches(
-            ".portfolio-svg-route-label, strong",
-          )
-            ? "label"
-            : element.matches("em")
-              ? "status"
-              : "reason";
-          return {
-            alpha: (values[3] ? Number(values[3]) : 1) * inheritedOpacity,
-            foreground: values.slice(0, 3).map(Number),
-            height: rect.height,
-            name: `${routeStop}-${role}`,
-            width: rect.width,
-            x: rect.left + window.scrollX,
-            y: rect.top + window.scrollY,
-          };
-        })
-        .filter((target) => target !== null),
-    paintProperty,
+async function expectReadable(locator: Locator) {
+  const measurements = await locator.evaluateAll((elements) =>
+    elements.map((element) => {
+      const style = getComputedStyle(element);
+      const parseRgb = (value: string) =>
+        (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+      return {
+        foreground: parseRgb(style.color),
+        background: parseRgb(style.backgroundColor),
+      };
+    }),
   );
 
-  expect(targets.length).toBeGreaterThan(0);
-  const screenshot = await page.screenshot({
-    animations: "disabled",
-    fullPage: true,
-    scale: "css",
-    style: `${selector} { visibility: hidden !important; }`,
-  });
-
-  return page.evaluate(
-    async ({ imageUrl, sampledTargets }) => {
-      const image = new Image();
-      image.src = imageUrl;
-      await image.decode();
-
-      const canvas = document.createElement("canvas");
-      canvas.width = image.naturalWidth;
-      canvas.height = image.naturalHeight;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) {
-        throw new Error("Canvas 2D context unavailable");
-      }
-      context.drawImage(image, 0, 0);
-
-      const luminance = (rgb: readonly number[]) => {
-        const [red, green, blue] = rgb.map((value) => {
-          const channel = value / 255;
-          return channel <= 0.04045
-            ? channel / 12.92
-            : ((channel + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
-      };
-      const ratio = (foreground: readonly number[], background: readonly number[]) => {
-        const foregroundLuminance = luminance(foreground);
-        const backgroundLuminance = luminance(background);
-        return (
-          (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
-          (Math.min(foregroundLuminance, backgroundLuminance) + 0.05)
-        );
-      };
-
-      return sampledTargets.map((target) => {
-        const left = Math.max(0, Math.floor(target.x));
-        const top = Math.max(0, Math.floor(target.y));
-        const width = Math.max(
-          1,
-          Math.min(canvas.width - left, Math.ceil(target.width)),
-        );
-        const height = Math.max(
-          1,
-          Math.min(canvas.height - top, Math.ceil(target.height)),
-        );
-        const pixels = context.getImageData(left, top, width, height).data;
-        let minimum = Number.POSITIVE_INFINITY;
-        let minimumAt = { x: left, y: top };
-        let minimumBackground = [0, 0, 0];
-        let total = 0;
-        let count = 0;
-
-        for (let offset = 0; offset < pixels.length; offset += 4) {
-          const background = [
-            pixels[offset],
-            pixels[offset + 1],
-            pixels[offset + 2],
-          ];
-          const foreground = target.foreground.map(
-            (channel, index) =>
-              channel * target.alpha + background[index] * (1 - target.alpha),
-          );
-          const measured = ratio(foreground, background);
-          if (measured < minimum) {
-            const pixelIndex = offset / 4;
-            minimum = measured;
-            minimumAt = {
-              x: left + (pixelIndex % width),
-              y: top + Math.floor(pixelIndex / width),
-            };
-            minimumBackground = background;
-          }
-          total += measured;
-          count += 1;
-        }
-
-        return {
-          average: total / count,
-          minimum,
-          minimumAt,
-          minimumBackground,
-          name: target.name,
-          samples: count,
-          targetBounds: {
-            height: target.height,
-            width: target.width,
-            x: target.x,
-            y: target.y,
-          },
-        };
-      });
-    },
-    {
-      imageUrl: `data:image/png;base64,${screenshot.toString("base64")}`,
-      sampledTargets: targets,
-    },
-  );
-}
-
-async function expectReadableRouteText(
-  page: Page,
-  selector: string,
-  paintProperty: "color" | "fill",
-  viewport: string,
-  locale: string,
-) {
-  const measurements = await renderedTextContrast(page, selector, paintProperty);
+  expect(measurements.length).toBeGreaterThan(0);
   for (const measurement of measurements) {
-    expect.soft(
-      measurement.minimum,
-      `${viewport} ${locale} ${measurement.name}: ` +
-        `min=${measurement.minimum.toFixed(2)} ` +
-        `avg=${measurement.average.toFixed(2)} ` +
-        `background=${measurement.minimumBackground.join(",")} ` +
-        `at=${measurement.minimumAt.x},${measurement.minimumAt.y} ` +
-        `bounds=${measurement.targetBounds.x.toFixed(0)},` +
-        `${measurement.targetBounds.y.toFixed(0)},` +
-        `${measurement.targetBounds.width.toFixed(0)}x` +
-        `${measurement.targetBounds.height.toFixed(0)} ` +
-        `samples=${measurement.samples}`,
-    ).toBeGreaterThanOrEqual(4.5);
+    expect(measurement.foreground).toHaveLength(3);
+    expect(measurement.background).toHaveLength(3);
+    expect(contrastRatio(measurement.foreground, measurement.background)).toBeGreaterThanOrEqual(4.5);
   }
 }
 
-async function expectDesktopRouteHierarchy(page: Page) {
-  const hierarchy = await page
-    .locator(".portfolio-route-destination")
-    .evaluateAll((destinations) =>
-      destinations.map((destination) => {
-        const label = destination.querySelector(".portfolio-svg-route-label");
-        const route = destination.getAttribute("data-emphasis");
-        if (!label || !route) return null;
-        const style = getComputedStyle(label);
-        return {
-          fill: style.fill,
-          fontSize: Number.parseFloat(style.fontSize),
-          fontWeight: Number.parseInt(style.fontWeight, 10),
-          route,
-        };
-      }).filter((value) => value !== null),
+async function expectRootRows(page: Page, locale: "zh-CN" | "en") {
+  const routeRows = page.locator(".advisor-workspace-preview .workspace-route-row");
+  await expect(routeRows).toHaveCount(3);
+  for (const [id, zhCountry, zhOutcome] of ROUTES) {
+    const row = page.locator(`.advisor-workspace-preview .workspace-route-row[data-route-id="${id}"]`);
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(locale === "zh-CN" ? zhCountry : id === "australia" ? "Australia" : id === "japan" ? "Japan" : "Malaysia");
+    await expect(row).toContainText(
+      locale === "zh-CN"
+        ? zhOutcome
+        : id === "australia"
+          ? "Recommended with budget condition"
+          : id === "japan"
+            ? "Conditional alternative"
+            : "Blocked",
     );
-  const primary = hierarchy.find(({ route }) => route === "primary");
-  const secondary = hierarchy.find(({ route }) => route === "secondary");
-  const muted = hierarchy.find(({ route }) => route === "muted");
-
-  expect(primary).toBeDefined();
-  expect(secondary).toBeDefined();
-  expect(muted).toBeDefined();
-  expect(primary?.fontSize).toBeGreaterThan(secondary?.fontSize ?? Number.POSITIVE_INFINITY);
-  expect(primary?.fontWeight).toBeGreaterThan(secondary?.fontWeight ?? Number.POSITIVE_INFINITY);
-  expect(secondary?.fontWeight).toBeGreaterThan(muted?.fontWeight ?? Number.POSITIVE_INFINITY);
-  expect(primary?.fill).not.toBe(secondary?.fill);
-  expect(muted?.fill).not.toBe(secondary?.fill);
+  }
 }
 
 test("keeps the primary portfolio action readable in both locales", async ({ page }) => {
@@ -266,75 +74,39 @@ test("keeps the primary portfolio action readable in both locales", async ({ pag
       await page.getByRole("button", { name: "English", exact: true }).click();
       await expect(page.locator("html")).toHaveAttribute("lang", "en");
     }
-
-    const colors = await page
-      .locator(".portfolio-button-primary")
-      .evaluate((element) => {
-        const style = getComputedStyle(element);
-        const parseRgb = (value: string) =>
-          (value.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
-        return {
-          foreground: parseRgb(style.color),
-          background: parseRgb(style.backgroundColor),
-        };
-      });
-
-    expect(colors.foreground).toHaveLength(3);
-    expect(colors.background).toHaveLength(3);
-    expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(
-      4.5,
-    );
+    await expectReadable(page.locator(".portfolio-primary-action"));
   }
 });
 
-test("keeps every desktop route label and reason readable over the rendered background", async ({
-  page,
-}) => {
+test("keeps the coded route preview readable and ordered at the review widths", async ({ page }) => {
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 1024, height: 900 },
+    { width: 768, height: 1024 },
+    { width: 390, height: 844 },
+    { width: 320, height: 720 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await expect(page.locator(".advisor-workspace-preview")).toBeVisible();
+    await expectRootRows(page, "zh-CN");
+    await expectReadable(page.locator(".advisor-workspace-preview .workspace-status-pill"));
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth === document.documentElement.clientWidth,
+      ),
+    ).toBe(true);
+  }
+});
+
+test("keeps the English route preview truthful without runtime image dependencies", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
-  await waitForPortfolioBackdrop(page);
-
-  for (const locale of ["zh-CN", "en"] as const) {
-    if (locale === "en") {
-      await page.getByRole("button", { name: "English", exact: true }).click();
-      await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    }
-    await expect(page.locator(".portfolio-route-dark-field")).toHaveCount(1);
-    await expect(page.locator(".portfolio-route-copy-veil")).toHaveCount(0);
-    await expect(page.locator(".portfolio-route-label-veil")).toHaveCount(0);
-    await expect(page.locator(".portfolio-route-reason-veil")).toHaveCount(0);
-    await expect(
-      page.locator(".portfolio-route-destination rect"),
-    ).toHaveCount(0);
-    await expectDesktopRouteHierarchy(page);
-    await expectReadableRouteText(
-      page,
-      DESKTOP_ROUTE_TEXT,
-      "fill",
-      "1440x1000",
-      locale,
-    );
-  }
-});
-
-test("keeps every mobile route label, status, and reason readable over the rendered background", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await waitForPortfolioBackdrop(page);
-
-  for (const locale of ["zh-CN", "en"] as const) {
-    if (locale === "en") {
-      await page.getByRole("button", { name: "English", exact: true }).click();
-      await expect(page.locator("html")).toHaveAttribute("lang", "en");
-    }
-    await expectReadableRouteText(
-      page,
-      MOBILE_ROUTE_TEXT,
-      "color",
-      "390x844",
-      locale,
-    );
-  }
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Turn scattered consultations into a client plan you can move forward",
+  );
+  await expectRootRows(page, "en");
+  await expect(page.locator("main img")).toHaveCount(0);
 });

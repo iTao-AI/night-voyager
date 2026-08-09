@@ -8,7 +8,7 @@ const PUBLIC_EVIDENCE_ROOT = process.env.PRESENTATION_PUBLIC_EVIDENCE_ROOT;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const ROUTES = ["/", "/demo/collaboration", "/demo", "/demo/plan"] as const;
 const LOCALES = ["zh-CN", "en"] as const;
-const WIDTHS = [1440, 768, 390, 320] as const;
+const WIDTHS = [1440, 1024, 768, 390, 320] as const;
 const MOTION_MODES = ["no-preference", "reduce"] as const;
 
 type AuditCell = {
