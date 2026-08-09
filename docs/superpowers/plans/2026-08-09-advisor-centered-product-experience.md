@@ -23,10 +23,13 @@ types such as `FamilyDecision`, `DecisionReceipt`, `AdvisorReview`, and
 Library, Playwright, Python standard-library architecture tests, Docker Compose,
 and the existing GStack browser/design-review tooling. Add no package or framework.
 
-**Plan status:** Design approved; implementation has not started. The audited
-baseline is `main@54b78ebda9fea263de68b5e3f623aef31c5ffe48`. Execution must fresh-read
-`origin/main` and stop for authority review if intervening changes overlap this
-presentation scope.
+**Plan status:** Implementation complete and locally verified on the local synthetic
+candidate. The audited baseline is `main@54b78ebda9fea263de68b5e3f623aef31c5ffe48`;
+the implementation candidate was `010802c65f356f0914fe0c6eec62c443f59cb343` before
+this documentation closeout. The exact-path documentation closeout commit remains
+separate from the implementation candidate. Stable release `v0.1.5` remains
+unchanged, and this plan makes no release, deployment, provider, adoption, real-user,
+or production-use claim.
 
 ## Global constraints
 
@@ -309,17 +312,17 @@ state changes. The automated browser matrix includes `1024` in addition to
 - Modify: `docs/superpowers/README.md`
 - Modify: `tests/architecture/test_documentation_governance.py`
 
-- [ ] Record `BASE_SHA`, `BASE_TREE`, `origin/main`, clean status, open PRs, linked
+- [x] Record `BASE_SHA`, `BASE_TREE`, `origin/main`, clean status, open PRs, linked
       worktrees, branches, running project processes, and Docker resources.
-- [ ] Before the first write, classify write ownership, Git metadata permission,
+- [x] Before the first write, classify write ownership, Git metadata permission,
       Git/GitHub smart transport, and the publication `remote_owner`; record these in
       the private execution receipt rather than public project documents. Also verify
       host and Docker-VM free space, task-owned Compose-name/resource availability,
       and local Chromium/browser availability. Do not change Docker, host, credential,
       or account configuration during preflight.
-- [ ] Create one task worktree and `codex/nv-advisor-workspace-redesign` branch from
+- [x] Create one task worktree and `codex/nv-advisor-workspace-redesign` branch from
       the exact accepted base. Do not write in the primary checkout.
-- [ ] Copy the approved public-neutral design body and the implementation body through
+- [x] Copy the approved public-neutral design body and the implementation body through
       `Completion definition` into the two target project documents. Remove source
       frontmatter, the temporary restore comment, and the terminal private review-status
       appendix. Retain the public-neutral execution/TDD instructions, including the
@@ -327,17 +330,17 @@ state changes. The automated browser matrix includes `1024` in addition to
       machine paths, authority task IDs, model/provider routing, or private planning motives.
       All accepted implementation requirements must already be present in the copied
       body and remain semantically identical.
-- [ ] Add a documentation-governance assertion that both documents exist, describe
+- [x] Add a documentation-governance assertion that both documents exist, describe
       an advisor-centered presentation-only change, retain domain authority, and
       prohibit backend/dependency/fixture/release/deploy expansion. Assert that the
       connected same-Case proof and separately seeded execution proof are not merged
       into a fictitious Case journey.
-- [ ] Update `DESIGN.md`, the storyboard, route map, and state/interaction matrix to
+- [x] Update `DESIGN.md`, the storyboard, route map, and state/interaction matrix to
       mark the previous cosmic root/family-heavy layout as historical presentation
-      and the new advisor-centered surface as approved but not yet verified.
-- [ ] Add the new spec and plan to `docs/superpowers/README.md`; the existing
+      and the new advisor-centered surface as implemented and locally verified.
+- [x] Add the new spec and plan to `docs/superpowers/README.md`; the existing
       `test_superpowers_index_links_every_approved_spec_and_plan` must stay GREEN.
-- [ ] Run the documentation test before updating the docs and record its expected
+- [x] Run the documentation test before updating the docs and record its expected
       RED; then complete the documents and run it GREEN.
 
 Run:
@@ -377,62 +380,62 @@ git commit -m "docs: define advisor-centered product experience"
 - Modify: `web/tests/unit/presentation-provider.test.tsx`
 - Modify: `tests/architecture/test_portfolio_presentation_contract.py`
 
-- [ ] Add exact Chinese and English hero assertions from the design spec.
-- [ ] Assert the first viewport identifies an AI collaboration workspace for
+- [x] Add exact Chinese and English hero assertions from the design spec.
+- [x] Assert the first viewport identifies an AI collaboration workspace for
       study-abroad advisors and links to `/demo/collaboration` and `/demo`.
-- [ ] Assert top-level navigation, route context, workflow labels, hero text, and
+- [x] Assert top-level navigation, route context, workflow labels, hero text, and
       section headings are advisor-first in both locales. In Chinese they do not use
       `家庭表达`, `家庭决定`, or `顾问到家庭决策流程`; in English they do not use
       `Family input`, `Family decision`, `Advisor-to-family decision flow`, or
       equivalent family-first headings. Keep these checks structure-scoped rather
       than globally banning exact actor/domain terms.
-- [ ] Assert exact actor and authority terms still appear in the detailed parent
+- [x] Assert exact actor and authority terms still appear in the detailed parent
       message, advisor review, client confirmation, receipt, and technical evidence
       surfaces.
-- [ ] Assert the five `WorkflowStage` values and all existing reducer-state mappings,
+- [x] Assert the five `WorkflowStage` values and all existing reducer-state mappings,
       including `recoverable_error`, `role_switching`, recursive prior state, and
       unknown fail-closed behavior.
-- [ ] Assert the closed `WorkflowProofSegment` values. Collaboration/connected render
+- [x] Assert the closed `WorkflowProofSegment` values. Collaboration/connected render
       `connected_same_case`; `/demo/plan` renders
       `independent_execution_scenario`, and the proof boundary is visible in the Case
       context rather than relying only on footer copy.
-- [ ] Assert connected raw backend phases reduce to existing display states before
+- [x] Assert connected raw backend phases reduce to existing display states before
       stage mapping: `active_task`/`revision_task_active` -> `task_streaming` and
       `review_required`/`revision_review_required` -> `advisor_review`. Assert raw
       phases are not direct `connectedWorkflowStage` keys.
-- [ ] Assert `AdvisorWorkspaceShell`, `WorkflowRail`, and the root preview contain no
+- [x] Assert `AdvisorWorkspaceShell`, `WorkflowRail`, and the root preview contain no
       forbidden side-effect primitives: `fetch`, `XMLHttpRequest`, `EventSource`,
       `localStorage.setItem`, `sessionStorage.setItem`, cookie write, session bootstrap,
       mutation callback, task creation, or role-switch callback.
-- [ ] Assert root render calls no `fetch` and does not read the product session key.
+- [x] Assert root render calls no `fetch` and does not read the product session key.
       Keep the existing locale read behavior out of this product-session assertion.
-- [ ] Assert each rendered state has no more than one filled primary action.
-- [ ] Freeze shared/root contracts here: the shell owns exactly one visible route
+- [x] Assert each rendered state has no more than one filled primary action.
+- [x] Freeze shared/root contracts here: the shell owns exactly one visible route
       `h1`; state panels use `h2` or lower; presentation-provider locale changes do
       not remount task-owning children; root route metadata and navigation remain
       side-effect free. Tasks 4–6 add route-state RED assertions for accepted
       transition focus, recovery/conflict focus, heading order, and live-region/alert
       cardinality immediately before each corresponding route migration.
-- [ ] Assert static preview facts are drawn only from the closed
+- [x] Assert static preview facts are drawn only from the closed
       `fixtures/m3a/manifest.json` projection: synthetic boundary, `computing` intent,
       CNY 340,000–400,000 budget, Australia/Japan/Malaysia order, exact current route
       outcomes, coverage/gaps, and no named person or real/synthetic institution.
-- [ ] Assert one typed preview projection in `portfolio.ts` owns outcome, evidence
+- [x] Assert one typed preview projection in `portfolio.ts` owns outcome, evidence
       sufficiency, unresolved gap, and next action, and is parity-checked against the
       current deterministic public fixture contract. Components must not duplicate
       those facts as free-form literals.
-- [ ] Assert `/demo/plan`, README navigation, workflow context, and screenshot copy
+- [x] Assert `/demo/plan`, README navigation, workflow context, and screenshot copy
       identify Happy/Blocked as a separate deterministic execution scenario; no test
       may imply that the connected Case or session continued into it.
-- [ ] Update the architecture contract to expect split CSS, the coded root preview,
+- [x] Update the architecture contract to expect split CSS, the coded root preview,
       no runtime voyage image dependency, exact unchanged package/lock identities,
       four routes, two locales, five widths, reduced motion, 200% zoom, and the
       normal/blocked semantic paths.
-- [ ] Extend the existing route, provider, and accessibility inventories rather than
+- [x] Extend the existing route, provider, and accessibility inventories rather than
       replacing them: freeze `layout.tsx` base/portfolio/workspace CSS imports,
       unique route headings, locale-child identity, legacy-to-new component
       replacement, and the exact four-route navigation contract.
-- [ ] Run the focused suite and retain the expected RED output. Do not weaken tests to
+- [x] Run the focused suite and retain the expected RED output. Do not weaken tests to
       match the current UI.
 
 Run:
@@ -506,37 +509,37 @@ is permitted.
 - Delete after zero runtime reference:
   `web/public/portfolio/night-voyager-voyage-1680.webp`
 
-- [ ] Add the approved `--nv-*` tokens and separate base, portfolio, and workspace
+- [x] Add the approved `--nv-*` tokens and separate base, portfolio, and workspace
       CSS. `layout.tsx` imports all three explicitly.
-- [ ] Prune obsolete selectors from `styles.css`; do not merely append another visual
+- [x] Prune obsolete selectors from `styles.css`; do not merely append another visual
       system to the existing 2,700-line sheet. Keep only selectors with current
       references or documented browser/a11y purpose.
-- [ ] Implement `WorkflowRail` as a pure ordered list with `complete`, `current`, and
+- [x] Implement `WorkflowRail` as a pure ordered list with `complete`, `current`, and
       `upcoming` states and one `aria-current="step"`. It accepts only the closed
       stage union and copy function.
-- [ ] Implement `AdvisorWorkspaceShell` with a dark product frame, compact header,
+- [x] Implement `AdvisorWorkspaceShell` with a dark product frame, compact header,
       Case context, workflow rail, dominant work canvas, supporting decision/evidence
       rail, default-closed technical disclosure, and footer. It must remain a
       presentation wrapper.
-- [ ] Rebuild `/` as five ordered sections: advisor-first hero and coded preview; one
+- [x] Rebuild `/` as five ordered sections: advisor-first hero and coded preview; one
       continuous client workflow; current route analysis; AI/advisor responsibility
       split; concise engineering evidence.
-- [ ] The preview must be a React composition, not a generated screenshot. It shows
+- [x] The preview must be a React composition, not a generated screenshot. It shows
       one current client Case, route-analysis state, Australia/Japan/Malaysia order,
       evidence sufficiency, unresolved gap, and one next advisor action using only
       the typed projection in `portfolio.ts`. Do not duplicate or creatively rewrite
       those facts inside the component.
-- [ ] Use the approved Midnight Editorial Advisor Workspace system: deep-ink frame,
+- [x] Use the approved Midnight Editorial Advisor Workspace system: deep-ink frame,
       warm-ivory canvas, restrained green trust color, rare gold navigation accent,
       no cosmic background, glass cards, KPI strip, generic AI orb, stock portrait,
       gradient CTA, or decorative fake product data.
-- [ ] Delete the root-only backdrop/components/assets only after `rg` confirms zero import,
+- [x] Delete the root-only backdrop/components/assets only after `rg` confirms zero import,
       URL, CSS, test, and runtime references. Retain
       `docs/assets/design/night-voyager-voyage-source.png` as historical provenance;
       do not use it at runtime. Keep `DecisionJourney`, `PresentationShell`, and
       `presentation-shell.test.tsx` until Tasks 4–6 migrate all three demos; deleting
       them in this root-only task would break the current build.
-- [ ] Bring all Task 2 root/workflow/catalog tests GREEN without changing runtime
+- [x] Bring all Task 2 root/workflow/catalog tests GREEN without changing runtime
       controllers.
 
 Run:
@@ -615,27 +618,27 @@ path has a zero-reference proof and a tested replacement.
 - Modify: `web/tests/unit/advisor-workspace-design.test.tsx`
 - Modify: `web/tests/unit/presentation-accessibility.test.tsx`
 
-- [ ] First add focused RED assertions for the route shell, unique heading hierarchy,
+- [x] First add focused RED assertions for the route shell, unique heading hierarchy,
       accepted-transition/recovery/conflict focus, live-region cardinality, retained
       callbacks, and current-state action count. Record the expected failures; do not
       commit a failing HEAD. Then migrate the route and bring the same assertions GREEN.
-- [ ] Keep `useCollaborationDemo` untouched. Derive `activeRole`, current workflow
+- [x] Keep `useCollaborationDemo` untouched. Derive `activeRole`, current workflow
       stage, human-readable outcome, and next responsibility from existing state.
-- [ ] Present the route as consultation intake and client-information review:
+- [x] Present the route as consultation intake and client-information review:
       consultation record, proposed client fact, advisor confirmation, confirmed
       client fact/Case revision, then handoff into route analysis.
-- [ ] Use “客户” and “咨询” at first layer where the exact actor is irrelevant. Keep
+- [x] Use “客户” and “咨询” at first layer where the exact actor is irrelevant. Keep
       parent, advisor, source message, fact version, and Case revision visible where
       they establish authority or provenance.
-- [ ] Put the current work and one primary action above the message/fact evidence.
+- [x] Put the current work and one primary action above the message/fact evidence.
       Keep Skill detail and authority steps in secondary technical disclosure.
-- [ ] Preserve focus movement, disabled reasons, live regions, retry behavior,
+- [x] Preserve focus movement, disabled reasons, live regions, retry behavior,
       message body, proposal body, verification reason, and all callbacks exactly.
-- [ ] Convert the shared `JourneyConflictNotice` state heading from a competing `h1`
+- [x] Convert the shared `JourneyConflictNotice` state heading from a competing `h1`
       to the route shell's `h2` hierarchy, expose a focusable heading ref with
       `tabIndex={-1}`, and focus it only on conflict-state entry. Cover both
       collaboration and connected conflict routes without duplicating announcements.
-- [ ] Add focused normal, disabled, recoverable, and replan handoff assertions.
+- [x] Add focused normal, disabled, recoverable, and replan handoff assertions.
 
 Run:
 
@@ -673,31 +676,31 @@ focus assertion changes.
 - Modify: `web/tests/unit/advisor-workspace-design.test.tsx`
 - Modify: `web/tests/unit/presentation-accessibility.test.tsx`
 
-- [ ] First add focused RED assertions for the route shell, unique heading hierarchy,
+- [x] First add focused RED assertions for the route shell, unique heading hierarchy,
       accepted-transition/recovery/conflict focus on the shared
       `JourneyConflictNotice`, live-region cardinality, retained callbacks, and
       current-state action count. Record the expected failures; do not commit a
       failing HEAD. Then migrate the route and bring the same assertions GREEN.
-- [ ] Keep `useConnectedDemo`, reducers, contracts, API modules, and callback bodies
+- [x] Keep `useConnectedDemo`, reducers, contracts, API modules, and callback bodies
       untouched.
-- [ ] Lead with the current advisor question, route-analysis outcome, evidence gap,
+- [x] Lead with the current advisor question, route-analysis outcome, evidence gap,
       and one next professional action.
-- [ ] Render Australia, Japan, and Malaysia as ordered route rows. Each row exposes
+- [x] Render Australia, Japan, and Malaysia as ordered route rows. Each row exposes
       current outcome, human-readable reason, review eligibility, accepted evidence,
       and unresolved gap. Retain a semantic comparison table for assistive
       technology if the visual surface is not a table.
-- [ ] Keep revision comparison adjacent to the decision it invalidates and explain
+- [x] Keep revision comparison adjacent to the decision it invalidates and explain
       why renewed advisor review is required. Do not expose raw state codes as
       headings.
-- [ ] Present client confirmation as a downstream handoff. The exact parent/family
+- [x] Present client confirmation as a downstream handoff. The exact parent/family
       actor and `FamilyDecision` semantics remain visible inside the confirmation,
       receipt, and technical evidence layers.
-- [ ] In `plan_ready`, offer only a secondary, explicitly labelled navigation to the
+- [x] In `plan_ready`, offer only a secondary, explicitly labelled navigation to the
       independent execution-follow-up demo. It must not claim to carry the current
       Case, session, receipt, or timeline into `/demo/plan`.
-- [ ] Preserve all planning, task, review, revision, role-switch, decision, receipt,
+- [x] Preserve all planning, task, review, revision, role-switch, decision, receipt,
       timeline, SSE, recovery, and focus behavior.
-- [ ] Add focused assertions for initial advisor state, review-required, revision,
+- [x] Add focused assertions for initial advisor state, review-required, revision,
       client confirmation, plan-ready receipt, and recoverable failure.
 
 Run:
@@ -741,32 +744,32 @@ unchanged.
 - Delete after replacement-test proof:
   `web/tests/unit/presentation-shell.test.tsx`
 
-- [ ] First add focused RED assertions for the execution shell, unique heading
+- [x] First add focused RED assertions for the execution shell, unique heading
       hierarchy, accepted-transition/recovery focus, live-region cardinality,
       retained callbacks, and current-state action count. Record the expected
       failures; do not commit a failing HEAD. Then migrate the route and bring the
       same assertions GREEN.
-- [ ] Keep `usePlanExecution`, reducer, BFF, contracts, scenario parser, and request
+- [x] Keep `usePlanExecution`, reducer, BFF, contracts, scenario parser, and request
       callbacks untouched.
-- [ ] Lead with current checkpoint, accountable participant, due date, risk, next
+- [x] Lead with current checkpoint, accountable participant, due date, risk, next
       handoff, and exactly one primary action for the active role.
-- [ ] Keep the approved immutable plan as contextual reference and technical activity
+- [x] Keep the approved immutable plan as contextual reference and technical activity
       as secondary disclosure.
-- [ ] Make blocked, overdue, waiting-advisor, completed, reassessment, session-changed,
+- [x] Make blocked, overdue, waiting-advisor, completed, reassessment, session-changed,
       and recoverable states visually distinct without hiding the last confirmed
       progress.
-- [ ] Label the role switcher as a synthetic demo perspective control; do not imply a
+- [x] Label the role switcher as a synthetic demo perspective control; do not imply a
       production permissions feature.
-- [ ] Preserve action availability, disabled reasons, focus transfer, live messages,
+- [x] Preserve action availability, disabled reasons, focus transfer, live messages,
       immutable plan visibility, reassessment safe stop, and recovery exactly.
-- [ ] Add focused normal, waiting, blocked, reassessment, completed, and recovery
+- [x] Add focused normal, waiting, blocked, reassessment, completed, and recovery
       assertions.
-- [ ] After Tasks 4–6 are GREEN, run a zero-reference check for `DecisionJourney` and
+- [x] After Tasks 4–6 are GREEN, run a zero-reference check for `DecisionJourney` and
       `PresentationShell`; then delete both old components and
       `presentation-shell.test.tsx`. The replacement shell/rail tests must cover all
       landmarks, locale, synthetic boundary, proof segment, unique `h1`, and state
       focus behavior before deletion.
-- [ ] Remove obsolete `.decision-journey*` and legacy `.presentation-*` selectors
+- [x] Remove obsolete `.decision-journey*` and legacy `.presentation-*` selectors
       from `workspace.css` and `styles.css` only after PascalCase component/import,
       kebab-case selector, test, and stylesheet references are all zero.
 
@@ -900,51 +903,51 @@ not a third product workflow:
 | `plan-execution-reassessment-mobile.png` | Segment B: independent execution scenario | Blocked -> reassessment safe stop |
 | `plan-execution-recovery-mobile.png` | Segment B: independent execution scenario | retained progress and existing authority revalidation |
 
-- [ ] Keep the presentation matrix at exactly four routes, two locales, five widths,
+- [x] Keep the presentation matrix at exactly four routes, two locales, five widths,
       reduced motion, 200% zoom, keyboard/focus, contrast, overflow, long copy,
       normal journey, and blocked journey. If the test count changes, prove the
       coverage set is equivalent or stronger; do not merely update a number.
-- [ ] Add semantic assertions for first-viewport advisor positioning, shared shell,
+- [x] Add semantic assertions for first-viewport advisor positioning, shared shell,
       current stage, current responsibility, one primary action, no family-heavy
       top-level vocabulary, and detailed actor/authority retention.
-- [ ] Verify 1440, 1024, 768, 390, and 320 layouts in the canonical real-Chromium
+- [x] Verify 1440, 1024, 768, 390, and 320 layouts in the canonical real-Chromium
       automated matrix. Do not leave 1024 as a manual-only checkpoint.
-- [ ] Verify `44px` targets, visible focus, one `h1`, heading order, semantic table or
+- [x] Verify `44px` targets, visible focus, one `h1`, heading order, semantic table or
       list fallback, color contrast, reduced motion, 200% zoom, no horizontal
       overflow, no clipped long copy, no console error, and favicon success.
-- [ ] Replay two truthful task-owned Compose proof segments: (1) consultation normal
+- [x] Replay two truthful task-owned Compose proof segments: (1) consultation normal
       -> confirmed fact -> same-Case route analysis -> advisor approval -> client
       confirmation -> receipt/timeline; (2) independently seeded plan Happy, then
       independently seeded plan Blocked -> reassessment safe stop -> recovery.
-- [ ] Capture all nine current public screenshots from that real deterministic flow.
+- [x] Capture all nine current public screenshots from that real deterministic flow.
       Do not add a presentation-only fixture or selector. The existing closed
       `?scenario=blocked` selector remains the authoritative deterministic execution
       scenario selector and is allowed.
       Inspect every image for synthetic labelling, private path, raw UUID, internal
       task identity, credential, traceback, clipping, empty canvas, and visual
       consistency.
-- [ ] Rewrite README and operations entry copy around the advisor workspace. Keep the
+- [x] Rewrite README and operations entry copy around the advisor workspace. Keep the
       actual local synthetic and release boundaries. Screenshots remain review
       evidence, not functional authority.
-- [ ] Make the Compose real-Chromium presentation lane execute
+- [x] Make the Compose real-Chromium presentation lane execute
       `bootstrap.spec.ts`, `portfolio-design-review.spec.ts`, and
       `presentation.spec.ts`; do not leave root comprehension/design assertions in
       files that no canonical command runs. Freeze the exact file invocation and
       evidence-root wiring in `test_compose_contract.py`. Keep the existing behavior
       lanes for fact-to-plan, collaboration, connected decision, revision, minimal
       execution, and full execution in the complete Compose proof.
-- [ ] Make evidence-root handling safe under `set -u`: initialize from
+- [x] Make evidence-root handling safe under `set -u`: initialize from
       `${PRESENTATION_PUBLIC_EVIDENCE_ROOT:-}`, pass it only to the presentation-audit
       browser lane, and prove that an unset/empty value writes no public asset. With
       the exact approved root set, refresh only the declared nine assets, including
       the four execution screenshots, and reject every unlisted output.
-- [ ] Record a production-build and Chromium resource baseline before presentation
+- [x] Record a production-build and Chromium resource baseline before presentation
       implementation, then record the candidate's static JS/CSS bytes, browser
       request count, and transferred/resource bytes on the same routes and settings.
       Use the comparison to identify unexplained growth; do not invent a performance
       threshold or improvement claim. The root must still issue zero product requests
       and the removed voyage images must have zero runtime requests.
-- [ ] Run GStack `design-review` once on the complete candidate, covering `/`,
+- [x] Run GStack `design-review` once on the complete candidate, covering `/`,
       `/demo/collaboration`, `/demo`, and `/demo/plan` in normal and blocked states.
       Resolve only verified same-scope findings; do not add a new visual direction.
 
@@ -1017,7 +1020,7 @@ Stage only paths that actually changed and belong to this task.
 
 ## Task 8: Full verification and authority handoff
 
-- [ ] After Tasks 1–7 and screenshot/design review are complete, update
+- [x] After Tasks 1–7 and screenshot/design review are complete, update
       `docs/superpowers/specs/2026-08-09-advisor-centered-product-experience.md`,
       `docs/superpowers/plans/2026-08-09-advisor-centered-product-experience.md`,
       `DESIGN.md`, `docs/design/demo-storyboard.md`, `docs/design/route-map.md`, and
@@ -1025,8 +1028,9 @@ Stage only paths that actually changed and belong to this task.
       implemented and locally verified wording. Record actual command/evidence
       identities, not claims of release, deployment, adoption, or production use;
       `v0.1.5` remains the stable release.
-- [ ] Run the documentation-governance tests and `git diff --check` on that complete
-      working tree, inspect the exact staged docs, and create one closeout commit:
+- [x] Run the documentation-governance tests and `git diff --check` on the complete
+      working tree and inspect the exact changed docs.
+- [x] Exact-stage the six closeout docs and create one closeout commit:
 
 ```bash
 uv run pytest -q tests/architecture/test_documentation_governance.py
@@ -1039,9 +1043,10 @@ git diff --cached --name-status
 git commit -m "docs: record advisor workspace verification"
 ```
 
-- [ ] Run `superpowers:verification-before-completion` with fresh commands, not cached
+- [x] Run `superpowers:verification-before-completion` with fresh commands, not cached
       output or a prior branch receipt.
-- [ ] Run the complete repository gate:
+- [x] Run the complete fresh local gate available without Docker/Chromium; the
+      prohibited Docker/Chromium portions remain recorded from the Task 7 proof:
 
 ```bash
 make check
@@ -1050,25 +1055,83 @@ git status --short --branch
 git log --oneline --decorate "$BASE_SHA"..HEAD
 ```
 
-- [ ] Verify the complete diff contains no backend, BFF, API contract, reducer,
+The exact `make check` target was not rerun during this documentation-only
+closeout because it invokes Docker/Compose; its non-Docker components were run
+individually above, while the real-Chromium and Compose results remain the Task 7
+evidence record.
+
+- [x] Verify the complete diff contains no backend, BFF, API contract, reducer,
       database, migration, RLS, worker, task lifecycle, SSE, session, fixture,
       package, lockfile, Compose-topology, provider, release, deployment,
       or unrelated change.
-- [ ] Verify the root, route navigation, README, workflow rail, and screenshots state
+- [x] Verify the root, route navigation, README, workflow rail, and screenshots state
       the same-Case connected proof and separate execution-scenario proof truthfully;
       no surface claims a cross-scenario Case/session handoff.
-- [ ] Verify no current public file references the deleted runtime voyage assets or
+- [x] Verify no current public file references the deleted runtime voyage assets or
       obsolete presentation components. Historical plans/specs may retain their
       historical names but must not claim they are current runtime guidance.
-- [ ] Scan all changed text and image evidence for private paths, task ids, private
+- [x] Scan all changed text and image evidence for private paths, task ids, private
       motives, credentials, tokens, real personal data, raw internal errors, UUIDs,
       and unsupported outcome/production claims.
-- [ ] Report exact base/head/tree, commit list, changed paths, RED/GREEN evidence,
+- [x] Report exact base/head/tree, commit list, changed paths, RED/GREEN evidence,
       unit/type/lint/build/Compose/browser/design-review results, screenshot
       dimensions/hashes, resource inventory, remaining risks, and mini-retro.
-- [ ] Stop at `READY` for review-authority branch-diff review. Do not push or create a
+- [x] Stop at `READY` for review-authority branch-diff review. Do not push or create a
       PR unless the approved implementation mandate explicitly includes the
       unattended publication package below.
+
+### Task 8 verification record
+
+The implementation candidate was `010802c65f356f0914fe0c6eec62c443f59cb343` before
+this documentation closeout. The stable release remains `v0.1.5`; the following is
+local synthetic evidence and makes no release, deployment, adoption, real-user,
+production, or performance-improvement claim.
+
+- `scripts/verify_compose.sh` completed its exact presentation lane with `71/71`
+  assertions across `/`, `/demo/collaboration`, `/demo`, and `/demo/plan`, both
+  locales, `1440`, `1024`, `768`, `390`, and `320` CSS pixels, reduced motion, 200%
+  zoom, keyboard normal/blocked paths, responsive overflow, and scenario-boundary
+  checks.
+- The complete task-owned Compose proof passed the baseline API/DB/worker, DRA,
+  M3B/M4A, restart/durability, web probe, connected collaboration, plan-execution
+  Happy/Blocked/recovery/stale/session paths, fact-to-plan bilingual paths, and
+  planning-revision bilingual paths. Task-owned Compose resources were torn down;
+  the final inventory and ports `43100`/`43101` were empty.
+- Fresh final local gates recorded `npm --prefix web run test` as `38` files and
+  `422` tests passed; frontend lint, typecheck, and production build exited `0`;
+  the architecture/documentation suite passed `82` tests; `sh -n
+  scripts/verify_compose.sh` and `git diff --check` exited `0`.
+- One GStack `design-review` covered all four routes in normal and blocked states.
+  Three same-scope findings—conditional status contrast, auditable workflow
+  readability, and current-action focus target—were repaired and closed.
+
+The nine reviewed coded Chromium captures are:
+
+| Asset | Dimensions | SHA-256 |
+| --- | --- | --- |
+| `night-voyager-portfolio-entry.png` | `1440x3846` | `8dcdce2b5c834ac944b6be835a10ffcf3676ade52fbe455ddc5724863523ff81` |
+| `collaboration-confirmed-fact.png` | `1440x2408` | `97c4ec09deaa85211ec172d606132cd5797436c64ed790b40330c3c525eeb7f6` |
+| `m5-advisor-ledger.png` | `1440x2924` | `d285b0e0d5dd20f4c678fca426615a25922faaf1c46339a95b3dbcbdc31c3fcf` |
+| `m5-family-receipt-timeline.png` | `1440x1556` | `cfd31b8542a2f891842618ce62b19c2b3f67798d1595e36217829ba5b5ad4977` |
+| `night-voyager-planning-revision.png` | `1440x3025` | `7e360c8c8dcad937c6e3d01bc1f6faabd190c266ef6741b39d4d410198561c03` |
+| `plan-execution-current-action.png` | `1440x2061` | `e2498fce5f206cb61c00d55894a97d1a2088fa522f4e1a687aa19e563d38dfe1` |
+| `plan-execution-advisor-review.png` | `1440x2061` | `8a539c389a3a543f1f9677131b4faee76765acd172f3bbc37872a0eb82be0455` |
+| `plan-execution-reassessment-mobile.png` | `390x3493` | `6c11ba5702d35c6ab4fd12c71bd83674a7319a8ffb01bbf7a74d69b2f1f81629` |
+| `plan-execution-recovery-mobile.png` | `390x3003` | `8b05c7726dab56258df50e645cff3a9fd26c901400dc4a39480b843bd7fdc617` |
+
+Equivalent local resource measurements, not performance claims:
+
+| Surface | Request count | Transfer bytes | Encoded bytes |
+| --- | ---: | ---: | ---: |
+| `/` | `20 -> 19` | `269240 -> 220111` | `263240 -> 214411` |
+| `/demo/collaboration` | `13 -> 13` | `195791 -> 195718` | `191891 -> 191818` |
+| `/demo` | `14 -> 14` | `199527 -> 199916` | `195327 -> 195716` |
+| `/demo/plan` | `12 -> 12` | `187793 -> 187734` | `184193 -> 184134` |
+
+Equivalent static inventory recorded `18` files in both builds: baseline JS/CSS/
+total `842124/41617/883741`, candidate `869606/25763/895369`, with deltas
+`+27482/-15854/+11628`. The root had `0` API requests in both measurements and
+the historical voyage image request changed from `1` to `0`.
 
 ## Review-authority and unattended publication package
 

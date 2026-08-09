@@ -3,7 +3,18 @@
 
 ## Status
 
-Approved design. Implementation has not started.
+Implemented and locally verified on the local synthetic candidate. The stable
+release remains `v0.1.5`; this closeout records no release, deployment, provider,
+adoption, real-user, or production-use claim.
+
+The implementation candidate verified for this redesign is
+`010802c65f356f0914fe0c6eec62c443f59cb343`. The fresh local verification record
+includes the full Vitest suite (`38` files, `422` tests), frontend lint, typecheck,
+production build, architecture/documentation governance tests, the successful
+`scripts/verify_compose.sh` presentation lane (`71/71`), the complete normal and
+blocked deterministic Compose proof, and one GStack `design-review` over all four
+routes in normal and blocked states. The nine current screenshot assets are real
+coded Chromium captures and remain review evidence rather than product authority.
 
 This document defines one bounded presentation and interaction redesign for the
 existing Night Voyager local synthetic portfolio product. It supersedes the current

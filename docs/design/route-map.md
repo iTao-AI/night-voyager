@@ -1,8 +1,8 @@
 # Connected route map
 
-The approved route map is advisor-centered and presentation-only. The previous
-cosmic root/family-heavy map is historical context and the replacement is not yet
-locally verified. The complete governed walkthrough begins at `/demo/collaboration`
+The implemented route map is advisor-centered and presentation-only. The previous
+cosmic root/family-heavy map is historical context; the replacement is locally
+verified. The complete governed walkthrough begins at `/demo/collaboration`
 and continues the same Case into `/demo` through receipt and `TimelinePlan`. The
 separately seeded `/demo/plan` execution scenario never claims a Case or session
 handoff from `/demo`. Seven explicit BFF route files expose exactly eight HTTP
@@ -10,8 +10,8 @@ methods for the collaboration and Skill-inspector reads/mutations. The read-only
 same-Case handoff then composes the existing focused advisor-family/evidence route;
 it adds no new BFF handler.
 
-`/demo` also remains independently available as the focused advisor-family/evidence
-route. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI
+`/demo` also remains independently available as the advisor route-analysis and
+downstream client-confirmation surface. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI
 identity, task, review, decision, SSE, and three connected read endpoints, including
 participant-safe `journey-status`. The approved shell uses one dark product frame,
 warm decision surface, five-stage workflow rail, current-work canvas, evidence rail,
@@ -48,6 +48,13 @@ The BFF is transport only: no catch-all, no role selector, no task/route/policy
 authority, and no client-computed decision requirements. The shared planning Skill
 inspector is a server-owned `no-store` projection; it performs no client-side
 relational join and grants no mutation authority. `/` is the current static
-Chinese-first Virtual Night Voyage portfolio entry and makes no API/session/task/SSE
-request. Its responsive AVIF/WebP files are runtime imagery while the source PNG is
-provenance only. All connected state is local synthetic PostgreSQL state.
+advisor-centered portfolio entry and makes no API/session/task/SSE request. Its
+preview is a coded React composition; historical voyage imagery is provenance only
+and has no runtime dependency. All connected state is local synthetic PostgreSQL
+state.
+
+The implemented route map was verified by the local `scripts/verify_compose.sh`
+presentation lane: `71/71` presentation assertions passed across both locales, the
+five audited widths, reduced motion, 200% zoom, and normal/blocked keyboard paths.
+The connected same-Case proof ends at its receipt and `TimelinePlan`; `/demo/plan`
+remains a separately seeded execution scenario.
