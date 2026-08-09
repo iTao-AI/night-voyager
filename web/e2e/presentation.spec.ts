@@ -124,7 +124,13 @@ async function renderedMetrics(page: Page) {
     function color(value: string): Color | null {
       const channels = value.match(/[\d.]+/g)?.map(Number);
       if (!channels || channels.length < 3) return null;
-      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
+      const scale = /^color\(srgb\s/.test(value) ? 255 : 1;
+      return [
+        channels[0] * scale,
+        channels[1] * scale,
+        channels[2] * scale,
+        channels[3] ?? 1,
+      ];
     }
     function composite(foreground: Color, background: Color): Color {
       const alpha = foreground[3] + background[3] * (1 - foreground[3]);
@@ -339,9 +345,9 @@ async function assertSemanticPresentation(page: Page) {
     await expect(shell).toHaveAttribute("data-proof-segment", expectedProofSegment);
     await expect(page.locator(".workflow-rail")).toBeVisible();
     expect(await page.locator("[data-primary-action='true']:visible").count()).toBeLessThanOrEqual(1);
-    await expect(
-      page.locator(".workspace-header, .workspace-context-bar, .workflow-rail, .workspace-route-heading"),
-    ).not.toContainText(
+    expect((await page.locator(
+      ".workspace-header, .workspace-context-bar, .workflow-rail, .workspace-route-heading",
+    ).allTextContents()).join("\n")).not.toMatch(
       /家庭表达|家庭决定|顾问到家庭决策流程|Family input|Family decision|Advisor-to-family decision flow/,
     );
   }
