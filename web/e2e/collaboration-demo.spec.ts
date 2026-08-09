@@ -41,10 +41,18 @@ async function verifyNegative(page: Page, caseId: string, key: string, expectedC
 }
 
 async function expectCollapsedNoTaskInspector(page: Page) {
+  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  const technicalSummary = technicalEvidence.locator(":scope > summary");
+  await expect(technicalSummary).toBeVisible();
+  await expect(technicalEvidence).not.toHaveAttribute("open", "");
+  await technicalSummary.click();
+
   const details = page.locator(".skill-inspector details");
   await expect(details.locator("summary")).toBeVisible();
   await expect(details).not.toHaveAttribute("open", "");
   await expect(details).toContainText(/尚未创建规划任务|Planning task not created/);
+  await technicalSummary.click();
+  await expect(technicalEvidence).not.toHaveAttribute("open", "");
 }
 
 test("collaboration-demo.spec.ts proves governed memory authority without creating a task", async ({ page }) => {

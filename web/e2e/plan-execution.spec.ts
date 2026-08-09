@@ -90,7 +90,7 @@ async function rotate(page: Page, role: keyof typeof copy.en): Promise<string> {
 
 async function expectLiveAndVisibleCopy(page: Page, message: string) {
   await expect(page.getByRole("status")).toHaveText(message);
-  await expect(page.locator("p:not([role])").filter({ hasText: message })).toBeVisible();
+  await expect(page.locator(".workspace-status-copy")).toHaveText(message);
 }
 
 async function progress(
@@ -173,7 +173,7 @@ test("complete governed plan execution browser-to-database proof", async ({ page
   acceptedReceiptIds.push(started.receipt.receipt_id);
   expect(started.view.current_checkpoint?.milestone_key).toBe("documents");
   checkpointIds.push(...started.view.checkpoints.map((item) => item.checkpoint_id));
-  await expect(page.getByRole("heading", { level: 1, name: labels.currentAction })).toBeFocused();
+  await expect(page.locator(".plan-execution-hero > h3")).toBeFocused();
   const authoritySummary = page.locator("[data-plan-authority-summary]");
   await expect(authoritySummary).toContainText(labels.documents);
   await expect(authoritySummary).not.toContainText("documents");

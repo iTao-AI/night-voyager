@@ -91,7 +91,7 @@ async function expectCheckpoint(
 
 async function expectLiveAndVisibleCopy(page: Page, message: string) {
   await expect(page.getByRole("status")).toHaveText(message);
-  await expect(page.locator("p:not([role])").filter({ hasText: message })).toBeVisible();
+  await expect(page.locator(".workspace-status-copy")).toHaveText(message);
 }
 
 test("minimal governed plan execution reaches completed through one bilingual journey", async ({
