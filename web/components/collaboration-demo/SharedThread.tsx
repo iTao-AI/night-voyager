@@ -17,6 +17,7 @@ export function SharedThread({ messages, loading = false }: { messages: readonly
           {messages.map((message) => (
             <li key={message.message_event_id}>
               <p className="message-meta">{presentCode(locale, "role", message.actor_role)} · {copy("messageSequenceLabel")} {message.sequence_no}</p>
+              <p className="technical-label">{copy("messageOriginalLabel")}</p>
               <p>{message.body}</p>
             </li>
           ))}

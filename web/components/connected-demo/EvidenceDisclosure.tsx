@@ -17,7 +17,7 @@ export function EvidenceDisclosure({ evidence }: { evidence: Ledger["evidence"] 
           <li key={`${item.snapshot_date}-${index}`}>
             <strong>{presentCode(locale, "evidenceClaim", item.claim)}</strong>
             <span> · {copy("evidencePublisherLabel")}: {item.publisher}</span>
-            <span> · {copy("evidenceLimitationLabel")}: {item.limitation}</span>
+            <span> · <span className="technical-label">{copy("evidenceLimitationLabel")}</span>: <span className="evidence-raw-content">{item.limitation}</span></span>
             <span> · {copy("evidenceSnapshotLabel")}: {formatIsoDate(locale, item.snapshot_date)}</span>
           </li>
         ))}

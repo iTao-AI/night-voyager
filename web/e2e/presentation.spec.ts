@@ -290,6 +290,17 @@ async function assertSemanticPresentation(page: Page) {
   expect(metrics.headings.filter((heading) => heading.level === "H1")).toHaveLength(1);
   expect(metrics.landmarks).toContain("main");
   expect(metrics.targets.filter((target) => target.height < 24 || target.width < 24)).toEqual([]);
+  const journeyStage = page.url().includes("/demo/collaboration")
+    ? "family_input"
+    : page.url().includes("/demo/plan")
+      ? "plan_execution"
+      : page.url().includes("/demo")
+        ? "advisor_confirmation"
+        : null;
+  if (journeyStage) {
+    await expect(page.locator(".decision-journey-track > li")).toHaveCount(5);
+    await expect(page.locator(`.decision-journey[data-current-stage='${journeyStage}']`)).toBeVisible();
+  }
   if (metrics.reducedMotion) {
     expect(metrics.maxMotionMs).toBeLessThanOrEqual(10);
     expect(metrics.motionOffenders).toEqual([]);

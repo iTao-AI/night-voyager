@@ -14,7 +14,8 @@ continue to own their current hooks and mutation callbacks. Catalog additions,
 labels, CSS, and favicon are presentation-only. No backend, BFF, session,
 database, task, SSE, or dependency surface changes are allowed.
 
-**Plan status:** Approved for implementation.
+**Plan status:** Implemented locally; browser verification and authority review
+remain pending.
 
 ## Constraints
 
@@ -36,57 +37,57 @@ database, task, SSE, or dependency surface changes are allowed.
 
 ### 1. Land the public-neutral contract
 
-- [ ] Add this plan and the matching presentation design spec.
-- [ ] Keep the design index discoverable without task identity or execution
+- [x] Add this plan and the matching presentation design spec.
+- [x] Keep the design index discoverable without task identity or execution
       metadata.
-- [ ] Review the exact docs diff and commit it separately before code changes.
+- [x] Review the exact docs diff and commit it separately before code changes.
 
 ### 2. Freeze the RED contract
 
-- [ ] Add tests for the five closed journey stages and the horizontal/vertical
+- [x] Add tests for the five closed journey stages and the horizontal/vertical
       semantic order.
-- [ ] Add tests for each route's existing UI-state mapping, including unknown
+- [x] Add tests for each route's existing UI-state mapping, including unknown
       fail-closed behavior.
-- [ ] Add Chinese/English catalog key parity and natural business vocabulary
+- [x] Add Chinese/English catalog key parity and natural business vocabulary
       assertions, with exact technical terms confined to disclosure assertions.
-- [ ] Add byte-for-byte tests for a server message body, advisor reason, and
+- [x] Add byte-for-byte tests for a server message body, advisor reason, and
       evidence limitation.
-- [ ] Add static boundary assertions that `DecisionJourney` has no fetch,
+- [x] Add static boundary assertions that `DecisionJourney` has no fetch,
       mutation, storage, cookie, API, session, database, task, or role-switch
       surface.
-- [ ] Run the focused tests and record an expected RED failure caused by the
+- [x] Run the focused tests and record an expected RED failure caused by the
       missing implementation.
 
 ### 3. Implement the shared journey and route mapping
 
-- [ ] Add `web/components/presentation/DecisionJourney.tsx` with the closed
+- [x] Add `web/components/presentation/DecisionJourney.tsx` with the closed
       `JourneyStage` type and pure display props.
-- [ ] Add a presentation mapping module for collaboration, connected, and plan
+- [x] Add a presentation mapping module for collaboration, connected, and plan
       execution states; unknown values return `null`.
-- [ ] Render the journey in all three routes without changing existing action
+- [x] Render the journey in all three routes without changing existing action
       callbacks, disabled conditions, focus behavior, or live regions.
-- [ ] Reorder the route shells so stage/role, outcome, boundary, primary action,
+- [x] Reorder the route shells so stage/role, outcome, boundary, primary action,
       journey, business content, and technical disclosure read in that order.
 
 ### 4. Refine bilingual presentation and visual system
 
-- [ ] Add natural bilingual journey/authority-label catalog keys with exact key
+- [x] Add natural bilingual journey/authority-label catalog keys with exact key
       parity.
-- [ ] Add additive labels for `消息原文`, `顾问确认原文`, and technical
+- [x] Add additive labels for `消息原文`, `顾问确认原文`, and technical
       disclosure; preserve server-owned strings exactly.
-- [ ] Add the dependency-free `web/app/icon.svg`.
-- [ ] Add restrained desktop horizontal and mobile vertical journey CSS, shared
+- [x] Add the dependency-free `web/app/icon.svg`.
+- [x] Add restrained desktop horizontal and mobile vertical journey CSS, shared
       internal spacing/rhythm, focus/contrast/target/reduced-motion rules, and
       no-overflow behavior without touching the home-page visual layer.
-- [ ] Update the storyboard, state/interaction matrix, and internal-demo rules
+- [x] Update the storyboard, state/interaction matrix, and internal-demo rules
       in `DESIGN.md` to describe the presentation-only contract.
 
 ### 5. Verify the real deterministic flow
 
-- [ ] Run `npm --prefix web run lint`.
-- [ ] Run `npm --prefix web run typecheck`.
-- [ ] Run `npm --prefix web run test`.
-- [ ] Run `npm --prefix web run build`.
+- [x] Run `npm --prefix web run lint`.
+- [x] Run `npm --prefix web run typecheck`.
+- [x] Run `npm --prefix web run test`.
+- [x] Run `npm --prefix web run build`.
 - [ ] Run `make check` and the repository public-hygiene, diff, dependency,
       and route-contract checks available in the current checkout.
 - [ ] In one task-owned Compose project, replay normal collaboration, same-Case

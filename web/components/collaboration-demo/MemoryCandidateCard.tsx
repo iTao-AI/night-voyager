@@ -26,7 +26,7 @@ export function MemoryCandidateCard({ candidate }: { candidate: MemoryCandidateP
         <div><dt>{copy("candidateSourceLabel")}</dt><dd>{copy("candidateParentMessage")}{advisor ? ` ${advisor.source_message_sequence_no}` : ""}</dd></div>
         {advisor ? <div><dt>{copy("candidatePinnedRevision")}</dt><dd>{advisor.case_revision}</dd></div> : null}
       </dl>
-      {advisor?.reason ? <p className="advisor-reason"><strong>{copy("candidateAdvisorReason")}:</strong> {advisor.reason}</p> : null}
+      {advisor?.reason ? <p className="advisor-reason"><strong><span>{copy("advisorReasonOriginalLabel")}</span>:</strong> {advisor.reason}</p> : null}
     </section>
   );
 }

@@ -108,6 +108,16 @@ heading, and one polite live region announces terminal or waiting changes.
 Presentation locale and responsive layout never alter PostgreSQL, HTTP, BFF,
 receipt-then-GET, recovery, role, or reassessment authority.
 
+The current internal-demo presentation layer adds one shared, display-only
+decision journey to `/demo/collaboration`, `/demo`, and `/demo/plan`: family
+input, advisor confirmation, route review, family decision, and plan execution.
+The closed stage is mapped only from existing UI state; unknown values render no
+journey. The journey has no fetch, mutation, storage, session, or authority
+responsibility. Each route keeps its existing primary action, business content,
+raw server-owned message/reason/limitation, and technical evidence disclosure.
+Desktop uses a horizontal journey and mobile uses a vertical journey; the root
+portfolio remains outside this presentation-only change.
+
 ## Accessibility
 
 - Provide a skip link and semantic `header`, `nav`, `main`, `section`, and `footer` landmarks.
@@ -133,3 +143,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-22 | Make the portfolio presentation Chinese-first | Adds an exact `zh-CN`/`en` presentation-only layer and outcome-first root while preserving the same server authority and warm-paper direction. |
 | 2026-07-23 | Split the root from the governed demo visual layer | Gives `/` the Virtual Night Voyage entry while preserving the warm-paper ledger and every existing authority boundary on both demo routes. |
 | 2026-07-28 | Extend the connected ledger with a revision journey | Preserves backend phase/role authority while presenting the retained predecessor, deterministic comparison, fresh advisor authorization, and a fail-closed blocked counterfactual. |
+| 2026-08-09 | Add a shared internal-demo decision journey | Helps a first-time visitor understand role, result, boundary, action, route trade-offs, and next steps before opening existing technical evidence; it changes no business authority or route contract. |

@@ -23,8 +23,8 @@ export function CurrentConfirmedFacts({
             <dl className="collaboration-facts" key={`${fact.fact_key}-${fact.fact_version}`}>
               <div><dt>{copy("factLabel")}</dt><dd>{presentCode(locale, "factKey", fact.fact_key)}</dd></div>
               <div><dt>{copy("currentValueLabel")}</dt><dd>{presentConfirmedFactValue(locale, fact.fact_key, fact.value)}</dd></div>
-              <div><dt>{copy("factAuthorityLabel")}</dt><dd>{copy("factVersionLabel")} {fact.fact_version}</dd></div>
-              <div><dt>{copy("caseAuthorityLabel")}</dt><dd>{copy("caseRevisionLabel")} {caseRevision}</dd></div>
+              <div><dt>{copy("factAuthorityLabel")}</dt><dd><span>{copy("factVersionLabel")} {fact.fact_version}</span>{copy("factVersionLabel") === copy("factVersionTechnicalLabel") ? null : <span className="technical-label"> {copy("factVersionTechnicalLabel")} {fact.fact_version}</span>}</dd></div>
+              <div><dt>{copy("caseAuthorityLabel")}</dt><dd><span>{copy("caseRevisionLabel")} {caseRevision}</span>{copy("caseRevisionLabel") === copy("caseRevisionTechnicalLabel") ? null : <span className="technical-label"> {copy("caseRevisionTechnicalLabel")} {caseRevision}</span>}</dd></div>
             </dl>
           ))}
         </div>
