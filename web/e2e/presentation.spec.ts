@@ -21,6 +21,8 @@ const APPROVED_PUBLIC_EVIDENCE_FILENAMES = [
   "plan-execution-reassessment-mobile.png",
   "plan-execution-recovery-mobile.png",
 ] as const;
+const PRIMARY_ACTION_LANDMARKS = ["skip-link", "brand", "locale", "primary-action"] as const;
+const ROLE_SWITCH_LANDMARKS = ["skip-link", "brand", "locale", "role-switch"] as const;
 
 type AuditCell = {
   route: (typeof ROUTES)[number];
@@ -59,6 +61,19 @@ async function openCell(browser: Browser, cell: AuditCell) {
   return { context, page };
 }
 
+async function waitForKeyboardReadiness(page: Page, route: AuditCell["route"]) {
+  if (route === "/demo/plan") {
+    const roleSwitch = page.locator(".plan-role-switcher button:not([disabled])").first();
+    await expect(roleSwitch).toBeVisible();
+    await expect(roleSwitch).toBeEnabled();
+    return ROLE_SWITCH_LANDMARKS;
+  }
+  const primaryAction = page.locator('[data-primary-action="true"]:not([disabled])').first();
+  await expect(primaryAction).toBeVisible();
+  await expect(primaryAction).toBeEnabled();
+  return PRIMARY_ACTION_LANDMARKS;
+}
+
 async function keyboardAndFocusEvidence(page: Page) {
   const sequence: string[] = [];
   let visibleFocus = false;
@@ -75,11 +90,13 @@ async function keyboardAndFocusEvidence(page: Page) {
             ? "brand"
             : active.closest(".locale-switch")
               ? "locale"
-              : active.matches('[data-primary-action="true"]')
-                ? "primary-action"
-                : active.matches("summary")
-                  ? "technical-disclosure"
-                  : "other",
+              : active.closest(".plan-role-switcher")
+                ? "role-switch"
+                : active.matches('[data-primary-action="true"]')
+                  ? "primary-action"
+                  : active.matches("summary")
+                    ? "technical-disclosure"
+                    : "other",
         visible: style.outlineStyle !== "none" && style.outlineWidth !== "0px",
       };
     });
@@ -99,14 +116,20 @@ async function keyboardAndFocusEvidence(page: Page) {
   return { focus, keyboard: sequence, visibleFocus };
 }
 
-function keyboardLandmarkSubsequence(sequence: readonly string[]) {
-  return ["skip-link", "brand", "locale", "primary-action"].map((landmark) =>
+function keyboardLandmarkSubsequence(
+  sequence: readonly string[],
+  expectedLandmarks: readonly string[],
+) {
+  return expectedLandmarks.map((landmark) =>
     sequence.indexOf(landmark),
   );
 }
 
-function assertKeyboardLandmarkSubsequence(sequence: readonly string[]) {
-  const indexes = keyboardLandmarkSubsequence(sequence);
+function assertKeyboardLandmarkSubsequence(
+  sequence: readonly string[],
+  expectedLandmarks: readonly string[],
+) {
+  const indexes = keyboardLandmarkSubsequence(sequence, expectedLandmarks);
   expect(indexes.every((index) => index >= 0)).toBe(true);
   expect(indexes).toEqual([...indexes].sort((left, right) => left - right));
 }
@@ -497,8 +520,7 @@ test.describe("provider-free governed presentation audit", () => {
         };
         test(`${slug(cell)} rendered baseline`, async ({ browser }) => {
           const { context, page } = await openCell(browser, cell);
-          await expect(page.locator('[data-primary-action="true"]').first()).toBeVisible();
-          await expect(page.locator('[data-primary-action="true"]').first()).toBeEnabled();
+          const expectedLandmarks = await waitForKeyboardReadiness(page, cell.route);
           const keyboardEvidence = await keyboardAndFocusEvidence(page);
           const evidence = {
             cell,
@@ -506,7 +528,7 @@ test.describe("provider-free governed presentation audit", () => {
             metrics: await assertSemanticPresentation(page),
           };
           expect(keyboardEvidence.keyboard.some((item) => item !== "none")).toBe(true);
-          assertKeyboardLandmarkSubsequence(keyboardEvidence.keyboard);
+          assertKeyboardLandmarkSubsequence(keyboardEvidence.keyboard, expectedLandmarks);
           expect(keyboardEvidence.visibleFocus).toBe(true);
           await mkdir(AUDIT_OUTPUT!, { mode: 0o700, recursive: true });
           await page.screenshot({

@@ -285,15 +285,31 @@ def test_browser_presentation_contract_is_advisor_first_and_keeps_execution_boun
     assert 'activateByKeyboard(summary, "Enter")' in source
     assert 'activateByKeyboard(summary, "Space")' in source
     assert (
-        "await expect(page.locator('[data-primary-action=\"true\"]').first())"
-        ".toBeVisible();"
+        'const PRIMARY_ACTION_LANDMARKS = ["skip-link", "brand", "locale", '
+        '"primary-action"] as const;'
         in source
     )
     assert (
-        "await expect(page.locator('[data-primary-action=\"true\"]').first())"
-        ".toBeEnabled();"
+        'const ROLE_SWITCH_LANDMARKS = ["skip-link", "brand", "locale", '
+        '"role-switch"] as const;'
         in source
     )
+    assert "async function waitForKeyboardReadiness" in source
+    assert 'if (route === "/demo/plan")' in source
+    assert 'plan-role-switcher button:not([disabled])' in source
+    assert 'data-primary-action="true"]:not([disabled])' in source
+    assert (
+        "assertKeyboardLandmarkSubsequence(keyboardEvidence.keyboard, expectedLandmarks)"
+        in source
+    )
+    readiness = source.split("async function waitForKeyboardReadiness", 1)[1].split(
+        "async function keyboardAndFocusEvidence", 1
+    )[0]
+    plan_branch = readiness.split('if (route === "/demo/plan")', 1)[1].split(
+        "  }", 1
+    )[0]
+    assert "role-switcher" in plan_branch
+    assert "data-primary-action" not in plan_branch
     assert "portfolio-category" in design_review
     assert "Family input" not in bootstrap
     assert "Family decision" not in bootstrap
