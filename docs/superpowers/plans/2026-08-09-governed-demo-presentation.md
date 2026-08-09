@@ -14,8 +14,9 @@ continue to own their current hooks and mutation callbacks. Catalog additions,
 labels, CSS, and favicon are presentation-only. No backend, BFF, session,
 database, task, SSE, or dependency surface changes are allowed.
 
-**Plan status:** Implemented locally; browser verification and authority review
-remain pending.
+**Plan status:** Implementation and local authority verification complete.
+Publication status is tracked by repository history and GitHub rather than this
+execution plan.
 
 ## Constraints
 
@@ -88,25 +89,25 @@ remain pending.
 - [x] Run `npm --prefix web run typecheck`.
 - [x] Run `npm --prefix web run test`.
 - [x] Run `npm --prefix web run build`.
-- [ ] Run `make check` and the repository public-hygiene, diff, dependency,
+- [x] Run `make check` and the repository public-hygiene, diff, dependency,
       and route-contract checks available in the current checkout.
-- [ ] In one task-owned Compose project, replay normal collaboration, same-Case
+- [x] In one task-owned Compose project, replay normal collaboration, same-Case
       planning, advisor review, family receipt/timeline, plan happy, and plan
       blocked/reassessment safe-stop paths.
-- [ ] Use real Chromium at 1440/768/390/320, including focus, reduced motion,
+- [x] Use real Chromium at 1440/768/390/320, including focus, reduced motion,
       44px targets, contrast, and overflow checks.
-- [ ] Generate and inspect the tracked advisor route-comparison and family
+- [x] Generate and inspect the tracked advisor route-comparison and family
       receipt/timeline screenshots.
-- [ ] Run the GStack `design-review` visual QA and fix only in-scope findings.
+- [x] Run the GStack `design-review` visual QA and fix only in-scope findings.
 
 ### 6. Close locally and hand off
 
-- [ ] Run `superpowers:verification-before-completion` with fresh evidence,
+- [x] Run `superpowers:verification-before-completion` with fresh evidence,
       review the exact final diff, and confirm no backend or local-only paths changed.
-- [ ] Commit the implementation after the docs commit; if commit or branch
+- [x] Commit the implementation after the docs commit; if commit or branch
       metadata is blocked, preserve the exact diff and report the one mechanical
       authority bridge.
-- [ ] Preserve this worktree and branch for authority review. No push, PR,
+- [x] Preserve this worktree and branch for authority review. No push, PR,
       merge, tag, release, deploy, or cleanup is performed.
 
 ## Completion record
@@ -116,3 +117,19 @@ changed-file summary, RED and GREEN evidence, actual verification commands and
 results, screenshot paths and browser QA outcome, remaining risk or blocked
 external gate, a mini-retro seed, the next gate of authority full branch-diff
 review, and the absence of push/PR/merge/cleanup.
+
+## Authority verification record
+
+- Fresh `make check` completed successfully, including backend, frontend,
+  architecture, database, dependency, release, and public-hygiene gates.
+- A fresh task-owned Compose proof completed successfully and removed its
+  containers, network, volume, and local images. It included the existing
+  normal, blocked, recovery, restart, bilingual, browser, and database paths.
+- The provider-free presentation matrix ran exactly 58 real Chromium tests
+  across four routes, two locales, four widths, reduced motion, 200% zoom, and
+  the normal and blocked journeys.
+- GStack Browser rechecked the three live routes at desktop, tablet, and mobile
+  sizes. No console error, horizontal overflow, undersized visible target, or
+  new high/medium design finding remained.
+- The final authority diff review found no backend, API, schema, migration,
+  package, lockfile, synthetic-fixture, or business-authority change.
