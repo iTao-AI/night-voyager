@@ -798,6 +798,35 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "compatible upstream support for sharp >=0.35" not in source
 
 
+def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    plans_index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    connected = (ROOT / "docs/operations/connected-demo.md").read_text(
+        encoding="utf-8"
+    )
+    route_map = (ROOT / "docs/design/route-map.md").read_text(encoding="utf-8")
+    spec = (
+        ROOT
+        / "docs/superpowers/specs/2026-08-09-advisor-centered-product-experience.md"
+    ).read_text(encoding="utf-8")
+    compose = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "current development candidate" in readme
+    assert "not released or deployed" in readme
+    assert "当前 development candidate" in readme_cn
+    assert "未发布或部署" in readme_cn
+    assert "current development candidate" in docs_index
+    assert "not released or deployed" in docs_index
+    assert "Implemented locally; not released" in plans_index
+    assert "current development captures" in connected
+    assert "advisor-centered route-analysis and downstream client-confirmation" in route_map
+    assert "exact route/locale/width/motion/zoom coverage" in spec
+    assert "58-cell" not in spec
+    assert "compose-proof: presentation audit passed" in compose
+
+
 def test_current_security_policy_tracks_the_development_dependency_path() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 
@@ -1076,7 +1105,7 @@ def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
         assert token in combined
 
 
-def test_advisor_workspace_docs_describe_the_current_v0_1_5_surface() -> None:
+def test_advisor_workspace_docs_separate_current_candidate_from_release_history() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
     design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
@@ -1126,7 +1155,11 @@ def test_advisor_workspace_docs_describe_the_current_v0_1_5_surface() -> None:
     assert "complete governed walkthrough" in storyboard
     assert "focused advisor-family/evidence route" in storyboard
     assert "complete governed walkthrough" in route_map
-    assert "focused advisor-family/evidence route" in route_map
+    assert (
+        "The historical label \"focused advisor-family/evidence route\" is retained "
+        "only in documentation history."
+        in route_map
+    )
 
     for token in (
         "v0.1.5 is the current local synthetic portfolio release",
@@ -1196,7 +1229,7 @@ def test_high_end_portfolio_evidence_is_bounded_and_release_verifiable() -> None
     for token in (
         "PORTFOLIO_ENTRY_SURFACE",
         "PORTFOLIO_SOURCE_SHA256",
-        "PORTFOLIO_PRODUCTION_ASSETS",
+        "PORTFOLIO_REMOVED_RUNTIME_ASSETS",
         "verify_portfolio_entry_surface",
     ):
         assert token in verifier

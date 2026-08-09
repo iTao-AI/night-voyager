@@ -107,6 +107,43 @@ it("labels the receipt handoff as an independent execution scenario", () => {
   expect(screen.getByText(/不承接当前 Case 或 session/)).toBeVisible();
 });
 
+it("focuses the current-work heading after an accepted connected transition", async () => {
+  setConnectedDemo({ value: "bootstrapping" });
+  const view = renderPresentation(<ConnectedDemo />);
+  fireEvent.click(screen.getByRole("button", { name: "开始顾问流程" }));
+
+  setConnectedDemo({
+    value: "advisor_ready",
+    status: { ...statusFor("task_ready"), active_role: "advisor" },
+    ledger: ledgerFixture("task-ready"),
+  });
+  view.rerender(<ConnectedDemo />);
+
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 2, name: "当前工作阶段" })).toHaveFocus(),
+  );
+});
+
+it("focuses connected conflict and recovery headings on state entry", async () => {
+  setConnectedDemo({ value: "bootstrapping" }, "collaboration");
+  const conflict = renderPresentation(<ConnectedDemo />);
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 2, name: "另一个演示流程正在进行" })).toHaveFocus(),
+  );
+  conflict.unmount();
+
+  const retained = {
+    value: "advisor_ready",
+    status: { ...statusFor("task_ready"), active_role: "advisor" },
+    ledger: ledgerFixture("task-ready"),
+  };
+  setConnectedDemo({ value: "recoverable_error", code: "transport_failure", prior: retained });
+  renderPresentation(<ConnectedDemo />);
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 3, name: "需要恢复" })).toHaveFocus(),
+  );
+});
+
 it("renders Chinese task-ready authority with one primary action and no raw phase", () => {
   const ledger = ledgerFixture("task-ready");
   const { container } = renderPresentation(

@@ -8,7 +8,6 @@ from pathlib import Path
 
 import yaml
 
-
 APPROVED_PRESENTATION_ASSETS = (
     "night-voyager-portfolio-entry.png",
     "collaboration-confirmed-fact.png",
@@ -277,6 +276,13 @@ def test_presentation_audit_lane_runs_the_exact_browser_specs_and_fail_closed_ro
         == 1
     )
     assert "presentation.spec.ts" in lane
+
+
+def test_presentation_audit_success_marker_is_count_neutral() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "compose-proof: presentation audit passed" in script
+    assert "58-cell" not in script
 
 
 def test_presentation_evidence_contract_has_exactly_the_approved_public_assets() -> None:

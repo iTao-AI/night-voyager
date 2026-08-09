@@ -129,7 +129,8 @@ revision, the controlled student preferred-country change, retained predecessor,
 successor PlanningRun, lost-ack recovery, deterministic comparison, renewed review,
 only the current family decision, and the blocked budget counterfactual. The
 dedicated asset is updated only with `UPDATE_PLANNING_REVISION_SCREENSHOT=1`;
-`UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the released portfolio captures.
+`UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the current development captures;
+these screenshots are review evidence for the unreleased presentation candidate.
 
 Local Task 4 evidence used the exact host Playwright browser against Compose-served
 PostgreSQL/API/worker state because the local containerized browser image could not

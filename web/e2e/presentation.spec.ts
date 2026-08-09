@@ -66,18 +66,24 @@ async function keyboardAndFocusEvidence(page: Page) {
     await page.keyboard.press("Tab");
     const step = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
-      if (!active) return { descriptor: "none", visible: false };
+      if (!active) return { landmark: "none", visible: false };
       const style = getComputedStyle(active);
       return {
-        descriptor: [
-          active.tagName.toLowerCase(),
-          active.getAttribute("aria-label"),
-          active.textContent?.trim().slice(0, 80),
-        ].filter(Boolean).join(":"),
+        landmark: active.matches(".skip-link")
+          ? "skip-link"
+          : active.matches(".portfolio-brand, .workspace-brand")
+            ? "brand"
+            : active.closest(".locale-switch")
+              ? "locale"
+              : active.matches('[data-primary-action="true"]')
+                ? "primary-action"
+                : active.matches("summary")
+                  ? "technical-disclosure"
+                  : "other",
         visible: style.outlineStyle !== "none" && style.outlineWidth !== "0px",
       };
     });
-    sequence.push(step.descriptor);
+    sequence.push(step.landmark);
     visibleFocus ||= step.visible;
   }
   const focus = await page.evaluate(() => {
@@ -91,6 +97,18 @@ async function keyboardAndFocusEvidence(page: Page) {
     };
   });
   return { focus, keyboard: sequence, visibleFocus };
+}
+
+function keyboardLandmarkSubsequence(sequence: readonly string[]) {
+  return ["skip-link", "brand", "locale", "primary-action", "technical-disclosure"].map(
+    (landmark) => sequence.indexOf(landmark),
+  );
+}
+
+function assertKeyboardLandmarkSubsequence(sequence: readonly string[]) {
+  const indexes = keyboardLandmarkSubsequence(sequence);
+  expect(indexes.every((index) => index >= 0)).toBe(true);
+  expect(indexes).toEqual([...indexes].sort((left, right) => left - right));
 }
 
 async function activateByKeyboard(
@@ -486,6 +504,7 @@ test.describe("provider-free governed presentation audit", () => {
             metrics: await assertSemanticPresentation(page),
           };
           expect(keyboardEvidence.keyboard.some((item) => item !== "none")).toBe(true);
+          assertKeyboardLandmarkSubsequence(keyboardEvidence.keyboard);
           expect(keyboardEvidence.visibleFocus).toBe(true);
           await mkdir(AUDIT_OUTPUT!, { mode: 0o700, recursive: true });
           await page.screenshot({

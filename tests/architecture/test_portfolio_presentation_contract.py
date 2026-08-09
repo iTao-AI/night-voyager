@@ -143,7 +143,7 @@ def test_root_preview_projection_matches_the_closed_fixture_contract() -> None:
     assert f'preferredMinor: {budget["preferred_minor"]:,}'.replace(",", "_") in projection
     assert f'hardCeilingMinor: {budget["hard_ceiling_minor"]:,}'.replace(",", "_") in projection
 
-    expected_routes = []
+    expected_routes: list[tuple[str, str, str, list[str], str | None]] = []
     entries_by_country = {
         country: entry
         for country, entry in zip(
@@ -172,7 +172,7 @@ def test_root_preview_projection_matches_the_closed_fixture_contract() -> None:
         r'\s+unresolvedGap: (?P<gap>null|"[^"]+"),\n\s+\}',
         re.DOTALL,
     )
-    actual_routes = []
+    actual_routes: list[tuple[str, str, str, list[str], str | None]] = []
     for match in route_pattern.finditer(projection):
         actual_routes.append(
             (
@@ -261,7 +261,8 @@ def test_plan_execution_evidence_is_generated_from_semantic_state_assertions() -
     assert '"本地合成演示"' in source
 
 
-def test_browser_presentation_contract_is_advisor_first_and_keeps_the_execution_boundary_visible() -> None:
+def test_browser_presentation_contract_is_advisor_first_and_keeps_execution_boundary_visible(
+) -> None:
     bootstrap = (ROOT / "web/e2e/bootstrap.spec.ts").read_text(encoding="utf-8")
     design_review = (ROOT / "web/e2e/portfolio-design-review.spec.ts").read_text(
         encoding="utf-8"
@@ -277,6 +278,8 @@ def test_browser_presentation_contract_is_advisor_first_and_keeps_the_execution_
     assert "data-primary-action" in source
     assert "connected_same_case" in source
     assert "independent_execution_scenario" in source
+    assert "assertKeyboardLandmarkSubsequence" in source
+    assert "keyboardLandmarkSubsequence" in source
     assert "portfolio-category" in design_review
     assert "Family input" not in bootstrap
     assert "Family decision" not in bootstrap

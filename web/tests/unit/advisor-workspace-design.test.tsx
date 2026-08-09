@@ -118,6 +118,13 @@ describe("advisor workspace presentation contract", () => {
     expect(en.workflowStageExecutionFollowup).toBe("Execution follow-up");
   });
 
+  it("keeps the canonical preview as the only production route model", () => {
+    const source = readFileSync(resolve(process.cwd(), "lib/presentation/portfolio.ts"), "utf8");
+
+    expect(source).not.toContain("PORTFOLIO_ROUTE_STOPS");
+    expect(source).not.toContain("PortfolioRouteStop");
+  });
+
   it("renders the root as an advisor workspace and keeps the root static", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);

@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager is an AI collaboration workspace for study-abroad advisors. It turns a local synthetic consultation into reviewable client facts, route analysis, advisor judgment, client confirmation, and a durable receipt and TimelinePlan while preserving the existing authority boundaries. The current v0.1.5 local synthetic portfolio release opens at `/` with a coded, static preview and an explicit persistent English switch. The root performs no API, session, task, or EventSource work.
+Night Voyager is an AI collaboration workspace for study-abroad advisors. It turns a local synthetic consultation into reviewable client facts, route analysis, advisor judgment, client confirmation, and a durable receipt and TimelinePlan while preserving the existing authority boundaries. The current development candidate presents the redesigned advisor-centered root and four-route workspace as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
 
 The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. All four routes share the advisor workspace shell.
 
@@ -57,8 +57,8 @@ performs read-only validation and creates no task.
 
 The current focused planning-revision proof uses
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. Screenshot maintenance is
-explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` retains the released portfolio
-captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
+explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` updates the current
+development-candidate portfolio captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
 `night-voyager-planning-revision.png`.
 
 For the governed execution path released in v0.1.5, open `/demo/plan` and follow

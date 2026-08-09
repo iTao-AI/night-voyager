@@ -1,8 +1,7 @@
 # Documentation
 
-v0.1.5 is the current local synthetic portfolio release of Night Voyager, an
-AI collaboration workspace for study-abroad advisors. It includes the
-advisor-centered portfolio workflow plus governed timeline execution,
+v0.1.5 is the current local synthetic portfolio release of Night Voyager. It
+includes the governed portfolio workflow plus governed timeline execution,
 recovery/reassessment authority, reconciliation, professional presentation,
 evaluator-first DX, and bounded dependency maintenance. Start with the
 [release notes](releases/v0.1.5.md) and
@@ -20,8 +19,12 @@ Current complementary-evidence Slice 0 status is a permanent local `evaluation_i
 safe stop: no `MkeCaptureArtifactV2`, terminal receipt, information-gain conclusion,
 candidate persistence, Slice 1/2 unlock, or v0.1.6 release exists. PR #87 is merged; hosted CI and publication cleanup are complete.
 
+The current development candidate is an AI collaboration workspace for study-abroad advisors and separately contains the implemented-locally,
+presentation-only advisor-centered workspace evidence. It is not released or deployed;
+stable v0.1.5 and its release documents remain unchanged.
+
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).
-- Portfolio reviewers: open `/` for the static Chinese-default advisor workspace, switch explicitly to English when needed, then inspect the released captures and synthetic plan-execution evidence: [current action](assets/plan-execution-current-action.png), [advisor review](assets/plan-execution-advisor-review.png), [mobile reassessment](assets/plan-execution-reassessment-mobile.png), and [mobile recovery](assets/plan-execution-recovery-mobile.png). Semantic assertions remain authority; Screenshots are review evidence, not functional authority. The connected same-Case proof ends at its receipt and TimelinePlan; `/demo/plan` is an independent deterministic execution scenario.
+- Portfolio reviewers: open `/` for the static Chinese-default advisor workspace, switch explicitly to English when needed, then inspect the current development captures and synthetic plan-execution evidence: [current action](assets/plan-execution-current-action.png), [advisor review](assets/plan-execution-advisor-review.png), [mobile reassessment](assets/plan-execution-reassessment-mobile.png), and [mobile recovery](assets/plan-execution-recovery-mobile.png). Semantic assertions remain authority; Screenshots are review evidence, not functional authority. The connected same-Case proof ends at its receipt and TimelinePlan; `/demo/plan` is an independent deterministic execution scenario.
 - Interviewers: begin the connected same-Case proof at `/demo/collaboration` with the [collaboration runbook](operations/collaboration-walkthrough.md), continue through `/demo` with the [connected runbook](operations/connected-demo.md), or inspect the separately seeded Happy/Blocked execution scenario at `/demo/plan` with the [execution runbook](operations/plan-execution-walkthrough.md). The four routes share one advisor workspace presentation and must not be treated as production.
 - Timeline-execution reviewers: use the local `/demo/plan` vertical with the [execution runbook](operations/timeline-execution.md), [complete walkthrough](operations/plan-execution-walkthrough.md), [contract reference](reference/timeline-execution-contract.md), and [ADR 0013](decisions/0013-governed-timeline-execution-authority.md). PR #80, PR #83, PR #84, and PR #85 are merged and included in released v0.1.5 at migration `0015`; PR #87 is merged; hosted CI and publication cleanup are complete.
 - Contributors: follow the [change-to-test matrix and guardrails](../CONTRIBUTING.md).

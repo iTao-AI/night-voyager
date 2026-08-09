@@ -244,7 +244,7 @@ run_presentation_audit_lane() {
         browser-proof npx playwright test \
             --config playwright.compose.config.ts \
             bootstrap.spec.ts portfolio-design-review.spec.ts presentation.spec.ts
-    printf 'compose-proof: 58-cell presentation audit passed\n'
+    printf 'compose-proof: presentation audit passed\n'
 }
 
 run_plan_execution_lane() {

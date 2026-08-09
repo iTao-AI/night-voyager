@@ -7,8 +7,11 @@ and continues the same Case into `/demo` through receipt and `TimelinePlan`. The
 separately seeded `/demo/plan` execution scenario never claims a Case or session
 handoff from `/demo`. Seven explicit BFF route files expose exactly eight HTTP
 methods for the collaboration and Skill-inspector reads/mutations. The read-only
-same-Case handoff then composes the existing focused advisor-family/evidence route;
-it adds no new BFF handler.
+same-Case handoff then composes the existing advisor-centered route-analysis and downstream
+client-confirmation surface; it adds no new BFF handler.
+The historical label "focused advisor-family/evidence route" is retained only in documentation history.
+
+Current presentation wording: advisor-centered route-analysis and downstream client-confirmation.
 
 `/demo` also remains independently available as the advisor route-analysis and
 downstream client-confirmation surface. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI

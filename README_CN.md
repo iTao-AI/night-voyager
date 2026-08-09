@@ -1,6 +1,6 @@
 # Night Voyager
 
-Night Voyager 是留学顾问的 AI 协作工作台。它把本地合成咨询整理为可核对的客户信息、方案研判、顾问判断、客户确认以及持久化 receipt 与 TimelinePlan，同时保留既有 authority 边界。当前 v0.1.5 local synthetic portfolio release 在 `/` 提供 coded、static 预览，并保留显式、持久的 English 切换。这个 root 是 local synthetic、provider-free 展示面，不发起 API、session、task 或 EventSource。
+Night Voyager 是留学顾问的 AI 协作工作台。它把本地合成咨询整理为可核对的客户信息、方案研判、顾问判断、客户确认以及持久化 receipt 与 TimelinePlan，同时保留既有 authority 边界。当前 development candidate 展示重做后的 advisor-centered root 与四个 route 共享的 workspace，属于静态（static）、local synthetic、provider-free presentation evidence，仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
 
 完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。四个 route 共享 advisor workspace shell。
 
@@ -57,7 +57,7 @@ make down
 
 当前 focused planning-revision proof 使用
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`。Screenshot 维护显式隔离：
-`UPDATE_PORTFOLIO_SCREENSHOTS` 保留已发布的 portfolio captures，
+`UPDATE_PORTFOLIO_SCREENSHOTS` 更新当前 development-candidate portfolio captures，
 `UPDATE_PLANNING_REVISION_SCREENSHOT` 只能更新
 `night-voyager-planning-revision.png`。
 

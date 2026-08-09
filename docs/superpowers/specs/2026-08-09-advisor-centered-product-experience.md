@@ -15,6 +15,7 @@ production build, architecture/documentation governance tests, the successful
 blocked deterministic Compose proof, and one GStack `design-review` over all four
 routes in normal and blocked states. The nine current screenshot assets are real
 coded Chromium captures and remain review evidence rather than product authority.
+The presentation audit covered the exact route/locale/width/motion/zoom coverage.
 
 This document defines one bounded presentation and interaction redesign for the
 existing Night Voyager local synthetic portfolio product. It supersedes the current
@@ -562,8 +563,7 @@ the implementation plan.
   accessibility matrix, and relevant architecture tests pass on the implementation
   candidate.
 - A task-owned Compose run passes the same-Case collaboration-to-receipt lane, the
-  separate plan-execution Happy/Blocked lanes, and the exact 58-cell presentation
-  audit or an intentionally updated equivalent that retains the same
+  separate plan-execution Happy/Blocked lanes, and the presentation audit's exact
   route/locale/width/motion/zoom coverage.
 - Real Chromium checks normal and blocked routes, keyboard navigation, 200% zoom,
   console errors, favicon, responsive overflow, and current screenshots.

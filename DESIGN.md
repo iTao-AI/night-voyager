@@ -2,11 +2,11 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The focused advisor-family/evidence route at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only. The previous cosmic root and family-heavy route presentation are historical presentation context; the implemented advisor-centered workspace redesign is presentation-only and locally verified on the local synthetic candidate. Stable release `v0.1.5` remains unchanged, with no release, deployment, provider, or production-use claim.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The advisor-centered route-analysis and downstream client-confirmation surface at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only. The previous cosmic root and family-heavy route presentation are historical presentation context; the implemented advisor-centered workspace redesign is presentation-only and locally verified on the local synthetic candidate. Stable release `v0.1.5` remains unchanged, with no release, deployment, provider, or production-use claim.
 
 - **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, route-evidence secondary action to `#route-atlas`)
 - **Complete governed walkthrough:** `/demo/collaboration` -> read-only same-Case handoff -> explicit task action on `/demo`
-- **Focused advisor-family/evidence route:** `/demo`
+- **Advisor route-analysis and client-confirmation surface:** `/demo`
 - **Governed plan-execution route:** `/demo/plan` (`happy` by default; exact
   `blocked` query scenario)
 - **Implemented presentation direction:** AI collaboration workspace for study-abroad advisors; locally verified
@@ -86,7 +86,8 @@ owner-controlled activation/rollback, persisted planning-revision materializatio
 five-field task/execution pins. PR C implements the task-free `/demo/collaboration` route,
 closed browser reducer, and shared read-only inspector from the frozen role-safe HTTP
 projections. It adds no backend authority, migration, task operation, polling, or
-EventSource. The existing task-owning `/demo` lifecycle remains the advisor-family flow
+EventSource. The existing task-owning `/demo` lifecycle remains the advisor route-analysis
+and client-confirmation flow
 and preserves one SSE connection. Catalog-only Skills are never presented as executing
 capabilities merely because they have versions or passing evaluations.
 

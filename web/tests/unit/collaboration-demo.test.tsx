@@ -114,6 +114,21 @@ it("keeps a journey conflict in the route hierarchy and focuses its h2 on entry"
   expect(screen.getByRole("alert")).toBeInTheDocument();
 });
 
+it("focuses the route recovery heading when collaboration enters a recoverable error", async () => {
+  setState({
+    value: "recoverable_error",
+    category: "stale",
+    resumePhase: "replan_required",
+    context: { ...baseContext, role: "advisor", candidate: advisorCandidate, fact, caseRevision: 2 },
+  });
+  renderPresentation(<CollaborationDemo />);
+
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 2, name: "协作流程已安全暂停" })).toHaveFocus(),
+  );
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+});
+
 it("renders the governed human gates and no task or generic-chat affordance", async () => {
   setState({ value: "bootstrapping_parent", context: { ...baseContext, thread: null, messages: [] } });
   const view = renderPresentation(<CollaborationDemo />);

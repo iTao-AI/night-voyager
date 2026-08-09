@@ -10,6 +10,7 @@ import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
 import { MemoryCandidateCard } from "../../components/collaboration-demo/MemoryCandidateCard";
 import { SharedThread } from "../../components/collaboration-demo/SharedThread";
 import { PlanExecutionWorkspace } from "../../components/plan-execution/PlanExecutionWorkspace";
+import { WorkflowRail } from "../../components/presentation/WorkflowRail";
 import { PresentationProvider } from "../../lib/presentation/context";
 import {
   collaborationWorkflowStage,
@@ -212,6 +213,53 @@ it("retains a known stage through recoverable and role-switching projections", (
   expect(connectedWorkflowStage("recoverable_error", { value: "family_review" })).toBe("client_confirmation");
   expect(connectedWorkflowStage("recoverable_error", { value: "future_state_secret" })).toBeNull();
   expect(planExecutionWorkflowStage("recoverable_error")).toBe("execution_followup");
+});
+
+it("renders the exact complete/current/upcoming rail sequence, including an unknown stage", () => {
+  const current = renderPresentation(
+    <WorkflowRail currentStage="route_analysis" copy={(key) => key} />,
+  );
+  expect(
+    [...current.container.querySelectorAll(".workflow-rail-list > li")].map(
+      (item) => item.getAttribute("data-state"),
+    ),
+  ).toEqual(["complete", "complete", "current", "upcoming", "upcoming"]);
+  expect(current.container.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
+  current.unmount();
+
+  const unknown = renderPresentation(<WorkflowRail currentStage={null} copy={(key) => key} />);
+  expect(
+    [...unknown.container.querySelectorAll(".workflow-rail-list > li")].map(
+      (item) => item.getAttribute("data-state"),
+    ),
+  ).toEqual(["upcoming", "upcoming", "upcoming", "upcoming", "upcoming"]);
+  expect(unknown.container.querySelectorAll("[aria-current]")).toHaveLength(0);
+});
+
+it("recovers connected stages through nested known prior state and fails closed deeply", () => {
+  const known = {
+    value: "recoverable_error",
+    prior: {
+      value: "role_switching",
+      prior: { value: "recoverable_error", prior: { value: "family_review" } },
+    },
+  };
+  expect(connectedWorkflowStage(known.value, known.prior)).toBe("client_confirmation");
+
+  const unknown = {
+    value: "recoverable_error",
+    prior: {
+      value: "role_switching",
+      prior: { value: "future_state_secret", prior: { value: "family_review" } },
+    },
+  };
+  expect(connectedWorkflowStage(unknown.value, unknown.prior)).toBeNull();
+  expect(
+    connectedWorkflowStage("recoverable_error", {
+      value: "role_switching",
+      prior: { value: "recoverable_error" },
+    }),
+  ).toBeNull();
 });
 
 it("fails closed for unknown UI state without exposing the raw state", () => {
