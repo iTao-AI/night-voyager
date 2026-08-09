@@ -424,7 +424,7 @@ async function mutation(
   await activateByKeyboard(page.getByRole("button", { exact: true, name }), key);
   expect((await receipt).status()).toBe(200);
   expect((await freshRead).status()).toBe(200);
-  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+  await expect(page.locator(".plan-execution-hero > h3")).toBeFocused();
 }
 
 async function captureState(page: Page, name: string) {
