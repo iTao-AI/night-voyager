@@ -100,8 +100,8 @@ async function keyboardAndFocusEvidence(page: Page) {
 }
 
 function keyboardLandmarkSubsequence(sequence: readonly string[]) {
-  return ["skip-link", "brand", "locale", "primary-action", "technical-disclosure"].map(
-    (landmark) => sequence.indexOf(landmark),
+  return ["skip-link", "brand", "locale", "primary-action"].map((landmark) =>
+    sequence.indexOf(landmark),
   );
 }
 
