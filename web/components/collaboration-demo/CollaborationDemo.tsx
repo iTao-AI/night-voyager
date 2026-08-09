@@ -5,7 +5,9 @@ import { useEffect, useRef } from "react";
 import { useCollaborationDemo } from "../../lib/collaboration-demo/use-collaboration-demo";
 import { presentCode } from "../../lib/presentation/codes";
 import { usePresentation } from "../../lib/presentation/context";
+import { collaborationJourneyStage } from "../../lib/presentation/journey";
 import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
+import { DecisionJourney } from "../presentation/DecisionJourney";
 import { PresentationShell } from "../presentation/PresentationShell";
 import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
 import { CollaborationRecoveryNotice } from "./CollaborationRecoveryNotice";
@@ -24,6 +26,10 @@ export function CollaborationDemo() {
   }, [state.value]);
 
   const context = state.context;
+  const journeyStage = collaborationJourneyStage(
+    state.value,
+    state.value === "recoverable_error" ? state.resumePhase : undefined,
+  );
   const busy = state.value === "message_submitting" || state.value === "confirmation_submitting" || state.value === "switching_to_advisor";
   const advisorCandidate = context.candidate && "candidate_id" in context.candidate ? context.candidate : null;
   const canConfirm = state.value === "advisor_reviewing" && advisorCandidate?.state === "pending" && advisorCandidate.case_revision === context.caseRevision;
@@ -73,9 +79,8 @@ export function CollaborationDemo() {
 
               {state.value === "recoverable_error" ? <CollaborationRecoveryNotice category={state.category} onRetry={() => void demo.retry()} headingRef={phaseHeading} /> : null}
 
-              <ol className="authority-steps" aria-label={copy("collaborationPathLabel")}>
-                <li>{copy("pathSharedMessage")}</li><li>{copy("pathTypedProposal")}</li><li>{copy("pathAdvisorReview")}</li><li>{copy("pathConfirmedFact")}</li><li>{copy("pathCaseRevision")}</li><li>{copy("pathReplanRequired")}</li>
-              </ol>
+              {journeyStage ? <DecisionJourney currentStage={journeyStage} copy={copy} /> : null}
+
             </section>
 
             {context.thread ? <SharedThread messages={context.messages} loading={busy && context.messages.length === 0} /> : null}
@@ -84,6 +89,13 @@ export function CollaborationDemo() {
             {context.role === "advisor" && demo.inspector ? <PlanningSkillInspector inspector={demo.inspector} /> : null}
 
             {["replan_required", "handoff_validating"].includes(state.value) && context.fact ? <ConfirmedFactSummary fact={context.fact} caseRevision={context.caseRevision} /> : null}
+
+            <details className="technical-disclosure authority-steps-disclosure">
+              <summary>{copy("collaborationPathLabel")}</summary>
+              <ol className="authority-steps" aria-label={copy("collaborationPathLabel")}>
+                <li>{copy("pathSharedMessage")}</li><li><span>{copy("typedProposalLabel")}</span> <span className="technical-label">{copy("pathTypedProposal")}</span></li><li>{copy("pathAdvisorReview")}</li><li>{copy("pathConfirmedFact")}</li><li><span>{copy("caseRevisionLabel")}</span> <span className="technical-label">{copy("pathCaseRevision")}</span></li><li>{copy("pathReplanRequired")}</li>
+              </ol>
+            </details>
           </>
         ) : null}
       </div>

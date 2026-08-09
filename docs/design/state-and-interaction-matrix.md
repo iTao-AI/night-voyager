@@ -5,6 +5,32 @@ missing, invalid, and storage-failure default; exact `en` is explicitly selectab
 Switching writes only `night-voyager:presentation-locale:v1` and leaves lifecycle
 state, requests, idempotency, journey storage, EventSource, and navigation unchanged.
 
+## Internal-demo presentation layer
+
+The three internal routes share a closed display journey with these exact stages:
+`family_input`, `advisor_confirmation`, `route_review`, `family_decision`, and
+`plan_execution`. Each route maps its existing UI state to one stage and passes
+only that stage plus localized copy to the display component. The mapping is
+fail-closed: an unknown UI state renders no journey and never exposes the raw
+state value. This layer has no fetch, mutation, storage, cookie, session,
+database, task, or role-switch responsibility.
+
+The journey is ordered before route-specific business content and technical
+evidence disclosure. It explains the current role/stage, user-visible outcome,
+boundary, and existing primary action at the route surface; it does not create
+or replace any action. Server-owned message bodies, advisor reasons, and
+evidence limitations remain byte-for-byte unchanged. Technical terms remain in
+the disclosure layer while the first layer uses the corresponding Chinese
+business vocabulary.
+
+On `/demo/collaboration`, the six-fact authority path is an accessible native
+technical disclosure placed after the shared message, candidate, and confirmed
+fact business panels. It remains available without competing with the first
+screen journey or hiding any existing action. A collaboration `recoverable_error`
+projects its existing `resumePhase`; connected `role_switching` and
+`recoverable_error` project only their existing prior state. Missing or unknown
+resume/prior state remains fail-closed.
+
 | Phase | Visible truth | Primary action | Forbidden action |
 | --- | --- | --- | --- |
 | `task_ready` | current Case and canonical inputs; no task/run | create task | approve or derive pins |

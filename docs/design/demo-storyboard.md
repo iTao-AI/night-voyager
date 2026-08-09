@@ -7,6 +7,29 @@ independently usable. Both demo surfaces retain the warm-paper ledger visual sys
 
 The current story is introduced by the [Chinese-first portfolio entry](../assets/night-voyager-portfolio-entry.png): purpose, route evidence, next action, locale control, and the synthetic boundary precede technical proof. The static Virtual Night Voyage root uses optimized AVIF/WebP runtime imagery; its source PNG is provenance only. Exact `en` presents the same states without changing authority.
 
+## Shared presentation journey
+
+The three internal demo routes share a display-only five-stage journey:
+
+1. **Family input** — make the family’s conditions, preferences, and boundaries
+   explicit.
+2. **Advisor confirmation** — the assigned advisor checks the proposal, source,
+   and fact boundary.
+3. **Route review** — compare route outcomes, evidence, and trade-offs.
+4. **Family decision** — the family explicitly accepts the current route and
+   trade-offs.
+5. **Plan execution** — accountable people move through action checkpoints and
+   pause for review when needed.
+
+The current stage is projected from each route’s existing UI state. Unknown
+states fail closed and show no journey. The component is presentational only;
+it does not read storage, call APIs, perform mutations, or own authority. On
+desktop the journey is horizontal; on mobile it becomes vertical. Existing
+business actions remain the only actions, while messages, advisor reasons, and
+evidence limitations remain verbatim server-owned content. Technical terms such
+as `typed proposal`, `Case revision`, `Fact version`, `Skill pin`, and
+`checkpoint` remain available in the secondary evidence layer.
+
 ## Focused advisor-family/evidence route
 
 M5 turns the six-beat M1 visual intent into a real local synthetic walkthrough:

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Night Voyager</title>
+  <desc id="desc">A warm paper compass mark with a north star.</desc>
+  <rect width="64" height="64" rx="16" fill="#183f43"/>
+  <circle cx="32" cy="32" r="19" fill="none" stroke="#f4e9d1" stroke-width="2"/>
+  <path d="M32 13v7M32 44v7M13 32h7M44 32h7" stroke="#d5b56f" stroke-width="2"/>
+  <path d="m32 19 7 20-7-4-7 4 7-20Z" fill="#d5b56f"/>
+  <circle cx="32" cy="32" r="3" fill="#f4e9d1"/>
+</svg>

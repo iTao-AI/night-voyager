@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import type { DemoDisplayState } from "../../lib/connected-demo/reducer";
 import { usePresentation } from "../../lib/presentation/context";
+import { connectedJourneyStage } from "../../lib/presentation/journey";
 import { presentCode } from "../../lib/presentation/codes";
 import { PresentationShell } from "../presentation/PresentationShell";
 import { AdvisorLedger } from "./AdvisorLedger";
@@ -16,6 +17,7 @@ import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspecto
 import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import { RevisionFactEditor } from "./RevisionFactEditor";
+import { DecisionJourney } from "../presentation/DecisionJourney";
 
 function retainedLedger(state: DemoDisplayState): Ledger | null {
   if ("ledger" in state) return state.ledger;
@@ -53,6 +55,10 @@ export function ConnectedDemo() {
         )
       : null;
   const ledger = retainedLedger(state);
+  const journeyStage = connectedJourneyStage(
+    state.value,
+    "prior" in state ? state.prior : undefined,
+  );
   const busy = ["task_creating", "task_streaming", "review_submitting", "role_switching", "recoverable_error"].includes(state.value);
   const primaryFor = (current: Ledger) => {
     switch (current.phase) {
@@ -84,12 +90,14 @@ export function ConnectedDemo() {
             ledger={ledger}
             confirmedFacts={confirmedFactsFor(ledger.case_id, ledger.case_revision)}
             busy={busy}
+            journeyStage={journeyStage}
             onPrimaryAction={() => runUserAction(primaryFor(ledger))}
             onSecondaryAction={ledger.phase === "review_required"
               ? () => runUserAction(() => demo.requestRevision())
               : undefined}
           />
         ) : null}
+        {!ledger && journeyStage ? <DecisionJourney currentStage={journeyStage} copy={copy} /> : null}
         {demo.inspector && inspectorVisible ? <PlanningSkillInspector inspector={demo.inspector} /> : null}
         {state.value === "revision_requested" ? (
           <section className="ledger-hero" aria-labelledby="revision-proposal-title">

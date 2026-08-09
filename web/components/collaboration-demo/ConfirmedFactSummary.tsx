@@ -22,8 +22,8 @@ export function ConfirmedFactSummary({ fact, caseRevision }: { fact: ConfirmedFa
       <h2 id="confirmed-fact-title">{copy("confirmedFactTitle")}</h2>
       <p><strong>{value}</strong> {copy("confirmedFactProjection")}</p>
       <dl className="collaboration-facts">
-        <div><dt>{copy("factAuthorityLabel")}</dt><dd>{copy("factVersionLabel")} {fact.fact_version}</dd></div>
-        <div><dt>{copy("caseAuthorityLabel")}</dt><dd>{copy("caseRevisionLabel")} {caseRevision}</dd></div>
+        <div><dt>{copy("factAuthorityLabel")}</dt><dd><span>{copy("factVersionLabel")} {fact.fact_version}</span>{copy("factVersionLabel") === copy("factVersionTechnicalLabel") ? null : <span className="technical-label"> {copy("factVersionTechnicalLabel")} {fact.fact_version}</span>}</dd></div>
+        <div><dt>{copy("caseAuthorityLabel")}</dt><dd><span>{copy("caseRevisionLabel")} {caseRevision}</span>{copy("caseRevisionLabel") === copy("caseRevisionTechnicalLabel") ? null : <span className="technical-label"> {copy("caseRevisionTechnicalLabel")} {caseRevision}</span>}</dd></div>
         <div><dt>{copy("confirmedByLabel")}</dt><dd>{copy("assignedAdvisor")}</dd></div>
       </dl>
       {"reason" in fact ? <p className="advisor-reason"><strong>{copy("recordedReasonLabel")}:</strong> {fact.reason}</p> : null}

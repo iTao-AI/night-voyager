@@ -6,8 +6,10 @@ import { useState } from "react";
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
 import { usePresentation } from "../../lib/presentation/context";
+import { connectedJourneyStage, type JourneyStage } from "../../lib/presentation/journey";
 import { presentCode, presentRouteOutcome, presentRouteReason } from "../../lib/presentation/codes";
 import type { PresentationCopyKey } from "../../lib/presentation/catalog";
+import { DecisionJourney } from "../presentation/DecisionJourney";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { TaskProgress } from "./TaskProgress";
 import { CurrentConfirmedFacts } from "./CurrentConfirmedFacts";
@@ -28,12 +30,14 @@ export function AdvisorLedger({
   onPrimaryAction,
   onSecondaryAction,
   busy = false,
+  journeyStage,
 }: {
   ledger: Ledger;
   confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
   busy?: boolean;
+  journeyStage?: JourneyStage | null;
 }) {
   const { locale, copy } = usePresentation();
   const routes = ledger.routes;
@@ -43,6 +47,7 @@ export function AdvisorLedger({
   const primaryAction = primaryActionKey ? copy(
     ledger.phase === "replan_required" ? "createRevisedTaskAction" : primaryActionKey,
   ) : null;
+  const effectiveJourneyStage = journeyStage === undefined ? connectedJourneyStage(ledger.phase) : journeyStage;
   const presentClaims = (values: readonly string[], kind: "evidenceClaim" | "knownGap", emptyKey: PresentationCopyKey) =>
     values.length ? values.map((value) => presentCode(locale, kind, value)).join(", ") : copy(emptyKey);
 
@@ -54,7 +59,7 @@ export function AdvisorLedger({
         <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", "advisor")}</p>
         <p className="stage-outcome"><strong>{presentCode(locale, "demoPhase", ledger.phase)}</strong></p>
         <p>{copy("advisorRoleAuthority")}</p>
-        <p>{copy("caseRevisionLabel")} {ledger.case_revision}</p>
+        <p><span>{copy("caseRevisionLabel")} {ledger.case_revision}</span>{copy("caseRevisionLabel") === copy("caseRevisionTechnicalLabel") ? null : <span className="technical-label"> {copy("caseRevisionTechnicalLabel")} {ledger.case_revision}</span>}</p>
       </header>
 
       {ledger.comparison ? <PlanningRevisionComparison comparison={ledger.comparison} /> : null}
@@ -90,6 +95,8 @@ export function AdvisorLedger({
         ) : null}
       </div>
       {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
+
+      {effectiveJourneyStage ? <DecisionJourney currentStage={effectiveJourneyStage} copy={copy} /> : null}
 
       {!ledger.comparison && routes.length ? (
         <>

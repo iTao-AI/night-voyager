@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 
 import { PresentationShell } from "../presentation/PresentationShell";
 import { usePresentation } from "../../lib/presentation/context";
+import { planExecutionJourneyStage } from "../../lib/presentation/journey";
 import {
   usePlanExecution,
   type PlanExecutionController,
@@ -14,6 +15,7 @@ import { CurrentCheckpoint } from "./CurrentCheckpoint";
 import { ExecutionActivity } from "./ExecutionActivity";
 import { ExecutionRecoveryNotice } from "./ExecutionRecoveryNotice";
 import { ReassessmentHandoff } from "./ReassessmentHandoff";
+import { DecisionJourney } from "../presentation/DecisionJourney";
 import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
 
 export function PlanExecutionWorkspace({
@@ -27,6 +29,7 @@ export function PlanExecutionWorkspace({
   const controller = suppliedController ?? liveController;
   const { state, busy } = controller;
   const { copy } = usePresentation();
+  const journeyStage = planExecutionJourneyStage(state.value);
   const role = state.context?.active_role;
   const checkpoint = state.view?.current_checkpoint ?? null;
   const canAttest = state.value === "checkpoint_active"
@@ -206,6 +209,7 @@ export function PlanExecutionWorkspace({
               )}
             </div>
           </div>
+          {journeyStage ? <DecisionJourney currentStage={journeyStage} copy={copy} /> : null}
         </section>
         {state.value === "reassessment_required" && state.view?.reassessment && (
           <ReassessmentHandoff
