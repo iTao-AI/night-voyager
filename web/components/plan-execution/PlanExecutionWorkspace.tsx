@@ -2,9 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
-import { PresentationShell } from "../presentation/PresentationShell";
 import { usePresentation } from "../../lib/presentation/context";
-import { planExecutionJourneyStage } from "../../lib/presentation/journey";
+import { planExecutionWorkflowStage } from "../../lib/presentation/journey";
 import {
   usePlanExecution,
   type PlanExecutionController,
@@ -15,7 +14,7 @@ import { CurrentCheckpoint } from "./CurrentCheckpoint";
 import { ExecutionActivity } from "./ExecutionActivity";
 import { ExecutionRecoveryNotice } from "./ExecutionRecoveryNotice";
 import { ReassessmentHandoff } from "./ReassessmentHandoff";
-import { DecisionJourney } from "../presentation/DecisionJourney";
+import { AdvisorWorkspaceShell } from "../presentation/AdvisorWorkspaceShell";
 import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
 
 export function PlanExecutionWorkspace({
@@ -29,7 +28,7 @@ export function PlanExecutionWorkspace({
   const controller = suppliedController ?? liveController;
   const { state, busy } = controller;
   const { copy } = usePresentation();
-  const journeyStage = planExecutionJourneyStage(state.value);
+  const workflowStage = planExecutionWorkflowStage(state.value);
   const role = state.context?.active_role;
   const checkpoint = state.view?.current_checkpoint ?? null;
   const canAttest = state.value === "checkpoint_active"
@@ -99,185 +98,198 @@ export function PlanExecutionWorkspace({
             : "";
 
   return (
-    <PresentationShell contextKey="contextPlanExecution" mainId="plan-execution-main">
-      <div className="demo-shell plan-execution-workspace">
-        <p className="sr-only" role="status" aria-atomic="true" aria-live="polite">
-          {liveMessage}
-        </p>
-        <section data-section="current-action" className="ledger-hero plan-execution-hero">
-          <p className="eyebrow">{copy("planExecutionEyebrow")}</p>
-          <h1 ref={headingRef} tabIndex={-1}>{copy("planExecutionCurrentAction")}</h1>
-          <div className="plan-execution-current-grid">
-            <div
-              className="plan-authority-summary"
-              data-plan-authority-summary
-            >
-              <CurrentCheckpoint
-                checkpoint={checkpoint}
-                labels={{
-                  empty: copy("planExecutionNoCurrentCheckpoint"),
-                  milestone: copy("planExecutionCheckpointLabel"),
-                  state: copy("planExecutionCheckpointState"),
-                  dueDate: copy("planExecutionDueDate"),
-                  ownerRole: copy("planExecutionOwnerRole"),
-                  riskState: copy("planExecutionRiskState"),
-                  milestones,
-                  states: checkpointStates,
-                  roles,
-                  risks,
-                }}
-              />
-              <div className="next-handoff">
-                <p className="field-label">{copy("planExecutionNextHandoff")}</p>
-                <p>{nextHandoff}</p>
-              </div>
+    <AdvisorWorkspaceShell
+      activeRole={role ?? null}
+      contextKey="contextPlanExecution"
+      currentStage={workflowStage}
+      mainId="plan-execution-main"
+      proofSegment="independent_execution_scenario"
+      status={<p className="status workspace-status-copy">{liveMessage || copy("planExecutionConnectPrompt")}</p>}
+      supportingEvidence={
+        <>
+          <section className="plan-role-switcher" aria-labelledby="plan-role-title">
+            <h3 id="plan-role-title">{copy("planExecutionRoleTitle")}</h3>
+            <p>{copy("planExecutionRoleBody")}</p>
+            <div className="role-switcher-row">
+              {(["student", "parent", "advisor"] as const).map((nextRole) => (
+                <button
+                  aria-pressed={role === nextRole}
+                  disabled={busy}
+                  key={nextRole}
+                  onClick={() => void (state.context
+                    ? controller.switchRole(nextRole)
+                    : controller.connect(nextRole))}
+                >
+                  {copy(nextRole === "student" ? "roleStudent" : nextRole === "parent" ? "roleParent" : "roleAdvisor")}
+                </button>
+              ))}
             </div>
-            <div className="current-action-controls" data-current-action-controls>
-              {state.value === "loading" && <p>{copy("planExecutionConnectPrompt")}</p>}
-              {state.value === "ready_to_start" && (
-                <>
-                  {role === "advisor" && <p>{copy("planExecutionConnectPrompt")}</p>}
-                  <button
-                    className="execution-primary-action"
-                    disabled={busy || role === "advisor"}
-                    onClick={() => void controller.start()}
-                  >
-                    {copy("planExecutionStart")}
-                  </button>
-                </>
-              )}
-              {canAttest && (
-                <CheckpointAttestationForm
-                  disabled={busy}
-                  onProgress={() => void controller.attest("progress")}
-                  onCompletion={() => void controller.attest("completion")}
-                  onBlocked={(reason) => void controller.attest("blocked", reason)}
-                  labels={{
-                    group: copy("planExecutionAttestationLabel"),
-                    progress: copy("planExecutionProgress"),
-                    completion: copy("planExecutionSubmitCompletion"),
-                    blocked: copy("planExecutionRecordBlocked"),
-                    blockedReason: copy("planExecutionBlockedReason"),
-                    missingInput: copy("planExecutionMissingInput"),
-                    externalUnavailable: copy("planExecutionExternalUnavailable"),
-                    deadlineRisk: copy("planExecutionDeadlineRisk"),
-                  }}
-                />
-              )}
-              {isBlocked && <p>{copy("planExecutionBlocked")}</p>}
-              {isOverdue && <p>{copy("planExecutionOverdue")}</p>}
-              {canReassess && (
-                <>
-                  <p>{copy("planExecutionReassessmentStop")}</p>
-                  <button
-                    className="execution-primary-action"
-                    disabled={busy}
-                    onClick={() => void controller.reassess(isBlocked ? "blocked_attestation" : "deadline_elapsed")}
-                  >
-                    {copy("planExecutionRequestReassessment")}
-                  </button>
-                </>
-              )}
-              {state.value === "awaiting_advisor" && !canVerify && (
-                <p>{copy("planExecutionWaitingAdvisor")}</p>
-              )}
-              {canVerify && (
-                <AdvisorVerificationPanel
-                  disabled={busy}
-                  onVerify={() => void controller.verify("verify")}
-                  onRequestUpdate={() => void controller.verify("request_update")}
-                  labels={{
-                    group: copy("planExecutionVerificationLabel"),
-                    verify: copy("planExecutionVerify"),
-                    requestUpdate: copy("planExecutionRequestUpdate"),
-                  }}
-                />
-              )}
-              {state.value === "execution_completed" && <p>{copy("planExecutionCompleted")}</p>}
-              {state.value === "reassessment_required" && <p>{copy("planExecutionReassessment")}</p>}
-              {(state.value === "session_changed" || state.value === "recoverable_error") && (
-                <ExecutionRecoveryNotice
-                  sessionChanged={state.value === "session_changed"}
-                  disabled={busy}
-                  onRecover={() => void controller.recover()}
-                  labels={{
-                    sessionChanged: copy("planExecutionSessionChanged"),
-                    recoverable: copy("planExecutionRecoverableError"),
-                    recover: copy("planExecutionRecover"),
-                  }}
-                />
-              )}
+          </section>
+          <section className="approved-plan" aria-labelledby="approved-plan-title">
+            <div className="section-heading">
+              <h3 id="approved-plan-title">{copy("planExecutionApprovedPlanTitle")}</h3>
+              <p>{copy("planExecutionApprovedPlanBody")}</p>
             </div>
-          </div>
-          {journeyStage ? <DecisionJourney currentStage={journeyStage} copy={copy} /> : null}
-        </section>
-        {state.value === "reassessment_required" && state.view?.reassessment && (
-          <ReassessmentHandoff
-            reassessment={state.view.reassessment}
+            <ol className="approved-plan-steps">
+              {(state.view?.checkpoints ?? []).map((item) => (
+                <li data-state={item.state} key={item.checkpoint_id}>
+                  <span className="plan-step-number" aria-hidden="true">
+                    {String(item.ordinal).padStart(2, "0")}
+                  </span>
+                  <strong>{milestones[item.milestone_key]}</strong>
+                  <span>{checkpointStates[item.state]}</span>
+                  <small>{item.due_date} · {roles[item.accountable_role]}</small>
+                </li>
+              ))}
+            </ol>
+          </section>
+          <ExecutionActivity
+            activity={state.view?.activity ?? []}
+            total={state.view?.activity_total ?? 0}
+            truncated={state.view?.activity_truncated ?? false}
             labels={{
-              title: copy("planExecutionHandoffTitle"),
-              stop: copy("planExecutionReassessmentStop"),
-              pending: copy("planExecutionHandoffPending"),
-              whoNext: copy("planExecutionWhoNext"),
-              blockedTrigger: copy("planExecutionBlockedTrigger"),
-              deadlineTrigger: copy("planExecutionDeadlineTrigger"),
+              title: copy("planExecutionActivityTitle"),
+              disclosure: copy("planExecutionActivityDisclosure"),
+              empty: copy("planExecutionNoActivity"),
+              shown: copy("planExecutionActivityShown"),
+              total: copy("planExecutionActivityTotal"),
+              items: copy("planExecutionActivityItems"),
+              latest64: copy("planExecutionActivityLatest64"),
+              attestation: copy("planExecutionActivityAttestation"),
+              verification: copy("planExecutionActivityVerification"),
+              reassessment: copy("planExecutionActivityReassessment"),
+              receipt: copy("planExecutionActivityReceipt"),
             }}
           />
-        )}
-        <section className="plan-role-switcher" aria-labelledby="plan-role-title">
-          <h2 id="plan-role-title">{copy("planExecutionRoleTitle")}</h2>
-          <div className="role-switcher-row">
-            {(["student", "parent", "advisor"] as const).map((nextRole) => (
-              <button
-                aria-pressed={role === nextRole}
+        </>
+      }
+      technicalEvidence={<p>{copy("planExecutionApprovedPlanBody")}</p>}
+      titleKey="planExecutionWorkspaceTitle"
+    >
+      <p className="sr-only" role="status" aria-atomic="true" aria-live="polite">
+        {liveMessage}
+      </p>
+      <section data-section="current-action" className="ledger-hero plan-execution-hero">
+        <p className="eyebrow">{copy("planExecutionEyebrow")}</p>
+        <h3 ref={headingRef} tabIndex={-1}>{copy("planExecutionCurrentAction")}</h3>
+        <div className="plan-execution-current-grid">
+          <div
+            className="plan-authority-summary"
+            data-plan-authority-summary
+          >
+            <CurrentCheckpoint
+              checkpoint={checkpoint}
+              labels={{
+                empty: copy("planExecutionNoCurrentCheckpoint"),
+                milestone: copy("planExecutionCheckpointLabel"),
+                state: copy("planExecutionCheckpointState"),
+                dueDate: copy("planExecutionDueDate"),
+                ownerRole: copy("planExecutionOwnerRole"),
+                riskState: copy("planExecutionRiskState"),
+                milestones,
+                states: checkpointStates,
+                roles,
+                risks,
+              }}
+            />
+            <div className="next-handoff">
+              <p className="field-label">{copy("planExecutionNextHandoff")}</p>
+              <p>{nextHandoff}</p>
+            </div>
+          </div>
+          <div className="current-action-controls" data-current-action-controls>
+            {state.value === "loading" && <p>{copy("planExecutionConnectPrompt")}</p>}
+            {state.value === "ready_to_start" && (
+              <>
+                {role === "advisor" && <p>{copy("planExecutionConnectPrompt")}</p>}
+                <button
+                  className="execution-primary-action"
+                  data-primary-action="true"
+                  disabled={busy || role === "advisor"}
+                  onClick={() => void controller.start()}
+                >
+                  {copy("planExecutionStart")}
+                </button>
+              </>
+            )}
+            {canAttest && (
+              <CheckpointAttestationForm
                 disabled={busy}
-                key={nextRole}
-                onClick={() => void (state.context
-                  ? controller.switchRole(nextRole)
-                  : controller.connect(nextRole))}
-              >
-                {copy(nextRole === "student" ? "roleStudent" : nextRole === "parent" ? "roleParent" : "roleAdvisor")}
-              </button>
-            ))}
+                onProgress={() => void controller.attest("progress")}
+                onCompletion={() => void controller.attest("completion")}
+                onBlocked={(reason) => void controller.attest("blocked", reason)}
+                labels={{
+                  group: copy("planExecutionAttestationLabel"),
+                  progress: copy("planExecutionProgress"),
+                  completion: copy("planExecutionSubmitCompletion"),
+                  blocked: copy("planExecutionRecordBlocked"),
+                  blockedReason: copy("planExecutionBlockedReason"),
+                  missingInput: copy("planExecutionMissingInput"),
+                  externalUnavailable: copy("planExecutionExternalUnavailable"),
+                  deadlineRisk: copy("planExecutionDeadlineRisk"),
+                }}
+              />
+            )}
+            {isBlocked && <p>{copy("planExecutionBlocked")}</p>}
+            {isOverdue && <p>{copy("planExecutionOverdue")}</p>}
+            {canReassess && (
+              <>
+                <p>{copy("planExecutionReassessmentStop")}</p>
+                <button
+                  className="execution-primary-action"
+                  data-primary-action="true"
+                  disabled={busy}
+                  onClick={() => void controller.reassess(isBlocked ? "blocked_attestation" : "deadline_elapsed")}
+                >
+                  {copy("planExecutionRequestReassessment")}
+                </button>
+              </>
+            )}
+            {state.value === "awaiting_advisor" && !canVerify && (
+              <p>{copy("planExecutionWaitingAdvisor")}</p>
+            )}
+            {canVerify && (
+              <AdvisorVerificationPanel
+                disabled={busy}
+                onVerify={() => void controller.verify("verify")}
+                onRequestUpdate={() => void controller.verify("request_update")}
+                labels={{
+                  group: copy("planExecutionVerificationLabel"),
+                  verify: copy("planExecutionVerify"),
+                  requestUpdate: copy("planExecutionRequestUpdate"),
+                }}
+              />
+            )}
+            {state.value === "execution_completed" && <p>{copy("planExecutionCompleted")}</p>}
+            {state.value === "reassessment_required" && <p>{copy("planExecutionReassessment")}</p>}
+            {(state.value === "session_changed" || state.value === "recoverable_error") && (
+              <ExecutionRecoveryNotice
+                sessionChanged={state.value === "session_changed"}
+                disabled={busy}
+                onRecover={() => void controller.recover()}
+                labels={{
+                  sessionChanged: copy("planExecutionSessionChanged"),
+                  recoverable: copy("planExecutionRecoverableError"),
+                  recover: copy("planExecutionRecover"),
+                }}
+              />
+            )}
           </div>
-        </section>
-        <section className="approved-plan" aria-labelledby="approved-plan-title">
-          <div className="section-heading">
-            <h2 id="approved-plan-title">{copy("planExecutionApprovedPlanTitle")}</h2>
-            <p>{copy("planExecutionApprovedPlanBody")}</p>
-          </div>
-          <ol className="approved-plan-steps">
-            {(state.view?.checkpoints ?? []).map((item) => (
-              <li data-state={item.state} key={item.checkpoint_id}>
-                <span className="plan-step-number" aria-hidden="true">
-                  {String(item.ordinal).padStart(2, "0")}
-                </span>
-                <strong>{milestones[item.milestone_key]}</strong>
-                <span>{checkpointStates[item.state]}</span>
-                <small>{item.due_date} · {roles[item.accountable_role]}</small>
-              </li>
-            ))}
-          </ol>
-        </section>
-        <ExecutionActivity
-          activity={state.view?.activity ?? []}
-          total={state.view?.activity_total ?? 0}
-          truncated={state.view?.activity_truncated ?? false}
+        </div>
+      </section>
+      {state.value === "reassessment_required" && state.view?.reassessment && (
+        <ReassessmentHandoff
+          reassessment={state.view.reassessment}
           labels={{
-            title: copy("planExecutionActivityTitle"),
-            disclosure: copy("planExecutionActivityDisclosure"),
-            empty: copy("planExecutionNoActivity"),
-            shown: copy("planExecutionActivityShown"),
-            total: copy("planExecutionActivityTotal"),
-            items: copy("planExecutionActivityItems"),
-            latest64: copy("planExecutionActivityLatest64"),
-            attestation: copy("planExecutionActivityAttestation"),
-            verification: copy("planExecutionActivityVerification"),
-            reassessment: copy("planExecutionActivityReassessment"),
-            receipt: copy("planExecutionActivityReceipt"),
+            title: copy("planExecutionHandoffTitle"),
+            stop: copy("planExecutionReassessmentStop"),
+            pending: copy("planExecutionHandoffPending"),
+            whoNext: copy("planExecutionWhoNext"),
+            blockedTrigger: copy("planExecutionBlockedTrigger"),
+            deadlineTrigger: copy("planExecutionDeadlineTrigger"),
           }}
         />
-      </div>
-    </PresentationShell>
+      )}
+    </AdvisorWorkspaceShell>
   );
 }

@@ -2,27 +2,28 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The focused advisor-family/evidence route at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The advisor-centered route-analysis and downstream client-confirmation surface at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only. The previous cosmic root and family-heavy route presentation are historical presentation context; the implemented advisor-centered workspace redesign is presentation-only and locally verified on the local synthetic candidate. Stable release `v0.1.5` remains unchanged, with no release, deployment, provider, or production-use claim.
 
 - **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, route-evidence secondary action to `#route-atlas`)
 - **Complete governed walkthrough:** `/demo/collaboration` -> read-only same-Case handoff -> explicit task action on `/demo`
-- **Focused advisor-family/evidence route:** `/demo`
+- **Advisor route-analysis and client-confirmation surface:** `/demo`
 - **Governed plan-execution route:** `/demo/plan` (`happy` by default; exact
   `blocked` query scenario)
-- **Audience:** advisors first, then students and families
+- **Implemented presentation direction:** AI collaboration workspace for study-abroad advisors; locally verified
+- **Audience:** study-abroad organizations and advisor teams first; students and parents are client participants
 - **Page boundary:** root presentation has zero product-side network/session/task effects; demo routes use local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
 
 ## Aesthetic direction
 
-Night Voyager intentionally has two visual layers:
+The previous visual layers are historical presentation context:
 
-1. **Root `/` — Virtual Night Voyage:** deep navy, ivory, and champagne frame a cinematic but legible voyage backdrop, an evidence-bearing route atlas, and one continuous student-first decision trajectory. Responsive AVIF/WebP files are runtime assets; the source PNG is provenance only.
-2. **Governed demo routes — warm-paper ledger:** `/demo`,
+1. **Historical root `/` — Virtual Night Voyage:** deep navy, ivory, and champagne framed a cinematic voyage backdrop, route atlas, and student-first decision trajectory. Its generated AVIF/WebP runtime assets are not the approved direction.
+2. **Historical demo routes — warm-paper ledger:** `/demo`,
    `/demo/collaboration`, and `/demo/plan` retain the existing advisor ledger,
    family decision documents, restrained rules, and semantic status accents.
 
-The root may feel atmospheric; the governed application must feel calm, accountable, and readable. Neither layer should resemble a generic chat product, KPI dashboard, or infrastructure control tower.
+The implemented presentation direction is **Midnight Editorial Advisor Workspace**: one dark product frame, warm decision surface, advisor-first hierarchy, closed five-stage display projection, and progressive technical disclosure. It is locally verified in the current implementation. The product must feel calm, accountable, and readable; it should not resemble a generic chat product, KPI dashboard, or infrastructure control tower.
 
 ## Color tokens
 
@@ -59,11 +60,11 @@ No remote font or font package is required.
 
 ## Responsive layout
 
-- **Root desktop (`1440 × 1000`):** thesis and origin remain primary while the full route atlas exposes recommendation, reserve, and current exclusion.
-- **Root tablet (`768 × 1024`):** the route atlas becomes a compact ordered summary without changing meaning.
-- **Root mobile (`390 × 844` and `320 × 720`):** actions stack, route evidence stays in document order, and no content depends on the cinematic crop or motion.
+- **Approved audit widths:** `1440`, `1024`, `768`, `390`, and `320` CSS pixels in both `zh-CN` and `en`, with reduced motion and 200% zoom.
+- **Historical root desktop/mobile:** the former voyage composition and crop are retained only as historical evidence; no current claim depends on them.
 - **Desktop (`>=1280px`):** advisor ledger uses a main comparison surface with a narrow decision rail. Family frames remain linear and editorial.
-- **Intermediate (`768–1279px`):** one-column reading order with the semantic table preserved.
+- **Intermediate (`1024–1279px`):** compact horizontal workflow strip with a two-column workspace and semantic comparison preserved.
+- **Tablet (`768–1023px`):** one-column reading order with a readable five-stage horizontal workflow strip and semantic comparison preserved.
 - **Mobile (`<=767px`):** the desktop table is visually replaced by a country switcher and dimension-by-dimension comparison. The semantic table remains available to assistive technology.
 
 ## Lifecycle and interaction contract
@@ -85,7 +86,8 @@ owner-controlled activation/rollback, persisted planning-revision materializatio
 five-field task/execution pins. PR C implements the task-free `/demo/collaboration` route,
 closed browser reducer, and shared read-only inspector from the frozen role-safe HTTP
 projections. It adds no backend authority, migration, task operation, polling, or
-EventSource. The existing task-owning `/demo` lifecycle remains the advisor-family flow
+EventSource. The existing task-owning `/demo` lifecycle remains the advisor route-analysis
+and client-confirmation flow
 and preserves one SSE connection. Catalog-only Skills are never presented as executing
 capabilities merely because they have versions or passing evaluations.
 
@@ -108,11 +110,11 @@ heading, and one polite live region announces terminal or waiting changes.
 Presentation locale and responsive layout never alter PostgreSQL, HTTP, BFF,
 receipt-then-GET, recovery, role, or reassessment authority.
 
-The current internal-demo presentation layer adds one shared, display-only
-decision journey to `/demo/collaboration`, `/demo`, and `/demo/plan`: family
-input, advisor confirmation, route review, family decision, and plan execution.
-The closed stage is mapped only from existing UI state; unknown values render no
-journey. The journey has no fetch, mutation, storage, session, or authority
+The historical internal-demo presentation layer used a shared, display-only
+decision journey. The implemented replacement uses one closed, display-only workflow
+projection on `/demo/collaboration`, `/demo`, and `/demo/plan`:
+`咨询接入 -> 信息核验 -> 方案研判 -> 客户确认 -> 执行跟进`. Unknown values render
+no stage. The replacement owns no fetch, mutation, storage, session, or authority
 responsibility. Each route keeps its existing primary action, business content,
 raw server-owned message/reason/limitation, and technical evidence disclosure.
 The collaboration authority path remains six exact technical facts, but is now
@@ -120,8 +122,8 @@ an accessible native disclosure after the message, candidate, and confirmed-fact
 business content rather than a competing first-layer process strip. Known
 recoverable or role-switching states retain only the existing resume/prior stage
 as a read-only projection; unknown state still renders no journey. Desktop uses a
-horizontal journey and mobile uses a vertical journey; the root portfolio remains
-outside this presentation-only change.
+horizontal journey and mobile uses a vertical journey; the root portfolio uses the
+same product-frame tokens and a coded static preview while remaining side-effect-free.
 
 ## Accessibility
 
@@ -149,3 +151,5 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-07-23 | Split the root from the governed demo visual layer | Gives `/` the Virtual Night Voyage entry while preserving the warm-paper ledger and every existing authority boundary on both demo routes. |
 | 2026-07-28 | Extend the connected ledger with a revision journey | Preserves backend phase/role authority while presenting the retained predecessor, deterministic comparison, fresh advisor authorization, and a fail-closed blocked counterfactual. |
 | 2026-08-09 | Add a shared internal-demo decision journey | Helps a first-time visitor understand role, result, boundary, action, route trade-offs, and next steps before opening existing technical evidence; it changes no business authority or route contract. |
+| 2026-08-09 | Approve the advisor-centered workspace redesign | Replaces the historical cosmic root/family-heavy presentation with one advisor-first shell and five-stage display projection; this row records the approved direction before the subsequent implementation and verification record. |
+| 2026-08-10 | Verify the advisor-centered workspace redesign | Local deterministic Compose and real-Chromium evidence verify the implemented four-route, bilingual presentation matrix and the nine declared review captures; domain authority, stable release `v0.1.5`, and non-production boundaries remain unchanged. |

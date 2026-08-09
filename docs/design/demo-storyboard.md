@@ -1,15 +1,45 @@
 # Connected demo storyboard
 
-The complete governed walkthrough begins at `/demo/collaboration`, confirms a
-synthetic family fact under explicit human authority, and continues the same Case into
-the focused advisor-family/evidence route at `/demo`. The latter route remains
-independently usable. Both demo surfaces retain the warm-paper ledger visual system.
+The implemented storyboard presents Night Voyager as an AI collaboration workspace
+for study-abroad advisors. The former cosmic root and family-heavy warm-paper
+surface are historical presentation context. The Midnight Editorial Advisor
+Workspace is implemented and locally verified on the local synthetic candidate.
 
-The current story is introduced by the [Chinese-first portfolio entry](../assets/night-voyager-portfolio-entry.png): purpose, route evidence, next action, locale control, and the synthetic boundary precede technical proof. The static Virtual Night Voyage root uses optimized AVIF/WebP runtime imagery; its source PNG is provenance only. Exact `en` presents the same states without changing authority.
+The complete governed walkthrough begins at `/demo/collaboration`, confirms a
+synthetic client fact under explicit human authority, and continues the same Case
+into the focused route at `/demo` through its receipt and `TimelinePlan`. The
+independently seeded Happy/Blocked `/demo/plan` scenario is a separate execution
+proof segment; it is not a same-Case or same-session continuation.
+
+The phrase “focused advisor-family/evidence route” remains only as a historical
+label for the prior presentation and is not the approved top-level product framing.
+
+The current story is introduced by the [advisor-centered portfolio entry](../assets/night-voyager-portfolio-entry.png): purpose, route evidence, next action, locale control, and the synthetic boundary precede technical proof. The root preview is a coded React composition using the deterministic fixture projection; historical voyage imagery is provenance only and is not a runtime dependency. Exact `en` presents the same states without changing authority.
+
+## Local verification
+
+The implemented candidate was verified through the repository's local synthetic
+Compose and real-Chromium proof. The presentation audit passed `71/71` across `/`,
+`/demo/collaboration`, `/demo`, and `/demo/plan`, both locales, `1440`, `1024`,
+`768`, `390`, and `320` CSS pixels, reduced motion, 200% zoom, keyboard paths,
+normal paths, and blocked paths. The complete Compose proof also covered the
+connected collaboration-to-receipt flow and the independently seeded execution
+Happy, Blocked, recovery, stale-session, and session-change paths. Screenshots are
+review evidence from coded product surfaces; semantic assertions remain the
+acceptance authority.
 
 ## Shared presentation journey
 
-The three internal demo routes share a display-only five-stage journey:
+The three internal demo routes will share a display-only five-stage workflow:
+
+1. **Consultation intake** — capture the consultation record and current client
+   context.
+2. **Client fact review** — make proposed and confirmed client facts explicit.
+3. **Route analysis** — compare route outcomes, evidence, and trade-offs.
+4. **Client confirmation** — keep the consequential personal choice explicit.
+5. **Execution follow-up** — carry the approved result into accountable checkpoints.
+
+The historical labels were:
 
 1. **Family input** — make the family’s conditions, preferences, and boundaries
    explicit.
@@ -21,7 +51,7 @@ The three internal demo routes share a display-only five-stage journey:
 5. **Plan execution** — accountable people move through action checkpoints and
    pause for review when needed.
 
-The current stage is projected from each route’s existing UI state. Unknown
+The implemented current stage is projected from each route’s existing UI state. Unknown
 states fail closed and show no journey. The component is presentational only;
 it does not read storage, call APIs, perform mutations, or own authority. On
 desktop the journey is horizontal; on mobile it becomes vertical. Existing
@@ -30,7 +60,7 @@ evidence limitations remain verbatim server-owned content. Technical terms such
 as `typed proposal`, `Case revision`, `Fact version`, `Skill pin`, and
 `checkpoint` remain available in the secondary evidence layer.
 
-## Focused advisor-family/evidence route
+## Focused route: route analysis and client confirmation
 
 M5 turns the six-beat M1 visual intent into a real local synthetic walkthrough:
 
@@ -53,9 +83,9 @@ and claims must depict the connected Australia flow only.
 
 ## Complete governed walkthrough
 
-The standalone focused `/demo` story above remains available. The complete
+The standalone advisor route-analysis story above remains available. The complete
 fact-to-plan journey starts with six collaboration beats at `/demo/collaboration` and
-then continues the same Case into that existing advisor-family/evidence route:
+then continues the same Case into that existing route-analysis and client-confirmation surface:
 
 1. **Shared message** — a parent appends one bounded budget message.
 2. **Typed proposal** — an explicit action creates one revision-pinned candidate.
@@ -99,10 +129,10 @@ The v0.1.4 provider-free planning-revision continuation begins after the first a
 The dedicated capture is
 [night-voyager-planning-revision.png](../assets/night-voyager-planning-revision.png).
 
-## Governed plan execution continuation
+## Independent execution follow-up scenario
 
-`/demo/plan` defaults to the closed Happy scenario; `?scenario=blocked` selects
-the only other supported synthetic scenario. Each scenario has a distinct,
+`/demo/plan` defaults to the independently seeded closed Happy scenario;
+`?scenario=blocked` selects the only other supported synthetic scenario. Each scenario has a distinct,
 server-mapped assigned actor triad and exact Case. Happy proves receipt-then-GET,
 lost-ack exact replay, request-update, role rotation, completion, and reload.
 Blocked proves one blocked attestation, one advisor reassessment request, and a

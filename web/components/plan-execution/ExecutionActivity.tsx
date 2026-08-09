@@ -31,7 +31,7 @@ export function ExecutionActivity({
   };
   return (
     <section className="execution-activity" aria-labelledby="execution-activity-title">
-      <h2 id="execution-activity-title">{labels.title}</h2>
+      <h3 id="execution-activity-title">{labels.title}</h3>
       <details className="technical-details">
         <summary>{labels.disclosure}</summary>
         {activity.length === 0

@@ -318,7 +318,7 @@ def test_collaboration_walkthrough_is_publicly_discoverable_and_evidenced() -> N
     )
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
     assert "complete governed walkthrough" in readmes
-    assert "focused advisor-family/evidence route" in readmes
+    assert "route analysis" in readmes
     assert "collaboration-confirmed-fact.png" in readmes
     assert "collaboration-walkthrough.md" in docs_index
     assert "PR C" in docs_index and "implemented" in docs_index

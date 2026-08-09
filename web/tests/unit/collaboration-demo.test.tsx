@@ -32,8 +32,8 @@ vi.mock("../../lib/collaboration-demo/use-collaboration-demo", async () => {
   return { ...actual, useCollaborationDemo: () => hook.current };
 });
 
-function setState(state: unknown) {
-  hook.current = { state, inspector: null, journeyConflict: null, connectParent: vi.fn(), appendMessage: vi.fn(), proposeBudget: vi.fn(), switchToAdvisor: vi.fn(), confirmCandidate: vi.fn(), continueToPlanning: vi.fn(), retry: vi.fn(), endConflictingJourney: vi.fn() };
+function setState(state: unknown, journeyConflict: "advisor-family" | null = null) {
+  hook.current = { state, inspector: null, journeyConflict, connectParent: vi.fn(), appendMessage: vi.fn(), proposeBudget: vi.fn(), switchToAdvisor: vi.fn(), confirmCandidate: vi.fn(), continueToPlanning: vi.fn(), retry: vi.fn(), endConflictingJourney: vi.fn() };
 }
 
 function renderPresentation(ui: ReactElement) {
@@ -88,10 +88,51 @@ it("presents confirmed fact, versions, and server-authored reason without intern
   expect(container).not.toHaveTextContent(/family\.budget|confirmed_fact_id|candidate_id|schema_version|45000000/i);
 });
 
+it("presents consultation intake inside the advisor workspace shell", () => {
+  setState({ value: "thread_ready", context: baseContext });
+  const { container } = renderPresentation(<CollaborationDemo />);
+
+  expect(screen.getByRole("banner")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 1, name: "把咨询记录核验为客户档案" })).toBeVisible();
+  expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
+  expect(screen.getAllByText("咨询接入与信息核验").length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByText("同一 Case 的连接证明")).toBeVisible();
+  expect(screen.queryByRole("heading", { level: 1, name: "家庭协作与事实确认" })).toBeNull();
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(container.querySelectorAll('[data-primary-action="true"]')).toHaveLength(1);
+  expect(container.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1);
+});
+
+it("keeps a journey conflict in the route hierarchy and focuses its h2 on entry", async () => {
+  setState({ value: "thread_ready", context: baseContext }, "advisor-family");
+  renderPresentation(<CollaborationDemo />);
+
+  expect(screen.getByRole("heading", { level: 1, name: "把咨询记录核验为客户档案" })).toBeVisible();
+  expect(screen.getByRole("heading", { level: 2, name: "另一个演示流程正在进行" })).toHaveAttribute("tabindex", "-1");
+  await waitFor(() => expect(screen.getByRole("heading", { level: 2, name: "另一个演示流程正在进行" })).toHaveFocus());
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+});
+
+it("focuses the route recovery heading when collaboration enters a recoverable error", async () => {
+  setState({
+    value: "recoverable_error",
+    category: "stale",
+    resumePhase: "replan_required",
+    context: { ...baseContext, role: "advisor", candidate: advisorCandidate, fact, caseRevision: 2 },
+  });
+  renderPresentation(<CollaborationDemo />);
+
+  await waitFor(() =>
+    expect(screen.getByRole("heading", { level: 2, name: "协作流程已安全暂停" })).toHaveFocus(),
+  );
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+});
+
 it("renders the governed human gates and no task or generic-chat affordance", async () => {
   setState({ value: "bootstrapping_parent", context: { ...baseContext, thread: null, messages: [] } });
   const view = renderPresentation(<CollaborationDemo />);
-  expect(screen.getByRole("heading", { name: "家庭协作与事实确认" })).toBeVisible();
+  expect(screen.getByRole("heading", { level: 1, name: "把咨询记录核验为客户档案" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "开始家长流程" }));
   expect(hook.current.connectParent).toHaveBeenCalledOnce();
 
@@ -135,7 +176,7 @@ it.each([
 ] satisfies CollaborationErrorCategory[])("renders bounded recovery category %s without its raw value", (category) => {
   const retry = vi.fn();
   const { container } = renderPresentation(<CollaborationRecoveryNotice category={category} onRetry={retry} />);
-  expect(screen.getByRole("heading", { name: "协作流程已安全暂停" })).toBeVisible();
+  expect(screen.getByRole("heading", { level: 2, name: "协作流程已安全暂停" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "重新载入协作 authority" }));
   expect(retry).toHaveBeenCalledOnce();
   expect(container).not.toHaveTextContent(category);
@@ -145,7 +186,7 @@ it("offers the same authority chain in explicit English", async () => {
   localStorage.setItem("night-voyager:presentation-locale:v1", "en");
   setState({ value: "thread_ready", context: baseContext });
   renderPresentation(<CollaborationDemo />);
-  await waitFor(() => expect(screen.getByRole("heading", { name: "Family collaboration and fact confirmation" })).toBeVisible());
+  await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Verify consultation records into a client case" })).toBeVisible());
   expect(screen.getByRole("button", { name: "Submit the budget for advisor review" })).toBeEnabled();
   expect(screen.getByText(message.body)).toBeVisible();
 });

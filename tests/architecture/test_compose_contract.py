@@ -1,11 +1,24 @@
 import json
 import os
+import re
 import stat
 import subprocess
 import textwrap
 from pathlib import Path
 
 import yaml
+
+APPROVED_PRESENTATION_ASSETS = (
+    "night-voyager-portfolio-entry.png",
+    "collaboration-confirmed-fact.png",
+    "m5-advisor-ledger.png",
+    "m5-family-receipt-timeline.png",
+    "night-voyager-planning-revision.png",
+    "plan-execution-current-action.png",
+    "plan-execution-advisor-review.png",
+    "plan-execution-reassessment-mobile.png",
+    "plan-execution-recovery-mobile.png",
+)
 
 
 def _run_compose_cleanup_harness(
@@ -237,6 +250,86 @@ def test_browser_proof_runs_real_connected_playwright_before_teardown() -> None:
     assert "PRESENTATION_AUDIT=1" in script
     assert "PRESENTATION_AUDIT_OUTPUT_DIR" in script
     assert "presentation.spec.ts" in script
+
+
+def test_presentation_audit_lane_runs_the_exact_browser_specs_and_fail_closed_root() -> None:
+    config = Path("web/playwright.compose.config.ts").read_text(encoding="utf-8")
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+    lane = script.split("run_presentation_audit_lane() {", 1)[1].split(
+        "\n}\n\nrun_plan_execution_lane", 1
+    )[0]
+
+    for spec in (
+        "bootstrap.spec.ts",
+        "portfolio-design-review.spec.ts",
+        "presentation.spec.ts",
+    ):
+        assert spec in config
+        assert spec in lane
+    assert "PRESENTATION_PUBLIC_EVIDENCE_ROOT=${PRESENTATION_PUBLIC_EVIDENCE_ROOT:-}" in script
+    assert (
+        lane.count('-e PRESENTATION_PUBLIC_EVIDENCE_ROOT="$PRESENTATION_PUBLIC_EVIDENCE_ROOT"')
+        == 1
+    )
+    assert (
+        script.count('-e PRESENTATION_PUBLIC_EVIDENCE_ROOT="$PRESENTATION_PUBLIC_EVIDENCE_ROOT"')
+        == 1
+    )
+    assert "presentation.spec.ts" in lane
+
+
+def test_presentation_audit_success_marker_is_count_neutral() -> None:
+    script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "compose-proof: presentation audit passed" in script
+    assert "58-cell" not in script
+
+
+def test_presentation_evidence_contract_has_exactly_the_approved_public_assets() -> None:
+    presentation = Path("web/e2e/presentation.spec.ts").read_text(encoding="utf-8")
+    browser_sources = "\n".join(
+        Path(relative).read_text(encoding="utf-8")
+        for relative in (
+            "web/e2e/fact-to-plan.spec.ts",
+            "web/e2e/collaboration-demo.spec.ts",
+            "web/e2e/connected-demo.spec.ts",
+            "web/e2e/planning-revision.spec.ts",
+            "web/e2e/presentation.spec.ts",
+        )
+    )
+
+    assert "APPROVED_PUBLIC_EVIDENCE_FILENAMES" in presentation
+    assert "PUBLIC_EVIDENCE_ROOT && publicFilename" in presentation
+    declared_filenames = set(re.findall(r'"([a-z0-9-]+\.png)"', browser_sources))
+    assert declared_filenames == set(APPROVED_PRESENTATION_ASSETS)
+    for filename in APPROVED_PRESENTATION_ASSETS:
+        assert filename in browser_sources
+    assert "PRESENTATION_PUBLIC_EVIDENCE_ROOT" not in "\n".join(
+        Path(relative).read_text(encoding="utf-8")
+        for relative in (
+            "web/e2e/fact-to-plan.spec.ts",
+            "web/e2e/collaboration-demo.spec.ts",
+            "web/e2e/connected-demo.spec.ts",
+            "web/e2e/planning-revision.spec.ts",
+        )
+    )
+
+
+def test_current_public_navigation_explains_the_advisor_workspace_and_two_proof_segments() -> None:
+    readme = Path("README.md").read_text(encoding="utf-8")
+    readme_cn = Path("README_CN.md").read_text(encoding="utf-8")
+    docs_index = Path("docs/README.md").read_text(encoding="utf-8")
+
+    assert "AI collaboration workspace for study-abroad advisors" in readme
+    assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
+    assert "independent deterministic execution scenario" in readme
+    assert "Screenshots are review evidence, not functional authority" in readme
+    assert "留学顾问的 AI 协作工作台" in readme_cn
+    assert "同一 Case" in readme_cn
+    assert "独立播种" in readme_cn
+    assert "截图是评审证据，不是功能权威" in readme_cn
+    assert "AI collaboration workspace for study-abroad advisors" in docs_index
+    assert "independent deterministic execution scenario" in docs_index
 
 
 def test_compose_proof_builds_once_and_reuses_images_across_fresh_stacks() -> None:
@@ -530,18 +623,18 @@ def test_fact_to_plan_root_proof_locks_the_high_end_portfolio_contract() -> None
     bootstrap = Path("web/e2e/bootstrap.spec.ts").read_text(encoding="utf-8")
 
     for token in (
-        "Your study-abroad route should start with you",
-        "你的留学路线 应该从你出发",
+        "Turn scattered consultations into a client plan you can move forward",
+        "把零散咨询，整理成可以推进的留学方案",
         '"/demo/collaboration"',
-        '"#route-atlas"',
+        '"#route-atlas .portfolio-section-heading > p:last-child"',
         "{ width: 1440, height: 1000 }",
         "{ width: 768, height: 1024 }",
         "{ width: 390, height: 844 }",
         "{ width: 320, height: 720 }",
-        'reducedMotion: "reduce"',
+        'page.emulateMedia({ reducedMotion: "reduce" })',
         "rootApiRequests",
         "storageReplacements",
-        ".portfolio-button:visible",
+        ".portfolio-primary-action:visible",
         "document.documentElement.scrollWidth",
         "night-voyager-portfolio-entry.png",
     ):

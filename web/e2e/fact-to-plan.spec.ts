@@ -8,28 +8,28 @@ const workerReadySentinel = process.env.FACT_TO_PLAN_WORKER_READY_SENTINEL;
 const presentationLocale = process.env.PRESENTATION_LOCALE === "en" ? "en" : "zh-CN";
 const updatePortfolioScreenshots = process.env.UPDATE_PORTFOLIO_SCREENSHOTS === "1";
 const portfolioCopy = presentationLocale === "en" ? {
-  budget: "Budget CNY 300,000–400,000",
-  heading: "Your study-abroad route should start with you",
-  primaryAction: "View the example plan",
-  secondaryAction: "View route evidence",
-  routeDescription: "The student plans to study data science with a budget of CNY 300,000–400,000. Australia is recommended, Japan is the reserve route, and Malaysia is not recommended at present.",
+  budget: "CNY 340,000–400,000",
+  heading: "Turn scattered consultations into a client plan you can move forward",
+  primaryAction: "Walk through one client case",
+  secondaryAction: "See how the proposal is verified",
+  routeDescription: "The current case has intended field computing and a CNY 340,000–400,000 budget. Australia is recommended with a budget condition, Japan is a conditional alternative, and Malaysia is blocked.",
   supersededBudget: "305,500",
   routes: [
-    ["australia", "Australia", "Recommended"],
-    ["japan", "Japan", "Reserve"],
-    ["malaysia", "Malaysia", "Not recommended at present"],
+    ["australia", "Australia", "Recommended with budget condition"],
+    ["japan", "Japan", "Conditional alternative"],
+    ["malaysia", "Malaysia", "Blocked"],
   ],
 } : {
-  budget: "预算 30–40 万元",
-  heading: "你的留学路线 应该从你出发",
-  primaryAction: "查看示例方案",
-  secondaryAction: "查看路线依据",
-  routeDescription: "学生希望学习数据科学，预算 30–40 万元。澳大利亚为推荐路线，日本为备选路线，马来西亚暂不推荐。",
+  budget: "¥340,000–400,000",
+  heading: "把零散咨询，整理成可以推进的留学方案",
+  primaryAction: "查看一次完整咨询流程",
+  secondaryAction: "了解方案如何被核对",
+  routeDescription: "当前档案的 intended field 为 computing，预算为 CNY 340,000–400,000。澳大利亚在预算条件下推荐，日本为有条件备选，马来西亚暂不可选。",
   supersededBudget: "30.55",
   routes: [
-    ["australia", "澳大利亚", "推荐"],
-    ["japan", "日本", "备选"],
-    ["malaysia", "马来西亚", "暂不推荐"],
+    ["australia", "澳大利亚", "在预算条件下推荐"],
+    ["japan", "日本", "有条件备选"],
+    ["malaysia", "马来西亚", "暂不可选"],
   ],
 } as const;
 const presentationCopy = presentationLocale === "en" ? {
@@ -100,16 +100,25 @@ async function expectPortfolioEntry(page: Page) {
   await expect(
     page.getByRole("heading", { level: 1, name: portfolioCopy.heading }),
   ).toBeVisible();
+  await expect(page.locator(".portfolio-category")).toContainText(
+    /留学顾问的 AI 协作工作台|AI collaboration workspace for study-abroad advisors/,
+  );
+  await expect(page.locator(".portfolio-workflow")).toContainText(
+    /同一产品模型|one product model/,
+  );
+  await expect(page.locator(".portfolio-workflow")).toContainText(
+    /独立播种|independently seeded/,
+  );
   await expect(
-    page.getByRole("link", { name: portfolioCopy.primaryAction }),
+    page.locator(".portfolio-primary-action"),
   ).toHaveAttribute("href", "/demo/collaboration");
   await expect(
     page.getByRole("link", { name: portfolioCopy.secondaryAction }),
-  ).toHaveAttribute("href", "#route-atlas");
-  await expect(page.locator("#portfolio-atlas-description")).toHaveText(
+  ).toHaveAttribute("href", "/demo");
+  await expect(page.locator("#route-atlas .portfolio-section-heading > p:last-child")).toHaveText(
     portfolioCopy.routeDescription,
   );
-  await expect(page.getByText(portfolioCopy.budget, { exact: true })).toBeVisible();
+  await expect(page.getByText(portfolioCopy.budget, { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("main")).not.toContainText(portfolioCopy.supersededBudget);
 
   for (const viewport of [
@@ -141,7 +150,7 @@ async function expectPortfolioEntry(page: Page) {
       ),
     ).toBe(true);
     const undersized = await page
-      .locator(".portfolio-button:visible, .locale-switch button:visible")
+      .locator(".portfolio-primary-action:visible, .portfolio-secondary-action:visible, .locale-switch button:visible")
       .evaluateAll(
         (nodes) =>
           nodes.filter((node) => {
@@ -165,13 +174,9 @@ async function expectPortfolioEntry(page: Page) {
           }).length,
     );
     expect(clipped).toBe(0);
-    const routeSurface = page.locator(
-      viewport.width >= 1024
-        ? ".portfolio-atlas-graphic"
-        : ".portfolio-route-summary",
-    );
+    const routeSurface = page.locator("#route-atlas .portfolio-route-list");
     for (const [id, country, outcome] of portfolioCopy.routes) {
-      const route = routeSurface.locator(`[data-route-stop="${id}"]`);
+      const route = routeSurface.locator(`[data-route-id="${id}"]`);
       await expect(route).toHaveCount(1);
       await expect(route).toContainText(country);
       await expect(route).toContainText(outcome);
@@ -188,6 +193,10 @@ async function capturePublicScreenshot(page: Page, filename: string) {
     return box.left < 0 || box.right > document.documentElement.clientWidth + 0.5;
   }).length);
   expect(clipped).toBe(0);
+  const skipLink = page.locator(".skip-link");
+  await expect(skipLink).toHaveCount(1);
+  await skipLink.evaluate((node) => node.setAttribute("hidden", ""));
+  await expect(skipLink).toBeHidden();
   await page.screenshot({ path: `/workspace/docs/assets/${filename}`, fullPage: true });
 }
 
@@ -405,19 +414,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await page.waitForFunction(() => {
-    const image = document.querySelector(".portfolio-backdrop img");
-    return (
-      image instanceof HTMLImageElement &&
-      image.complete &&
-      image.naturalWidth > 0
-    );
-  });
-  expect(
-    await page
-      .locator(".portfolio-backdrop img")
-      .evaluate((image) => (image as HTMLImageElement).currentSrc),
-  ).toContain("night-voyager-voyage-1680.avif");
+  await expect(page.locator(".advisor-workspace-preview")).toBeVisible();
   await expectPublicSurface(page);
   expect(mutations).toHaveLength(0);
   expect(eventRequests).toHaveLength(0);
@@ -448,10 +445,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.reload();
   await expectPortfolioEntry(page);
-  await expect(page.locator(".portfolio-route-path").first()).toHaveCSS(
-    "stroke-dashoffset",
-    "0px",
-  );
+  await expect(page.locator("html")).toHaveCSS("scroll-behavior", "auto");
   expect(rootApiRequests).toHaveLength(0);
   expect(storageReplacements).toHaveLength(0);
   if (presentationLocale === "zh-CN" && updatePortfolioScreenshots) {
@@ -461,6 +455,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
 
   await page.goto("/demo/collaboration");
   await expectPublicSurface(page);
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: presentationLocale === "en" ? "Skip to main content" : "跳到主要内容" })).toBeFocused();
   await page.getByRole("button", { name: presentationCopy.startParent }).click();
@@ -505,6 +500,8 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   });
   await page.getByRole("button", { name: presentationCopy.handoff }).click();
   await page.waitForURL("**/demo");
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
   await expect(page.getByRole("heading", { name: presentationCopy.stage })).toBeVisible();
   await expect(page.getByText(presentationCopy.familyBudget)).toBeVisible();
   await expect(page.getByText("Case revision 2").first()).toBeVisible();
@@ -578,11 +575,14 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     await captureFactToPlanApprovalDiagnostic(page, beforeReload.caseId, beforeReload.taskId);
     throw error;
   }
-  await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
+  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  await technicalEvidence.locator(":scope > summary").click();
+  await expect(technicalEvidence.getByText(presentationCopy.pinMatched)).toBeVisible();
   const reloadEventStart = eventRequests.length;
   await page.reload();
   await expect(page.getByRole("button", { name: presentationCopy.approve })).toBeEnabled();
-  await expect(page.getByText(presentationCopy.pinMatched)).toBeVisible();
+  await technicalEvidence.locator(":scope > summary").click();
+  await expect(technicalEvidence.getByText(presentationCopy.pinMatched)).toBeVisible();
   const afterReload = await page.evaluate(() => {
     const metadata: unknown = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
     if (typeof metadata !== "object" || metadata === null) {

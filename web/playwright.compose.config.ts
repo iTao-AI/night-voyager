@@ -11,7 +11,9 @@ export default defineConfig({
     "planning-revision.spec.ts",
     "plan-execution-minimal.spec.ts",
     "plan-execution.spec.ts",
-    ...(presentationAudit ? ["presentation.spec.ts"] : []),
+    ...(presentationAudit
+      ? ["bootstrap.spec.ts", "portfolio-design-review.spec.ts", "presentation.spec.ts"]
+      : []),
   ],
   timeout: 120_000,
   expect: { timeout: 15_000 },

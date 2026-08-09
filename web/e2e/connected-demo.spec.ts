@@ -8,10 +8,18 @@ async function expectNoRawPresentation(page: Page) {
 }
 
 async function expectCollapsedNoTaskInspector(page: Page) {
+  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  const technicalSummary = technicalEvidence.locator(":scope > summary");
+  await expect(technicalSummary).toBeVisible();
+  await expect(technicalEvidence).not.toHaveAttribute("open", "");
+  await technicalSummary.click();
+
   const details = page.locator(".skill-inspector details");
   await expect(details.locator("summary")).toBeVisible();
   await expect(details).not.toHaveAttribute("open", "");
   await expect(details).toContainText(/尚未创建规划任务|Planning task not created/);
+  await technicalSummary.click();
+  await expect(technicalEvidence).not.toHaveAttribute("open", "");
 }
 
 test("connected-demo.spec.ts preserves the native SSE cursor and renders a live terminal task", async ({ page }) => {
@@ -82,14 +90,19 @@ test("connected-demo.spec.ts preserves the native SSE cursor and renders a live 
   });
   expect(cancelled.status).toBe(200);
   await expect(page.getByRole("status")).toContainText(/已取消|Cancelled/i);
-  await expect(page.getByText(/规划任务已暂停|Planning task paused/i)).toBeVisible();
+  await expect(
+    page.locator(".workspace-current-work").getByText(/规划任务已暂停|Planning task paused/i),
+  ).toBeVisible();
 });
 
 test("connected-demo.spec.ts connected golden flow proves the advisor-to-family database flow", async ({ page }) => {
   test.skip(terminalProof, "runs in the normal worker-backed Compose lane");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/demo");
-  await expect(page.getByRole("heading", { name: /顾问到家庭的决策流程|Advisor-to-family decision flow/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /让路线分析先通过顾问判断|Put route analysis through advisor review/ })).toBeVisible();
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+  await expect(page.locator(".workflow-rail-list")).toHaveCount(1);
   await expect(page.getByRole("banner")).toBeVisible();
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByRole("contentinfo")).toBeVisible();
@@ -97,7 +110,7 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   await expect(page.getByRole("link", { name: /跳到主要内容|Skip to main content/ })).toBeFocused();
 
   await page.getByRole("button", { name: /开始顾问流程|Start advisor flow/ }).click();
-  await expect(page.getByRole("heading", { name: /当前决策阶段|Current decision stage/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /当前工作阶段|Current workflow stage/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /创建规划任务|Create planning task/ })).toBeEnabled();
 
   const initialSse = page.waitForRequest((request) => request.url().includes("/events?after="));
@@ -112,9 +125,18 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   await expect(page.getByText(/有条件备选|Conditional alternative/).first()).toBeVisible();
   await expect(page.getByText(/较高风险的合成备选方案|Higher-risk synthetic alternative/).first()).toBeVisible();
   await expect(page.getByText(/暂不可选|Blocked/).first()).toBeVisible();
-  await expect(page.getByText(/已接受的合成证据与限制|Accepted synthetic evidence and limitations/i)).toBeVisible();
+  await expect(page.locator("#evidence-summary-title")).toHaveText(
+    /已接受的合成证据与限制|Accepted synthetic evidence and limitations/i,
+  );
   await expect(page.getByRole("status")).toContainText(/需要顾问审核|Needs advisor review/i);
-  await expect(page.getByText(/运行时 Skill pin 已匹配|Runtime Skill pin matched/)).toBeVisible();
+  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  const technicalSummary = technicalEvidence.locator(":scope > summary");
+  await technicalSummary.click();
+  await expect(
+    technicalEvidence.getByText(/运行时 Skill pin 已匹配|Runtime Skill pin matched/),
+  ).toBeVisible();
+  await technicalSummary.click();
+  await expect(technicalEvidence).not.toHaveAttribute("open", "");
   await expectNoRawPresentation(page);
   await page.setViewportSize({ width: 768, height: 900 });
   await expect(page.getByText(/在预算条件下推荐|Recommended with budget condition/).first()).toBeVisible();

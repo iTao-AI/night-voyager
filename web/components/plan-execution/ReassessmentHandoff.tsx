@@ -16,7 +16,7 @@ export function ReassessmentHandoff({
 }) {
   return (
     <section aria-labelledby="reassessment-handoff-title">
-      <h2 id="reassessment-handoff-title">{labels.title}</h2>
+      <h3 id="reassessment-handoff-title">{labels.title}</h3>
       <p>{labels.stop}</p>
       <p>{labels.pending}</p>
       <p>{labels.whoNext}</p>

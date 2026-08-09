@@ -14,23 +14,21 @@ describe("presentation catalog contract", () => {
     }
   });
 
-  it("keeps the exact approved Chinese promise and canonical product identity", () => {
-    expect(zhCN.productPromise).toBe("你的留学路线应该从你出发");
+  it("keeps the exact advisor workspace promise and canonical product identity", () => {
+    expect(zhCN.productPromise).toBe("留学顾问的 AI 协作工作台");
     expect(zhCN.productName).toBe("Night Voyager");
     expect(en.productName).toBe("Night Voyager");
   });
 
-  it("freezes the student-first portfolio thesis in both locales", () => {
-    expect(zhCN.rootTitleLineOne).toBe("你的留学路线");
-    expect(zhCN.rootTitleLineTwo).toBe("应该从你出发");
+  it("freezes the advisor-first portfolio thesis in both locales", () => {
+    expect(zhCN.rootTitle).toBe("把零散咨询，整理成可以推进的留学方案");
     expect(zhCN.rootSummary).toBe(
-      "不只告诉你去哪留学，更要说清为什么适合你。看懂不同路线的理由与取舍，再把选择变成一份可以执行的计划。",
+      "Night Voyager 帮助顾问整理客户信息、核对证据、比较留学路线并推进后续计划。AI 负责研究与草拟，关键判断仍由顾问确认。",
     );
-    expect(en.rootTitleLineOne).toBe("Your study-abroad route");
-    expect(en.rootTitleLineTwo).toBe("should start with you");
-    expect(en.rootSummary).toMatch(/why.*fits.*trade-offs.*actionable plan/i);
-    expect(zhCN.rootPrimaryAction).toBe("查看示例方案");
-    expect(zhCN.rootSecondaryAction).toBe("查看路线依据");
+    expect(en.rootTitle).toBe("Turn scattered consultations into a client plan you can move forward");
+    expect(en.rootSummary).toMatch(/organize.*evidence.*compare.*advisor/i);
+    expect(zhCN.rootPrimaryAction).toBe("查看一次完整咨询流程");
+    expect(zhCN.rootSecondaryAction).toBe("了解方案如何被核对");
   });
 
   it("does not use raw contract codes as visible copy", () => {

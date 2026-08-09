@@ -12,7 +12,7 @@ export function ExecutionRecoveryNotice({
   return (
     <div className="execution-recovery-notice">
       <p>{sessionChanged ? labels.sessionChanged : labels.recoverable}</p>
-      <button disabled={disabled} onClick={onRecover}>{labels.recover}</button>
+      <button className="execution-primary-action" data-primary-action="true" disabled={disabled} onClick={onRecover}>{labels.recover}</button>
     </div>
   );
 }

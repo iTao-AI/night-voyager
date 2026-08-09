@@ -1,21 +1,23 @@
 # State and interaction matrix
 
-Presentation state is orthogonal to both lifecycles. Exact `zh-CN` is the SSR,
+Presentation state is orthogonal to both lifecycles. The former family-heavy
+journey labels are historical presentation context; the implemented replacement is
+advisor-centered and locally verified. Exact `zh-CN` is the SSR,
 missing, invalid, and storage-failure default; exact `en` is explicitly selectable.
 Switching writes only `night-voyager:presentation-locale:v1` and leaves lifecycle
 state, requests, idempotency, journey storage, EventSource, and navigation unchanged.
 
 ## Internal-demo presentation layer
 
-The three internal routes share a closed display journey with these exact stages:
-`family_input`, `advisor_confirmation`, `route_review`, `family_decision`, and
-`plan_execution`. Each route maps its existing UI state to one stage and passes
+The three internal routes share a closed display workflow with these exact stages:
+`consultation_intake`, `client_fact_review`, `route_analysis`,
+`client_confirmation`, and `execution_followup`. Each route maps its existing UI state to one stage and passes
 only that stage plus localized copy to the display component. The mapping is
 fail-closed: an unknown UI state renders no journey and never exposes the raw
 state value. This layer has no fetch, mutation, storage, cookie, session,
 database, task, or role-switch responsibility.
 
-The journey is ordered before route-specific business content and technical
+The workflow is ordered before route-specific business content and technical
 evidence disclosure. It explains the current role/stage, user-visible outcome,
 boundary, and existing primary action at the route surface; it does not create
 or replace any action. Server-owned message bodies, advisor reasons, and
@@ -104,3 +106,10 @@ The governed plan-execution route has a separate closed lifecycle:
 Every accepted transition returns focus to `Current action` and announces through
 one polite live region. The blocked advisor surface exposes only reassessment;
 it never retains family attestation controls.
+
+The implemented matrix was verified with the full Vitest suite (`38` files,
+`422` tests), frontend lint, typecheck, production build, architecture and
+documentation governance tests, and the local real-Chromium presentation audit.
+The browser audit passed `71/71` across both locales, `1440`, `1024`, `768`, `390`,
+and `320` CSS pixels, reduced motion, 200% zoom, keyboard normal/blocked paths,
+and the same-Case versus separately seeded execution boundary.

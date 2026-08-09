@@ -1,14 +1,14 @@
 # Night Voyager
 
-Night Voyager turns a synthetic study-abroad comparison into a traceable advisor-to-family decision with durable Agent tasks, explicit human review, and a persisted receipt and timeline. The current v0.1.5 local synthetic portfolio release opens at `/` with a high-end Chinese-first “Virtual Night Voyage” entry and an explicit persistent English switch. This root is a static, local synthetic, provider-free presentation: it performs no API, session, task, or EventSource work. Runtime imagery uses responsive AVIF and WebP assets; the checked-in source PNG is provenance only.
+Night Voyager is an AI collaboration workspace for study-abroad advisors. It turns a local synthetic consultation into reviewable client facts, route analysis, advisor judgment, client confirmation, and a durable receipt and TimelinePlan while preserving the existing authority boundaries. The current development candidate presents the redesigned advisor-centered root and four-route workspace as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
 
-The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case into explicit planning. The focused advisor-family/evidence route remains at `/demo` and can also be used independently. Both governed demo routes retain the existing warm-paper ledger presentation.
+The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. All four routes share the advisor workspace shell.
 
 ![Chinese-first Night Voyager portfolio entry](docs/assets/night-voyager-portfolio-entry.png)
 
 ![Advisor Ledger at review-required](docs/assets/m5-advisor-ledger.png)
 
-![Family decision receipt and timeline](docs/assets/m5-family-receipt-timeline.png)
+![Client confirmation receipt and TimelinePlan](docs/assets/m5-family-receipt-timeline.png)
 
 ![Governed collaboration confirmed fact](docs/assets/collaboration-confirmed-fact.png)
 
@@ -19,7 +19,7 @@ Governed plan-execution development evidence (synthetic review evidence only):
 [advisor review](docs/assets/plan-execution-advisor-review.png),
 [mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png), and
 [mobile recovery](docs/assets/plan-execution-recovery-mobile.png). Semantic
-assertions remain the acceptance authority; screenshots are review evidence.
+assertions remain the acceptance authority; Screenshots are review evidence, not functional authority.
 
 ## Engineering proof
 
@@ -48,7 +48,7 @@ make proof
 make down
 ```
 
-Open `http://127.0.0.1:3000/` for the current portfolio entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the complete governed walkthrough, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` into `/demo`. For the focused advisor-family/evidence route, use the [connected demo runbook](docs/operations/connected-demo.md) directly at `/demo`. The [v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md) defines the current release gates.
+Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` into `/demo`. For the independent deterministic execution scenario, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at `/demo/plan`. The [v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md) defines the current release gates.
 
 For the current same-Case development walkthrough, begin at `/demo/collaboration`,
 confirm the synthetic family fact, choose `继续进入受治理规划` (`Continue to governed
@@ -57,8 +57,8 @@ performs read-only validation and creates no task.
 
 The current focused planning-revision proof uses
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. Screenshot maintenance is
-explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` retains the released portfolio
-captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
+explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` updates the current
+development-candidate portfolio captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
 `night-voyager-planning-revision.png`.
 
 For the governed execution path released in v0.1.5, open `/demo/plan` and follow

@@ -9,7 +9,7 @@ FROM node:24.18.0-alpine AS builder
 WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN mkdir -p public && npm run build
 
 FROM node:24.18.0-alpine AS runner
 WORKDIR /app

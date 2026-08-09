@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -10,10 +10,12 @@ import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
 import { MemoryCandidateCard } from "../../components/collaboration-demo/MemoryCandidateCard";
 import { SharedThread } from "../../components/collaboration-demo/SharedThread";
 import { PlanExecutionWorkspace } from "../../components/plan-execution/PlanExecutionWorkspace";
+import { WorkflowRail } from "../../components/presentation/WorkflowRail";
 import { PresentationProvider } from "../../lib/presentation/context";
 import {
-  collaborationJourneyStage,
-  connectedJourneyStage,
+  collaborationWorkflowStage,
+  connectedWorkflowStage,
+  planExecutionWorkflowStage,
 } from "../../lib/presentation/journey";
 import { en, zhCN } from "../../lib/presentation/catalog";
 import type { CollaborationMessage, MemoryCandidateProjection } from "../../lib/collaboration-demo/contracts";
@@ -171,71 +173,122 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-it("renders one closed five-stage journey for each demo route", () => {
+it("renders one closed five-stage workflow for each demo route", () => {
   collaborationState("thread_ready");
   const collaboration = renderPresentation(<CollaborationDemo />);
-  expect(collaboration.container.querySelectorAll(".decision-journey-track > li")).toHaveLength(5);
-  expect(collaboration.container.querySelector("[data-current-stage='family_input']")).not.toBeNull();
+  expect(collaboration.container.querySelectorAll(".workflow-rail-list > li")).toHaveLength(5);
+  expect(collaboration.container.querySelector("[data-current-stage='consultation_intake']")).not.toBeNull();
   collaboration.unmount();
 
   connectedState("family_review");
   const connected = renderPresentation(<ConnectedDemo />);
-  expect(connected.container.querySelector("[data-current-stage='family_decision']")).not.toBeNull();
+  expect(connected.container.querySelector("[data-current-stage='client_confirmation']")).not.toBeNull();
   connected.unmount();
 
   planState("ready_to_start");
   const plan = renderPresentation(<PlanExecutionWorkspace />);
-  expect(plan.container.querySelector("[data-current-stage='plan_execution']")).not.toBeNull();
+  expect(plan.container.querySelector("[data-current-stage='execution_followup']")).not.toBeNull();
 });
 
 it("maps advisor confirmation and route review from existing route state", () => {
   collaborationState("advisor_reviewing", "advisor");
   const collaboration = renderPresentation(<CollaborationDemo />);
-  expect(collaboration.container.querySelector("[data-current-stage='advisor_confirmation']")).not.toBeNull();
+  expect(collaboration.container.querySelector("[data-current-stage='client_fact_review']")).not.toBeNull();
   collaboration.unmount();
 
   connectedState("advisor_review");
   const connected = renderPresentation(<ConnectedDemo />);
-  expect(connected.container.querySelector("[data-current-stage='advisor_confirmation']")).not.toBeNull();
+  expect(connected.container.querySelector("[data-current-stage='route_analysis']")).not.toBeNull();
   connected.unmount();
 
   connectedState("task_streaming");
   const routeReview = renderPresentation(<ConnectedDemo />);
-  expect(routeReview.container.querySelector("[data-current-stage='route_review']")).not.toBeNull();
+  expect(routeReview.container.querySelector("[data-current-stage='route_analysis']")).not.toBeNull();
 });
 
 it("retains a known stage through recoverable and role-switching projections", () => {
-  expect(collaborationJourneyStage("recoverable_error", "replan_required")).toBe("route_review");
-  expect(collaborationJourneyStage("recoverable_error", "future_state_secret")).toBeNull();
-  expect(connectedJourneyStage("role_switching", { value: "advisor_review" })).toBe("advisor_confirmation");
-  expect(connectedJourneyStage("recoverable_error", { value: "family_review" })).toBe("family_decision");
-  expect(connectedJourneyStage("recoverable_error", { value: "future_state_secret" })).toBeNull();
+  expect(collaborationWorkflowStage("recoverable_error", "replan_required")).toBe("route_analysis");
+  expect(collaborationWorkflowStage("recoverable_error", "future_state_secret")).toBeNull();
+  expect(connectedWorkflowStage("role_switching", { value: "advisor_review" })).toBe("route_analysis");
+  expect(connectedWorkflowStage("recoverable_error", { value: "family_review" })).toBe("client_confirmation");
+  expect(connectedWorkflowStage("recoverable_error", { value: "future_state_secret" })).toBeNull();
+  expect(planExecutionWorkflowStage("recoverable_error")).toBe("execution_followup");
+});
+
+it("renders the exact complete/current/upcoming rail sequence, including an unknown stage", () => {
+  const current = renderPresentation(
+    <WorkflowRail currentStage="route_analysis" copy={(key) => key} />,
+  );
+  expect(
+    [...current.container.querySelectorAll(".workflow-rail-list > li")].map(
+      (item) => item.getAttribute("data-state"),
+    ),
+  ).toEqual(["complete", "complete", "current", "upcoming", "upcoming"]);
+  expect(current.container.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
+  current.unmount();
+
+  const unknown = renderPresentation(<WorkflowRail currentStage={null} copy={(key) => key} />);
+  expect(
+    [...unknown.container.querySelectorAll(".workflow-rail-list > li")].map(
+      (item) => item.getAttribute("data-state"),
+    ),
+  ).toEqual(["upcoming", "upcoming", "upcoming", "upcoming", "upcoming"]);
+  expect(unknown.container.querySelectorAll("[aria-current]")).toHaveLength(0);
+});
+
+it("recovers connected stages through nested known prior state and fails closed deeply", () => {
+  const known = {
+    value: "recoverable_error",
+    prior: {
+      value: "role_switching",
+      prior: { value: "recoverable_error", prior: { value: "family_review" } },
+    },
+  };
+  expect(connectedWorkflowStage(known.value, known.prior)).toBe("client_confirmation");
+
+  const unknown = {
+    value: "recoverable_error",
+    prior: {
+      value: "role_switching",
+      prior: { value: "future_state_secret", prior: { value: "family_review" } },
+    },
+  };
+  expect(connectedWorkflowStage(unknown.value, unknown.prior)).toBeNull();
+  expect(
+    connectedWorkflowStage("recoverable_error", {
+      value: "role_switching",
+      prior: { value: "recoverable_error" },
+    }),
+  ).toBeNull();
 });
 
 it("fails closed for unknown UI state without exposing the raw state", () => {
   collaborationState("future_state_secret");
   const collaboration = renderPresentation(<CollaborationDemo />);
-  expect(collaboration.container.querySelector(".decision-journey")).toBeNull();
+  expect(collaboration.container.querySelector(".workflow-rail-list")).not.toBeNull();
+  expect(collaboration.container.querySelector(".workflow-rail-list")?.getAttribute("data-current-stage")).toBeNull();
   expect(collaboration.container).not.toHaveTextContent("future_state_secret");
   collaboration.unmount();
 
   connectedState("future_state_secret");
   const connected = renderPresentation(<ConnectedDemo />);
-  expect(connected.container.querySelector(".decision-journey")).toBeNull();
+  expect(connected.container.querySelector(".workflow-rail-list")).not.toBeNull();
+  expect(connected.container.querySelector(".workflow-rail-list")?.getAttribute("data-current-stage")).toBeNull();
   expect(connected.container).not.toHaveTextContent("future_state_secret");
   connected.unmount();
 
   planState("future_state_secret");
   const plan = renderPresentation(<PlanExecutionWorkspace />);
-  expect(plan.container.querySelector(".decision-journey")).toBeNull();
+  expect(plan.container.querySelector(".workflow-rail-list")).not.toBeNull();
+  expect(plan.container.querySelector(".workflow-rail-list")?.getAttribute("data-current-stage")).toBeNull();
 });
 
 it("keeps business vocabulary and exact contract terms in the intended layers", () => {
-  expect(zhCN.journeyStageFamilyInput).toBe("家庭表达");
-  expect(zhCN.journeyStageAdvisorConfirmation).toBe("顾问确认");
-  expect(zhCN.journeyStageRouteReview).toBe("路线比较");
-  expect(zhCN.journeyStageFamilyDecision).toBe("家庭决定");
-  expect(zhCN.journeyStagePlanExecution).toBe("行动计划");
+  expect(zhCN.workflowStageConsultationIntake).toBe("咨询接入");
+  expect(zhCN.workflowStageClientFactReview).toBe("信息核验");
+  expect(zhCN.workflowStageRouteAnalysis).toBe("方案研判");
+  expect(zhCN.workflowStageClientConfirmation).toBe("客户确认");
+  expect(zhCN.workflowStageExecutionFollowup).toBe("执行跟进");
   expect(zhCN.typedProposalLabel).toBe("结构化事实提案");
   expect(zhCN.caseRevisionDisclosureLabel).toBe("档案版本");
   expect(zhCN.factVersionDisclosureLabel).toBe("事实版本");
@@ -248,29 +301,31 @@ it("keeps business vocabulary and exact contract terms in the intended layers", 
   expect(en.checkpointDisclosureLabel).toBe("checkpoint");
   expect(en.messageOriginalLabel).toBe("Original message");
   expect(en.advisorReasonOriginalLabel).toBe("Original advisor confirmation");
-  expect(en.journeyCurrentSeparator).toBe(": ");
-  expect(zhCN.journeyCurrentSeparator).toBe("：");
-  expect(zhCN).not.toHaveProperty("journeyCompletedLabel");
-  expect(zhCN).not.toHaveProperty("journeyUpcomingLabel");
+  expect(en.workflowStageConsultationIntake).toBe("Consultation intake");
+  expect(en.workflowStageClientFactReview).toBe("Client fact review");
+  expect(en.workflowStageRouteAnalysis).toBe("Route analysis");
+  expect(en.workflowStageClientConfirmation).toBe("Client confirmation");
+  expect(en.workflowStageExecutionFollowup).toBe("Execution follow-up");
 });
 
-it("renders an English-natural current-stage label and keeps technical facts secondary", async () => {
+it("keeps English workflow labels and technical facts secondary", async () => {
   planState("ready_to_start");
   localStorage.setItem("night-voyager:presentation-locale:v1", "en");
   const plan = renderPresentation(<PlanExecutionWorkspace />);
-  await waitFor(() => expect(plan.container.querySelector(".decision-journey-current")).toHaveTextContent("Current stage: Plan execution"));
+  await waitFor(() => expect(plan.container.querySelector(".workflow-rail-list")).toHaveAttribute("data-current-stage", "execution_followup"));
+  expect(plan.container.querySelector(".workflow-rail-label")).toHaveTextContent("Consultation intake");
   plan.unmount();
 
   collaborationState("thread_ready");
   const collaboration = renderPresentation(<CollaborationDemo />);
-  const journey = collaboration.container.querySelector(".decision-journey");
+  const workflow = collaboration.container.querySelector(".workflow-rail");
   const thread = collaboration.container.querySelector(".shared-thread");
-  const technical = collaboration.container.querySelector("details.authority-steps-disclosure");
-  expect(journey).not.toBeNull();
+  const technical = collaboration.container.querySelector(".workspace-technical-evidence");
+  expect(workflow).not.toBeNull();
   expect(thread).not.toBeNull();
   expect(technical).not.toBeNull();
   expect(technical?.querySelectorAll(".authority-steps > li")).toHaveLength(6);
-  expect(journey!.compareDocumentPosition(thread!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(workflow!.compareDocumentPosition(thread!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(thread!.compareDocumentPosition(technical!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 });
 
@@ -297,9 +352,7 @@ it("preserves server-owned message, advisor reason, and evidence limitation exac
 });
 
 it("keeps the shared journey presentational and side-effect free", () => {
-  const file = resolve(process.cwd(), "components/presentation/DecisionJourney.tsx");
-  expect(existsSync(file)).toBe(true);
-  if (!existsSync(file)) return;
+  const file = resolve(process.cwd(), "components/presentation/WorkflowRail.tsx");
   const source = readFileSync(file, "utf8");
   expect(source).not.toMatch(/fetch\s*\(|localStorage|sessionStorage|document\.|window\.|EventSource|mutation|switchRole|useEffect|useState/);
 });

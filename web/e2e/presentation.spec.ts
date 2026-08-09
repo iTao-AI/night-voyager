@@ -8,8 +8,21 @@ const PUBLIC_EVIDENCE_ROOT = process.env.PRESENTATION_PUBLIC_EVIDENCE_ROOT;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const ROUTES = ["/", "/demo/collaboration", "/demo", "/demo/plan"] as const;
 const LOCALES = ["zh-CN", "en"] as const;
-const WIDTHS = [1440, 768, 390, 320] as const;
+const WIDTHS = [1440, 1024, 768, 390, 320] as const;
 const MOTION_MODES = ["no-preference", "reduce"] as const;
+const APPROVED_PUBLIC_EVIDENCE_FILENAMES = [
+  "night-voyager-portfolio-entry.png",
+  "collaboration-confirmed-fact.png",
+  "m5-advisor-ledger.png",
+  "m5-family-receipt-timeline.png",
+  "night-voyager-planning-revision.png",
+  "plan-execution-current-action.png",
+  "plan-execution-advisor-review.png",
+  "plan-execution-reassessment-mobile.png",
+  "plan-execution-recovery-mobile.png",
+] as const;
+const PRIMARY_ACTION_LANDMARKS = ["skip-link", "brand", "locale", "primary-action"] as const;
+const ROLE_SWITCH_LANDMARKS = ["skip-link", "brand", "locale", "role-switch"] as const;
 
 type AuditCell = {
   route: (typeof ROUTES)[number];
@@ -48,6 +61,19 @@ async function openCell(browser: Browser, cell: AuditCell) {
   return { context, page };
 }
 
+async function waitForKeyboardReadiness(page: Page, route: AuditCell["route"]) {
+  if (route === "/demo/plan") {
+    const roleSwitch = page.locator(".plan-role-switcher button:not([disabled])").first();
+    await expect(roleSwitch).toBeVisible();
+    await expect(roleSwitch).toBeEnabled();
+    return ROLE_SWITCH_LANDMARKS;
+  }
+  const primaryAction = page.locator('[data-primary-action="true"]:not([disabled])').first();
+  await expect(primaryAction).toBeVisible();
+  await expect(primaryAction).toBeEnabled();
+  return PRIMARY_ACTION_LANDMARKS;
+}
+
 async function keyboardAndFocusEvidence(page: Page) {
   const sequence: string[] = [];
   let visibleFocus = false;
@@ -55,18 +81,26 @@ async function keyboardAndFocusEvidence(page: Page) {
     await page.keyboard.press("Tab");
     const step = await page.evaluate(() => {
       const active = document.activeElement as HTMLElement | null;
-      if (!active) return { descriptor: "none", visible: false };
+      if (!active) return { landmark: "none", visible: false };
       const style = getComputedStyle(active);
       return {
-        descriptor: [
-          active.tagName.toLowerCase(),
-          active.getAttribute("aria-label"),
-          active.textContent?.trim().slice(0, 80),
-        ].filter(Boolean).join(":"),
+        landmark: active.matches(".skip-link")
+          ? "skip-link"
+          : active.matches(".portfolio-brand, .workspace-brand")
+            ? "brand"
+            : active.closest(".locale-switch")
+              ? "locale"
+              : active.closest(".plan-role-switcher")
+                ? "role-switch"
+                : active.matches('[data-primary-action="true"]')
+                  ? "primary-action"
+                  : active.matches("summary")
+                    ? "technical-disclosure"
+                    : "other",
         visible: style.outlineStyle !== "none" && style.outlineWidth !== "0px",
       };
     });
-    sequence.push(step.descriptor);
+    sequence.push(step.landmark);
     visibleFocus ||= step.visible;
   }
   const focus = await page.evaluate(() => {
@@ -80,6 +114,24 @@ async function keyboardAndFocusEvidence(page: Page) {
     };
   });
   return { focus, keyboard: sequence, visibleFocus };
+}
+
+function keyboardLandmarkSubsequence(
+  sequence: readonly string[],
+  expectedLandmarks: readonly string[],
+) {
+  return expectedLandmarks.map((landmark) =>
+    sequence.indexOf(landmark),
+  );
+}
+
+function assertKeyboardLandmarkSubsequence(
+  sequence: readonly string[],
+  expectedLandmarks: readonly string[],
+) {
+  const indexes = keyboardLandmarkSubsequence(sequence, expectedLandmarks);
+  expect(indexes.every((index) => index >= 0)).toBe(true);
+  expect(indexes).toEqual([...indexes].sort((left, right) => left - right));
 }
 
 async function activateByKeyboard(
@@ -113,7 +165,13 @@ async function renderedMetrics(page: Page) {
     function color(value: string): Color | null {
       const channels = value.match(/[\d.]+/g)?.map(Number);
       if (!channels || channels.length < 3) return null;
-      return [channels[0], channels[1], channels[2], channels[3] ?? 1];
+      const scale = /^color\(srgb\s/.test(value) ? 255 : 1;
+      return [
+        channels[0] * scale,
+        channels[1] * scale,
+        channels[2] * scale,
+        channels[3] ?? 1,
+      ];
     }
     function composite(foreground: Color, background: Color): Color {
       const alpha = foreground[3] + background[3] * (1 - foreground[3]);
@@ -224,7 +282,7 @@ async function renderedMetrics(page: Page) {
         };
       });
     const journeyCopy = visible
-      .filter((element) => element.matches(".decision-journey-current, .decision-journey-track li > span:last-child"))
+      .filter((element) => element.matches(".workflow-rail-label"))
       .map((element) => ({
         fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
         text: element.textContent?.trim().slice(0, 120),
@@ -299,15 +357,40 @@ async function assertSemanticPresentation(page: Page) {
   expect(metrics.targets.filter((target) => target.height < 44 || target.width < 44)).toEqual([]);
   expect(metrics.journeyCopy.filter((copy) => copy.fontSize < 16)).toEqual([]);
   const journeyStage = page.url().includes("/demo/collaboration")
-    ? "family_input"
+    ? "consultation_intake"
     : page.url().includes("/demo/plan")
-      ? "plan_execution"
+      ? "execution_followup"
       : page.url().includes("/demo")
-        ? "advisor_confirmation"
+        ? "route_analysis"
         : null;
   if (journeyStage) {
-    await expect(page.locator(".decision-journey-track > li")).toHaveCount(5);
-    await expect(page.locator(`.decision-journey[data-current-stage='${journeyStage}']`)).toBeVisible();
+    await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
+    await expect(page.locator(`.workflow-rail-list[data-current-stage='${journeyStage}']`)).toBeVisible();
+  }
+  const shell = page.locator(".advisor-workspace-shell");
+  if (page.url().endsWith("/") || new URL(page.url()).pathname === "/") {
+    await expect(page.locator(".portfolio-category")).toContainText(
+      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+    );
+    await expect(page.locator(".advisor-workspace-preview")).toContainText(
+      /澳大利亚|Australia/,
+    );
+  } else {
+    await expect(shell).toBeVisible();
+    await expect(page.locator(".workspace-category")).toContainText(
+      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+    );
+    const expectedProofSegment = page.url().includes("/demo/plan")
+      ? "independent_execution_scenario"
+      : "connected_same_case";
+    await expect(shell).toHaveAttribute("data-proof-segment", expectedProofSegment);
+    await expect(page.locator(".workflow-rail")).toBeVisible();
+    expect(await page.locator("[data-primary-action='true']:visible").count()).toBeLessThanOrEqual(1);
+    expect((await page.locator(
+      ".workspace-header, .workspace-context-bar, .workflow-rail, .workspace-route-heading",
+    ).allTextContents()).join("\n")).not.toMatch(
+      /家庭表达|家庭决定|顾问到家庭决策流程|Family input|Family decision|Advisor-to-family decision flow/,
+    );
   }
   if (metrics.reducedMotion) {
     expect(metrics.maxMotionMs).toBeLessThanOrEqual(10);
@@ -382,7 +465,7 @@ async function mutation(
   await activateByKeyboard(page.getByRole("button", { exact: true, name }), key);
   expect((await receipt).status()).toBe(200);
   expect((await freshRead).status()).toBe(200);
-  await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+  await expect(page.locator(".plan-execution-hero > h3")).toBeFocused();
 }
 
 async function captureState(page: Page, name: string) {
@@ -407,6 +490,7 @@ async function captureState(page: Page, name: string) {
     path: path.join(AUDIT_OUTPUT!, `${name}.png`),
   });
   if (PUBLIC_EVIDENCE_ROOT && publicFilename) {
+    expect(APPROVED_PUBLIC_EVIDENCE_FILENAMES).toContain(publicFilename);
     await mkdir(PUBLIC_EVIDENCE_ROOT, { mode: 0o755, recursive: true });
     await page.screenshot({
       animations: "disabled",
@@ -436,6 +520,7 @@ test.describe("provider-free governed presentation audit", () => {
         };
         test(`${slug(cell)} rendered baseline`, async ({ browser }) => {
           const { context, page } = await openCell(browser, cell);
+          const expectedLandmarks = await waitForKeyboardReadiness(page, cell.route);
           const keyboardEvidence = await keyboardAndFocusEvidence(page);
           const evidence = {
             cell,
@@ -443,6 +528,7 @@ test.describe("provider-free governed presentation audit", () => {
             metrics: await assertSemanticPresentation(page),
           };
           expect(keyboardEvidence.keyboard.some((item) => item !== "none")).toBe(true);
+          assertKeyboardLandmarkSubsequence(keyboardEvidence.keyboard, expectedLandmarks);
           expect(keyboardEvidence.visibleFocus).toBe(true);
           await mkdir(AUDIT_OUTPUT!, { mode: 0o700, recursive: true });
           await page.screenshot({

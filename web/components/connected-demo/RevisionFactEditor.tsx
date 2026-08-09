@@ -48,6 +48,7 @@ export function RevisionFactEditor({
       ) : null}
       <button
         className="primary-action"
+        data-primary-action="true"
         type="button"
         disabled={!valid || busy}
         onClick={onSubmit}

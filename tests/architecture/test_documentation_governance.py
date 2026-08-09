@@ -462,6 +462,41 @@ def test_superpowers_index_links_every_approved_spec_and_plan() -> None:
     assert missing == []
 
 
+def test_advisor_workspace_redesign_documents_preserve_public_boundaries() -> None:
+    design_path = (
+        ROOT
+        / "docs/superpowers/specs/2026-08-09-advisor-centered-product-experience.md"
+    )
+    plan_path = (
+        ROOT
+        / "docs/superpowers/plans/2026-08-09-advisor-centered-product-experience.md"
+    )
+    assert design_path.is_file()
+    assert plan_path.is_file()
+
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in (design_path, plan_path)
+    )
+    for required in (
+        "AI collaboration workspace for study-abroad advisors",
+        "presentation-only",
+        "AdvisorReview",
+        "FamilyDecision",
+        "DecisionReceipt",
+        "TimelinePlan",
+        "same-Case",
+        "separately seeded execution",
+        "Do not modify backend",
+        "dependency",
+        "fixture",
+        "release",
+        "deployment",
+    ):
+        assert required in combined
+    assert "same-Case" in combined
+    assert "Never imply a Case or session handoff" in combined
+
+
 def test_superpowers_index_statuses_match_plan_banners() -> None:
     index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
     assert superpowers_status_binding_errors(index) == []
@@ -763,6 +798,35 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "compatible upstream support for sharp >=0.35" not in source
 
 
+def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
+    docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
+    plans_index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    connected = (ROOT / "docs/operations/connected-demo.md").read_text(
+        encoding="utf-8"
+    )
+    route_map = (ROOT / "docs/design/route-map.md").read_text(encoding="utf-8")
+    spec = (
+        ROOT
+        / "docs/superpowers/specs/2026-08-09-advisor-centered-product-experience.md"
+    ).read_text(encoding="utf-8")
+    compose = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
+
+    assert "current development candidate" in readme
+    assert "not released or deployed" in readme
+    assert "当前 development candidate" in readme_cn
+    assert "未发布或部署" in readme_cn
+    assert "current development candidate" in docs_index
+    assert "not released or deployed" in docs_index
+    assert "Implemented locally; not released" in plans_index
+    assert "current development captures" in connected
+    assert "advisor-centered route-analysis and downstream client-confirmation" in route_map
+    assert "exact route/locale/width/motion/zoom coverage" in spec
+    assert "58-cell" not in spec
+    assert "compose-proof: presentation audit passed" in compose
+
+
 def test_current_security_policy_tracks_the_development_dependency_path() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 
@@ -1041,7 +1105,7 @@ def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
         assert token in combined
 
 
-def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
+def test_advisor_workspace_docs_separate_current_candidate_from_release_history() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
     design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
@@ -1067,16 +1131,15 @@ def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
             "provider-free",
             "/demo/collaboration",
             "/demo",
-            "AVIF",
-            "WebP",
-            "source PNG",
-            "v0.1.3",
+            "v0.1.5",
         ):
             assert token in current_readme
-    assert "complete governed walkthrough begins at `/demo/collaboration`" in readme
-    assert "focused advisor-family/evidence route remains at `/demo`" in readme
-    assert "完整 governed walkthrough 从 `/demo/collaboration` 开始" in readme_cn
-    assert "focused advisor-family/evidence route 保留在 `/demo`" in readme_cn
+    assert "AI collaboration workspace for study-abroad advisors" in readme
+    assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
+    assert "independent deterministic execution scenario" in readme
+    assert "留学顾问的 AI 协作工作台" in readme_cn
+    assert "同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束" in readme_cn
+    assert "独立播种" in readme_cn
 
     for token in (
         "Virtual Night Voyage",
@@ -1092,7 +1155,11 @@ def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
     assert "complete governed walkthrough" in storyboard
     assert "focused advisor-family/evidence route" in storyboard
     assert "complete governed walkthrough" in route_map
-    assert "focused advisor-family/evidence route" in route_map
+    assert (
+        "The historical label \"focused advisor-family/evidence route\" is retained "
+        "only in documentation history."
+        in route_map
+    )
 
     for token in (
         "v0.1.5 is the current local synthetic portfolio release",
@@ -1147,7 +1214,7 @@ def test_current_guidance_uses_complete_and_focused_route_roles() -> None:
 
     assert "Keep `/demo` task-owning" in contributing
     assert "focused `/demo` route" in connected
-    assert "complete governed walkthrough begins" in collaboration
+    assert "connected same-Case proof begins" in collaboration
     assert "task-free collaboration route" in state_matrix
     assert "task-free `/demo/collaboration` route" in design
     assert "task-owning `/demo` lifecycle" in design
@@ -1162,7 +1229,7 @@ def test_high_end_portfolio_evidence_is_bounded_and_release_verifiable() -> None
     for token in (
         "PORTFOLIO_ENTRY_SURFACE",
         "PORTFOLIO_SOURCE_SHA256",
-        "PORTFOLIO_PRODUCTION_ASSETS",
+        "PORTFOLIO_REMOVED_RUNTIME_ASSETS",
         "verify_portfolio_entry_surface",
     ):
         assert token in verifier

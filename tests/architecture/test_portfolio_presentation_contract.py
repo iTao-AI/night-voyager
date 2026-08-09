@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import re
 from pathlib import Path
 
 import pytest
@@ -19,32 +21,6 @@ PRIVATE_OR_METADATA_MARKERS = (
     b"XMP ",
     b"http://ns.adobe.com/xap/",
 )
-PRODUCTION_ASSETS = (
-    (
-        "web/public/portfolio/night-voyager-voyage-960.avif",
-        "avif",
-        (960, 540),
-        "c8850328b09d17fe70f67fadc8a489bff94a5008af33436b4416a958129de028",
-    ),
-    (
-        "web/public/portfolio/night-voyager-voyage-1680.avif",
-        "avif",
-        (1672, 941),
-        "41bdfcc5065c3d8cfa454005875f97e1a1befe4f49e6cfd239433e6c61a1edfc",
-    ),
-    (
-        "web/public/portfolio/night-voyager-voyage-960.webp",
-        "webp",
-        (960, 540),
-        "5dffa4256d757f0fbe05b401b0679fe11e5863ebeee4f06a212a8f81aa0d9ded",
-    ),
-    (
-        "web/public/portfolio/night-voyager-voyage-1680.webp",
-        "webp",
-        (1672, 941),
-        "a5f71dca693e58916876a6f126d35c41aeaf21608935fe8c89b6dab09d5de806",
-    ),
-)
 LOCKED_DEPENDENCY_IDENTITIES = {
     "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
     "uv.lock": "42ed354a51331efb9c7566dcdce628f78baff1723a494741cf7fe78bdab9823f",
@@ -54,11 +30,27 @@ LOCKED_DEPENDENCY_IDENTITIES = {
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
+M3A_MANIFEST = ROOT / "fixtures/m3a/manifest.json"
 PLAN_EXECUTION_EVIDENCE = (
     ("docs/assets/plan-execution-current-action.png", 1440),
     ("docs/assets/plan-execution-advisor-review.png", 1440),
     ("docs/assets/plan-execution-reassessment-mobile.png", 390),
     ("docs/assets/plan-execution-recovery-mobile.png", 390),
+)
+APPROVED_PUBLIC_EVIDENCE_FILENAMES = (
+    "night-voyager-portfolio-entry.png",
+    "collaboration-confirmed-fact.png",
+    "m5-advisor-ledger.png",
+    "m5-family-receipt-timeline.png",
+    "night-voyager-planning-revision.png",
+    "plan-execution-current-action.png",
+    "plan-execution-advisor-review.png",
+    "plan-execution-reassessment-mobile.png",
+    "plan-execution-recovery-mobile.png",
+)
+REMOVED_RUNTIME_ASSETS = tuple(
+    "night-voyager-voyage-" + suffix
+    for suffix in ("960.avif", "960.webp", "1680.avif", "1680.webp")
 )
 
 
@@ -72,39 +64,6 @@ def _png_size(data: bytes) -> tuple[int, int]:
     return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
 
 
-def _avif_size(data: bytes) -> tuple[int, int]:
-    assert data[4:8] == b"ftyp"
-    assert b"avif" in data[8:32]
-    marker = data.find(b"ispe")
-    assert marker >= 4
-    return (
-        int.from_bytes(data[marker + 8 : marker + 12], "big"),
-        int.from_bytes(data[marker + 12 : marker + 16], "big"),
-    )
-
-
-def _webp_size(data: bytes) -> tuple[int, int]:
-    assert data.startswith(b"RIFF")
-    assert data[8:12] == b"WEBP"
-    chunk = data[12:16]
-    payload = 20
-    if chunk == b"VP8X":
-        return (
-            1 + int.from_bytes(data[payload + 4 : payload + 7], "little"),
-            1 + int.from_bytes(data[payload + 7 : payload + 10], "little"),
-        )
-    if chunk == b"VP8 ":
-        assert data[payload + 3 : payload + 6] == b"\x9d\x01\x2a"
-        return (
-            int.from_bytes(data[payload + 6 : payload + 8], "little") & 0x3FFF,
-            int.from_bytes(data[payload + 8 : payload + 10], "little") & 0x3FFF,
-        )
-    assert chunk == b"VP8L"
-    assert data[payload] == 0x2F
-    packed = int.from_bytes(data[payload + 1 : payload + 5], "little")
-    return (packed & 0x3FFF) + 1, ((packed >> 14) & 0x3FFF) + 1
-
-
 def test_approved_source_identity_is_exact() -> None:
     assert SOURCE.is_file()
     data = SOURCE.read_bytes()
@@ -114,28 +73,10 @@ def test_approved_source_identity_is_exact() -> None:
     assert all(marker not in data for marker in PRIVATE_OR_METADATA_MARKERS)
 
 
-@pytest.mark.parametrize(
-    ("relative", "format_name", "expected_size", "expected_sha256"),
-    PRODUCTION_ASSETS,
-)
-def test_responsive_production_asset_is_valid_and_bounded(
-    relative: str,
-    format_name: str,
-    expected_size: tuple[int, int],
-    expected_sha256: str,
-) -> None:
-    path = ROOT / relative
-    assert path.is_file(), relative
-    data = path.read_bytes()
-    assert 0 < len(data) < SOURCE_BYTES
-    assert hashlib.sha256(data).hexdigest() == expected_sha256
-    width, height = (
-        _avif_size(data) if format_name == "avif" else _webp_size(data)
-    )
-    assert (width, height) == expected_size
-    assert height > 0
-    assert abs((width / height) - (SOURCE_SIZE[0] / SOURCE_SIZE[1])) < 0.002
-    assert all(marker not in data for marker in PRIVATE_OR_METADATA_MARKERS)
+def test_runtime_voyage_assets_are_not_required_by_the_current_surface() -> None:
+    runtime_directory = ROOT / "web/public/portfolio"
+    for filename in REMOVED_RUNTIME_ASSETS:
+        assert not (runtime_directory / filename).exists(), filename
 
 
 def test_runtime_portfolio_directory_contains_no_png_source() -> None:
@@ -149,30 +90,34 @@ def test_dependency_manifests_and_locks_keep_the_approved_identity() -> None:
 
 
 def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> None:
-    css = (ROOT / "web/app/styles.css").read_text(encoding="utf-8")
+    css = "\n".join(
+        (ROOT / relative).read_text(encoding="utf-8")
+        for relative in ("web/app/styles.css", "web/app/portfolio.css", "web/app/workspace.css")
+    )
     component_paths = (
-        ROOT / "web/components/presentation/PortfolioBackdrop.tsx",
         ROOT / "web/components/presentation/PortfolioEntry.tsx",
-        ROOT / "web/components/presentation/PortfolioJourney.tsx",
-        ROOT / "web/components/presentation/PortfolioRouteAtlas.tsx",
         ROOT / "web/components/presentation/PortfolioShell.tsx",
+        ROOT / "web/components/presentation/AdvisorWorkspacePreview.tsx",
+        ROOT / "web/components/presentation/AdvisorWorkspaceShell.tsx",
+        ROOT / "web/components/presentation/WorkflowRail.tsx",
     )
     assert all(path.is_file() for path in component_paths)
     components = "\n".join(path.read_text(encoding="utf-8") for path in component_paths)
 
     for token in (
-        ".portfolio-night",
+        "--nv-frame",
+        "--nv-canvas",
+        ".advisor-portfolio-shell",
+        ".advisor-workspace-shell",
+        ".workflow-rail",
         "@media (max-width: 1023px)",
         "@media (max-width: 767px)",
         "@media (max-width: 389px)",
         "@media (prefers-reduced-motion: reduce)",
-        ".portfolio-route-path",
-        "stroke-dashoffset: 0",
-        ".portfolio-backdrop",
-        "animation: none",
+        "@media (min-width: 1280px)",
+        "200%",
     ):
         assert token in css
-    assert "width: calc(100% - 2rem)" in css
     for forbidden in (
         "<canvas",
         "<video",
@@ -181,8 +126,70 @@ def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> 
         "requestAnimationFrame",
         "onPointerMove",
         "pointermove",
+        "night-voyager-voyage-" + "960",
+        "night-voyager-voyage-" + "1680",
     ):
         assert forbidden not in components
+
+
+def test_root_preview_projection_matches_the_closed_fixture_contract() -> None:
+    manifest = json.loads(M3A_MANIFEST.read_text(encoding="utf-8"))
+    projection = (ROOT / "web/lib/presentation/portfolio.ts").read_text(encoding="utf-8")
+    case = manifest["case"]
+    budget = case["family"]["budget"]
+
+    assert f'intendedField: "{case["student"]["intended_field"]}"' in projection
+    assert f'currency: "{budget["currency"]}"' in projection
+    assert f'preferredMinor: {budget["preferred_minor"]:,}'.replace(",", "_") in projection
+    assert f'hardCeilingMinor: {budget["hard_ceiling_minor"]:,}'.replace(",", "_") in projection
+
+    expected_routes: list[tuple[str, str, str, list[str], str | None]] = []
+    entries_by_country = {
+        country: entry
+        for country, entry in zip(
+            case["student"]["preferred_countries"],
+            manifest["source_pack"]["entries"],
+            strict=True,
+        )
+    }
+    for country in case["student"]["preferred_countries"]:
+        entry = entries_by_country[country]
+        expected_routes.append(
+            (
+                country,
+                manifest["expected"][country],
+                "complete" if not entry["known_gaps"] else "partial",
+                entry["coverage"],
+                entry["known_gaps"][0] if entry["known_gaps"] else None,
+            )
+        )
+
+    route_pattern = re.compile(
+        r'\{\n\s+id: "(?P<id>[^"]+)",\n'
+        r'\s+outcome: "(?P<outcome>[^"]+)",\n'
+        r'\s+evidenceSufficiency: "(?P<sufficiency>[^"]+)",\n'
+        r'\s+acceptedEvidence: \[(?P<evidence>.*?)\],\n'
+        r'\s+unresolvedGap: (?P<gap>null|"[^"]+"),\n\s+\}',
+        re.DOTALL,
+    )
+    actual_routes: list[tuple[str, str, str, list[str], str | None]] = []
+    for match in route_pattern.finditer(projection):
+        actual_routes.append(
+            (
+                match["id"],
+                match["outcome"],
+                match["sufficiency"],
+                re.findall(r'"([^"]+)"', match["evidence"]),
+                None if match["gap"] == "null" else match["gap"].strip('"'),
+            )
+        )
+
+    assert actual_routes == expected_routes
+    assert 'proofSegment: "connected_same_case"' in projection
+    assert 'nextAction: "review_routes"' in projection
+    assert "Synthetic Australia Institution" not in projection
+    assert "Synthetic Japan Institution" not in projection
+    assert "Synthetic Malaysia Institution" not in projection
 
 
 def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> None:
@@ -193,7 +200,7 @@ def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> Non
         assert route in source
     for locale in ('"zh-CN"', '"en"'):
         assert locale in source
-    for width in ("1440", "768", "390", "320"):
+    for width in ("1440", "1024", "768", "390", "320"):
         assert width in source
     for required_contract in (
         "PRESENTATION_AUDIT_OUTPUT_DIR",
@@ -252,3 +259,57 @@ def test_plan_execution_evidence_is_generated_from_semantic_state_assertions() -
     assert "PRESENTATION_PUBLIC_EVIDENCE_ROOT" in source
     assert '"Local synthetic demo"' in source
     assert '"本地合成演示"' in source
+
+
+def test_browser_presentation_contract_is_advisor_first_and_keeps_execution_boundary_visible(
+) -> None:
+    bootstrap = (ROOT / "web/e2e/bootstrap.spec.ts").read_text(encoding="utf-8")
+    design_review = (ROOT / "web/e2e/portfolio-design-review.spec.ts").read_text(
+        encoding="utf-8"
+    )
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+
+    assert "AI collaboration workspace for study-abroad advisors" in bootstrap
+    assert "留学顾问的 AI 协作工作台" in bootstrap
+    assert "APPROVED_PUBLIC_EVIDENCE_FILENAMES" in source
+    for filename in APPROVED_PUBLIC_EVIDENCE_FILENAMES:
+        assert filename in source
+    assert "data-proof-segment" in source
+    assert "data-primary-action" in source
+    assert "connected_same_case" in source
+    assert "independent_execution_scenario" in source
+    assert "assertKeyboardLandmarkSubsequence" in source
+    assert "keyboardLandmarkSubsequence" in source
+    assert '["skip-link", "brand", "locale", "primary-action"]' in source
+    assert "keyboardDisclosureEvidence" in source
+    assert 'activateByKeyboard(summary, "Enter")' in source
+    assert 'activateByKeyboard(summary, "Space")' in source
+    assert (
+        'const PRIMARY_ACTION_LANDMARKS = ["skip-link", "brand", "locale", '
+        '"primary-action"] as const;'
+        in source
+    )
+    assert (
+        'const ROLE_SWITCH_LANDMARKS = ["skip-link", "brand", "locale", '
+        '"role-switch"] as const;'
+        in source
+    )
+    assert "async function waitForKeyboardReadiness" in source
+    assert 'if (route === "/demo/plan")' in source
+    assert 'plan-role-switcher button:not([disabled])' in source
+    assert 'data-primary-action="true"]:not([disabled])' in source
+    assert (
+        "assertKeyboardLandmarkSubsequence(keyboardEvidence.keyboard, expectedLandmarks)"
+        in source
+    )
+    readiness = source.split("async function waitForKeyboardReadiness", 1)[1].split(
+        "async function keyboardAndFocusEvidence", 1
+    )[0]
+    plan_branch = readiness.split('if (route === "/demo/plan")', 1)[1].split(
+        "  }", 1
+    )[0]
+    assert "role-switcher" in plan_branch
+    assert "data-primary-action" not in plan_branch
+    assert "portfolio-category" in design_review
+    assert "Family input" not in bootstrap
+    assert "Family decision" not in bootstrap
