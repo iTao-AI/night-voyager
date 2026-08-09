@@ -1076,7 +1076,7 @@ def test_chinese_first_portfolio_docs_are_discoverable_and_truthful() -> None:
         assert token in combined
 
 
-def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
+def test_advisor_workspace_docs_describe_the_current_v0_1_5_surface() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
     design = (ROOT / "DESIGN.md").read_text(encoding="utf-8")
@@ -1102,16 +1102,15 @@ def test_high_end_portfolio_docs_describe_the_current_v0_1_3_surface() -> None:
             "provider-free",
             "/demo/collaboration",
             "/demo",
-            "AVIF",
-            "WebP",
-            "source PNG",
-            "v0.1.3",
+            "v0.1.5",
         ):
             assert token in current_readme
-    assert "complete governed walkthrough begins at `/demo/collaboration`" in readme
-    assert "focused advisor-family/evidence route remains at `/demo`" in readme
-    assert "完整 governed walkthrough 从 `/demo/collaboration` 开始" in readme_cn
-    assert "focused advisor-family/evidence route 保留在 `/demo`" in readme_cn
+    assert "AI collaboration workspace for study-abroad advisors" in readme
+    assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
+    assert "independent deterministic execution scenario" in readme
+    assert "留学顾问的 AI 协作工作台" in readme_cn
+    assert "同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束" in readme_cn
+    assert "独立播种" in readme_cn
 
     for token in (
         "Virtual Night Voyage",
@@ -1182,7 +1181,7 @@ def test_current_guidance_uses_complete_and_focused_route_roles() -> None:
 
     assert "Keep `/demo` task-owning" in contributing
     assert "focused `/demo` route" in connected
-    assert "complete governed walkthrough begins" in collaboration
+    assert "connected same-Case proof begins" in collaboration
     assert "task-free collaboration route" in state_matrix
     assert "task-free `/demo/collaboration` route" in design
     assert "task-owning `/demo` lifecycle" in design

@@ -1,8 +1,13 @@
 # Governed plan execution walkthrough
 
-This walkthrough is a local synthetic, provider-free proof. It is not a release,
+This walkthrough is the independent deterministic execution scenario in the
+advisor workspace. It is a local synthetic, provider-free proof. It is not a release,
 deployment, live application workflow, admissions outcome, or successor-plan
 automation.
+
+It does not continue the connected Case or session from `/demo/collaboration` and
+`/demo`; Happy and Blocked are separately seeded scenarios. Screenshots are review
+evidence, while the semantic browser and database assertions remain authoritative.
 
 ## Routes and identities
 

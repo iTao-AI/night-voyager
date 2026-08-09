@@ -1,8 +1,10 @@
 # Connected demo operations
 
-M5 connects the focused `/demo` route to the local synthetic FastAPI, worker, SSE, and PostgreSQL
-paths. It proves an advisor-to-parent workflow; it is not production tenancy,
-live institutional coverage, or admissions advice.
+M5 connects the focused `/demo` route to the local synthetic FastAPI, worker, SSE,
+and PostgreSQL paths. It is the route-analysis segment of the advisor workspace and
+proves advisor review followed by client confirmation; its connected same-Case proof
+ends at the receipt and TimelinePlan. It is not production tenancy, live
+institutional coverage, or admissions advice.
 
 The shared presentation shell server-renders exact `zh-CN`. The header's labelled
 `中文` / `English` control can persist exact `en` at
@@ -17,10 +19,12 @@ or enter the `sessionStorage` journey envelope.
 
 ![Chinese planning revision comparison](../assets/night-voyager-planning-revision.png)
 
-The complete governed walkthrough begins at `/demo/collaboration` and is documented
+The connected same-Case walkthrough begins at `/demo/collaboration` and is documented
 in the [governed collaboration walkthrough](collaboration-walkthrough.md). It shares
 the session envelope and read-only inspector. Its controlled handoff creates no task
 or SSE connection; `/demo` owns both only after explicit advisor action.
+The independently seeded Happy/Blocked execution scenario at `/demo/plan` is not a
+continuation of this Case or session.
 
 ## Run the walkthrough
 

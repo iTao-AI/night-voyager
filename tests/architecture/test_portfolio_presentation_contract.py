@@ -37,6 +37,17 @@ PLAN_EXECUTION_EVIDENCE = (
     ("docs/assets/plan-execution-reassessment-mobile.png", 390),
     ("docs/assets/plan-execution-recovery-mobile.png", 390),
 )
+APPROVED_PUBLIC_EVIDENCE_FILENAMES = (
+    "night-voyager-portfolio-entry.png",
+    "collaboration-confirmed-fact.png",
+    "m5-advisor-ledger.png",
+    "m5-family-receipt-timeline.png",
+    "night-voyager-planning-revision.png",
+    "plan-execution-current-action.png",
+    "plan-execution-advisor-review.png",
+    "plan-execution-reassessment-mobile.png",
+    "plan-execution-recovery-mobile.png",
+)
 REMOVED_RUNTIME_ASSETS = tuple(
     "night-voyager-voyage-" + suffix
     for suffix in ("960.avif", "960.webp", "1680.avif", "1680.webp")
@@ -248,3 +259,24 @@ def test_plan_execution_evidence_is_generated_from_semantic_state_assertions() -
     assert "PRESENTATION_PUBLIC_EVIDENCE_ROOT" in source
     assert '"Local synthetic demo"' in source
     assert '"本地合成演示"' in source
+
+
+def test_browser_presentation_contract_is_advisor_first_and_keeps_the_execution_boundary_visible() -> None:
+    bootstrap = (ROOT / "web/e2e/bootstrap.spec.ts").read_text(encoding="utf-8")
+    design_review = (ROOT / "web/e2e/portfolio-design-review.spec.ts").read_text(
+        encoding="utf-8"
+    )
+    source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
+
+    assert "AI collaboration workspace for study-abroad advisors" in bootstrap
+    assert "留学顾问的 AI 协作工作台" in bootstrap
+    assert "APPROVED_PUBLIC_EVIDENCE_FILENAMES" in source
+    for filename in APPROVED_PUBLIC_EVIDENCE_FILENAMES:
+        assert filename in source
+    assert "data-proof-segment" in source
+    assert "data-primary-action" in source
+    assert "connected_same_case" in source
+    assert "independent_execution_scenario" in source
+    assert "portfolio-category" in design_review
+    assert "Family input" not in bootstrap
+    assert "Family decision" not in bootstrap

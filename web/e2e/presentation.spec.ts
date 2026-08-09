@@ -10,6 +10,17 @@ const ROUTES = ["/", "/demo/collaboration", "/demo", "/demo/plan"] as const;
 const LOCALES = ["zh-CN", "en"] as const;
 const WIDTHS = [1440, 1024, 768, 390, 320] as const;
 const MOTION_MODES = ["no-preference", "reduce"] as const;
+const APPROVED_PUBLIC_EVIDENCE_FILENAMES = [
+  "night-voyager-portfolio-entry.png",
+  "collaboration-confirmed-fact.png",
+  "m5-advisor-ledger.png",
+  "m5-family-receipt-timeline.png",
+  "night-voyager-planning-revision.png",
+  "plan-execution-current-action.png",
+  "plan-execution-advisor-review.png",
+  "plan-execution-reassessment-mobile.png",
+  "plan-execution-recovery-mobile.png",
+] as const;
 
 type AuditCell = {
   route: (typeof ROUTES)[number];
@@ -309,6 +320,31 @@ async function assertSemanticPresentation(page: Page) {
     await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
     await expect(page.locator(`.workflow-rail-list[data-current-stage='${journeyStage}']`)).toBeVisible();
   }
+  const shell = page.locator(".advisor-workspace-shell");
+  if (page.url().endsWith("/") || new URL(page.url()).pathname === "/") {
+    await expect(page.locator(".portfolio-category")).toContainText(
+      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+    );
+    await expect(page.locator(".advisor-workspace-preview")).toContainText(
+      /澳大利亚|Australia/,
+    );
+  } else {
+    await expect(shell).toBeVisible();
+    await expect(page.locator(".workspace-category")).toContainText(
+      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+    );
+    const expectedProofSegment = page.url().includes("/demo/plan")
+      ? "independent_execution_scenario"
+      : "connected_same_case";
+    await expect(shell).toHaveAttribute("data-proof-segment", expectedProofSegment);
+    await expect(page.locator(".workflow-rail")).toBeVisible();
+    expect(await page.locator("[data-primary-action='true']:visible").count()).toBeLessThanOrEqual(1);
+    await expect(
+      page.locator(".workspace-header, .workspace-context-bar, .workflow-rail, .workspace-route-heading"),
+    ).not.toContainText(
+      /家庭表达|家庭决定|顾问到家庭决策流程|Family input|Family decision|Advisor-to-family decision flow/,
+    );
+  }
   if (metrics.reducedMotion) {
     expect(metrics.maxMotionMs).toBeLessThanOrEqual(10);
     expect(metrics.motionOffenders).toEqual([]);
@@ -407,6 +443,7 @@ async function captureState(page: Page, name: string) {
     path: path.join(AUDIT_OUTPUT!, `${name}.png`),
   });
   if (PUBLIC_EVIDENCE_ROOT && publicFilename) {
+    expect(APPROVED_PUBLIC_EVIDENCE_FILENAMES).toContain(publicFilename);
     await mkdir(PUBLIC_EVIDENCE_ROOT, { mode: 0o755, recursive: true });
     await page.screenshot({
       animations: "disabled",

@@ -18,6 +18,7 @@ UPDATE_PORTFOLIO_SCREENSHOTS=${UPDATE_PORTFOLIO_SCREENSHOTS:-0}
 UPDATE_PLANNING_REVISION_SCREENSHOT=${UPDATE_PLANNING_REVISION_SCREENSHOT:-0}
 PLANNING_REVISION_REVIEW_DIR=${PLANNING_REVISION_REVIEW_DIR:-tmp/planning-revision-review}
 PRESENTATION_AUDIT_OUTPUT_DIR=${PRESENTATION_AUDIT_OUTPUT_DIR:-/tmp/night-voyager-presentation-audit}
+PRESENTATION_PUBLIC_EVIDENCE_ROOT=${PRESENTATION_PUBLIC_EVIDENCE_ROOT:-}
 FACT_TO_PLAN_ZH_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-proof.json
 FACT_TO_PLAN_ZH_WORKER_READY_FILE=docs/assets/.fact-to-plan-zh-CN-worker-ready
 FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json
@@ -239,8 +240,10 @@ run_presentation_audit_lane() {
     docker compose --profile browser-proof run --rm --no-deps \
         -e PRESENTATION_AUDIT=1 \
         -e PRESENTATION_AUDIT_OUTPUT_DIR="$PRESENTATION_AUDIT_OUTPUT_DIR" \
+        -e PRESENTATION_PUBLIC_EVIDENCE_ROOT="$PRESENTATION_PUBLIC_EVIDENCE_ROOT" \
         browser-proof npx playwright test \
-            --config playwright.compose.config.ts presentation.spec.ts
+            --config playwright.compose.config.ts \
+            bootstrap.spec.ts portfolio-design-review.spec.ts presentation.spec.ts
     printf 'compose-proof: 58-cell presentation audit passed\n'
 }
 

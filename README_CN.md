@@ -1,14 +1,14 @@
 # Night Voyager
 
-Night Voyager 将一组三国留学比较转化为可追溯的 advisor-to-family decision：以 durable Agent task 执行流程，经过明确的人工复核，并持久化 decision receipt 与 timeline。当前 v0.1.5 local synthetic portfolio release 在 `/` 提供 high-end Chinese-first“虚幻夜航”入口，并保留显式、持久的 English 切换。这个 root 是 static、local synthetic、provider-free 展示面，不发起 API、session、task 或 EventSource。运行时图片使用响应式 AVIF 与 WebP；仓库中的 source PNG 只用于 provenance。
+Night Voyager 是留学顾问的 AI 协作工作台。它把本地合成咨询整理为可核对的客户信息、方案研判、顾问判断、客户确认以及持久化 receipt 与 TimelinePlan，同时保留既有 authority 边界。当前 v0.1.5 local synthetic portfolio release 在 `/` 提供 coded、static 预览，并保留显式、持久的 English 切换。这个 root 是 local synthetic、provider-free 展示面，不发起 API、session、task 或 EventSource。
 
-完整 governed walkthrough 从 `/demo/collaboration` 开始，并将同一个 Case 继续交给显式 planning。focused advisor-family/evidence route 保留在 `/demo`，也可独立使用。两个 governed demo route 都保留既有 warm-paper ledger 视觉。
+完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。四个 route 共享 advisor workspace shell。
 
 ![Chinese-first Night Voyager 作品集入口](docs/assets/night-voyager-portfolio-entry.png)
 
 ![review-required 阶段的 Advisor Ledger](docs/assets/m5-advisor-ledger.png)
 
-![Family decision receipt 与 timeline](docs/assets/m5-family-receipt-timeline.png)
+![客户确认回执与 TimelinePlan](docs/assets/m5-family-receipt-timeline.png)
 
 ![Governed collaboration confirmed fact](docs/assets/collaboration-confirmed-fact.png)
 
@@ -19,7 +19,7 @@ Governed plan-execution development evidence（仅 synthetic review evidence）�
 [advisor review](docs/assets/plan-execution-advisor-review.png)、
 [mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png) 与
 [mobile recovery](docs/assets/plan-execution-recovery-mobile.png)。Semantic
-assertions 才是 acceptance authority；screenshots are review evidence。
+assertions 才是 acceptance authority；截图是评审证据，不是功能权威。
 
 ## 工程证据
 
@@ -48,7 +48,7 @@ make proof
 make down
 ```
 
-当前作品集入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。完整 governed walkthrough 按 [collaboration runbook](docs/operations/collaboration-walkthrough.md)从 `/demo/collaboration` 进入 `/demo`；focused advisor-family/evidence route 可按 [connected demo runbook](docs/operations/connected-demo.md)直接从 `/demo` 开始。[v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md)定义 current release gates。
+当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md)从 `/demo/collaboration` 进入 `/demo`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md)访问 `/demo/plan`。[v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md)定义 current release gates。
 
 如需验证当前 same-Case development walkthrough，请从
 `/demo/collaboration` 开始，确认 synthetic family fact，选择

@@ -100,6 +100,12 @@ async function expectPortfolioEntry(page: Page) {
   await expect(
     page.getByRole("heading", { level: 1, name: portfolioCopy.heading }),
   ).toBeVisible();
+  await expect(page.locator(".portfolio-category")).toContainText(
+    /留学顾问的 AI 协作工作台|AI collaboration workspace for study-abroad advisors/,
+  );
+  await expect(page.locator(".portfolio-workflow")).toContainText(
+    /同一 Case|same Case/,
+  );
   await expect(
     page.locator(".portfolio-primary-action"),
   ).toHaveAttribute("href", "/demo/collaboration");
@@ -445,6 +451,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
 
   await page.goto("/demo/collaboration");
   await expectPublicSurface(page);
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: presentationLocale === "en" ? "Skip to main content" : "跳到主要内容" })).toBeFocused();
   await page.getByRole("button", { name: presentationCopy.startParent }).click();
@@ -489,6 +496,8 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   });
   await page.getByRole("button", { name: presentationCopy.handoff }).click();
   await page.waitForURL("**/demo");
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
   await expect(page.getByRole("heading", { name: presentationCopy.stage })).toBeVisible();
   await expect(page.getByText(presentationCopy.familyBudget)).toBeVisible();
   await expect(page.getByText("Case revision 2").first()).toBeVisible();

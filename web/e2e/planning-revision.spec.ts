@@ -425,6 +425,8 @@ async function blockedFlow(page: Page, advisorCsrf: string): Promise<FlowProof> 
   expect(rejected.ok()).toBe(false);
   await hydrate(page, BLOCKED_CASE, "advisor", nextAdvisorCsrf);
   await page.goto("/demo");
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
   await expect(page.getByRole("heading", { name: copy.blocked })).toBeVisible();
   await expect(page.getByRole("link", { name: copy.safeExit })).toBeVisible();
   await expect(
@@ -466,6 +468,8 @@ test(
     let csrf = await mint(page, "advisor");
     await hydrate(page, HAPPY_CASE, "advisor", csrf);
     await page.goto("/demo");
+    await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+    await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
     const initialLedger = await read(
       page,
       `/api/demo/cases/${HAPPY_CASE}/advisor-ledger`,

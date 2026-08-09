@@ -89,7 +89,10 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   test.skip(terminalProof, "runs in the normal worker-backed Compose lane");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/demo");
-  await expect(page.getByRole("heading", { name: /顾问到家庭的决策流程|Advisor-to-family decision flow/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /让路线分析先通过顾问判断|Put route analysis through advisor review/ })).toBeVisible();
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+  await expect(page.locator(".workflow-rail-list")).toHaveCount(1);
   await expect(page.getByRole("banner")).toBeVisible();
   await expect(page.getByRole("main")).toBeVisible();
   await expect(page.getByRole("contentinfo")).toBeVisible();
@@ -97,7 +100,7 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   await expect(page.getByRole("link", { name: /跳到主要内容|Skip to main content/ })).toBeFocused();
 
   await page.getByRole("button", { name: /开始顾问流程|Start advisor flow/ }).click();
-  await expect(page.getByRole("heading", { name: /当前决策阶段|Current decision stage/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /当前工作阶段|Current workflow stage/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /创建规划任务|Create planning task/ })).toBeEnabled();
 
   const initialSse = page.waitForRequest((request) => request.url().includes("/events?after="));

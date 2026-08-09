@@ -78,6 +78,27 @@ test("keeps the primary portfolio action readable in both locales", async ({ pag
   }
 });
 
+test("keeps the advisor workspace identity and route-analysis preview in the first surface", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".portfolio-category")).toHaveText("留学顾问的 AI 协作工作台");
+  await expect(page.locator(".portfolio-eyebrow")).toHaveText("AI 协作工作台 · 为留学顾问设计");
+  await expect(page.locator(".advisor-workspace-preview")).toContainText("当前客户档案 · 方案研判");
+  await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
+    /家庭表达|家庭决定|顾问到家庭决策流程/,
+  );
+
+  await page.getByRole("button", { name: "English", exact: true }).click();
+  await expect(page.locator(".portfolio-category")).toHaveText(
+    "AI collaboration workspace for study-abroad advisors",
+  );
+  await expect(page.locator(".portfolio-eyebrow")).toHaveText(
+    "AI collaboration workspace for study-abroad advisors",
+  );
+  await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
+    /Family input|Family decision|Advisor-to-family decision flow/,
+  );
+});
+
 test("keeps the coded route preview readable and ordered at the review widths", async ({ page }) => {
   for (const viewport of [
     { width: 1440, height: 1000 },

@@ -1,10 +1,11 @@
 # Governed collaboration walkthrough
 
-The complete governed walkthrough begins at `/demo/collaboration`. This local
-synthetic route shows how a parent proposal becomes an authoritative Case fact only
-after assigned advisor confirmation, then hands the same Case to the focused `/demo`
-route. It is non-production proof, not messaging, admissions advice, or a claim
-about real users.
+The connected same-Case proof begins at `/demo/collaboration`. This local synthetic
+advisor workspace shows how a client consultation record becomes an authoritative
+Case fact only after assigned advisor confirmation, then hands the same Case to
+route analysis at `/demo`. The proof ends at the persisted receipt and TimelinePlan;
+`/demo/plan` is a separate deterministic execution scenario. It is non-production
+proof, not messaging, admissions advice, or a claim about real users.
 
 The route server-renders exact `zh-CN`; the shared header can explicitly persist
 exact `en` at `night-voyager:presentation-locale:v1`. Locale is presentation-only and

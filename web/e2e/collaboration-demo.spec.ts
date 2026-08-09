@@ -56,6 +56,9 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   await expect(page.getByRole("contentinfo")).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: /跳到主要内容|Skip to main content/ })).toBeFocused();
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
+  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+  await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
 
   await page.getByRole("button", { name: /开始家长流程|Start parent flow/ }).click();
   await expect(page.getByRole("heading", { name: /共享 Case 沟通记录|Shared Case communication record/ })).toBeVisible();

@@ -99,6 +99,13 @@ test("minimal governed plan execution reaches completed through one bilingual jo
 }) => {
   test.skip(!minimalProof, "runs only in the dedicated minimal execution lane");
   await page.goto("/demo/plan");
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute(
+    "data-proof-segment",
+    "independent_execution_scenario",
+  );
+  await expect(page.locator(".workspace-context-bar")).toContainText(
+    /独立的确定性执行场景|Independent deterministic execution scenario/,
+  );
   await expect(page.getByRole("heading", { name: "当前行动" })).toBeVisible();
   await page.getByRole("button", { name: "学生", exact: true }).click();
   await expect(
