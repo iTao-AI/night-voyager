@@ -6,11 +6,8 @@ import { useState } from "react";
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
 import { usePresentation } from "../../lib/presentation/context";
-import { connectedJourneyStage, type JourneyStage } from "../../lib/presentation/journey";
 import { presentCode, presentRouteOutcome, presentRouteReason } from "../../lib/presentation/codes";
 import type { PresentationCopyKey } from "../../lib/presentation/catalog";
-import { DecisionJourney } from "../presentation/DecisionJourney";
-import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { TaskProgress } from "./TaskProgress";
 import { CurrentConfirmedFacts } from "./CurrentConfirmedFacts";
 import { PlanningRevisionComparison } from "./PlanningRevisionComparison";
@@ -30,14 +27,12 @@ export function AdvisorLedger({
   onPrimaryAction,
   onSecondaryAction,
   busy = false,
-  journeyStage,
 }: {
   ledger: Ledger;
   confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
   busy?: boolean;
-  journeyStage?: JourneyStage | null;
 }) {
   const { locale, copy } = usePresentation();
   const routes = ledger.routes;
@@ -47,15 +42,14 @@ export function AdvisorLedger({
   const primaryAction = primaryActionKey ? copy(
     ledger.phase === "replan_required" ? "createRevisedTaskAction" : primaryActionKey,
   ) : null;
-  const effectiveJourneyStage = journeyStage === undefined ? connectedJourneyStage(ledger.phase) : journeyStage;
   const presentClaims = (values: readonly string[], kind: "evidenceClaim" | "knownGap", emptyKey: PresentationCopyKey) =>
-    values.length ? values.map((value) => presentCode(locale, kind, value)).join(", ") : copy(emptyKey);
+    values.length ? values.map((value, index) => <span key={`${kind}-${value}-${index}`}>{presentCode(locale, kind, value)}{index < values.length - 1 ? ", " : ""}</span>) : copy(emptyKey);
 
   return (
     <section className="advisor-ledger" aria-labelledby="advisor-ledger-title">
       <header className="section-heading outcome-heading">
         <p className="overline">{copy("advisorLedgerOverline")}</p>
-        <h1 id="advisor-ledger-title">{copy("advisorStageTitle")}</h1>
+        <h3 id="advisor-ledger-title">{copy("advisorStageTitle")}</h3>
         <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", "advisor")}</p>
         <p className="stage-outcome"><strong>{presentCode(locale, "demoPhase", ledger.phase)}</strong></p>
         <p>{copy("advisorRoleAuthority")}</p>
@@ -83,7 +77,7 @@ export function AdvisorLedger({
         </div>
         {primaryAction ? (
           <div className="action-row">
-            <button className="primary-action" type="button" disabled={busy} onClick={onPrimaryAction}>{primaryAction}</button>
+            <button className="primary-action" data-primary-action="true" type="button" disabled={busy} onClick={onPrimaryAction}>{primaryAction}</button>
             {ledger.phase === "review_required" && onSecondaryAction ? (
               <button className="secondary-action" type="button" disabled={busy} onClick={onSecondaryAction}>
                 {copy("requestRevisionAction")}
@@ -96,13 +90,11 @@ export function AdvisorLedger({
       </div>
       {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
 
-      {effectiveJourneyStage ? <DecisionJourney currentStage={effectiveJourneyStage} copy={copy} /> : null}
-
       {!ledger.comparison && routes.length ? (
         <>
           <div className="table-wrap">
             <table aria-label={copy("routeComparisonLabel")}>
-              <thead><tr><th>{copy("routeColumn")}</th><th>{copy("outcomeColumn")}</th><th>{copy("reasonColumn")}</th><th>{copy("eligibilityColumn")}</th></tr></thead>
+              <thead><tr><th>{copy("routeColumn")}</th><th>{copy("outcomeColumn")}</th><th>{copy("reasonColumn")}</th><th>{copy("eligibilityColumn")}</th><th>{copy("requiredClaims")}</th><th>{copy("knownGaps")}</th></tr></thead>
               <tbody>
                 {routes.map((route, index) => {
                   const country = String(route.country);
@@ -113,6 +105,8 @@ export function AdvisorLedger({
                       <td>{presentRouteOutcome(locale, route.outcome)}</td>
                       <td>{presentRouteReason(locale, route.reason_code)}</td>
                       <td><span className={`status ${blocked ? "danger" : "trust"}`}>{copy(blocked ? "notEligibleForReview" : "eligibleForReview")}</span></td>
+                      <td>{presentClaims(route.required_claims, "evidenceClaim", "noRequiredClaims")}</td>
+                      <td>{presentClaims(route.known_gaps, "knownGap", "noKnownGaps")}</td>
                     </tr>
                   );
                 })}
@@ -142,7 +136,6 @@ export function AdvisorLedger({
 
       <CurrentConfirmedFacts facts={confirmedFacts} caseRevision={ledger.case_revision} />
       <TaskProgress ledger={ledger} />
-      <EvidenceDisclosure evidence={ledger.evidence ?? []} />
     </section>
   );
 }

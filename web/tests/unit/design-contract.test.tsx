@@ -15,7 +15,7 @@ describe("M5 connected demo design contract", () => {
     render(<PresentationProvider><DemoPage /></PresentationProvider>);
 
     expect(screen.getByText("本地合成演示")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "顾问到家庭的决策流程" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "让路线分析先通过顾问判断" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始顾问流程" })).toBeEnabled();
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });

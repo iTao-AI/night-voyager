@@ -20,7 +20,7 @@ export function CheckpointAttestationForm({
   return (
     <div className="checkpoint-attestation" role="group" aria-label={labels.group}>
       <div className="execution-action-row">
-        <button className="execution-primary-action" disabled={disabled} onClick={onCompletion}>
+        <button className="execution-primary-action" data-primary-action="true" disabled={disabled} onClick={onCompletion}>
           {labels.completion}
         </button>
         <button className="execution-secondary-action" disabled={disabled} onClick={onProgress}>

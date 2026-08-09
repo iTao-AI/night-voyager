@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { ReactElement } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
 import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
 import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
@@ -16,7 +17,13 @@ import type {
 } from "../../lib/collaboration-demo/contracts";
 import type { CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
 import { PresentationProvider } from "../../lib/presentation/context";
-import { brief as briefFixture, comparison as comparisonFixture, CONFIRMED_FACT, ledger as ledgerFixture } from "./connected-demo-test-data";
+import { brief as briefFixture, comparison as comparisonFixture, CONFIRMED_FACT, ledger as ledgerFixture, status as statusFor } from "./connected-demo-test-data";
+
+const connectedHook = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
+vi.mock("../../lib/connected-demo/use-connected-demo", async () => {
+  const actual = await vi.importActual<typeof import("../../lib/connected-demo/use-connected-demo")>("../../lib/connected-demo/use-connected-demo");
+  return { ...actual, useConnectedDemo: () => connectedHook.current };
+});
 
 function renderPresentation(ui: ReactElement) {
   return render(ui, { wrapper: PresentationProvider });
@@ -42,6 +49,62 @@ const mixedConfirmedFacts = [
 afterEach(() => {
   cleanup();
   localStorage.clear();
+  vi.clearAllMocks();
+});
+
+function setConnectedDemo(state: unknown, journeyConflict: "collaboration" | null = null) {
+  connectedHook.current = {
+    state,
+    confirmed: false,
+    setConfirmed: vi.fn(),
+    inspector: null,
+    currentFacts: { caseId: ledgerFixture("review-required").case_id, caseRevision: 1, facts: [CONFIRMED_FACT] },
+    revision: null,
+    journeyConflict,
+    endConflictingJourney: vi.fn(),
+    connectAdvisor: vi.fn(),
+    recover: vi.fn(),
+    retry: vi.fn(),
+    createTask: vi.fn(),
+    createRevisionTask: vi.fn(),
+    approve: vi.fn(),
+    requestRevision: vi.fn(),
+    rotateToStudent: vi.fn(),
+    submitPreferredCountries: vi.fn(),
+    rotateToAdvisor: vi.fn(),
+    confirmPreferredCountries: vi.fn(),
+    approveRevision: vi.fn(),
+    rotateToParent: vi.fn(),
+    decide: vi.fn(),
+  };
+}
+
+it("presents connected route analysis inside the advisor workspace shell", () => {
+  const ledger = ledgerFixture("review-required");
+  setConnectedDemo({ value: "advisor_review", status: { ...statusFor("review_required"), active_role: "advisor" }, ledger });
+  const { container } = renderPresentation(<ConnectedDemo />);
+
+  expect(screen.getByRole("heading", { level: 1, name: "让路线分析先通过顾问判断" })).toBeVisible();
+  expect(screen.getAllByText("方案研判与客户确认").length).toBeGreaterThanOrEqual(1);
+  expect(screen.getByText("同一 Case 的连接证明")).toBeVisible();
+  expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "批准当前计划" })).toHaveAttribute("data-primary-action", "true");
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(container.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1);
+  expect(container.querySelector(".workspace-supporting-evidence")).toBeInTheDocument();
+  expect(container.querySelector(".workspace-technical-evidence:not([open])")).toBeInTheDocument();
+  expect(screen.queryByText("顾问到家庭决策流程")).toBeNull();
+});
+
+it("labels the receipt handoff as an independent execution scenario", () => {
+  const brief = briefFixture("plan-ready");
+  setConnectedDemo({ value: "plan_ready", status: { ...statusFor("plan_ready"), active_role: "parent" }, brief });
+  renderPresentation(<ConnectedDemo />);
+
+  expect(screen.getByRole("heading", { level: 1, name: "让路线分析先通过顾问判断" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "家庭决定回执" })).toBeVisible();
+  expect(screen.getByRole("link", { name: /执行跟进使用独立播种/ })).toHaveAttribute("href", "/demo/plan");
+  expect(screen.getByText(/不承接当前 Case 或 session/)).toBeVisible();
 });
 
 it("renders Chinese task-ready authority with one primary action and no raw phase", () => {
@@ -153,7 +216,7 @@ it("orders route outcome, reason, eligibility and uses closed fallbacks", () => 
   expect(screen.getAllByText("暂不可选").length).toBeGreaterThan(0);
   expect(screen.getAllByText("成本与汇率证据均在已批准边界内").length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("button", { name: "马来西亚" }));
-  expect(screen.getByText(/缺少马来西亚项目匹配证据/)).toBeVisible();
+  expect(screen.getAllByText(/缺少马来西亚项目匹配证据/).length).toBeGreaterThan(0);
   expect(screen.getAllByText("缺少直接的项目匹配证据").length).toBeGreaterThan(0);
   expect(screen.getAllByText("状态暂不可用").length).toBeGreaterThan(0);
   expect(container).not.toHaveTextContent(/recommended_with_condition|raw_claim_secret|raw_gap_secret|malaysia_gap|direct_program_fit_evidence_absent/);

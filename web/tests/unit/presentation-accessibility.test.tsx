@@ -56,7 +56,7 @@ describe("presentation accessibility contract", () => {
     const e2e = readFileSync(resolve(process.cwd(), "e2e/presentation.spec.ts"), "utf8");
     const composeConfig = readFileSync(resolve(process.cwd(), "playwright.compose.config.ts"), "utf8");
     const composeProof = readFileSync(resolve(process.cwd(), "../scripts/verify_compose.sh"), "utf8");
-    const currentText = css.match(/--journey-current-text:\s*(#[0-9a-f]{6})/i)?.[1];
+    const currentText = css.match(/--nv-attention:\s*(#[0-9a-f]{6})/i)?.[1];
     const rgb = (value: string) => value.match(/[0-9a-f]{2}/gi)!.map((channel) => Number.parseInt(channel, 16) / 255);
     const luminance = (value: string) => rgb(value).reduce((sum, channel, index) => {
       const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;

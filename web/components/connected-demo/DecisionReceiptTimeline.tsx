@@ -14,7 +14,7 @@ export function DecisionReceiptTimeline({ brief }: { brief: CurrentDecisionBrief
   return (
     <article className="family-frame decided-frame" aria-labelledby="receipt-title">
       <p className="overline">{copy("receiptOverline")}</p>
-      <h1 id="receipt-title">{copy("receiptTitle")}</h1>
+      <h3 id="receipt-title">{copy("receiptTitle")}</h3>
       <p>{copy("receiptSummary")}</p>
       <dl className="decision-requirements">
         <div><dt>{copy("acceptedBudgetLabel")}</dt><dd>{formatCnyRange(locale, receipt.accepted_budget_min_minor, receipt.accepted_budget_max_minor, receipt.currency)}</dd></div>

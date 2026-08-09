@@ -47,6 +47,23 @@ function controllerFor(
   return controller;
 }
 
+it("presents execution follow-up in the shared independent-scenario workspace shell", () => {
+  const { container } = render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace controller={activeController()} scenario="happy" />
+    </PresentationProvider>,
+  );
+
+  expect(screen.getByRole("banner")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 1, name: "把当前执行节点推进到可复核状态" })).toBeVisible();
+  expect(screen.getByText("独立的确定性执行场景")).toBeVisible();
+  expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  expect(container.querySelectorAll('[data-primary-action="true"]')).toHaveLength(1);
+  expect(container.querySelector(".workspace-supporting-evidence")).toBeInTheDocument();
+  expect(container.querySelector(".workspace-technical-evidence:not([open])")).toBeInTheDocument();
+});
+
 it("renders the current action first without raw hashes or row versions", () => {
   const controller = activeController();
   const { container } = render(

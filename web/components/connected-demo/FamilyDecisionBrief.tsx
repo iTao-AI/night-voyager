@@ -21,7 +21,7 @@ export function FamilyDecisionBrief({
   return (
     <article className="family-frame" aria-labelledby="family-brief-title">
       <p className="overline">{copy("familyBriefOverline")}</p>
-      <h1 id="family-brief-title">{copy("familyBriefTitle")}</h1>
+      <h3 id="family-brief-title">{copy("familyBriefTitle")}</h3>
       <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", "parent")}</p>
       <p>{copy("parentRoleAuthority")}</p>
       <p>{copy("familyBriefOutcome")}</p>
@@ -47,7 +47,7 @@ export function FamilyDecisionBrief({
         <input type="checkbox" checked={confirmed} onChange={(event) => onConfirm(event.target.checked)} />
         {copy("familyConfirmLabel")}
       </label>
-      <button className="primary-action" type="button" disabled={!confirmed} onClick={onSubmit}>{copy("continueFamilyDecisionAction")}</button>
+      <button className="primary-action" data-primary-action="true" type="button" disabled={!confirmed} onClick={onSubmit}>{copy("continueFamilyDecisionAction")}</button>
       {!confirmed ? <p className="disabled-reason">{copy("familyConfirmationRequired")}</p> : null}
     </article>
   );

@@ -348,67 +348,6 @@
   margin-top: 2rem;
 }
 
-.decision-journey {
-  margin: 2rem 0;
-  padding-top: 1.25rem;
-  border-top: 2px solid var(--nv-ink);
-}
-
-.decision-journey-header {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.decision-journey-current {
-  align-self: start;
-  padding: .55rem .7rem;
-  border: 1px solid var(--nv-attention);
-}
-
-.decision-journey-current strong {
-  color: var(--journey-current-text);
-}
-
-.decision-journey-track {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--nv-border);
-  list-style: none;
-}
-
-.decision-journey-track li {
-  display: grid;
-  gap: .4rem;
-  min-width: 0;
-  min-block-size: 8rem;
-  padding: 1rem;
-  border-left: 1px solid var(--nv-border);
-  background: var(--nv-surface);
-}
-
-.decision-journey-track li:first-child {
-  border-left: 0;
-}
-
-.decision-journey-track li[data-state="current"] {
-  box-shadow: inset 0 4px var(--nv-attention);
-}
-
-.decision-journey-track li[data-state="complete"] {
-  box-shadow: inset 0 4px var(--nv-trust);
-}
-
-.decision-journey-number {
-  color: var(--nv-attention);
-  font-size: .76rem;
-  font-weight: 800;
-}
-
 .switcher-row,
 .role-switcher-row,
 .execution-action-row {

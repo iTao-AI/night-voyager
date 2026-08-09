@@ -11,7 +11,7 @@ export function AdvisorVerificationPanel({
 }) {
   return (
     <div className="execution-action-row" role="group" aria-label={labels.group}>
-      <button className="execution-primary-action" disabled={disabled} onClick={onVerify}>
+      <button className="execution-primary-action" data-primary-action="true" disabled={disabled} onClick={onVerify}>
         {labels.verify}
       </button>
       <button className="execution-secondary-action" disabled={disabled} onClick={onRequestUpdate}>

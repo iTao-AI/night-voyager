@@ -8,7 +8,7 @@ export function CollaborationRecoveryNotice({ category, onRetry, headingRef }: {
   const { locale, copy } = usePresentation();
   return (
     <section className="recovery-notice" role="alert" aria-labelledby="collaboration-recovery-title">
-      <h1 id="collaboration-recovery-title" ref={headingRef} tabIndex={-1}>{copy("collaborationRecoveryTitle")}</h1>
+      <h2 id="collaboration-recovery-title" ref={headingRef} tabIndex={-1}>{copy("collaborationRecoveryTitle")}</h2>
       <p>{presentCode(locale, "collaborationError", category)}</p>
       <p>{copy("collaborationRecoveryBoundary")}</p>
       <button type="button" onClick={onRetry}>{copy("collaborationRecoveryAction")}</button>

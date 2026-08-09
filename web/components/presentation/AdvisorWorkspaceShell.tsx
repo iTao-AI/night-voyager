@@ -96,7 +96,7 @@ export function AdvisorWorkspaceShell({
               <h1>{copy(titleKey)}</h1>
               <div className="workspace-status">{status}</div>
             </div>
-            <section className="workspace-current-work" aria-labelledby="workspace-current-work-title">
+            <section className="workspace-current-work" data-section="current-action" aria-labelledby="workspace-current-work-title">
               <h2 id="workspace-current-work-title">{copy("workspaceCurrentStage")}</h2>
               {children}
             </section>

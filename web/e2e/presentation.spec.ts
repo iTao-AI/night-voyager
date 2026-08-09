@@ -224,7 +224,7 @@ async function renderedMetrics(page: Page) {
         };
       });
     const journeyCopy = visible
-      .filter((element) => element.matches(".decision-journey-current, .decision-journey-track li > span:last-child"))
+      .filter((element) => element.matches(".workflow-rail-label"))
       .map((element) => ({
         fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
         text: element.textContent?.trim().slice(0, 120),
@@ -299,15 +299,15 @@ async function assertSemanticPresentation(page: Page) {
   expect(metrics.targets.filter((target) => target.height < 44 || target.width < 44)).toEqual([]);
   expect(metrics.journeyCopy.filter((copy) => copy.fontSize < 16)).toEqual([]);
   const journeyStage = page.url().includes("/demo/collaboration")
-    ? "family_input"
+    ? "consultation_intake"
     : page.url().includes("/demo/plan")
-      ? "plan_execution"
+      ? "execution_followup"
       : page.url().includes("/demo")
-        ? "advisor_confirmation"
+        ? "route_analysis"
         : null;
   if (journeyStage) {
-    await expect(page.locator(".decision-journey-track > li")).toHaveCount(5);
-    await expect(page.locator(`.decision-journey[data-current-stage='${journeyStage}']`)).toBeVisible();
+    await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
+    await expect(page.locator(`.workflow-rail-list[data-current-stage='${journeyStage}']`)).toBeVisible();
   }
   if (metrics.reducedMotion) {
     expect(metrics.maxMotionMs).toBeLessThanOrEqual(10);
