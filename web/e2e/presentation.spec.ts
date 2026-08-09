@@ -497,6 +497,8 @@ test.describe("provider-free governed presentation audit", () => {
         };
         test(`${slug(cell)} rendered baseline`, async ({ browser }) => {
           const { context, page } = await openCell(browser, cell);
+          await expect(page.locator('[data-primary-action="true"]').first()).toBeVisible();
+          await expect(page.locator('[data-primary-action="true"]').first()).toBeEnabled();
           const keyboardEvidence = await keyboardAndFocusEvidence(page);
           const evidence = {
             cell,

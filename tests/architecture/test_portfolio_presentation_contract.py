@@ -284,6 +284,16 @@ def test_browser_presentation_contract_is_advisor_first_and_keeps_execution_boun
     assert "keyboardDisclosureEvidence" in source
     assert 'activateByKeyboard(summary, "Enter")' in source
     assert 'activateByKeyboard(summary, "Space")' in source
+    assert (
+        "await expect(page.locator('[data-primary-action=\"true\"]').first())"
+        ".toBeVisible();"
+        in source
+    )
+    assert (
+        "await expect(page.locator('[data-primary-action=\"true\"]').first())"
+        ".toBeEnabled();"
+        in source
+    )
     assert "portfolio-category" in design_review
     assert "Family input" not in bootstrap
     assert "Family decision" not in bootstrap
