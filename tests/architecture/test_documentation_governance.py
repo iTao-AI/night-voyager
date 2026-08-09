@@ -462,6 +462,41 @@ def test_superpowers_index_links_every_approved_spec_and_plan() -> None:
     assert missing == []
 
 
+def test_advisor_workspace_redesign_documents_preserve_public_boundaries() -> None:
+    design_path = (
+        ROOT
+        / "docs/superpowers/specs/2026-08-09-advisor-centered-product-experience.md"
+    )
+    plan_path = (
+        ROOT
+        / "docs/superpowers/plans/2026-08-09-advisor-centered-product-experience.md"
+    )
+    assert design_path.is_file()
+    assert plan_path.is_file()
+
+    combined = "\n".join(
+        path.read_text(encoding="utf-8") for path in (design_path, plan_path)
+    )
+    for required in (
+        "AI collaboration workspace for study-abroad advisors",
+        "presentation-only",
+        "AdvisorReview",
+        "FamilyDecision",
+        "DecisionReceipt",
+        "TimelinePlan",
+        "same-Case",
+        "separately seeded execution",
+        "Do not modify backend",
+        "dependency",
+        "fixture",
+        "release",
+        "deployment",
+    ):
+        assert required in combined
+    assert "same-Case" in combined
+    assert "Never imply a Case or session handoff" in combined
+
+
 def test_superpowers_index_statuses_match_plan_banners() -> None:
     index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
     assert superpowers_status_binding_errors(index) == []

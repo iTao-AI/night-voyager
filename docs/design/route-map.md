@@ -1,7 +1,11 @@
 # Connected route map
 
-The complete governed walkthrough begins at `/demo/collaboration` and continues the
-same Case into `/demo`. Seven explicit BFF route files expose exactly eight HTTP
+The approved route map is advisor-centered and presentation-only. The previous
+cosmic root/family-heavy map is historical context and the replacement is not yet
+locally verified. The complete governed walkthrough begins at `/demo/collaboration`
+and continues the same Case into `/demo` through receipt and `TimelinePlan`. The
+separately seeded `/demo/plan` execution scenario never claims a Case or session
+handoff from `/demo`. Seven explicit BFF route files expose exactly eight HTTP
 methods for the collaboration and Skill-inspector reads/mutations. The read-only
 same-Case handoff then composes the existing focused advisor-family/evidence route;
 it adds no new BFF handler.
@@ -9,8 +13,9 @@ it adds no new BFF handler.
 `/demo` also remains independently available as the focused advisor-family/evidence
 route. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI
 identity, task, review, decision, SSE, and three connected read endpoints, including
-participant-safe `journey-status`. Both demo
-routes retain the warm-paper ledger visual system.
+participant-safe `journey-status`. The approved shell uses one dark product frame,
+warm decision surface, five-stage workflow rail, current-work canvas, evidence rail,
+and default-closed technical disclosure across all three demo routes.
 
 ```text
 /demo
@@ -25,7 +30,7 @@ routes retain the warm-paper ledger visual system.
   -> retained predecessor + deterministic old/new comparison
   -> fresh advisor authorization -> only the current family decision
 
-/demo/collaboration
+/demo/collaboration (connected same-Case proof)
   -> parent bootstrap + shared thread
   -> parent message -> typed budget candidate
   -> revoke parent -> mint assigned advisor
@@ -33,6 +38,10 @@ routes retain the warm-paper ledger visual system.
   -> read-only candidate/fact/ledger/inspector validation
   -> one envelope replacement -> /demo with the same Case and advisor session
   -> explicit task action -> pinned task -> one EventSource -> existing decision flow
+
+/demo/plan (independent execution scenario)
+  -> independently seeded Happy or Blocked scenario
+  -> current checkpoint -> accountable action -> advisor review or reassessment
 ```
 
 The BFF is transport only: no catch-all, no role selector, no task/route/policy

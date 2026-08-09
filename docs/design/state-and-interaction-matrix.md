@@ -1,21 +1,23 @@
 # State and interaction matrix
 
-Presentation state is orthogonal to both lifecycles. Exact `zh-CN` is the SSR,
+Presentation state is orthogonal to both lifecycles. The former family-heavy
+journey labels are historical presentation context; the approved replacement is
+advisor-centered and not yet locally verified. Exact `zh-CN` is the SSR,
 missing, invalid, and storage-failure default; exact `en` is explicitly selectable.
 Switching writes only `night-voyager:presentation-locale:v1` and leaves lifecycle
 state, requests, idempotency, journey storage, EventSource, and navigation unchanged.
 
 ## Internal-demo presentation layer
 
-The three internal routes share a closed display journey with these exact stages:
-`family_input`, `advisor_confirmation`, `route_review`, `family_decision`, and
-`plan_execution`. Each route maps its existing UI state to one stage and passes
+The three internal routes share a closed display workflow with these exact stages:
+`consultation_intake`, `client_fact_review`, `route_analysis`,
+`client_confirmation`, and `execution_followup`. Each route maps its existing UI state to one stage and passes
 only that stage plus localized copy to the display component. The mapping is
 fail-closed: an unknown UI state renders no journey and never exposes the raw
 state value. This layer has no fetch, mutation, storage, cookie, session,
 database, task, or role-switch responsibility.
 
-The journey is ordered before route-specific business content and technical
+The workflow is ordered before route-specific business content and technical
 evidence disclosure. It explains the current role/stage, user-visible outcome,
 boundary, and existing primary action at the route surface; it does not create
 or replace any action. Server-owned message bodies, advisor reasons, and
