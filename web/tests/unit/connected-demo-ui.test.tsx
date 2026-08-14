@@ -89,10 +89,14 @@ it("presents connected route analysis inside the advisor workspace shell", () =>
   expect(screen.getByText("同一 Case 的连接证明")).toBeVisible();
   expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "批准当前计划" })).toHaveAttribute("data-primary-action", "true");
+  expect(container.querySelector("[data-frame-slot='work'] .advisor-ledger")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='work'] [data-primary-action='true']")).toBeNull();
+  expect(container.querySelector("[data-frame-slot='authority'] [data-primary-action='true']")).toBeInTheDocument();
+  expect(container.querySelector("[data-route-priority='dominant'][data-route-country='australia']")).toBeInTheDocument();
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(container.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1);
-  expect(container.querySelector(".workspace-supporting-evidence")).toBeInTheDocument();
-  expect(container.querySelector(".workspace-technical-evidence:not([open])")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='evidence']")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='technical']:not([open])")).toBeInTheDocument();
   expect(screen.queryByText("顾问到家庭决策流程")).toBeNull();
 });
 
@@ -103,8 +107,20 @@ it("labels the receipt handoff as an independent execution scenario", () => {
 
   expect(screen.getByRole("heading", { level: 1, name: "让路线分析先通过顾问判断" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "家庭决定回执" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: "家庭决定回执" }).closest("[data-persisted-result='true']")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "家庭决定回执" }).closest("[data-frame-slot='work']")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /执行跟进使用独立播种/ })).toHaveAttribute("href", "/demo/plan");
   expect(screen.getByText(/不承接当前 Case 或 session/)).toBeVisible();
+});
+
+it("keeps the client brief in work and its confirmation action in authority", () => {
+  const brief = briefFixture("family-review");
+  setConnectedDemo({ value: "family_review", status: { ...statusFor("family_review"), active_role: "parent" }, brief });
+  const { container } = renderPresentation(<ConnectedDemo />);
+
+  expect(container.querySelector("[data-frame-slot='work'] .family-frame")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='work'] [data-primary-action='true']")).toBeNull();
+  expect(container.querySelector("[data-frame-slot='authority'] [data-primary-action='true']")).toBeInTheDocument();
 });
 
 it("focuses the current-work heading after an accepted connected transition", async () => {
@@ -120,7 +136,7 @@ it("focuses the current-work heading after an accepted connected transition", as
   view.rerender(<ConnectedDemo />);
 
   await waitFor(() =>
-    expect(screen.getByRole("heading", { level: 2, name: "当前工作阶段" })).toHaveFocus(),
+    expect(screen.getByRole("heading", { level: 2, name: "当前工作对象" })).toHaveFocus(),
   );
 });
 
@@ -153,7 +169,8 @@ it("renders Chinese task-ready authority with one primary action and no raw phas
   expect(screen.getByText("可以开始规划")).toBeVisible();
   expect(screen.getByRole("button", { name: "创建规划任务" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "创建规划任务" }).closest("details")).toBeNull();
-  expect(screen.getByText("Case revision 1")).toBeVisible();
+  expect(screen.getByText("档案版本 1")).toBeVisible();
+  expect(container).not.toHaveTextContent(/Case revision|Fact version/i);
   expect(container).not.toHaveTextContent(/task-ready|lease owner|organization_id|reviewer notes/i);
 });
 
@@ -162,19 +179,20 @@ it("renders current Case revision and confirmed facts without internal provenanc
   const { container, rerender } = renderPresentation(
     <AdvisorLedger ledger={current} confirmedFacts={[CONFIRMED_FACT]} onPrimaryAction={() => undefined} />,
   );
-  expect(screen.getAllByText("Case revision 2")).toHaveLength(2);
+  expect(screen.getAllByText("档案版本 2")).toHaveLength(2);
   expect(screen.getByRole("heading", { name: "当前已确认家庭事实" })).toBeVisible();
   expect(screen.getByText("家庭总预算")).toBeVisible();
   expect(screen.getByText("¥300,000–400,000")).toBeVisible();
-  expect(screen.getByText("Fact version 1")).toBeVisible();
+  expect(screen.getByText("事实版本 1")).toBeVisible();
+  expect(container).not.toHaveTextContent(/Case revision|Fact version/i);
   expect(container).not.toHaveTextContent(/family\.budget|45000000|44000000|confirmed_fact_id|candidate_id|schema_version|\{"/i);
 
   rerender(<AdvisorLedger ledger={current} confirmedFacts={[]} onPrimaryAction={() => undefined} />);
-  expect(screen.getByText("此 Case revision 尚无已确认事实。")).toBeVisible();
+  expect(screen.getByText("当前档案尚无已确认信息。")).toBeVisible();
   expect(screen.queryByText("¥300,000–400,000")).toBeNull();
 
   rerender(<AdvisorLedger ledger={current} confirmedFacts={null} onPrimaryAction={() => undefined} />);
-  expect(screen.getByText("服务器事实投影刷新前，当前事实暂不可用。")).toBeVisible();
+  expect(screen.getByText("服务器信息刷新前，当前事实暂不可用。")).toBeVisible();
 });
 
 it("renders every exact confirmed-fact type in one Chinese mixed projection", () => {
@@ -192,9 +210,10 @@ it("renders every exact confirmed-fact type in one Chinese mixed projection", ()
     "¥300,000–400,000",
   ]) expect(screen.getByText(visible)).toBeVisible();
   for (const version of [1, 2, 3, 4, 5, 6]) {
-    expect(screen.getByText(`Fact version ${version}`)).toBeVisible();
+    expect(screen.getByText(`事实版本 ${version}`)).toBeVisible();
   }
-  expect(screen.getAllByText("Case revision 7")).toHaveLength(7);
+  expect(screen.getAllByText("档案版本 7")).toHaveLength(7);
+  expect(container).not.toHaveTextContent(/Case revision|Fact version/i);
   expect(container).not.toHaveTextContent(/student\.|family\.|confirmed_fact_id|candidate_id|schema_version|\{"/i);
 });
 
@@ -214,9 +233,10 @@ it("renders every exact confirmed-fact type in one explicit English mixed projec
     "CNY 300,000–400,000",
   ]) expect(screen.getByText(visible)).toBeVisible();
   for (const version of [1, 2, 3, 4, 5, 6]) {
-    expect(screen.getByText(`Fact version ${version}`)).toBeVisible();
+    expect(screen.getByText(`Information version ${version}`)).toBeVisible();
   }
-  expect(screen.getAllByText("Case revision 7")).toHaveLength(7);
+  expect(screen.getAllByText("Record version 7")).toHaveLength(7);
+  expect(container).not.toHaveTextContent(/Case revision|Fact version/i);
   expect(container).not.toHaveTextContent(/student\.|family\.|confirmed_fact_id|candidate_id|schema_version|\{"/i);
 });
 
@@ -292,6 +312,7 @@ it("renders a bilingual server-owned revision comparison without identifiers", a
   expect(container).not.toHaveTextContent(
     /40000000|70000000|previous_planning_run_id|current_planning_run_id|student\.preferred_countries/,
   );
+  expect(container).not.toHaveTextContent(/Case revision|Fact version/i);
 
   cleanup();
   localStorage.setItem("night-voyager:presentation-locale:v1", "en");
@@ -342,7 +363,7 @@ it("shows renewed server authorization in the family-safe revised brief", () => 
   renderPresentation(
     <FamilyDecisionBrief brief={revised} confirmed onConfirm={() => undefined} onSubmit={() => undefined} />,
   );
-  expect(screen.getByText("当前 Case revision 2")).toBeVisible();
+  expect(screen.getByText("当前档案版本 2")).toBeVisible();
   expect(screen.getByText("顾问已为当前修订重新授权")).toBeVisible();
   expect(screen.getByRole("button", { name: "继续家庭决定" })).toBeEnabled();
 });

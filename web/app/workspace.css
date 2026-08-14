@@ -429,6 +429,15 @@
   color: var(--nv-surface);
 }
 
+.advisor-ledger .table-wrap tbody tr[data-route-priority="dominant"] {
+  background: var(--nv-context-surface);
+}
+
+.advisor-ledger .table-wrap tbody tr[data-route-priority="dominant"] th {
+  border-left: 4px solid var(--nv-intervention);
+  color: var(--nv-primary-ink);
+}
+
 @media (min-width: 1280px) {
   .workspace-layout {
     grid-template-columns: 13rem minmax(0, 1fr);

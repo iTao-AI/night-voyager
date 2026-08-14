@@ -12,7 +12,7 @@ export function DecisionReceiptTimeline({ brief }: { brief: CurrentDecisionBrief
   if (receipt === null || timeline === null) return null;
 
   return (
-    <article className="family-frame decided-frame" aria-labelledby="receipt-title">
+    <article className="family-frame decided-frame" data-persisted-result="true" data-result-country={timeline.country} aria-labelledby="receipt-title">
       <p className="overline">{copy("receiptOverline")}</p>
       <h3 id="receipt-title">{copy("receiptTitle")}</h3>
       <p>{copy("receiptSummary")}</p>
