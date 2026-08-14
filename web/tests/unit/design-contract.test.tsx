@@ -28,7 +28,7 @@ describe("M5 connected demo design contract", () => {
 
     render(<PresentationProvider><Home /></PresentationProvider>);
     expect(screen.getByRole("heading", { level: 1, name: "让复杂的留学规划，清晰地向前。" })).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "顾问工作台导航" })).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Night Voyager 导航" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "查看顾问工作流" })).toHaveAttribute("href", "#product");
     expect(screen.getByRole("link", { name: "GitHub ↗" })).toHaveAttribute("href", "https://github.com/iTao-AI/night-voyager");
   });

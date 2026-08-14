@@ -6,9 +6,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import Home from "../../app/page";
 import { AdvisorProductFrame } from "../../components/presentation/AdvisorProductFrame";
+import { PortfolioStory } from "../../components/presentation/PortfolioStory";
 import { PresentationProvider } from "../../lib/presentation/context";
 import { en, zhCN } from "../../lib/presentation/catalog";
-import { PORTFOLIO_PREVIEW } from "../../lib/presentation/portfolio";
+import { PORTFOLIO_PREVIEW, PERSISTED_OUTCOME } from "../../lib/presentation/portfolio";
 
 afterEach(() => {
   cleanup();
@@ -67,6 +68,36 @@ describe("reference-driven presentation contract", () => {
     expect(container.querySelector("img")).toBeNull();
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(setItemSpy).not.toHaveBeenCalled();
+  });
+
+  it("keeps the three public scenes and persisted outcome values typed and bounded", () => {
+    expect(PERSISTED_OUTCOME).toEqual({
+      route: "australia",
+      budget: "¥305,500–400,000",
+      tradeoff: "预算弹性",
+      source: "客户直接确认",
+      intakeMonth: "2027-02",
+      timeline: [
+        "文件准备 · 2026-09-01 · 学生",
+        "提交申请 · 2026-10-15 · 学生",
+        "签证准备 · 2026-12-15 · 学生",
+        "抵达准备 · 2027-01-20 · 家长",
+      ],
+    });
+
+    const { container } = render(<PresentationProvider><PortfolioStory /></PresentationProvider>);
+    expect([...container.querySelectorAll<HTMLElement>("[data-story-sentinel]")].map((node) => node.dataset.storyScene)).toEqual([
+      "confirmed",
+      "route",
+      "outcome",
+    ]);
+    const storySource = readFileSync(
+      resolve(process.cwd(), "components/presentation/PortfolioStory.tsx"),
+      "utf8",
+    );
+    expect(storySource).toContain("IntersectionObserver");
+    expect(storySource).toContain("observer?.disconnect()");
+    expect(storySource).not.toMatch(/fetch\s*\(|localStorage|sessionStorage|EventSource|document\.cookie/);
   });
 
   it("keeps the shared product frame pure and exposes authored mobile reading order", () => {

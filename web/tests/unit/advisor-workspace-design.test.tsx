@@ -26,7 +26,7 @@ describe("advisor workspace presentation contract", () => {
   it("freezes the approved advisor-first metadata and hero copy", () => {
     expect(zhCN.documentTitle).toBe("Night Voyager｜为留学顾问打造的 AI 协作平台");
     expect(zhCN.documentDescription).toBe(
-      "把分散在聊天、资料和研究中的信息，整理成可核对、可沟通、可推进的留学方案。",
+      "Night Voyager 帮助顾问把散落在对话里的预算、目标、时间和现实条件整理清楚，再据此比较不同路线、说明推荐理由，并推进下一步。",
     );
     expect(zhCN.rootEyebrow).toBe("为留学顾问打造的 AI 协作平台");
     expect(zhCN.rootTitle).toBe("让复杂的留学规划，清晰地向前。");
@@ -40,11 +40,9 @@ describe("advisor workspace presentation contract", () => {
       "Night Voyager | An AI Collaboration Platform Built for Study-Abroad Advisors",
     );
     expect(en.documentDescription).toBe(
-      "Turn fragmented conversations, evidence, and route research into a reviewable client plan.",
+      "Night Voyager helps advisors organize the budgets, goals, timelines, and practical constraints scattered across conversations, then compare routes, explain recommendations, and move the next step forward.",
     );
-    expect(en.rootEyebrow).toBe(
-      "AI collaboration workspace for study-abroad advisors",
-    );
+    expect(en.rootEyebrow).toBe("An AI collaboration platform built for study-abroad advisors");
     expect(en.rootTitle).toBe(
       "Move complex study-abroad planning forward with clarity.",
     );
@@ -132,8 +130,8 @@ describe("advisor workspace presentation contract", () => {
     const { container } = render(<PresentationProvider><Home /></PresentationProvider>);
 
     expect(screen.getByRole("heading", { level: 1, name: zhCN.rootTitle })).toBeInTheDocument();
-    expect(screen.getByText(zhCN.rootEyebrow)).toBeInTheDocument();
-    expect(screen.getAllByText(/留学顾问的 AI 协作工作台/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(zhCN.rootEyebrow)).toHaveLength(2);
+    expect(screen.getAllByText(/为留学顾问打造的 AI 协作平台/).length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: zhCN.rootPrimaryAction })).toHaveAttribute("href", "#product");
     expect(screen.getByRole("link", { name: zhCN.rootSecondaryAction })).toHaveAttribute(
       "href",

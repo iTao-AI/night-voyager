@@ -54,7 +54,7 @@ describe("portfolio entry", () => {
       "/demo",
     );
     const headerNavigation = screen.getByRole("navigation", {
-      name: "顾问工作台导航",
+      name: "Night Voyager 导航",
     });
     expect(within(headerNavigation).getByRole("link", { name: "可信推进" })).toHaveAttribute("href", "#route-atlas");
     expect(
@@ -97,7 +97,7 @@ describe("portfolio entry", () => {
       "/demo",
     );
     const headerNavigation = screen.getByRole("navigation", {
-      name: "Advisor workspace navigation",
+      name: "Night Voyager navigation",
     });
     expect(within(headerNavigation).getByRole("link", { name: "Trusted progress" })).toHaveAttribute("href", "#route-atlas");
     expect(screen.getAllByText(/An AI collaboration platform built for study-abroad advisors/i).length).toBeGreaterThan(0);

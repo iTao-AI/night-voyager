@@ -26,7 +26,7 @@ describe("presentation accessibility contract", () => {
     expect(container.querySelector(".advisor-workspace-preview")).toBeInTheDocument();
     expect(container.querySelector(".portfolio-route-list")).toBeInTheDocument();
     expect(container.querySelector("details > summary")).toBeInstanceOf(HTMLElement);
-    expect(screen.getAllByRole("link", { name: "查看一次完整咨询流程" })[0].closest("details")).toBeNull();
+    expect(screen.getAllByRole("link", { name: "查看完整咨询流程" })[0].closest("details")).toBeNull();
   });
 
   it("declares durable focus, target, wrapping, link, CJK, and reduced-motion CSS", () => {
@@ -71,7 +71,7 @@ describe("presentation accessibility contract", () => {
     };
 
     expect(currentText).toBeDefined();
-    expect(contrast(currentText!, "#fffdf8")).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(currentText!, "#061117")).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/\.workflow-rail-item\[data-state="current"\]\s*\{[^}]*border-left-color:/);
     expect(css).toMatch(/\.portfolio-brand[\s\S]*min-block-size:\s*44px/);
     expect(css).toMatch(/\.workspace-context-facts[\s\S]*grid-template-columns/);

@@ -17,20 +17,16 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
       <header className="portfolio-header">
         <div className="portfolio-header-inner">
           <Link className="portfolio-brand" href="/">
-            <span className="portfolio-brand-mark" aria-hidden="true"><span /></span>
-            <span>{copy("productName")}</span>
+            {copy("productName")}
           </Link>
-          <p className="portfolio-category">{copy("workspaceCategory")}</p>
+          <p className="portfolio-category">{copy("productPromise")}</p>
           <nav className="portfolio-primary-navigation" aria-label={copy("rootNavigationLabel")}>
-            <a href="#journey">{copy("rootNavApproach")}</a>
+            <a href="#product">{copy("rootNavApproach")}</a>
             <a href="#route-atlas">{copy("rootNavRoutes")}</a>
-            <a href="#portfolio-engineering-title">{copy("rootNavEvidence")}</a>
+            <a href="#engineering">{copy("rootNavEvidence")}</a>
           </nav>
           <div className="portfolio-header-actions">
             <LocaleSwitch />
-            <Link className="portfolio-header-action" href="/demo/collaboration">
-              {copy("rootHeaderAction")}
-            </Link>
           </div>
         </div>
       </header>

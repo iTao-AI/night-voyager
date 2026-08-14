@@ -9,26 +9,28 @@ describe("presentation catalog contract", () => {
     for (const catalog of [zhCN, en]) {
       for (const value of Object.values(catalog)) {
         expect(value.trim().length).toBeGreaterThan(0);
-        expect(value.length).toBeLessThanOrEqual(240);
+        expect(value.length).toBeLessThanOrEqual(360);
       }
     }
   });
 
   it("keeps the exact advisor workspace promise and canonical product identity", () => {
-    expect(zhCN.productPromise).toBe("留学顾问的 AI 协作工作台");
+    expect(zhCN.productPromise).toBe("为留学顾问打造的 AI 协作平台");
     expect(zhCN.productName).toBe("Night Voyager");
     expect(en.productName).toBe("Night Voyager");
   });
 
   it("freezes the advisor-first portfolio thesis in both locales", () => {
-    expect(zhCN.rootTitle).toBe("把零散咨询，整理成可以推进的留学方案");
+    expect(zhCN.rootTitle).toBe("让复杂的留学规划，清晰地向前。");
     expect(zhCN.rootSummary).toBe(
-      "Night Voyager 帮助顾问整理客户信息、核对证据、比较留学路线并推进后续计划。AI 负责研究与草拟，关键判断仍由顾问确认。",
+      "Night Voyager 帮助顾问把散落在对话里的预算、目标、时间和现实条件整理清楚，再据此比较不同路线、说明推荐理由，并推进下一步。AI 协助整理与分析，关键判断仍由顾问完成。",
     );
-    expect(en.rootTitle).toBe("Turn scattered consultations into a client plan you can move forward");
-    expect(en.rootSummary).toMatch(/organize.*evidence.*compare.*advisor/i);
-    expect(zhCN.rootPrimaryAction).toBe("查看一次完整咨询流程");
-    expect(zhCN.rootSecondaryAction).toBe("了解方案如何被核对");
+    expect(en.rootTitle).toBe("Move complex study-abroad planning forward with clarity.");
+    expect(en.rootSummary).toBe(
+      "Night Voyager helps advisors organize the budgets, goals, timelines, and practical constraints scattered across conversations, then compare routes, explain recommendations, and move the next step forward. AI assists with organization and analysis; the advisor retains every consequential judgment.",
+    );
+    expect(zhCN.rootPrimaryAction).toBe("查看顾问工作流");
+    expect(zhCN.rootSecondaryAction).toBe("GitHub ↗");
   });
 
   it("does not use raw contract codes as visible copy", () => {
