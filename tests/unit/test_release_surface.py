@@ -347,7 +347,7 @@ def test_fact_to_plan_walkthrough_is_publicly_discoverable_and_evidenced() -> No
     combined = " ".join((readmes, docs_index, walkthrough, connected))
 
     assert "same-Case" in combined
-    assert "Continue to governed planning" in combined
+    assert "Continue to planning" in combined
     assert "local synthetic" in combined
     assert "provider-free" in combined
     assert "released in v0.1.3" in combined
