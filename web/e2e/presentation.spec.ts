@@ -8,7 +8,7 @@ const PUBLIC_EVIDENCE_ROOT = process.env.PRESENTATION_PUBLIC_EVIDENCE_ROOT;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const ROUTES = ["/", "/demo/collaboration", "/demo", "/demo/plan"] as const;
 const LOCALES = ["zh-CN", "en"] as const;
-const WIDTHS = [1440, 1024, 768, 390, 320] as const;
+const WIDTHS = [1440, 1280, 1024, 768, 390, 320] as const;
 const MOTION_MODES = ["no-preference", "reduce"] as const;
 const APPROVED_PUBLIC_EVIDENCE_FILENAMES = [
   "night-voyager-portfolio-entry.png",
@@ -370,7 +370,7 @@ async function assertSemanticPresentation(page: Page) {
   const shell = page.locator(".advisor-workspace-shell");
   if (page.url().endsWith("/") || new URL(page.url()).pathname === "/") {
     await expect(page.locator(".portfolio-category")).toContainText(
-      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+      /An AI collaboration platform built for study-abroad advisors|为留学顾问打造的 AI 协作平台/,
     );
     await expect(page.locator(".advisor-workspace-preview")).toContainText(
       /澳大利亚|Australia/,
@@ -378,7 +378,7 @@ async function assertSemanticPresentation(page: Page) {
   } else {
     await expect(shell).toBeVisible();
     await expect(page.locator(".workspace-category")).toContainText(
-      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+      /An AI collaboration platform built for study-abroad advisors|为留学顾问打造的 AI 协作平台/,
     );
     const expectedProofSegment = page.url().includes("/demo/plan")
       ? "independent_execution_scenario"

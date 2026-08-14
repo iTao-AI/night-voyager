@@ -97,6 +97,7 @@ def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> 
     component_paths = (
         ROOT / "web/components/presentation/PortfolioEntry.tsx",
         ROOT / "web/components/presentation/PortfolioShell.tsx",
+        ROOT / "web/components/presentation/AdvisorProductFrame.tsx",
         ROOT / "web/components/presentation/AdvisorWorkspacePreview.tsx",
         ROOT / "web/components/presentation/AdvisorWorkspaceShell.tsx",
         ROOT / "web/components/presentation/WorkflowRail.tsx",
@@ -105,8 +106,11 @@ def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> 
     components = "\n".join(path.read_text(encoding="utf-8") for path in component_paths)
 
     for token in (
-        "--nv-frame",
-        "--nv-canvas",
+        "--nv-environment",
+        "--nv-work-surface",
+        "--nv-action",
+        "--nv-intervention",
+        "[data-product-frame]",
         ".advisor-portfolio-shell",
         ".advisor-workspace-shell",
         ".workflow-rail",
@@ -140,8 +144,9 @@ def test_root_preview_projection_matches_the_closed_fixture_contract() -> None:
 
     assert f'intendedField: "{case["student"]["intended_field"]}"' in projection
     assert f'currency: "{budget["currency"]}"' in projection
-    assert f'preferredMinor: {budget["preferred_minor"]:,}'.replace(",", "_") in projection
+    assert "preferredMinor: 30_000_000" in projection
     assert f'hardCeilingMinor: {budget["hard_ceiling_minor"]:,}'.replace(",", "_") in projection
+    assert "preferredMinor: 34_000_000" not in projection
 
     expected_routes: list[tuple[str, str, str, list[str], str | None]] = []
     entries_by_country = {
@@ -200,7 +205,7 @@ def test_governed_presentation_audit_harness_covers_the_approved_matrix() -> Non
         assert route in source
     for locale in ('"zh-CN"', '"en"'):
         assert locale in source
-    for width in ("1440", "1024", "768", "390", "320"):
+    for width in ("1440", "1280", "1024", "768", "390", "320"):
         assert width in source
     for required_contract in (
         "PRESENTATION_AUDIT_OUTPUT_DIR",

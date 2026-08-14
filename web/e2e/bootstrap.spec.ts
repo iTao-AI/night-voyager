@@ -10,14 +10,14 @@ test("shows the advisor workspace portfolio entry without API side effects", asy
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
   await expect(page.locator(".advisor-workspace-preview")).toBeVisible();
-  await expect(page.locator(".portfolio-category")).toHaveText("留学顾问的 AI 协作工作台");
-  await expect(page.locator(".portfolio-eyebrow")).toHaveText("AI 协作工作台 · 为留学顾问设计");
+  await expect(page.locator(".portfolio-category")).toHaveText("为留学顾问打造的 AI 协作平台");
+  await expect(page.locator(".portfolio-eyebrow")).toHaveText("为留学顾问打造的 AI 协作平台");
   await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
     /家庭表达|家庭决定|顾问到家庭决策流程/,
   );
   await expect(page.getByRole("link", { name: "Night Voyager" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "把零散咨询，整理成可以推进的留学方案" }),
+    page.getByRole("heading", { name: "让复杂的留学规划，清晰地向前。" }),
   ).toBeVisible();
   await expect(page.locator(".portfolio-primary-action")).toHaveAttribute(
     "href",
@@ -94,11 +94,11 @@ test("shows the advisor workspace portfolio entry without API side effects", asy
     .toBe("en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.locator(".portfolio-category")).toHaveText(
-    "AI collaboration workspace for study-abroad advisors",
+    "An AI collaboration platform built for study-abroad advisors",
   );
   await expect(
     page.getByRole("heading", {
-      name: "Turn scattered consultations into a client plan you can move forward",
+      name: "Move complex study-abroad planning forward with clarity.",
     }),
   ).toBeVisible();
   await expect(page.locator(".portfolio-primary-action")).toHaveAttribute(

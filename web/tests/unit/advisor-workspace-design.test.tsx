@@ -24,20 +24,20 @@ afterEach(() => {
 
 describe("advisor workspace presentation contract", () => {
   it("freezes the approved advisor-first metadata and hero copy", () => {
-    expect(zhCN.documentTitle).toBe("Night Voyager｜留学顾问的 AI 协作工作台");
+    expect(zhCN.documentTitle).toBe("Night Voyager｜为留学顾问打造的 AI 协作平台");
     expect(zhCN.documentDescription).toBe(
       "把分散在聊天、资料和研究中的信息，整理成可核对、可沟通、可推进的留学方案。",
     );
-    expect(zhCN.rootEyebrow).toBe("AI 协作工作台 · 为留学顾问设计");
-    expect(zhCN.rootTitle).toBe("把零散咨询，整理成可以推进的留学方案");
+    expect(zhCN.rootEyebrow).toBe("为留学顾问打造的 AI 协作平台");
+    expect(zhCN.rootTitle).toBe("让复杂的留学规划，清晰地向前。");
     expect(zhCN.rootSummary).toBe(
-      "Night Voyager 帮助顾问整理客户信息、核对证据、比较留学路线并推进后续计划。AI 负责研究与草拟，关键判断仍由顾问确认。",
+      "Night Voyager 帮助顾问把散落在对话里的预算、目标、时间和现实条件整理清楚，再据此比较不同路线、说明推荐理由，并推进下一步。AI 协助整理与分析，关键判断仍由顾问完成。",
     );
-    expect(zhCN.rootPrimaryAction).toBe("查看一次完整咨询流程");
-    expect(zhCN.rootSecondaryAction).toBe("了解方案如何被核对");
+    expect(zhCN.rootPrimaryAction).toBe("查看顾问工作流");
+    expect(zhCN.rootSecondaryAction).toBe("GitHub ↗");
 
     expect(en.documentTitle).toBe(
-      "Night Voyager | AI Collaboration Workspace for Study-Abroad Advisors",
+      "Night Voyager | An AI Collaboration Platform Built for Study-Abroad Advisors",
     );
     expect(en.documentDescription).toBe(
       "Turn fragmented conversations, evidence, and route research into a reviewable client plan.",
@@ -46,13 +46,13 @@ describe("advisor workspace presentation contract", () => {
       "AI collaboration workspace for study-abroad advisors",
     );
     expect(en.rootTitle).toBe(
-      "Turn scattered consultations into a client plan you can move forward",
+      "Move complex study-abroad planning forward with clarity.",
     );
     expect(en.rootSummary).toBe(
-      "Night Voyager helps advisors organize client facts, review evidence, compare study routes, and carry the decision into execution. AI researches and drafts; the advisor keeps professional judgment.",
+      "Night Voyager helps advisors organize the budgets, goals, timelines, and practical constraints scattered across conversations, then compare routes, explain recommendations, and move the next step forward. AI assists with organization and analysis; the advisor retains every consequential judgment.",
     );
-    expect(en.rootPrimaryAction).toBe("Walk through one client case");
-    expect(en.rootSecondaryAction).toBe("See how the proposal is verified");
+    expect(en.rootPrimaryAction).toBe("See the advisor workflow");
+    expect(en.rootSecondaryAction).toBe("GitHub ↗");
   });
 
   it("uses the closed five-stage workflow and fails closed for unknown state", () => {
@@ -89,7 +89,7 @@ describe("advisor workspace presentation contract", () => {
     expect(PORTFOLIO_PREVIEW.intendedField).toBe("computing");
     expect(PORTFOLIO_PREVIEW.budget).toEqual({
       currency: "CNY",
-      preferredMinor: 34_000_000,
+      preferredMinor: 30_000_000,
       hardCeilingMinor: 40_000_000,
     });
     expect(PORTFOLIO_PREVIEW.routes.map(({ id }) => id)).toEqual([
@@ -134,13 +134,10 @@ describe("advisor workspace presentation contract", () => {
     expect(screen.getByRole("heading", { level: 1, name: zhCN.rootTitle })).toBeInTheDocument();
     expect(screen.getByText(zhCN.rootEyebrow)).toBeInTheDocument();
     expect(screen.getAllByText(/留学顾问的 AI 协作工作台/).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: zhCN.rootPrimaryAction })[0]).toHaveAttribute(
+    expect(screen.getByRole("link", { name: zhCN.rootPrimaryAction })).toHaveAttribute("href", "#product");
+    expect(screen.getByRole("link", { name: zhCN.rootSecondaryAction })).toHaveAttribute(
       "href",
-      "/demo/collaboration",
-    );
-    expect(screen.getAllByRole("link", { name: zhCN.rootSecondaryAction })[0]).toHaveAttribute(
-      "href",
-      "/demo",
+      "https://github.com/iTao-AI/night-voyager",
     );
     const workflow = container.querySelector<HTMLElement>(".portfolio-workflow-list")!;
     expect(within(workflow).getByText("咨询接入")).toBeInTheDocument();

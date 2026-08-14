@@ -27,28 +27,36 @@ describe("portfolio entry", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "把零散咨询，整理成可以推进的留学方案",
+        name: "让复杂的留学规划，清晰地向前。",
       }),
     ).toBeInTheDocument();
-    expect(screen.getAllByText(/留学顾问的 AI 协作工作台|为留学顾问设计/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("为留学顾问打造的 AI 协作平台").length).toBeGreaterThan(0);
     expect(screen.getAllByText("澳大利亚").length).toBeGreaterThan(0);
     expect(screen.getAllByText("在预算条件下推荐").length).toBeGreaterThan(0);
     expect(screen.getAllByText("日本").length).toBeGreaterThan(0);
     expect(screen.getAllByText("有条件备选").length).toBeGreaterThan(0);
     expect(screen.getAllByText("马来西亚").length).toBeGreaterThan(0);
     expect(screen.getAllByText("暂不可选").length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("link", { name: "查看一次完整咨询流程" })[0]).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "查看顾问工作流" })).toHaveAttribute(
+      "href",
+      "#product",
+    );
+    expect(screen.getByRole("link", { name: "GitHub ↗" })).toHaveAttribute(
+      "href",
+      "https://github.com/iTao-AI/night-voyager",
+    );
+    expect(screen.getAllByRole("link", { name: "查看完整咨询流程" })[0]).toHaveAttribute(
       "href",
       "/demo/collaboration",
     );
-    expect(screen.getAllByRole("link", { name: "了解方案如何被核对" })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "查看方案研判" })[0]).toHaveAttribute(
       "href",
       "/demo",
     );
     const headerNavigation = screen.getByRole("navigation", {
       name: "顾问工作台导航",
     });
-    expect(within(headerNavigation).getByRole("link", { name: "方案研判" })).toHaveAttribute("href", "#route-atlas");
+    expect(within(headerNavigation).getByRole("link", { name: "可信推进" })).toHaveAttribute("href", "#route-atlas");
     expect(
       screen.queryByRole("heading", {
         name: "把家庭事实变成可追溯的留学决策与行动计划",
@@ -69,21 +77,29 @@ describe("portfolio entry", () => {
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Turn scattered consultations into a client plan you can move forward",
+        name: "Move complex study-abroad planning forward with clarity.",
       }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Walk through one client case" })[0]).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "See the advisor workflow" })).toHaveAttribute(
+      "href",
+      "#product",
+    );
+    expect(screen.getByRole("link", { name: "GitHub ↗" })).toHaveAttribute(
+      "href",
+      "https://github.com/iTao-AI/night-voyager",
+    );
+    expect(screen.getAllByRole("link", { name: "See the complete consultation flow" })[0]).toHaveAttribute(
       "href",
       "/demo/collaboration",
     );
-    expect(screen.getByRole("link", { name: "See how the proposal is verified" })).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "See route analysis" })[0]).toHaveAttribute(
       "href",
       "/demo",
     );
     const headerNavigation = screen.getByRole("navigation", {
       name: "Advisor workspace navigation",
     });
-    expect(within(headerNavigation).getByRole("link", { name: "Route analysis" })).toHaveAttribute("href", "#route-atlas");
-    expect(screen.getAllByText(/AI collaboration workspace for study-abroad advisors/i).length).toBeGreaterThan(0);
+    expect(within(headerNavigation).getByRole("link", { name: "Trusted progress" })).toHaveAttribute("href", "#route-atlas");
+    expect(screen.getAllByText(/An AI collaboration platform built for study-abroad advisors/i).length).toBeGreaterThan(0);
   });
 });

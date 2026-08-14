@@ -80,8 +80,8 @@ test("keeps the primary portfolio action readable in both locales", async ({ pag
 
 test("keeps the advisor workspace identity and route-analysis preview in the first surface", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".portfolio-category")).toHaveText("留学顾问的 AI 协作工作台");
-  await expect(page.locator(".portfolio-eyebrow")).toHaveText("AI 协作工作台 · 为留学顾问设计");
+  await expect(page.locator(".portfolio-category")).toHaveText("为留学顾问打造的 AI 协作平台");
+  await expect(page.locator(".portfolio-eyebrow")).toHaveText("为留学顾问打造的 AI 协作平台");
   await expect(page.locator(".advisor-workspace-preview")).toContainText("当前客户档案 · 方案研判");
   await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
     /家庭表达|家庭决定|顾问到家庭决策流程/,
@@ -89,10 +89,10 @@ test("keeps the advisor workspace identity and route-analysis preview in the fir
 
   await page.getByRole("button", { name: "English", exact: true }).click();
   await expect(page.locator(".portfolio-category")).toHaveText(
-    "AI collaboration workspace for study-abroad advisors",
+    "An AI collaboration platform built for study-abroad advisors",
   );
   await expect(page.locator(".portfolio-eyebrow")).toHaveText(
-    "AI collaboration workspace for study-abroad advisors",
+    "An AI collaboration platform built for study-abroad advisors",
   );
   await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
     /Family input|Family decision|Advisor-to-family decision flow/,
@@ -126,7 +126,7 @@ test("keeps the English route preview truthful without runtime image dependencie
   await page.getByRole("button", { name: "English", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Turn scattered consultations into a client plan you can move forward",
+    "Move complex study-abroad planning forward with clarity.",
   );
   await expectRootRows(page, "en");
   await expect(page.locator("main img")).toHaveCount(0);
