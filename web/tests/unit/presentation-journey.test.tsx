@@ -320,7 +320,7 @@ it("keeps English workflow labels and technical facts secondary", async () => {
   const collaboration = renderPresentation(<CollaborationDemo />);
   const workflow = collaboration.container.querySelector(".workflow-rail");
   const thread = collaboration.container.querySelector(".shared-thread");
-  const technical = collaboration.container.querySelector(".workspace-technical-evidence");
+  const technical = collaboration.container.querySelector("[data-frame-slot='technical']");
   expect(workflow).not.toBeNull();
   expect(thread).not.toBeNull();
   expect(technical).not.toBeNull();

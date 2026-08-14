@@ -7,7 +7,7 @@ import { usePresentation } from "../../lib/presentation/context";
 export function SharedThread({ messages, loading = false }: { messages: readonly CollaborationMessage[]; loading?: boolean }) {
   const { locale, copy } = usePresentation();
   return (
-    <section className="collaboration-panel shared-thread" aria-labelledby="shared-thread-title">
+    <section className="collaboration-panel shared-thread" data-source-record="true" aria-labelledby="shared-thread-title">
       <p className="overline">{copy("threadOverline")}</p>
       <h2 id="shared-thread-title">{copy("threadTitle")}</h2>
       {loading ? <p role="status">{copy("threadLoading")}</p> : null}

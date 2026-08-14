@@ -56,7 +56,7 @@ it("renders localized empty/loading thread while preserving the user message exa
 
 it.each([
   ["pending", "等待顾问确认"],
-  ["stale", "所依据的 Case revision 已更新"],
+  ["stale", "所依据的档案版本已更新"],
   ["expired", "候选事实已过期"],
   ["confirmed", "已确认进入事实记录"],
   ["rejected", "未被采纳"],
@@ -82,8 +82,10 @@ it("presents confirmed fact, versions, and server-authored reason without intern
   const { container } = renderPresentation(<ConfirmedFactSummary fact={fact} caseRevision={2} />);
   expect(screen.getByRole("heading", { name: "已确认家庭事实" })).toBeVisible();
   expect(screen.getByText("¥300,000–400,000")).toBeVisible();
-  expect(screen.getByText("Fact version 1")).toBeVisible();
-  expect(screen.getByText("Case revision 2")).toBeVisible();
+  expect(screen.getByText("事实版本").closest("div")).toHaveTextContent("1");
+  expect(screen.getByText("档案版本").closest("div")).toHaveTextContent("2");
+  expect(screen.queryByText("Fact version", { exact: true })).toBeNull();
+  expect(screen.queryByText("Case revision", { exact: true })).toBeNull();
   expect(screen.getByText("Confirmed by advisor.")).toBeVisible();
   expect(container).not.toHaveTextContent(/family\.budget|confirmed_fact_id|candidate_id|schema_version|45000000/i);
 });
@@ -97,6 +99,9 @@ it("presents consultation intake inside the advisor workspace shell", () => {
   expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
   expect(screen.getAllByText("咨询接入与信息核验").length).toBeGreaterThanOrEqual(1);
   expect(screen.getByText("同一 Case 的连接证明")).toBeVisible();
+  expect(container.querySelector("[data-frame-slot='work'] .shared-thread")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='authority'] [data-primary-action='true']")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='evidence'] .shared-thread")).toBeNull();
   expect(screen.queryByRole("heading", { level: 1, name: "家庭协作与事实确认" })).toBeNull();
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(container.querySelectorAll('[data-primary-action="true"]')).toHaveLength(1);
@@ -154,7 +159,7 @@ it("renders the governed human gates and no task or generic-chat affordance", as
   setState({ value: "replan_required", context: { ...baseContext, role: "advisor", candidate: advisorCandidate, fact, caseRevision: 2 } });
   view.rerender(<CollaborationDemo />);
   expect(screen.getByRole("heading", { name: "需要重新规划" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "继续进入受治理规划" }));
+  fireEvent.click(screen.getByRole("button", { name: "继续进入规划" }));
   expect(hook.current.continueToPlanning).toHaveBeenCalledOnce();
   expect(screen.queryByRole("button", { name: /创建.*任务/ })).toBeNull();
   expect(screen.queryByText(/chat|agenttask|eventsource|schema_version|41000000/i)).toBeNull();
@@ -163,11 +168,16 @@ it("renders the governed human gates and no task or generic-chat affordance", as
 it("keeps confirmed fact visible during one disabled handoff validation", async () => {
   setState({ value: "handoff_validating", context: { ...baseContext, role: "advisor", candidate: advisorCandidate, fact, caseRevision: 2 } });
   renderPresentation(<CollaborationDemo />);
-  expect(screen.getByText("Fact version 1")).toBeVisible();
-  expect(screen.getByRole("heading", { name: "正在验证规划 authority" })).toHaveFocus();
-  expect(screen.getByRole("button", { name: "正在验证 authority…" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "正在验证 authority…" }).closest("details")).toBeNull();
-  expect(screen.queryByRole("button", { name: "继续进入受治理规划" })).toBeNull();
+  expect(screen.getByText("事实版本").closest("[data-confirmed-record]")).toBeVisible();
+  const technicalFactVersion = screen.getByText("Fact version", { exact: true }).closest("details");
+  expect(technicalFactVersion).toBeInTheDocument();
+  expect(technicalFactVersion).toHaveTextContent("1");
+  expect(screen.getAllByText("¥300,000–400,000").some((element) => element.closest("[data-frame-slot='work']"))).toBe(true);
+  expect(screen.getByRole("button", { name: "正在验证当前信息…" }).closest("[data-frame-slot='authority']")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "正在验证规划信息" })).toHaveFocus();
+  expect(screen.getByRole("button", { name: "正在验证当前信息…" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "正在验证当前信息…" }).closest("details")).toBeNull();
+  expect(screen.queryByRole("button", { name: "继续进入规划" })).toBeNull();
 });
 
 it.each([
@@ -177,7 +187,7 @@ it.each([
   const retry = vi.fn();
   const { container } = renderPresentation(<CollaborationRecoveryNotice category={category} onRetry={retry} />);
   expect(screen.getByRole("heading", { level: 2, name: "协作流程已安全暂停" })).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "重新载入协作 authority" }));
+  fireEvent.click(screen.getByRole("button", { name: "重新载入协作信息" }));
   expect(retry).toHaveBeenCalledOnce();
   expect(container).not.toHaveTextContent(category);
 });
