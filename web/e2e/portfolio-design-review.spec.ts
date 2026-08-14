@@ -47,10 +47,11 @@ async function expectReadable(locator: Locator) {
 }
 
 async function expectRootRows(page: Page, locale: "zh-CN" | "en") {
-  const routeRows = page.locator(".advisor-workspace-preview .workspace-route-row");
+  const routePreview = page.locator(".portfolio-hero-product .advisor-workspace-preview");
+  const routeRows = routePreview.locator(".portfolio-preview-route-list > li[data-route-id]");
   await expect(routeRows).toHaveCount(3);
   for (const [id, zhCountry, zhOutcome] of ROUTES) {
-    const row = page.locator(`.advisor-workspace-preview .workspace-route-row[data-route-id="${id}"]`);
+    const row = routePreview.locator(`.portfolio-preview-route-list > li[data-route-id="${id}"]`);
     await expect(row).toHaveCount(1);
     await expect(row).toContainText(locale === "zh-CN" ? zhCountry : id === "australia" ? "Australia" : id === "japan" ? "Japan" : "Malaysia");
     await expect(row).toContainText(
@@ -80,9 +81,12 @@ test("keeps the primary portfolio action readable in both locales", async ({ pag
 
 test("keeps the advisor workspace identity and route-analysis preview in the first surface", async ({ page }) => {
   await page.goto("/");
+  const routePreview = page.locator(".portfolio-hero-product .advisor-workspace-preview");
   await expect(page.locator(".portfolio-category")).toHaveText("为留学顾问打造的 AI 协作平台");
   await expect(page.locator(".portfolio-eyebrow")).toHaveText("为留学顾问打造的 AI 协作平台");
-  await expect(page.locator(".advisor-workspace-preview")).toContainText("当前客户档案 · 方案研判");
+  await expect(routePreview).toHaveAttribute("data-preview-scene", "route");
+  await expect(routePreview.locator(".workspace-top-band-grid")).toContainText("当前客户档案 · 档案版本 2");
+  await expect(routePreview.getByRole("heading", { name: "方案比较" })).toBeVisible();
   await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
     /家庭表达|家庭决定|顾问到家庭决策流程/,
   );
@@ -94,6 +98,8 @@ test("keeps the advisor workspace identity and route-analysis preview in the fir
   await expect(page.locator(".portfolio-eyebrow")).toHaveText(
     "An AI collaboration platform built for study-abroad advisors",
   );
+  await expect(routePreview.locator(".workspace-top-band-grid")).toContainText("Current client case · Record version 2");
+  await expect(routePreview.getByRole("heading", { name: "Plan comparison" })).toBeVisible();
   await expect(page.locator(".portfolio-primary-navigation")).not.toContainText(
     /Family input|Family decision|Advisor-to-family decision flow/,
   );
@@ -102,6 +108,7 @@ test("keeps the advisor workspace identity and route-analysis preview in the fir
 test("keeps the coded route preview readable and ordered at the review widths", async ({ page }) => {
   for (const viewport of [
     { width: 1440, height: 1000 },
+    { width: 1280, height: 1000 },
     { width: 1024, height: 900 },
     { width: 768, height: 1024 },
     { width: 390, height: 844 },
@@ -109,9 +116,9 @@ test("keeps the coded route preview readable and ordered at the review widths", 
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/");
-    await expect(page.locator(".advisor-workspace-preview")).toBeVisible();
+    await expect(page.locator(".portfolio-hero-product .advisor-workspace-preview")).toBeVisible();
     await expectRootRows(page, "zh-CN");
-    await expectReadable(page.locator(".advisor-workspace-preview .workspace-status-pill"));
+    await expectReadable(page.locator(".portfolio-hero-product .advisor-workspace-preview .workspace-status-pill"));
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth === document.documentElement.clientWidth,
@@ -125,7 +132,8 @@ test("keeps the English route preview truthful without runtime image dependencie
   await page.goto("/");
   await page.getByRole("button", { name: "English", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+  await expect(page.getByRole("heading", { level: 1 })).toHaveAttribute(
+    "aria-label",
     "Move complex study-abroad planning forward with clarity.",
   );
   await expectRootRows(page, "en");

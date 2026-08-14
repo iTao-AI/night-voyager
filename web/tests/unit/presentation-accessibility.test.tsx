@@ -78,10 +78,17 @@ describe("presentation accessibility contract", () => {
     expect(css).toMatch(/\.portfolio-primary-action[\s\S]*min-block-size:\s*48px/);
     expect(css).toContain("@media (max-width: 1023px)");
     expect(css).toContain("@media (min-width: 1280px)");
+    expect(css).toMatch(
+      /@media \(max-width: 560px\)[\s\S]*\.advisor-product-frame \.workflow-rail-list\s*\{[\s\S]*grid-template-columns:\s*1fr;[\s\S]*overflow:\s*visible;/,
+    );
     expect(css).toContain("200% zoom");
     expect(css).toMatch(/backdrop-filter/);
     expect(css).toMatch(/max-width:\s*560px[\s\S]*backdrop-filter:\s*none/);
     expect(e2e).toContain("target.height < 44 || target.width < 44");
+    expect(e2e).toContain("visibleBlurSurfaces");
+    expect(e2e).toContain("backdrop-filter: none !important");
+    expect(e2e).toContain("storySticky");
+    expect(e2e).toContain("storyTransforms");
     expect(composeConfig).toContain("presentation.spec.ts");
     expect(composeProof).toContain("PRESENTATION_AUDIT_OUTPUT_DIR");
     expect(composeProof).toContain("presentation.spec.ts");

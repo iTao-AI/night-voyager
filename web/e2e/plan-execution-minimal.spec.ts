@@ -91,7 +91,7 @@ async function expectCheckpoint(
 
 async function expectLiveAndVisibleCopy(page: Page, message: string) {
   await expect(page.getByRole("status")).toHaveText(message);
-  await expect(page.locator(".workspace-status-copy")).toHaveText(message);
+  await expect(page.locator("[data-frame-slot='work'] .workspace-status-copy")).toHaveText(message);
 }
 
 test("minimal governed plan execution reaches completed through one bilingual journey", async ({
@@ -103,8 +103,8 @@ test("minimal governed plan execution reaches completed through one bilingual jo
     "data-proof-segment",
     "independent_execution_scenario",
   );
-  await expect(page.locator(".workspace-context-bar")).toContainText(
-    /独立的确定性执行场景|Independent deterministic execution scenario/,
+  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(
+    /独立演示场景，不沿用当前客户档案。|Independent demo scenario; it does not reuse the current client case\./,
   );
   await expect(page.getByRole("heading", { name: "当前行动" })).toBeVisible();
   await page.getByRole("button", { name: "学生", exact: true }).click();

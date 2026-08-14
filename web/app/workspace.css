@@ -337,6 +337,10 @@
   background: var(--nv-surface);
 }
 
+.plan-execution-authority .current-action-controls {
+  color: var(--nv-primary-ink);
+}
+
 .section-heading {
   max-width: var(--reading);
 }
@@ -677,7 +681,7 @@
 .workspace-route-context,
 .workspace-route-heading > .workspace-route-context {
   margin: 0;
-  color: var(--nv-action);
+  color: #286d7e;
   font-size: .78rem;
   font-weight: 800;
   letter-spacing: .06em;
@@ -709,6 +713,14 @@
 .workspace-context-facts div {
   padding-block: .8rem;
   border-bottom: 1px solid rgba(73, 108, 118, .2);
+}
+
+.advisor-product-frame .workspace-context-facts div {
+  background: var(--nv-context-surface);
+}
+
+.advisor-product-frame .workspace-context-facts dd {
+  color: var(--nv-primary-ink);
 }
 
 .workspace-context-facts dt,
@@ -828,7 +840,8 @@
 }
 
 .advisor-product-frame .workflow-rail-label {
-  font-size: .82rem;
+  color: #286d7e;
+  font-size: 1rem;
   font-weight: 800;
 }
 
@@ -895,16 +908,32 @@
   }
 
   .advisor-product-frame .workflow-rail-list {
-    grid-template-columns: repeat(5, minmax(4.75rem, 1fr));
+    grid-template-columns: 1fr;
+    overflow: visible;
   }
 
   .advisor-product-frame .workflow-rail-item {
-    min-width: 4.75rem;
-    grid-template-columns: 1fr;
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: .25rem;
   }
 
   .advisor-product-frame .workflow-rail-label {
-    font-size: .78rem;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .workspace-authority-plane {
+    color: var(--nv-work-surface);
+  }
+
+  .workspace-authority-plane .workspace-authority-label {
+    color: #9eb4bc;
+  }
+
+  .workspace-authority-plane .workspace-authority-role,
+  .workspace-authority-plane .workspace-authority-status {
+    color: var(--nv-work-surface);
   }
 }

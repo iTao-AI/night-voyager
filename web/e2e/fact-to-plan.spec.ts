@@ -8,24 +8,24 @@ const workerReadySentinel = process.env.FACT_TO_PLAN_WORKER_READY_SENTINEL;
 const presentationLocale = process.env.PRESENTATION_LOCALE === "en" ? "en" : "zh-CN";
 const updatePortfolioScreenshots = process.env.UPDATE_PORTFOLIO_SCREENSHOTS === "1";
 const portfolioCopy = presentationLocale === "en" ? {
-  budget: "CNY 340,000–400,000",
-  heading: "Turn scattered consultations into a client plan you can move forward",
-  primaryAction: "Walk through one client case",
-  secondaryAction: "See how the proposal is verified",
-  routeDescription: "The current case has intended field computing and a CNY 340,000–400,000 budget. Australia is recommended with a budget condition, Japan is a conditional alternative, and Malaysia is blocked.",
-  supersededBudget: "305,500",
+  budget: "CNY 300,000–400,000",
+  heading: "Move complex study-abroad planning forward with clarity.",
+  primaryAction: "See the advisor workflow",
+  secondaryAction: "See route analysis",
+  routeDescription: "The current client case has intended field computing and a confirmed planning budget of CNY 300,000–400,000. Australia is recommended with a budget condition, Japan is a conditional alternative, and Malaysia is unavailable.",
+  persistedBudget: "CNY 305,500–400,000",
   routes: [
     ["australia", "Australia", "Recommended with budget condition"],
     ["japan", "Japan", "Conditional alternative"],
     ["malaysia", "Malaysia", "Blocked"],
   ],
 } : {
-  budget: "¥340,000–400,000",
-  heading: "把零散咨询，整理成可以推进的留学方案",
-  primaryAction: "查看一次完整咨询流程",
-  secondaryAction: "了解方案如何被核对",
-  routeDescription: "当前档案的 intended field 为 computing，预算为 CNY 340,000–400,000。澳大利亚在预算条件下推荐，日本为有条件备选，马来西亚暂不可选。",
-  supersededBudget: "30.55",
+  budget: "¥300,000–400,000",
+  heading: "让复杂的留学规划，清晰地向前。",
+  primaryAction: "查看顾问工作流",
+  secondaryAction: "查看方案研判",
+  routeDescription: "当前客户档案的意向方向为计算机方向，确认规划预算为 CNY 300,000–400,000。澳大利亚在预算条件下推荐，日本为有条件备选，马来西亚暂不可选。",
+  persistedBudget: "¥305,500–400,000",
   routes: [
     ["australia", "澳大利亚", "在预算条件下推荐"],
     ["japan", "日本", "有条件备选"],
@@ -39,9 +39,11 @@ const presentationCopy = presentationLocale === "en" ? {
   continueAdvisor: "Continue as assigned advisor",
   confirmBudget: "Confirm family budget",
   replan: "Re-plan required",
-  handoff: "Continue to governed planning",
+  handoff: "Continue to planning",
   stage: "Current decision stage",
   familyBudget: "Total family budget",
+  factVersion: "Information version",
+  caseRevision: "Record version",
   createTask: "Create planning task",
   pinMatched: "Runtime Skill pin matched",
   approve: "Approve current plan",
@@ -57,9 +59,11 @@ const presentationCopy = presentationLocale === "en" ? {
   continueAdvisor: "以指定顾问身份继续",
   confirmBudget: "确认家庭预算",
   replan: "需要重新规划",
-  handoff: "继续进入受治理规划",
+  handoff: "继续进入规划",
   stage: "当前决策阶段",
   familyBudget: "家庭总预算",
+  factVersion: "事实版本",
+  caseRevision: "档案版本",
   createTask: "创建规划任务",
   pinMatched: "运行时 Skill pin 已匹配",
   approve: "批准当前计划",
@@ -101,28 +105,34 @@ async function expectPortfolioEntry(page: Page) {
     page.getByRole("heading", { level: 1, name: portfolioCopy.heading }),
   ).toBeVisible();
   await expect(page.locator(".portfolio-category")).toContainText(
-    /留学顾问的 AI 协作工作台|AI collaboration workspace for study-abroad advisors/,
+    /为留学顾问打造的 AI 协作平台|An AI collaboration platform built for study-abroad advisors/,
   );
-  await expect(page.locator(".portfolio-workflow")).toContainText(
-    /同一产品模型|one product model/,
+  await expect(page.locator(".portfolio-product-story")).toContainText(
+    /客户信息、路线比较|Client information, plan comparisons/,
   );
-  await expect(page.locator(".portfolio-workflow")).toContainText(
-    /独立播种|independently seeded/,
+  await expect(page.locator(".portfolio-workflow-list")).toContainText(
+    /执行跟进|Execution follow-up/,
   );
   await expect(
-    page.locator(".portfolio-primary-action"),
+    page.locator("a.portfolio-primary-action[href='/demo/collaboration']"),
   ).toHaveAttribute("href", "/demo/collaboration");
   await expect(
     page.getByRole("link", { name: portfolioCopy.secondaryAction }),
   ).toHaveAttribute("href", "/demo");
-  await expect(page.locator("#route-atlas .portfolio-section-heading > p:last-child")).toHaveText(
-    portfolioCopy.routeDescription,
-  );
+  const reducedMotion = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
+  if (reducedMotion) {
+    await expect(page.getByText(portfolioCopy.persistedBudget, { exact: true }).first()).toBeVisible();
+  } else {
+    await page.locator("[data-story-sentinel][data-story-scene='route']").scrollIntoViewIfNeeded();
+    await expect(page.locator("#route-atlas .portfolio-preview-route-description")).toHaveText(
+      portfolioCopy.routeDescription,
+    );
+  }
   await expect(page.getByText(portfolioCopy.budget, { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("main")).not.toContainText(portfolioCopy.supersededBudget);
 
   for (const viewport of [
     { width: 1440, height: 1000 },
+    { width: 1280, height: 1000 },
     { width: 768, height: 1024 },
     { width: 390, height: 844 },
     { width: 320, height: 720 },
@@ -174,12 +184,16 @@ async function expectPortfolioEntry(page: Page) {
           }).length,
     );
     expect(clipped).toBe(0);
-    const routeSurface = page.locator("#route-atlas .portfolio-route-list");
-    for (const [id, country, outcome] of portfolioCopy.routes) {
-      const route = routeSurface.locator(`[data-route-id="${id}"]`);
-      await expect(route).toHaveCount(1);
-      await expect(route).toContainText(country);
-      await expect(route).toContainText(outcome);
+    if (!reducedMotion) {
+      const routeSurface = page.locator("#route-atlas .portfolio-route-list");
+      for (const [id, country, outcome] of portfolioCopy.routes) {
+        const route = routeSurface.locator(`[data-route-id="${id}"]`);
+        await expect(route).toHaveCount(1);
+        await expect(route).toContainText(country);
+        await expect(route).toContainText(outcome);
+      }
+    } else {
+      await expect(page.locator("#route-atlas .portfolio-preview-timeline")).toBeVisible();
     }
   }
 }
@@ -414,7 +428,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("lang", "zh-CN");
-  await expect(page.locator(".advisor-workspace-preview")).toBeVisible();
+  await expect(page.locator(".portfolio-hero-product .advisor-workspace-preview")).toBeVisible();
   await expectPublicSurface(page);
   expect(mutations).toHaveLength(0);
   expect(eventRequests).toHaveLength(0);
@@ -464,14 +478,16 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.getByRole("button", { name: presentationCopy.continueAdvisor }).click();
   await page.getByRole("button", { name: presentationCopy.confirmBudget }).click();
   await expect(page.getByRole("heading", { name: presentationCopy.replan })).toBeFocused();
-  await expect(page.getByText("Fact version 1")).toBeVisible();
-  await expect(page.getByText("Case revision 2")).toBeVisible();
+  const confirmedRecord = page.locator("[data-confirmed-record]");
+  await expect(confirmedRecord).toHaveAttribute("data-fact-version", "1");
+  await expect(confirmedRecord).toHaveAttribute("data-case-revision", "2");
+  await expect(confirmedRecord.getByText(presentationCopy.factVersion, { exact: true })).toBeVisible();
+  await expect(confirmedRecord.getByText(presentationCopy.caseRevision, { exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("heading", { name: presentationCopy.replan })).toBeFocused();
   await expectResponsiveSurface(page, [
     page.getByRole("heading", { name: presentationCopy.replan }),
-    page.getByText("Fact version 1"),
-    page.getByText("Case revision 2"),
+    confirmedRecord,
   ]);
   await page.setViewportSize({ width: 1440, height: 900 });
   if (presentationLocale === "zh-CN" && updatePortfolioScreenshots) {
@@ -501,10 +517,10 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.getByRole("button", { name: presentationCopy.handoff }).click();
   await page.waitForURL("**/demo");
   await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
-  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
   await expect(page.getByRole("heading", { name: presentationCopy.stage })).toBeVisible();
   await expect(page.getByText(presentationCopy.familyBudget)).toBeVisible();
-  await expect(page.getByText("Case revision 2").first()).toBeVisible();
+  await expect(page.getByText(`${presentationCopy.caseRevision} 2`, { exact: true }).first()).toBeVisible();
   expect(handoffReads).toEqual([
     `/api/demo/cases/${caseId}/memory-candidates`,
     `/api/demo/cases/${caseId}/confirmed-facts`,
@@ -575,7 +591,7 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     await captureFactToPlanApprovalDiagnostic(page, beforeReload.caseId, beforeReload.taskId);
     throw error;
   }
-  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  const technicalEvidence = page.locator("[data-frame-slot='technical']");
   await technicalEvidence.locator(":scope > summary").click();
   await expect(technicalEvidence.getByText(presentationCopy.pinMatched)).toBeVisible();
   const reloadEventStart = eventRequests.length;

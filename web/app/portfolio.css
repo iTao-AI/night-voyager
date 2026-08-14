@@ -297,13 +297,13 @@
 .workspace-status-recommended_with_condition {
   border-color: var(--nv-trust);
   background: var(--nv-trust-soft);
-  color: var(--nv-trust);
+  color: #286d7e;
 }
 
 .workspace-status-conditional {
   border-color: var(--nv-warning);
   background: #f5ead0;
-  color: var(--nv-warning);
+  color: #805400;
 }
 
 .workspace-status-blocked {
@@ -600,7 +600,7 @@
   margin-inline: auto;
   padding-block: 1.5rem 2rem;
   border-top: 1px solid var(--nv-border);
-  color: var(--nv-muted);
+  color: #a9c1c5;
   font-size: .9rem;
 }
 
@@ -987,7 +987,7 @@
 
 .portfolio-preview-route-gap,
 .portfolio-preview-safe-state {
-  color: var(--nv-intervention) !important;
+  color: #8f3f34 !important;
   font-size: .86rem;
   font-weight: 700;
 }
@@ -1167,7 +1167,7 @@
 }
 
 .portfolio-panel-label {
-  color: var(--nv-intervention) !important;
+  color: #8f3f34 !important;
   font-size: .78rem;
   font-weight: 850;
   letter-spacing: .08em;
