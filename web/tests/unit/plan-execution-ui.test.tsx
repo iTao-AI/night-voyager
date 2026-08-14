@@ -56,12 +56,14 @@ it("presents execution follow-up in the shared independent-scenario workspace sh
 
   expect(screen.getByRole("banner")).toBeInTheDocument();
   expect(screen.getByRole("heading", { level: 1, name: "把当前执行节点推进到可复核状态" })).toBeVisible();
-  expect(screen.getByText("独立的确定性执行场景")).toBeVisible();
+  expect(screen.getAllByText("独立演示场景，不沿用当前客户档案。").length).toBeGreaterThanOrEqual(1);
   expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(container.querySelectorAll('[data-primary-action="true"]')).toHaveLength(1);
-  expect(container.querySelector(".workspace-supporting-evidence")).toBeInTheDocument();
-  expect(container.querySelector(".workspace-technical-evidence:not([open])")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='work'] [data-primary-action='true']")).toBeNull();
+  expect(container.querySelector("[data-frame-slot='authority'] [data-primary-action='true']")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='evidence']")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='technical']:not([open])")).toBeInTheDocument();
 });
 
 it("renders the current action first without raw hashes or row versions", () => {
@@ -73,7 +75,9 @@ it("renders the current action first without raw hashes or row versions", () => 
   );
   expect(screen.getByRole("heading", { name: "当前行动" })).toBeInTheDocument();
   expect(container.querySelector("[data-section='current-action']"))
-    .toBe(container.querySelector("main section"));
+    .toBe(container.querySelector("[data-frame-slot='work'] [data-section='current-action']"));
+  expect(container.querySelector("[data-frame-slot='work'] [data-current-action-controls]")).toBeNull();
+  expect(container.querySelector("[data-frame-slot='authority'] [data-current-action-controls]")).toBeInTheDocument();
   expect(container.textContent).not.toMatch(/[0-9a-f]{64}/);
   expect(container.textContent).not.toContain("row_version");
   expect(screen.getByRole("button", { name: "记录进行中" })).toBeInTheDocument();
@@ -245,7 +249,7 @@ it("NVPC-P1-002 leaves only reassessment in the blocked advisor action region", 
       <PlanExecutionWorkspace controller={controller} />
     </PresentationProvider>,
   );
-  const action = container.querySelector("[data-section='current-action']");
+  const action = container.querySelector("[data-frame-slot='authority'] [data-current-action-controls]");
   expect(action).not.toBeNull();
   expect(action!.textContent).not.toContain("记录进行中");
   expect(action!.textContent).not.toContain("提交完成状态给顾问");
@@ -259,12 +263,14 @@ it("NVPC-P1-003 puts authority summary and next handoff before the action", () =
       <PlanExecutionWorkspace controller={activeController()} />
     </PresentationProvider>,
   );
-  const region = container.querySelector("[data-section='current-action']");
-  const summary = region?.querySelector("[data-plan-authority-summary]");
-  const action = region?.querySelector("[data-current-action-controls]");
+  const work = container.querySelector("[data-frame-slot='work']");
+  const authority = container.querySelector("[data-frame-slot='authority']");
+  const region = work?.querySelector("[data-section='current-action']");
+  const summary = work?.querySelector("[data-plan-authority-summary]");
+  const action = authority?.querySelector("[data-current-action-controls]");
   expect(summary).not.toBeNull();
   expect(action).not.toBeNull();
-  expect(summary!.compareDocumentPosition(action!))
+  expect(work!.compareDocumentPosition(authority!))
     .toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   expect(region!.textContent).toContain("下一位行动者");
   expect(screen.getByRole("group", { name: "checkpoint 状态证明" })).toBeInTheDocument();

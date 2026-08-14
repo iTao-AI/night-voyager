@@ -847,6 +847,11 @@
     grid-template-areas: "context" "work" "evidence" "authority";
   }
 
+  .advisor-workspace-shell[data-proof-segment="independent_execution_scenario"] .advisor-product-frame-grid,
+  .advisor-workspace-shell[data-proof-segment="independent_execution_scenario"] .advisor-product-frame-grid.has-evidence {
+    grid-template-areas: "context" "work" "authority" "evidence";
+  }
+
   .advisor-product-frame-authority {
     border-top: 1px solid rgba(73, 108, 118, .2);
     border-left: 0;
