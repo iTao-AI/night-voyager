@@ -1,8 +1,9 @@
 # Night Voyager Reference-Driven Presentation Spec
 
-Status: `PROPOSED`
-Implementation: `NOT_STARTED`
-Target repository baseline: `e28efdb53d72c8b42c9636f3440dd41ebcb426e0`
+Status: `LOCAL CANDIDATE / IN REVIEW`
+Implementation: `IMPLEMENTED LOCALLY`
+Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`
+Target repository baseline: `main@e28efdb53d72c8b42c9636f3440dd41ebcb426e0`
 
 This document specifies one presentation-only replacement of the current Night
 Voyager public site and advisor-workspace composition. It preserves all existing

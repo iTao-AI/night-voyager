@@ -1128,7 +1128,9 @@ def verify_release_surface() -> None:
     readme_contracts = (
         (
             "README.md",
-            "Night Voyager is an AI collaboration workspace for study-abroad advisors.",
+            "The current development candidate presents the reference-driven advisor-centered root "
+            "and three demo routes through one shared workspace shell",
+            "Stable v0.1.5 remains the prior local synthetic portfolio release.",
             "## Engineering proof",
             "## Evaluate the release",
             "## Synthetic and local limits",
@@ -1136,18 +1138,21 @@ def verify_release_surface() -> None:
         ),
         (
             "README_CN.md",
-            "Night Voyager 是留学顾问的 AI 协作工作台。",
+            "当前 development candidate 展示 reference-driven advisor-centered root 与三个 "
+            "demo route 共享的 workspace shell",
+            "稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。",
             "## 工程证据",
             "## 验证 release",
             "## 合成与本地边界",
             "## Milestone 与历史",
         ),
     )
-    for relative, outcome, proof, evaluator, limits, history in readme_contracts:
+    for relative, candidate, stable_boundary, proof, evaluator, limits, history in readme_contracts:
         source = (ROOT / relative).read_text(encoding="utf-8")
-        required = (outcome, *M5_SCREENSHOTS, proof, evaluator, limits, history)
+        visible_source = re.sub(r"<!--.*?-->", "", source, flags=re.DOTALL)
+        required = (candidate, stable_boundary, *M5_SCREENSHOTS, proof, evaluator, limits, history)
         try:
-            positions = [source.index(value) for value in required]
+            positions = [visible_source.index(value) for value in required]
         except ValueError as error:
             raise SystemExit(f"missing {RELEASE_TAG} README contract: {relative}") from error
         if positions != sorted(positions):
@@ -1204,7 +1209,10 @@ def verify_release_surface() -> None:
         source = (ROOT / relative).read_text(encoding="utf-8").lower()
         if any(phrase in source for phrase in stale):
             raise SystemExit(f"stale bootstrap release wording: {relative}")
-    print(f"proof release surface: {RELEASE_TAG} local synthetic portfolio contract confirmed")
+    print(
+        "proof release surface: current development candidate + stable v0.1.5 "
+        "historical boundary confirmed"
+    )
 
 
 def package_version(packages: list[dict[str, object]], name: str) -> str:

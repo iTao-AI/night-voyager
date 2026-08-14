@@ -4,8 +4,6 @@ Night Voyager 是面向留学顾问的 AI 协作平台。它把本地合成咨�
 
 当前 presentation authority 是 [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) 及其 [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md)。它们定义当前构图、responsive behavior、same-Case projection、独立执行场景与 bounded material treatment，不改变产品 authority。
 
-<!-- 稳定 v0.1.5 release surface（历史 wording）：Night Voyager 是留学顾问的 AI 协作工作台。 -->
-
 完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。四个 route 共享 advisor workspace shell。
 
 ![Chinese-first Night Voyager 作品集入口](docs/assets/night-voyager-portfolio-entry.png)

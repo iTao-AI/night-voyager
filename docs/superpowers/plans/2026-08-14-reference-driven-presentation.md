@@ -6,8 +6,9 @@
 > contract change, `superpowers:receiving-code-review` for authority findings,
 > and `superpowers:verification-before-completion` before every readiness claim.
 
-Status: `PROPOSED`
-Implementation: `NOT_STARTED`
+Status: `LOCAL CANDIDATE / IN REVIEW`
+Implementation: `IMPLEMENTED LOCALLY`
+Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`
 Target base: `main@e28efdb53d72c8b42c9636f3440dd41ebcb426e0`
 
 **Goal:** Implement the approved reference-driven Night Voyager public site and
@@ -928,8 +929,8 @@ Implementation is complete only after:
 6. no task-owned residue remains, or `DONE_WITH_RESIDUE` identifies the exact owner
    and recovery condition.
 
-Until the user approves the implementation and unattended package, stop here with
-`Implementation: NOT_STARTED`.
+The local candidate is implemented in the approved worktree and remains subject
+to authoritative review. It is not pushed, merged, released, or deployed.
 
 ## Implementation Tasks
 

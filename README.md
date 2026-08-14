@@ -4,8 +4,6 @@ Night Voyager is an AI collaboration platform for study-abroad advisors. It turn
 
 The current presentation authority is the [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) and its [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md). They define the current composition, responsive behavior, same-Case projection, independent execution scenario, and bounded material treatment without changing product authority.
 
-<!-- Stable v0.1.5 release surface (historical wording): Night Voyager is an AI collaboration workspace for study-abroad advisors. -->
-
 The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. All four routes share the advisor workspace shell.
 
 ![Chinese-first Night Voyager portfolio entry](docs/assets/night-voyager-portfolio-entry.png)
