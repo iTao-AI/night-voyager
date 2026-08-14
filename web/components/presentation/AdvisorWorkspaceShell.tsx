@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { PresentationCopyKey } from "../../lib/presentation/catalog";
 import { usePresentation } from "../../lib/presentation/context";
 import type { WorkflowProofSegment, WorkflowStage } from "../../lib/presentation/journey";
+import { AdvisorProductFrame } from "./AdvisorProductFrame";
 import { LocaleSwitch } from "./LocaleSwitch";
 import { WorkflowRail } from "./WorkflowRail";
 
@@ -20,6 +21,7 @@ type AdvisorWorkspaceShellProps = {
   supportingEvidence?: ReactNode;
   technicalEvidence?: ReactNode;
   titleKey: PresentationCopyKey;
+  authority?: ReactNode;
 };
 
 const ROLE_COPY: Record<NonNullable<AdvisorWorkspaceShellProps["activeRole"]>, PresentationCopyKey> = {
@@ -44,6 +46,7 @@ export function AdvisorWorkspaceShell({
   supportingEvidence,
   technicalEvidence,
   titleKey,
+  authority,
 }: AdvisorWorkspaceShellProps) {
   const { copy } = usePresentation();
 
@@ -65,52 +68,78 @@ export function AdvisorWorkspaceShell({
           </div>
         </div>
       </header>
-      <div className="workspace-context-bar" aria-label={copy("workspaceCaseContext")}>
-        <div>
-          <p className="workspace-context-label">{copy(contextKey)}</p>
-          <p className="workspace-boundary">{copy("workspaceSyntheticBoundary")}</p>
-        </div>
-        <dl className="workspace-context-facts">
-          <div>
-            <dt>{copy("workspaceCurrentStage")}</dt>
-            <dd>{currentStage ? copy(STAGE_COPY[currentStage]) : copy("statusUnavailable")}</dd>
-          </div>
-          <div>
-            <dt>{copy("workspaceActiveRole")}</dt>
-            <dd>{activeRole ? copy(ROLE_COPY[activeRole]) : copy("statusUnavailable")}</dd>
-          </div>
-          <div>
-            <dt>{copy("workspaceProofBoundary")}</dt>
-            <dd>{copy(PROOF_COPY[proofSegment])}</dd>
-          </div>
-        </dl>
-      </div>
       <main id={mainId} tabIndex={-1}>
-        <div className="workspace-layout">
-          <aside className="workspace-stage-column">
-            <WorkflowRail currentStage={currentStage} copy={copy} />
-          </aside>
-          <div className="workspace-content-column">
-            <div className="workspace-route-heading">
-              <p className="workspace-route-context">{copy(contextKey)}</p>
-              <h1>{copy(titleKey)}</h1>
-              <div className="workspace-status">{status}</div>
-            </div>
-            <section className="workspace-current-work" data-section="current-action" aria-labelledby="workspace-current-work-title">
-              <h2 id="workspace-current-work-title">{copy("workspaceCurrentStage")}</h2>
-              {children}
-            </section>
-            {supportingEvidence ? (
-              <aside className="workspace-supporting-evidence" aria-labelledby="workspace-supporting-evidence-title">
-                <h2 id="workspace-supporting-evidence-title">{copy("workspaceSupportingEvidence")}</h2>
-                {supportingEvidence}
-              </aside>
-            ) : null}
-            <details className="workspace-technical-evidence">
-              <summary>{copy("workspaceTechnicalEvidence")}</summary>
-              {technicalEvidence ?? <p>{copy("statusUnavailable")}</p>}
-            </details>
-          </div>
+        <div className="workspace-page">
+          <AdvisorProductFrame
+            topBand={
+              <div className="workspace-top-band-grid">
+                <div>
+                  <span>{copy("workspaceCaseContext")}</span>
+                  <strong>{copy(contextKey)}</strong>
+                </div>
+                <div>
+                  <span>{copy("workspaceCurrentStage")}</span>
+                  <strong>{currentStage ? copy(STAGE_COPY[currentStage]) : copy("statusUnavailable")}</strong>
+                </div>
+                <div>
+                  <span>{copy("workspaceCurrentStatus")}</span>
+                  <div className="workspace-top-band-status">{status}</div>
+                </div>
+                <div>
+                  <span>{copy("workspaceProofBoundary")}</span>
+                  <strong>{copy(PROOF_COPY[proofSegment])}</strong>
+                </div>
+              </div>
+            }
+            workflow={<WorkflowRail currentStage={currentStage} copy={copy} />}
+            context={
+              <div className="workspace-context-plane">
+                <p className="workspace-context-label">{copy("workspaceCaseContext")}</p>
+                <p className="workspace-context-value">{copy(contextKey)}</p>
+                <p className="workspace-boundary">{copy("workspaceSyntheticBoundary")}</p>
+                <dl className="workspace-context-facts">
+                  <div>
+                    <dt>{copy("workspaceActiveRole")}</dt>
+                    <dd>{activeRole ? copy(ROLE_COPY[activeRole]) : copy("statusUnavailable")}</dd>
+                  </div>
+                  <div>
+                    <dt>{copy("workspaceCurrentStage")}</dt>
+                    <dd>{currentStage ? copy(STAGE_COPY[currentStage]) : copy("statusUnavailable")}</dd>
+                  </div>
+                </dl>
+              </div>
+            }
+            currentWork={
+              <div className="workspace-current-work-content">
+                <div className="workspace-route-heading">
+                  <p className="workspace-route-context">{copy(contextKey)}</p>
+                  <h1>{copy(titleKey)}</h1>
+                  <div className="workspace-status">{status}</div>
+                </div>
+                <section className="workspace-current-work" data-section="current-action" aria-labelledby="workspace-current-work-title">
+                  <h2 id="workspace-current-work-title">{copy("workspaceCurrentWork")}</h2>
+                  {children}
+                </section>
+              </div>
+            }
+            evidence={
+              supportingEvidence ? (
+                <div className="workspace-supporting-evidence-content">
+                  <h2>{copy("workspaceSupportingEvidence")}</h2>
+                  {supportingEvidence}
+                </div>
+              ) : undefined
+            }
+            authority={
+              <div className="workspace-authority-plane">
+                <p className="workspace-authority-label">{copy("workspaceHumanAuthority")}</p>
+                <p className="workspace-authority-role">{activeRole ? copy(ROLE_COPY[activeRole]) : copy("statusUnavailable")}</p>
+                {authority ?? <p className="workspace-authority-status">{copy("workspaceAwaitingAction")}</p>}
+              </div>
+            }
+            technical={technicalEvidence ?? <p>{copy("statusUnavailable")}</p>}
+            technicalLabel={copy("workspaceTechnicalEvidence")}
+          />
         </div>
       </main>
       <footer className="workspace-footer">

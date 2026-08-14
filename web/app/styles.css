@@ -1,20 +1,32 @@
 :root {
   color-scheme: light;
-  --nv-frame: #081113;
-  --nv-frame-soft: #101b1d;
-  --nv-canvas: #f2ede3;
-  --nv-surface: #fffdf8;
-  --nv-ink: #14201e;
-  --nv-muted: #5b6762;
-  --nv-trust: #0d655c;
-  --nv-trust-soft: #dcece7;
-  --nv-attention: #b8503f;
-  --nv-warning: #8b5b06;
-  --nv-danger: #9f372f;
-  --nv-border: #d8d1c4;
-  --nv-frame-border: #263537;
-  --nv-highlight: #c7aa69;
-  --nv-focus: #18a99a;
+  --nv-environment: #061117;
+  --nv-product-dark: #0a1c24;
+  --nv-product-elevated: #102832;
+  --nv-action: #2b7486;
+  --nv-signal: #75c3d1;
+  --nv-current-soft: #dcebed;
+  --nv-intervention: #ce765f;
+  --nv-intervention-soft: #f2dfd9;
+  --nv-work-surface: #fcfdfc;
+  --nv-context-surface: #e5eceb;
+  --nv-primary-ink: #102027;
+  --nv-secondary-ink: #52666e;
+  --nv-frame: var(--nv-environment);
+  --nv-frame-soft: var(--nv-product-elevated);
+  --nv-canvas: var(--nv-environment);
+  --nv-surface: var(--nv-work-surface);
+  --nv-ink: var(--nv-primary-ink);
+  --nv-muted: var(--nv-secondary-ink);
+  --nv-trust: var(--nv-action);
+  --nv-trust-soft: var(--nv-current-soft);
+  --nv-attention: var(--nv-intervention);
+  --nv-warning: #9a6500;
+  --nv-danger: #a33a32;
+  --nv-border: #c4d2d1;
+  --nv-frame-border: rgba(172, 210, 216, .18);
+  --nv-highlight: var(--nv-signal);
+  --nv-focus: var(--nv-intervention);
   --canvas: var(--nv-canvas);
   --surface: var(--nv-surface);
   --ink: var(--nv-ink);
@@ -24,15 +36,17 @@
   --warning: var(--nv-warning);
   --danger: var(--nv-danger);
   --border: var(--nv-border);
-  --ui: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "WenQuanYi Zen Hei", "IBM Plex Sans", "Aptos", "Segoe UI", sans-serif;
+  --font-ui: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Aptos", "Segoe UI", system-ui, sans-serif;
+  --font-latin: "Avenir Next", Avenir, "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  --ui: var(--font-ui);
   --editorial: "Songti SC", "STSong", "Source Serif 4", "Iowan Old Style", "Palatino Linotype", serif;
   --page: 78rem;
   --reading: 48rem;
   --gutter: clamp(1rem, 4vw, 4rem);
   font-family: var(--ui);
   font-size: 16px;
-  background: var(--nv-canvas);
-  color: var(--nv-ink);
+  background: var(--nv-environment);
+  color: var(--nv-primary-ink);
 }
 
 * {
@@ -49,8 +63,8 @@ body {
   min-height: 100vh;
   margin: 0;
   overflow-x: hidden;
-  background: var(--nv-canvas);
-  color: var(--nv-ink);
+  background: var(--nv-environment);
+  color: var(--nv-primary-ink);
   line-height: 1.55;
 }
 
@@ -399,5 +413,29 @@ th {
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
     transition-duration: .01ms !important;
+  }
+}
+
+@supports (backdrop-filter: blur(1px)) {
+  .workspace-header {
+    backdrop-filter: blur(14px);
+  }
+
+  .workspace-authority-plane {
+    backdrop-filter: blur(10px);
+  }
+}
+
+@media (max-width: 900px) {
+  .workspace-authority-plane {
+    backdrop-filter: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .workspace-header,
+  .workspace-authority-plane {
+    backdrop-filter: none;
+    background: var(--nv-product-dark);
   }
 }
