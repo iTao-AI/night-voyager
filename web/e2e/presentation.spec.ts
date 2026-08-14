@@ -438,8 +438,14 @@ async function assertSemanticPresentation(page: Page) {
     await expect(page.locator(".advisor-workspace-preview").first()).toContainText(
       /澳大利亚|Australia/,
     );
-    if (metrics.reducedMotion) {
-      await expect(page.locator(".portfolio-story-frame .advisor-workspace-preview")).toHaveAttribute("data-preview-scene", "outcome");
+    const rootWidth = await page.evaluate(() => window.innerWidth);
+    if (metrics.reducedMotion || rootWidth <= 860) {
+      const staticSubjects = page.locator(".portfolio-story-static-subject:visible .advisor-workspace-preview");
+      await expect(staticSubjects).toHaveCount(3);
+      await expect(staticSubjects.nth(0)).toHaveAttribute("data-preview-scene", "confirmed");
+      await expect(staticSubjects.nth(1)).toHaveAttribute("data-preview-scene", "route");
+      await expect(staticSubjects.nth(2)).toHaveAttribute("data-preview-scene", "outcome");
+      await expect(page.locator(".portfolio-story-frame:visible")).toHaveCount(0);
     }
   } else {
     await expect(shell).toBeVisible();

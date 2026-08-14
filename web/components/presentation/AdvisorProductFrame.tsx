@@ -36,13 +36,15 @@ export function AdvisorProductFrame({
       <div className="advisor-product-frame-top-band" data-frame-slot="top-band">
         {topBand}
       </div>
-      <div className="advisor-product-frame-workflow" data-frame-slot="workflow">
-        {workflow}
-      </div>
       <div className={`advisor-product-frame-grid${evidence ? " has-evidence" : ""}`}>
-        <aside className="advisor-product-frame-context" data-frame-slot="context" data-column-span="2">
-          {context}
-        </aside>
+        <div className="advisor-product-frame-context-column" data-frame-slot="workflow" data-column-span="2">
+          <div className="advisor-product-frame-workflow">
+            {workflow}
+          </div>
+          <aside className="advisor-product-frame-context" data-frame-slot="context" data-column-span="2">
+            {context}
+          </aside>
+        </div>
         <section className="advisor-product-frame-work" data-frame-slot="work" data-column-span="7">
           {currentWork}
         </section>

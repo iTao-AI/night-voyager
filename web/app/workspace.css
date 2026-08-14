@@ -25,11 +25,11 @@
   display: inline-flex;
   min-block-size: 44px;
   align-items: center;
-  gap: .65rem;
   color: var(--nv-surface);
-  font-family: var(--editorial);
-  font-size: 1.25rem;
+  font-family: var(--font-latin);
+  font-size: 20px;
   font-weight: 800;
+  letter-spacing: -.035em;
   text-decoration: none;
 }
 
@@ -102,7 +102,7 @@
 
 .workspace-context-facts {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 1px;
   margin: 0;
   background: var(--nv-frame-border);
@@ -131,7 +131,7 @@
 
 .advisor-workspace-shell main {
   min-height: 70vh;
-  background: var(--nv-canvas);
+  background: var(--nv-environment);
   color: var(--nv-ink);
 }
 
@@ -325,6 +325,10 @@
   border-block: 2px solid var(--nv-ink);
 }
 
+.current-stage {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .current-action-controls,
 .collaboration-action {
   min-width: 0;
@@ -459,7 +463,7 @@
   }
 
   .workspace-context-facts {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .workspace-layout {
@@ -615,6 +619,12 @@
   grid-template-areas: "context work authority" "context evidence authority";
 }
 
+.advisor-product-frame-context-column {
+  grid-area: context;
+  min-width: 0;
+  background: var(--nv-context-surface);
+}
+
 .advisor-product-frame-context,
 .advisor-product-frame-work,
 .advisor-product-frame-evidence,
@@ -624,7 +634,6 @@
 }
 
 .advisor-product-frame-context {
-  grid-area: context;
   background: var(--nv-context-surface);
   color: var(--nv-primary-ink);
 }
@@ -723,6 +732,10 @@
   color: var(--nv-primary-ink);
 }
 
+.advisor-product-frame .workspace-context-facts {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .workspace-context-facts dt,
 .workspace-context-facts dd {
   margin: 0;
@@ -791,27 +804,30 @@
 }
 
 .advisor-product-frame .workflow-rail-list {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .advisor-product-frame .workflow-rail-item {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: .45rem;
+  grid-template-columns: minmax(0, 1fr);
+  gap: .25rem;
   min-width: 0;
   min-block-size: 3.5rem;
   align-items: center;
-  padding: .65rem .7rem;
+  padding: .55rem 0;
   border: 1px solid rgba(73, 108, 118, .2);
   border-bottom: 3px solid rgba(73, 108, 118, .2);
   background: transparent;
   color: var(--nv-secondary-ink);
+  writing-mode: horizontal-tb;
+  align-self: stretch;
+  width: 100%;
 }
 
 .advisor-product-frame .workflow-rail-item + .workflow-rail-item {
@@ -871,11 +887,22 @@
   }
 
   .advisor-product-frame .workflow-rail-list {
+    display: flex;
+    flex-direction: row;
+    gap: .5rem;
     overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: .35rem;
   }
 
   .advisor-product-frame .workflow-rail-item {
-    min-width: 8rem;
+    flex: 0 0 8.5rem;
+    min-width: 8.5rem;
+    min-block-size: 4rem;
+    width: auto;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .45rem;
+    padding: .65rem .7rem;
   }
 }
 
@@ -908,14 +935,19 @@
   }
 
   .advisor-product-frame .workflow-rail-list {
-    grid-template-columns: 1fr;
-    overflow: visible;
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .advisor-product-frame .workflow-rail-item {
-    min-width: 0;
+    flex-basis: 8.5rem;
+    min-width: 8.5rem;
     grid-template-columns: auto minmax(0, 1fr);
     gap: .25rem;
+    padding: .65rem .7rem;
+    width: auto;
   }
 
   .advisor-product-frame .workflow-rail-label {
@@ -925,15 +957,16 @@
 
 @media (max-width: 560px) {
   .workspace-authority-plane {
-    color: var(--nv-work-surface);
+    background: var(--nv-context-surface);
+    color: var(--nv-primary-ink);
   }
 
   .workspace-authority-plane .workspace-authority-label {
-    color: #9eb4bc;
+    color: #286d7e;
   }
 
   .workspace-authority-plane .workspace-authority-role,
   .workspace-authority-plane .workspace-authority-status {
-    color: var(--nv-work-surface);
+    color: var(--nv-primary-ink);
   }
 }

@@ -70,6 +70,42 @@ describe("reference-driven presentation contract", () => {
     expect(setItemSpy).not.toHaveBeenCalled();
   });
 
+  it("keeps every home-document id unique and resolves each aria-labelledby reference", () => {
+    const { container } = render(<PresentationProvider><Home /></PresentationProvider>);
+    const ids = [...container.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
+    expect(ids).toEqual([...new Set(ids)]);
+
+    for (const element of container.querySelectorAll<HTMLElement>("[aria-labelledby]")) {
+      for (const reference of element.getAttribute("aria-labelledby")!.split(/\s+/)) {
+        expect(container.ownerDocument.getElementById(reference)).toBeInTheDocument();
+      }
+    }
+  });
+
+  it("authors all three static story subjects in confirmed, route, outcome order", () => {
+    const { container } = render(<PresentationProvider><PortfolioStory /></PresentationProvider>);
+    expect([...container.querySelectorAll<HTMLElement>(".portfolio-story-static-subject .advisor-workspace-preview")]
+      .map((element) => element.dataset.previewScene))
+      .toEqual(["confirmed", "route", "outcome"]);
+  });
+
+  it("keeps the plain wordmark and candidate status public-neutral", () => {
+    const css = ["app/styles.css", "app/portfolio.css", "app/workspace.css"]
+      .map((file) => readFileSync(resolve(process.cwd(), file), "utf8"))
+      .join("\n");
+    const spec = readFileSync(resolve(process.cwd(), "../docs/superpowers/specs/2026-08-14-reference-driven-presentation.md"), "utf8");
+    const plan = readFileSync(resolve(process.cwd(), "../docs/superpowers/plans/2026-08-14-reference-driven-presentation.md"), "utf8");
+
+    expect(css).toContain("--font-latin");
+    expect(css).toMatch(/\.portfolio-brand[\s\S]*font-size:\s*20px[\s\S]*letter-spacing:\s*-\.035em/);
+    expect(css).toMatch(/\.workspace-brand[\s\S]*font-size:\s*20px[\s\S]*letter-spacing:\s*-\.035em/);
+    expect(css).not.toContain("brand-mark");
+    expect(spec).toContain("Status: `LOCAL CANDIDATE / IN REVIEW`");
+    expect(spec).toContain("Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`");
+    expect(plan).toContain("Status: `LOCAL CANDIDATE / IN REVIEW`");
+    expect(plan).toContain("Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`");
+  });
+
   it("keeps the three public scenes and persisted outcome values typed and bounded", () => {
     expect(PERSISTED_OUTCOME).toEqual({
       route: "australia",

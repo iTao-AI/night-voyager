@@ -82,6 +82,47 @@ async function expectPublicSurface(page: Page) {
   await expect(page.getByRole("main")).not.toContainText(rawPublicData);
 }
 
+async function expectTransitionSurfacesReadable(page: Page, selectors: string, state: string) {
+  const measurements = await page.locator(selectors).evaluateAll((elements) => {
+    const parse = (value: string) => {
+      const channels = (value.match(/[\d.]+/g) ?? []).map(Number);
+      const alpha = channels.length >= 4 ? channels[3] : 1;
+      return alpha >= 0.99 ? channels.slice(0, 3) : [];
+    };
+    const luminance = (rgb: number[]) => rgb.reduce((sum, channel, index) => {
+      const normalized = channel / 255;
+      const linear = normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index]!;
+    }, 0);
+    const contrast = (foreground: number[], background: number[]) => {
+      const light = Math.max(luminance(foreground), luminance(background));
+      const dark = Math.min(luminance(foreground), luminance(background));
+      return (light + 0.05) / (dark + 0.05);
+    };
+    return elements.map((element) => {
+      let surface: HTMLElement | null = element as HTMLElement;
+      let background = parse(getComputedStyle(surface).backgroundColor);
+      while (surface && background.length < 3) {
+        surface = surface.parentElement;
+        if (surface) background = parse(getComputedStyle(surface).backgroundColor);
+      }
+      const foreground = parse(getComputedStyle(element).color);
+      const box = element.getBoundingClientRect();
+      const frame = element.closest<HTMLElement>(".advisor-product-frame-grid")?.getBoundingClientRect();
+      return {
+        contrast: foreground.length === 3 && background.length === 3 ? contrast(foreground, background) : 0,
+        outsideFrame: frame ? box.left < frame.left - 1 || box.right > frame.right + 1 : false,
+      };
+    });
+  });
+  expect(measurements, state).not.toHaveLength(0);
+  expect(measurements.filter((measurement) => measurement.contrast < 4.5), state).toEqual([]);
+  expect(measurements.filter((measurement) => measurement.outsideFrame), state).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), state).toBe(true);
+}
+
 async function expectResponsiveSurface(page: Page, requiredVisible: readonly Locator[]) {
   for (const viewport of [
     { width: 1440, height: 900 },
@@ -177,10 +218,11 @@ async function expectPortfolioEntry(page: Page) {
         (nodes) =>
           nodes.filter((node) => {
             const box = node.getBoundingClientRect();
-            return (
-              box.left < -0.5 ||
-              box.right > document.documentElement.clientWidth + 0.5
+            const intentionalRailOverflow = node.closest(
+              ".advisor-product-frame .workflow-rail-list",
             );
+            if (intentionalRailOverflow) return false;
+            return box.left < -0.5 || box.right > document.documentElement.clientWidth + 0.5;
           }).length,
     );
     expect(clipped).toBe(0);
@@ -193,7 +235,29 @@ async function expectPortfolioEntry(page: Page) {
         await expect(route).toContainText(outcome);
       }
     } else {
-      await expect(page.locator("#route-atlas .portfolio-preview-timeline")).toBeVisible();
+      const staticSubjects = page.locator(
+        ".portfolio-story-static-subject:visible .advisor-workspace-preview",
+      );
+      await expect(staticSubjects).toHaveCount(3);
+      await expect(
+        page.locator(
+          "[data-story-scene='confirmed'] .portfolio-story-static-subject:visible .advisor-workspace-preview",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.locator(
+          "[data-story-scene='route'] .portfolio-story-static-subject:visible .advisor-workspace-preview",
+        ),
+      ).toBeVisible();
+      await expect(
+        page.locator(
+          "[data-story-scene='outcome'] .portfolio-story-static-subject:visible .advisor-workspace-preview",
+        ),
+      ).toBeVisible();
+      const staticSceneOrder = await page.locator(
+        ".portfolio-story-static-subject:visible .advisor-workspace-preview",
+      ).evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-preview-scene")));
+      expect(staticSceneOrder).toEqual(["confirmed", "route", "outcome"]);
     }
   }
 }
@@ -483,6 +547,11 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(confirmedRecord).toHaveAttribute("data-case-revision", "2");
   await expect(confirmedRecord.getByText(presentationCopy.factVersion, { exact: true })).toBeVisible();
   await expect(confirmedRecord.getByText(presentationCopy.caseRevision, { exact: true })).toBeVisible();
+  await expectTransitionSurfacesReadable(
+    page,
+    ".message-list li, [data-confirmed-record] .collaboration-facts > div",
+    "confirmed fact transition",
+  );
   await page.reload();
   await expect(page.getByRole("heading", { name: presentationCopy.replan })).toBeFocused();
   await expectResponsiveSurface(page, [
@@ -591,6 +660,11 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     await captureFactToPlanApprovalDiagnostic(page, beforeReload.caseId, beforeReload.taskId);
     throw error;
   }
+  await expectTransitionSurfacesReadable(
+    page,
+    ".advisor-ledger .table-wrap table, .advisor-ledger .current-stage",
+    "advisor review transition",
+  );
   const technicalEvidence = page.locator("[data-frame-slot='technical']");
   await technicalEvidence.locator(":scope > summary").click();
   await expect(technicalEvidence.getByText(presentationCopy.pinMatched)).toBeVisible();
@@ -650,6 +724,11 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.getByRole("button", { name: presentationCopy.continueDecision }).click();
   await expect(page.getByRole("heading", { name: presentationCopy.receipt })).toBeVisible();
   await expect(page.getByRole("heading", { name: presentationCopy.timeline })).toBeVisible();
+  await expectTransitionSurfacesReadable(
+    page,
+    "[data-persisted-result] .decision-requirements > div, [data-persisted-result] .timeline",
+    "persisted receipt transition",
+  );
   await page.reload();
   await expect(page.getByRole("heading", { name: presentationCopy.receipt })).toBeVisible();
   await expectResponsiveSurface(page, [

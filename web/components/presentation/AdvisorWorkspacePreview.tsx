@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useId } from "react";
 
 import { usePresentation } from "../../lib/presentation/context";
 import { presentCode } from "../../lib/presentation/codes";
@@ -26,6 +27,7 @@ const GAP_COPY: Record<Exclude<PortfolioPreviewGapCode, null>, Parameters<Return
 
 export function AdvisorWorkspacePreview({ scene = "route" }: AdvisorWorkspacePreviewProps) {
   const { copy, locale } = usePresentation();
+  const currentWorkTitleId = `portfolio-preview-current-work-title-${useId().replaceAll(":", "")}`;
   const budget = formatCnyRange(
     locale,
     PORTFOLIO_PREVIEW.budget.preferredMinor,
@@ -100,8 +102,8 @@ export function AdvisorWorkspacePreview({ scene = "route" }: AdvisorWorkspacePre
               <h2>{title}</h2>
               <p className="workspace-status">{status}</p>
             </div>
-            <section className="workspace-current-work" aria-labelledby="portfolio-preview-current-work-title">
-              <h3 id="portfolio-preview-current-work-title">{copy("workspaceCurrentWork")}</h3>
+            <section className="workspace-current-work" aria-labelledby={currentWorkTitleId}>
+              <h3 id={currentWorkTitleId}>{copy("workspaceCurrentWork")}</h3>
               {renderCurrentWork(scene, copy, locale, budget)}
             </section>
           </div>

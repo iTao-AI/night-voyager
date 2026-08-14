@@ -34,13 +34,12 @@ export function PortfolioStory() {
       const canObserve = typeof window.IntersectionObserver === "function";
       const nextMode: "desktop" | "static" = desktop && !reducedMotion && canObserve ? "desktop" : "static";
       if (frameMode === nextMode) {
-        if (nextMode === "static") setScene(reducedMotion ? "outcome" : "route");
         return;
       }
       frameMode = nextMode;
 
       if (nextMode === "static") {
-        setScene(reducedMotion ? "outcome" : "route");
+        setScene("route");
         return;
       }
 
@@ -116,6 +115,9 @@ function StoryChapter({ scene, title, body }: { scene: ObservedScene; title: str
       <div>
         <h3>{title}</h3>
         <p>{body}</p>
+      </div>
+      <div className="portfolio-story-static-subject" aria-label={title}>
+        <AdvisorWorkspacePreview scene={scene} />
       </div>
     </article>
   );

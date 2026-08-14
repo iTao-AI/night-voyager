@@ -307,7 +307,7 @@ th {
 .message-list li {
   padding: 1.15rem;
   border-top: 2px solid var(--nv-attention);
-  background: var(--nv-canvas);
+  background: var(--nv-surface);
 }
 
 .message-list li + li {
@@ -367,7 +367,7 @@ th {
 .inspector-grid div {
   min-width: 0;
   padding: 1rem;
-  background: var(--nv-canvas);
+  background: var(--nv-surface);
 }
 
 .collaboration-facts dt,

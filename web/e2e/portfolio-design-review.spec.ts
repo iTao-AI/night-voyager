@@ -127,6 +127,147 @@ test("keeps the coded route preview readable and ordered at the review widths", 
   }
 });
 
+test("keeps the product frame at 2/7/3 on desktop and uses an authored static sequence on reflow", async ({ page }) => {
+  for (const viewport of [
+    { width: 1440, height: 1000 },
+    { width: 1280, height: 1000 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/");
+    const geometry = await page.locator(".portfolio-hero-product .advisor-product-frame").evaluate((frame) => {
+      const grid = frame.querySelector<HTMLElement>(".advisor-product-frame-grid")!;
+      const context = frame.querySelector<HTMLElement>("[data-frame-slot='context']")!;
+      const work = frame.querySelector<HTMLElement>("[data-frame-slot='work']")!;
+      const authority = frame.querySelector<HTMLElement>("[data-frame-slot='authority']")!;
+      const workflow = frame.querySelector<HTMLElement>("[data-frame-slot='workflow']")!;
+      const rect = (element: HTMLElement) => {
+        const box = element.getBoundingClientRect();
+        return { left: box.left, right: box.right, top: box.top, bottom: box.bottom, width: box.width, height: box.height };
+      };
+      const authorityDescendants = [...authority.querySelectorAll<HTMLElement>("*")]
+        .filter((element) => getComputedStyle(element).display !== "none")
+        .map(rect)
+        .filter((box) => box.width > 0 && box.height > 0);
+      const workflowDescendants = [...workflow.querySelectorAll<HTMLElement>("*")]
+        .filter((element) => getComputedStyle(element).display !== "none")
+        .map(rect)
+        .filter((box) => box.width > 0 && box.height > 0);
+      const contextDescendants = [...context.querySelectorAll<HTMLElement>("*")]
+        .filter((element) => getComputedStyle(element).display !== "none")
+        .map(rect)
+        .filter((box) => box.width > 0 && box.height > 0);
+      return {
+        context: rect(context),
+        contextDescendants,
+        grid: rect(grid),
+        authority: rect(authority),
+        authorityDescendants,
+        workflowDescendants,
+        work: rect(work),
+        workflow: rect(workflow),
+        workflowDirection: getComputedStyle(workflow.querySelector<HTMLElement>(".workflow-rail-list")!).flexDirection,
+        labelWritingMode: getComputedStyle(workflow.querySelector<HTMLElement>(".workflow-rail-label")!).writingMode,
+        labelWidth: workflow.querySelector<HTMLElement>(".workflow-rail-label")!.getBoundingClientRect().width,
+        labelOverflow: workflow.querySelector<HTMLElement>(".workflow-rail-label")!.scrollWidth > workflow.querySelector<HTMLElement>(".workflow-rail-label")!.clientWidth + 1,
+      };
+    });
+
+    expect(geometry.context.width / geometry.grid.width).toBeCloseTo(2 / 12, 2);
+    expect(geometry.work.width / geometry.grid.width).toBeCloseTo(7 / 12, 2);
+    expect(geometry.authority.width / geometry.grid.width).toBeCloseTo(3 / 12, 2);
+    expect(geometry.workflow.width).toBeLessThanOrEqual(geometry.context.width + 1);
+    expect(geometry.workflowDirection).toBe("column");
+    expect(geometry.labelWritingMode).toBe("horizontal-tb");
+    expect(geometry.labelWidth).toBeGreaterThanOrEqual(80);
+    expect(geometry.labelOverflow).toBe(false);
+    for (const box of geometry.workflowDescendants) {
+      expect(box.left).toBeGreaterThanOrEqual(geometry.context.left - 1);
+      expect(box.right).toBeLessThanOrEqual(geometry.context.right + 1);
+    }
+    for (const box of geometry.contextDescendants) {
+      expect(box.left).toBeGreaterThanOrEqual(geometry.context.left - 1);
+      expect(box.right).toBeLessThanOrEqual(geometry.context.right + 1);
+    }
+    for (const box of geometry.authorityDescendants) {
+      expect(box.left).toBeGreaterThanOrEqual(geometry.authority.left - 1);
+      expect(box.right).toBeLessThanOrEqual(geometry.authority.right + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  for (const width of [768, 390, 320]) {
+    await page.setViewportSize({ width, height: width >= 768 ? 1000 : 844 });
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await page.goto("/");
+    const staticSubjects = page.locator(".portfolio-story-static-subject:visible .advisor-workspace-preview");
+    await expect(staticSubjects).toHaveCount(3);
+    await expect(staticSubjects.nth(0)).toHaveAttribute("data-preview-scene", "confirmed");
+    await expect(staticSubjects.nth(1)).toHaveAttribute("data-preview-scene", "route");
+    await expect(staticSubjects.nth(2)).toHaveAttribute("data-preview-scene", "outcome");
+    await expect(page.locator(".portfolio-story-frame:visible")).toHaveCount(0);
+    const reflow = await page.locator(".portfolio-hero-product .advisor-product-frame").evaluate((frame) => {
+      const topBand = frame.querySelector<HTMLElement>(".workspace-top-band-grid")!;
+      const rail = frame.querySelector<HTMLElement>(".advisor-product-frame-workflow .workflow-rail-list")!;
+      const items = [...rail.querySelectorAll<HTMLElement>(":scope > li")];
+      const boxes = items.map((item) => item.getBoundingClientRect());
+      return {
+        topBandColumns: new Set([...topBand.children].map((child) => Math.round(child.getBoundingClientRect().left))).size,
+        railWidth: rail.getBoundingClientRect().width,
+        railScrollWidth: rail.scrollWidth,
+        railDirection: getComputedStyle(rail).flexDirection,
+        itemHeights: boxes.map((box) => box.height),
+        itemTops: boxes.map((box) => Math.round(box.top)),
+      };
+    });
+    expect(reflow.topBandColumns).toBe(2);
+    expect(reflow.railDirection).toBe("row");
+    expect(new Set(reflow.itemTops).size).toBe(1);
+    expect(reflow.itemHeights.every((height) => height >= 64)).toBe(true);
+    if (width <= 560) expect(reflow.railScrollWidth).toBeGreaterThan(reflow.railWidth);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.locator(".portfolio-story-static-subject:visible .advisor-workspace-preview")).toHaveCount(3);
+  await expect(page.locator(".portfolio-story-frame:visible")).toHaveCount(0);
+  expect(await page.locator(".portfolio-story-frame, .portfolio-story-chapter, .portfolio-product-preview").evaluateAll((elements) =>
+    elements.filter((element) => {
+      const style = getComputedStyle(element);
+      return style.position === "sticky" || style.transform !== "none";
+    }).length,
+  )).toBe(0);
+});
+
+test("uses one plain 20px wordmark without a glyph across all four routes", async ({ page }) => {
+  for (const route of ["/", "/demo/collaboration", "/demo", "/demo/plan"]) {
+    await page.goto(route);
+    const wordmark = page.locator(".portfolio-brand, .workspace-brand");
+    await expect(wordmark).toHaveCount(1);
+    await expect(wordmark).toHaveText("Night Voyager");
+    await expect(wordmark.locator("svg, img, .portfolio-brand-mark, .workspace-brand-mark")).toHaveCount(0);
+    await expect.poll(() => wordmark.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return `${style.fontSize}|${style.letterSpacing}|${style.fontFamily}`;
+    })).toMatch(/^20px\|-0\.7px\|.*Avenir Next/i);
+  }
+});
+
+test("keeps every home id unique and every labelled-by reference resolvable in Chromium", async ({ page }) => {
+  await page.goto("/");
+  const report = await page.evaluate(() => {
+    const ids = [...document.querySelectorAll<HTMLElement>("[id]")].map((element) => element.id);
+    const unresolved = [...document.querySelectorAll<HTMLElement>("[aria-labelledby]")].flatMap((element) =>
+      element.getAttribute("aria-labelledby")!.split(/\s+/).filter((reference) => !document.getElementById(reference)),
+    );
+    return { duplicateIds: ids.filter((id, index) => ids.indexOf(id) !== index), unresolved };
+  });
+  expect(report.duplicateIds).toEqual([]);
+  expect(report.unresolved).toEqual([]);
+});
+
 test("keeps the English route preview truthful without runtime image dependencies", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");

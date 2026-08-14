@@ -58,7 +58,6 @@ export function AdvisorWorkspaceShell({
       <header className="workspace-header">
         <div className="workspace-header-inner">
           <Link className="workspace-brand" href="/">
-            <span className="workspace-brand-mark" aria-hidden="true"><span /></span>
             <span>{copy("productName")}</span>
           </Link>
           <p className="workspace-category">{copy("workspaceCategory")}</p>
