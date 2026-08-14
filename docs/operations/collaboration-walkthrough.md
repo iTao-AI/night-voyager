@@ -12,6 +12,8 @@ exact `en` at `night-voyager:presentation-locale:v1`. Locale is presentation-onl
 cannot alter the journey envelope, authority reads, idempotency, role rotation,
 navigation, task count, or EventSource count/URL.
 
+The current presentation authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The shared frame and five-stage rail are display-only; the route retains existing business and server authority.
+
 ![Confirmed family fact and Case revision](../assets/collaboration-confirmed-fact.png)
 
 ## Run the walkthrough
@@ -28,8 +30,8 @@ Open `http://127.0.0.1:3000/demo/collaboration` and follow the seven visible sta
    session and mint the assigned advisor session.
 4. Record the advisor confirmation. A message or proposal alone is never authority.
 5. Reload the confirmed fact and Case revision from PostgreSQL authority.
-6. At `需要重新规划` (`Re-plan required`), choose `继续进入受治理规划`
-   (`Continue to governed planning`). The route
+6. At `需要重新规划` (`Re-plan required`), choose `继续进入规划`
+   (`Continue to planning`). The route
    revalidates the current candidate, confirmed fact, Case revision, advisor ledger,
    and Skill inspector, then replaces the same-tab envelope and navigates once.
 7. On `/demo`, confirm the continued same Case and revision, then use the explicit

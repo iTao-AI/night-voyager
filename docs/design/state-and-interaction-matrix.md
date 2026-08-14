@@ -1,8 +1,8 @@
 # State and interaction matrix
 
 Presentation state is orthogonal to both lifecycles. The former family-heavy
-journey labels are historical presentation context; the implemented replacement is
-advisor-centered and locally verified. Exact `zh-CN` is the SSR,
+journey labels are historical presentation context; the current reference-driven
+replacement is advisor-centered and locally verified. Exact `zh-CN` is the SSR,
 missing, invalid, and storage-failure default; exact `en` is explicitly selectable.
 Switching writes only `night-voyager:presentation-locale:v1` and leaves lifecycle
 state, requests, idempotency, journey storage, EventSource, and navigation unchanged.
@@ -107,9 +107,9 @@ Every accepted transition returns focus to `Current action` and announces throug
 one polite live region. The blocked advisor surface exposes only reassessment;
 it never retains family attestation controls.
 
-The implemented matrix was verified with the full Vitest suite (`38` files,
-`422` tests), frontend lint, typecheck, production build, architecture and
-documentation governance tests, and the local real-Chromium presentation audit.
-The browser audit passed `71/71` across both locales, `1440`, `1024`, `768`, `390`,
-and `320` CSS pixels, reduced motion, 200% zoom, keyboard normal/blocked paths,
-and the same-Case versus separately seeded execution boundary.
+The implemented matrix was verified with the full Vitest suite, frontend lint,
+typecheck, production build, architecture and documentation governance tests, and
+the local real-Chromium presentation audit. The browser audit passed `103/103`
+across both locales, `1440`, `1280`, `1024`, `768`, `390`, and `320` CSS pixels,
+reduced motion, 200% zoom, material fallback, keyboard normal/blocked paths, and
+the same-Case versus separately seeded execution boundary.

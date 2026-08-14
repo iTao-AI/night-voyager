@@ -110,7 +110,7 @@ def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> 
         "--nv-work-surface",
         "--nv-action",
         "--nv-intervention",
-        "[data-product-frame]",
+        ".advisor-product-frame",
         ".advisor-portfolio-shell",
         ".advisor-workspace-shell",
         ".workflow-rail",
@@ -274,8 +274,8 @@ def test_browser_presentation_contract_is_advisor_first_and_keeps_execution_boun
     )
     source = PRESENTATION_AUDIT.read_text(encoding="utf-8")
 
-    assert "AI collaboration workspace for study-abroad advisors" in bootstrap
-    assert "留学顾问的 AI 协作工作台" in bootstrap
+    assert "An AI collaboration platform built for study-abroad advisors" in bootstrap
+    assert "为留学顾问打造的 AI 协作平台" in bootstrap
     assert "APPROVED_PUBLIC_EVIDENCE_FILENAMES" in source
     for filename in APPROVED_PUBLIC_EVIDENCE_FILENAMES:
         assert filename in source

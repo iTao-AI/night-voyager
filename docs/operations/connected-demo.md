@@ -6,6 +6,11 @@ proves advisor review followed by client confirmation; its connected same-Case p
 ends at the receipt and TimelinePlan. It is not production tenancy, live
 institutional coverage, or admissions advice.
 
+The current shared presentation uses the reference-driven Midnight Editorial Advisor
+Workspace: a dark product frame, warm decision surface, five-stage display rail,
+authority plane, and default-closed technical evidence. These are presentation-only
+surfaces over the existing server-owned projections.
+
 The shared presentation shell server-renders exact `zh-CN`. The header's labelled
 `中文` / `English` control can persist exact `en` at
 `night-voyager:presentation-locale:v1`; invalid or unavailable storage falls back to
@@ -132,13 +137,12 @@ dedicated asset is updated only with `UPDATE_PLANNING_REVISION_SCREENSHOT=1`;
 `UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the current development captures;
 these screenshots are review evidence for the unreleased presentation candidate.
 
-Local Task 4 evidence used the exact host Playwright browser against Compose-served
-PostgreSQL/API/worker state because the local containerized browser image could not
-complete external Docker/apt transport. That controlled provider-free hybrid was
-GREEN for both locales and the database verifier, but it is not formal Compose GREEN.
-After publication, the exact-head hosted `python`, `frontend`, and `compose` checks
-remain mandatory, and the hosted `compose` check must run the normal containerized
-path successfully.
+The current task-scoped Compose proof uses the containerized browser against the
+Compose-served PostgreSQL/API/worker state. It passed both locales, the presentation
+matrix, same-Case persistence, independent Happy/Blocked execution, stale-tab and
+restart recovery, and database verification before removing its task-owned resources.
+Earlier host-browser fallback notes are historical evidence and do not replace the
+current containerized proof.
 
 The proof exercises PostgreSQL roles/RLS, identity cookies and fixed Origin,
 worker/SSE replay, advisor review, real role rotation, family decision,

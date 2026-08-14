@@ -1134,10 +1134,10 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
             "v0.1.5",
         ):
             assert token in current_readme
-    assert "AI collaboration workspace for study-abroad advisors" in readme
+    assert "AI collaboration platform for study-abroad advisors" in readme
     assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
     assert "independent deterministic execution scenario" in readme
-    assert "留学顾问的 AI 协作工作台" in readme_cn
+    assert "面向留学顾问的 AI 协作平台" in readme_cn
     assert "同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束" in readme_cn
     assert "独立播种" in readme_cn
 
@@ -1277,7 +1277,7 @@ def test_fact_to_plan_walkthrough_documents_same_case_explicit_authority() -> No
         "skill_reference": " ".join(skill_reference.split()),
     }
 
-    assert "Continue to governed planning" in normalized["collaboration"]
+    assert "Continue to planning" in normalized["collaboration"]
     assert "same Case" in normalized["collaboration"]
     assert "zero task" in normalized["collaboration"]
     assert "continued Case" in normalized["connected"]

@@ -320,15 +320,15 @@ def test_current_public_navigation_explains_the_advisor_workspace_and_two_proof_
     readme_cn = Path("README_CN.md").read_text(encoding="utf-8")
     docs_index = Path("docs/README.md").read_text(encoding="utf-8")
 
-    assert "AI collaboration workspace for study-abroad advisors" in readme
+    assert "AI collaboration platform for study-abroad advisors" in readme
     assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
     assert "independent deterministic execution scenario" in readme
     assert "Screenshots are review evidence, not functional authority" in readme
-    assert "留学顾问的 AI 协作工作台" in readme_cn
+    assert "面向留学顾问的 AI 协作平台" in readme_cn
     assert "同一 Case" in readme_cn
     assert "独立播种" in readme_cn
     assert "截图是评审证据，不是功能权威" in readme_cn
-    assert "AI collaboration workspace for study-abroad advisors" in docs_index
+    assert "reference-driven AI collaboration platform for study-abroad advisors" in docs_index
     assert "independent deterministic execution scenario" in docs_index
 
 
@@ -578,7 +578,7 @@ def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> Non
 
     assert '"fact-to-plan.spec.ts"' in config
     assert "FACT_TO_PLAN_PROOF_FILE" in browser
-    assert "Continue to governed planning" in browser
+    assert "Continue to planning" in browser
     assert "events?after=0" in browser
     assert verifier.is_file()
     assert "verify_fact_to_plan_flow.py" in script
@@ -623,10 +623,10 @@ def test_fact_to_plan_root_proof_locks_the_high_end_portfolio_contract() -> None
     bootstrap = Path("web/e2e/bootstrap.spec.ts").read_text(encoding="utf-8")
 
     for token in (
-        "Turn scattered consultations into a client plan you can move forward",
-        "把零散咨询，整理成可以推进的留学方案",
+        "Move complex study-abroad planning forward with clarity.",
+        "让复杂的留学规划，清晰地向前。",
         '"/demo/collaboration"',
-        '"#route-atlas .portfolio-section-heading > p:last-child"',
+        '"#route-atlas .portfolio-preview-route-description"',
         "{ width: 1440, height: 1000 }",
         "{ width: 768, height: 1024 }",
         "{ width: 390, height: 844 }",
@@ -687,8 +687,11 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
         'timeline: "Action timeline"',
         'timeline: "行动时间线"',
         'page.getByRole("heading", { name: presentationCopy.replan })',
-        'page.getByText("Fact version 1")',
-        'page.getByText("Case revision 2")',
+        'page.locator("[data-confirmed-record]")',
+        'toHaveAttribute("data-fact-version", "1")',
+        'toHaveAttribute("data-case-revision", "2")',
+        'getByText(presentationCopy.factVersion, { exact: true })',
+        'getByText(presentationCopy.caseRevision, { exact: true })',
         'page.getByRole("heading", { name: presentationCopy.receipt })',
         'page.getByRole("heading", { name: presentationCopy.timeline })',
     ):

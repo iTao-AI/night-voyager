@@ -2,14 +2,16 @@
 
 ## Product context
 
-Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The advisor-centered route-analysis and downstream client-confirmation surface at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only. The previous cosmic root and family-heavy route presentation are historical presentation context; the implemented advisor-centered workspace redesign is presentation-only and locally verified on the local synthetic candidate. Stable release `v0.1.5` remains unchanged, with no release, deployment, provider, or production-use claim.
+Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The advisor-centered route-analysis and downstream client-confirmation surface at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only. The previous cosmic root and family-heavy route presentation are historical presentation context; the current reference-driven advisor workspace is presentation-only and locally verified on the local synthetic candidate. Stable release `v0.1.5` remains unchanged, with no release, deployment, provider, or production-use claim.
+
+The current visual authority is the [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md). The public root projects `¥300,000–400,000`; the persisted connected outcome remains `¥305,500–400,000`; `/demo/plan` is an independently seeded scenario.
 
 - **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, route-evidence secondary action to `#route-atlas`)
 - **Complete governed walkthrough:** `/demo/collaboration` -> read-only same-Case handoff -> explicit task action on `/demo`
 - **Advisor route-analysis and client-confirmation surface:** `/demo`
 - **Governed plan-execution route:** `/demo/plan` (`happy` by default; exact
   `blocked` query scenario)
-- **Implemented presentation direction:** AI collaboration workspace for study-abroad advisors; locally verified
+- **Implemented presentation direction:** reference-driven Midnight Editorial Advisor Workspace for study-abroad advisors; locally verified
 - **Audience:** study-abroad organizations and advisor teams first; students and parents are client participants
 - **Page boundary:** root presentation has zero product-side network/session/task effects; demo routes use local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
@@ -20,10 +22,17 @@ The previous visual layers are historical presentation context:
 
 1. **Historical root `/` — Virtual Night Voyage:** deep navy, ivory, and champagne framed a cinematic voyage backdrop, route atlas, and student-first decision trajectory. Its generated AVIF/WebP runtime assets are not the approved direction.
 2. **Historical demo routes — warm-paper ledger:** `/demo`,
-   `/demo/collaboration`, and `/demo/plan` retain the existing advisor ledger,
-   family decision documents, restrained rules, and semantic status accents.
+   `/demo/collaboration`, and `/demo/plan` retain the existing warm reading
+   surfaces, advisor ledger, family decision documents, restrained rules, and
+   semantic status accents.
 
-The implemented presentation direction is **Midnight Editorial Advisor Workspace**: one dark product frame, warm decision surface, advisor-first hierarchy, closed five-stage display projection, and progressive technical disclosure. It is locally verified in the current implementation. The product must feel calm, accountable, and readable; it should not resemble a generic chat product, KPI dashboard, or infrastructure control tower.
+The current direction is the **Midnight Editorial Advisor Workspace**: one dark
+product frame, warm decision surface, advisor-first hierarchy, a closed
+five-stage display projection, and progressive technical disclosure. It is
+implemented across `/`, `/demo/collaboration`, `/demo`, and `/demo/plan` without
+changing their server-owned authority.
+
+The product must feel calm, accountable, and readable; it should not resemble a generic chat product, KPI dashboard, or infrastructure control tower.
 
 ## Color tokens
 
@@ -60,7 +69,7 @@ No remote font or font package is required.
 
 ## Responsive layout
 
-- **Approved audit widths:** `1440`, `1024`, `768`, `390`, and `320` CSS pixels in both `zh-CN` and `en`, with reduced motion and 200% zoom.
+- **Approved audit widths:** `1440`, `1280`, `1024`, `768`, `390`, and `320` CSS pixels in both `zh-CN` and `en`, with reduced motion, 200% zoom, material fallback, and no dense-data blur.
 - **Historical root desktop/mobile:** the former voyage composition and crop are retained only as historical evidence; no current claim depends on them.
 - **Desktop (`>=1280px`):** advisor ledger uses a main comparison surface with a narrow decision rail. Family frames remain linear and editorial.
 - **Intermediate (`1024–1279px`):** compact horizontal workflow strip with a two-column workspace and semantic comparison preserved.
@@ -101,8 +110,7 @@ family-decision action. This remains controlled provider-free evidence rather th
 strict live acceptance.
 
 The v0.1.5 local synthetic portfolio release adds a governed plan-execution
-surface using the same
-warm-paper identity with a stricter action hierarchy: current milestone, state,
+surface using the same dark product frame and warm decision surface with a stricter action hierarchy: current milestone, state,
 due date, accountable role, risk, and next handoff precede the one available
 action. The immutable four-step plan remains visible, technical activity is a
 secondary disclosure, accepted transitions move focus to the current-action
@@ -153,3 +161,4 @@ No KPI strip, match percentage, three colored country cards, generic control-tow
 | 2026-08-09 | Add a shared internal-demo decision journey | Helps a first-time visitor understand role, result, boundary, action, route trade-offs, and next steps before opening existing technical evidence; it changes no business authority or route contract. |
 | 2026-08-09 | Approve the advisor-centered workspace redesign | Replaces the historical cosmic root/family-heavy presentation with one advisor-first shell and five-stage display projection; this row records the approved direction before the subsequent implementation and verification record. |
 | 2026-08-10 | Verify the advisor-centered workspace redesign | Local deterministic Compose and real-Chromium evidence verify the implemented four-route, bilingual presentation matrix and the nine declared review captures; domain authority, stable release `v0.1.5`, and non-production boundaries remain unchanged. |
+| 2026-08-14 | Implement and verify the reference-driven presentation | The shared frame, root story, three demo routes, six-width browser matrix, material fallback, bilingual Compose proof, and nine approved captures are locally verified; the change remains presentation-only and release-neutral. |

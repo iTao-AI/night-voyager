@@ -1,9 +1,11 @@
 # Connected demo storyboard
 
-The implemented storyboard presents Night Voyager as an AI collaboration workspace
+The implemented storyboard presents Night Voyager as a reference-driven AI collaboration platform
 for study-abroad advisors. The former cosmic root and family-heavy warm-paper
 surface are historical presentation context. The Midnight Editorial Advisor
 Workspace is implemented and locally verified on the local synthetic candidate.
+
+The current authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md).
 
 The complete governed walkthrough begins at `/demo/collaboration`, confirms a
 synthetic client fact under explicit human authority, and continues the same Case
@@ -19,10 +21,10 @@ The current story is introduced by the [advisor-centered portfolio entry](../ass
 ## Local verification
 
 The implemented candidate was verified through the repository's local synthetic
-Compose and real-Chromium proof. The presentation audit passed `71/71` across `/`,
-`/demo/collaboration`, `/demo`, and `/demo/plan`, both locales, `1440`, `1024`,
-`768`, `390`, and `320` CSS pixels, reduced motion, 200% zoom, keyboard paths,
-normal paths, and blocked paths. The complete Compose proof also covered the
+Compose and real-Chromium proof. The presentation audit passed `103/103` across `/`,
+`/demo/collaboration`, `/demo`, and `/demo/plan`, both locales, `1440`, `1280`,
+`1024`, `768`, `390`, and `320` CSS pixels, reduced motion, 200% zoom, material
+fallback, keyboard paths, normal paths, and blocked paths. The complete Compose proof also covered the
 connected collaboration-to-receipt flow and the independently seeded execution
 Happy, Blocked, recovery, stale-session, and session-change paths. Screenshots are
 review evidence from coded product surfaces; semantic assertions remain the
@@ -93,7 +95,7 @@ then continues the same Case into that existing route-analysis and client-confir
    assigned advisor; no client-only selector exists.
 4. **Confirmed fact** — advisor confirmation publishes fact version 1.
 5. **Case revision** — authoritative reload shows Case revision 2 and provenance.
-6. **Re-plan required** — `Continue to governed planning` performs read-only
+6. **Re-plan required** — `Continue to planning` performs read-only
    authority validation, one envelope replacement, and one navigation with zero
    task mutations.
 7. **Governed planning** — `/demo` restores the same Case and revision; only its
