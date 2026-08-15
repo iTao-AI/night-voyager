@@ -120,7 +120,7 @@ describe("advisor showcase contract", () => {
       "智能助手可以分析并提出建议，但承担责任的决定和行动仍由顾问与客户负责，不能由模型代替。",
     );
     expect(readmeCn).toContain(
-      "当前提变化或执行受阻时，保留版本、回执和恢复入口，不沿用过期状态继续执行。",
+      "当方案前提发生变化或执行受阻时，保留版本、回执和恢复入口，不沿用过期状态继续执行。",
     );
     expect(readmeCn).toContain("## 顾问工作台概览");
     expect(readmeCn).toContain("## 三个产品判断");
@@ -134,6 +134,9 @@ describe("advisor showcase contract", () => {
     expect(readmeCn).toContain("来源版本、页面状态、图像尺寸和 SHA-256");
     expect(readmeCn).toContain("标准 390x844 视口");
     expect(readmeCn).toContain("决策回执与行动时间线");
+    expect(readmeCn).toContain(
+      "阻塞帧展示一个单独设置的确定性执行场景：当方案前提或预算发生变化，导致检查点受阻时，工作流回到顾问重新评估或安全停止。",
+    );
   });
 
   it("keeps internal execution language below the detailed-proof boundary", () => {
@@ -193,6 +196,8 @@ describe("advisor showcase contract", () => {
       "viewport",
       "locale",
       "timelineplan",
+      "独立播种",
+      "当前提",
     ]) {
       expect(readmeCn).not.toContain(phrase);
     }
