@@ -1,0 +1,48 @@
+{
+  "schema_version": "night-voyager.advisor-showcase.v1",
+  "source": {
+    "commit": "01de938af2faa06f129be581154cb61f51eed5e4",
+    "tree": "68f326c823a4227643e7debced8aa37cf9a2cac7",
+    "capture_helper": "web/e2e/showcase.spec.ts",
+    "capture_method": "fresh deterministic core services plus explicit Chromium capture"
+  },
+  "synthetic_demo_disclosure": "All four frames are real Chromium captures of the local synthetic, provider-free demo. They are review evidence, not production or admissions-outcome proof.",
+  "assets": {
+    "advisor-workspace-overview.png": {
+      "path": "docs/assets/advisor-workspace-overview.png",
+      "route": "/",
+      "state": "route_analysis_preview",
+      "proof_segment": "connected_same_case",
+      "locale": "zh-CN",
+      "viewport": { "width": 1600, "height": 1000 },
+      "sha256": "5c59f4e082e814f0c3476ac211ff36d85ac094fed40c29aa78662958e6390ec4"
+    },
+    "advisor-normal-path.png": {
+      "path": "docs/assets/advisor-normal-path.png",
+      "route": "/demo",
+      "state": "persisted_receipt_timeline",
+      "proof_segment": "connected_same_case",
+      "locale": "zh-CN",
+      "viewport": { "width": 1600, "height": 1000 },
+      "sha256": "8c1eb874cbce3cf43d9cfd3a4a65f0217bb9929ee95135860ad31025bcfba319"
+    },
+    "advisor-blocked-recovery.png": {
+      "path": "docs/assets/advisor-blocked-recovery.png",
+      "route": "/demo/plan?scenario=blocked",
+      "state": "blocked_reassessment",
+      "proof_segment": "independent_execution_scenario",
+      "locale": "zh-CN",
+      "viewport": { "width": 1600, "height": 1000 },
+      "sha256": "e66c65f4b2b16e801d64034c794ec0b7b9f5415467ca8cbedf154b1435d0793c"
+    },
+    "advisor-workspace-mobile.png": {
+      "path": "docs/assets/advisor-workspace-mobile.png",
+      "route": "/",
+      "state": "route_analysis_preview",
+      "proof_segment": "connected_same_case",
+      "locale": "zh-CN",
+      "viewport": { "width": 390, "height": 844 },
+      "sha256": "e842b90b8f451d327ecf1b59ccc3855f5d5024008fa78224f5d329ea94c4bc89"
+    }
+  }
+}

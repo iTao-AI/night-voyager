@@ -1,10 +1,61 @@
 # Night Voyager
 
-Night Voyager 是面向留学顾问的 AI 协作平台。它把本地合成咨询整理为可核对的客户信息、方案研判、顾问判断、客户确认以及持久化 receipt 与 TimelinePlan，同时保留既有 authority 边界。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell，属于静态（static）、local synthetic、provider-free presentation evidence，仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
+Night Voyager 帮助留学顾问把已确认事实整理成从路线比较到客户决定的清晰、可复核路径。
 
-当前 presentation authority 是 [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) 及其 [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md)。它们定义当前构图、responsive behavior、same-Case projection、独立执行场景与 bounded material treatment，不改变产品 authority。
+## 顾问工作台概览
 
-完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。四个 route 共享 advisor workspace shell。
+![顾问工作台概览](docs/assets/advisor-workspace-overview.png)
+
+这张真实 Chromium 截图展示当前基于本地合成数据的顾问工作台。它是该演示的评审证据，不代表生产环境或录取结果。[展示清单](docs/evidence/advisor-showcase-manifest.json) 记录四张标准展示图的来源版本、页面状态、图像尺寸和 SHA-256。
+
+## 目标用户与真实问题
+
+Night Voyager 面向留学顾问团队，支持他们与参与确认的学生和家长共同比较日本、马来西亚和澳大利亚。真实问题不是再生成一条无法追溯的推荐，而是在事实、偏好、时间或预算变化时，让所有人都能看清哪些内容已确认、考虑过哪些路线、谁需要作出决定，以及如何安全恢复。
+
+## 五阶段工作流
+
+1. **确认事实：** 将已确认事实与对话草稿、待核实假设分开。
+2. **比较路线：** 后续规划只使用明确确认的事实，按个案约束比较具备条件的路线。
+3. **顾问审核：** 由顾问批准、修改或停止拟议方案。
+4. **客户确认：** 保留客户的责任和明确选择。
+5. **记录结果：** 保留可供后续查看的决策回执与行动时间线。
+
+## 正常路径与阻塞恢复
+
+![顾问正常路径](docs/assets/advisor-normal-path.png)
+
+正常帧展示同一咨询个案路径：从路线研判经过顾问审核和客户确认，最终形成持久化决策回执与行动时间线。
+
+![顾问阻塞恢复](docs/assets/advisor-blocked-recovery.png)
+
+阻塞帧展示一个单独设置的确定性执行场景：当方案前提或预算发生变化，导致检查点受阻时，工作流回到顾问重新评估或安全停止。它不表示前一咨询个案会延续到这个独立场景，也不代表生产结果。
+
+![移动端顾问工作台](docs/assets/advisor-workspace-mobile.png)
+
+移动帧展示同一个真实路线研判工作台在标准 390x844 视口下的呈现。四张展示图对应概览、正常路径、阻塞恢复和移动端视图。
+
+## 三个产品判断
+
+- **事实先于规划：** 已确认事实与对话草稿分开保存；后续规划只使用明确确认的事实。
+- **建议不能替代责任：** 智能助手可以分析并提出建议，但承担责任的决定和行动仍由顾问与客户负责，不能由模型代替。
+- **变化时保留恢复入口：** 当方案前提发生变化或执行受阻时，保留版本、回执和恢复入口，不沿用过期状态继续执行。
+
+## 快速开始、架构与发布
+
+- **快速开始：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
+- **架构：** 阅读 [架构与里程碑历史](DESIGN.md) 与 [文档索引](docs/README.md)。
+- **发布：** [v0.1.5 发布说明](docs/releases/v0.1.5.md) 与 [v0.1.5 发布验证指南](docs/how-to/verify-v0.1.5-release.md) 说明当前发布基线；本展示层仅用于呈现，不改变发布状态。
+
+## 详细证明
+
+当前 runtime、contracts、authority boundaries 与 release evidence 继续保留在下方。历史视觉资产仍用于 proof 与 context，但不再作为 README 首层画廊。
+
+当前 development candidate 仍是面向留学顾问的 AI 协作平台。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell，属于静态（static）、local synthetic、provider-free presentation evidence，仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
+
+完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。截图是评审证据，不是功能权威；semantic assertions 才是 acceptance authority。
+
+<details>
+<summary>历史视觉证明截图</summary>
 
 ![Chinese-first Night Voyager 作品集入口](docs/assets/night-voyager-portfolio-entry.png)
 
@@ -16,12 +67,9 @@ Night Voyager 是面向留学顾问的 AI 协作平台。它把本地合成咨�
 
 ![Planning revision comparison 与 renewed review](docs/assets/night-voyager-planning-revision.png)
 
-Governed plan-execution development evidence（仅 synthetic review evidence）：
-[current action](docs/assets/plan-execution-current-action.png)、
-[advisor review](docs/assets/plan-execution-advisor-review.png)、
-[mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png) 与
-[mobile recovery](docs/assets/plan-execution-recovery-mobile.png)。Semantic
-assertions 才是 acceptance authority；截图是评审证据，不是功能权威。
+Governed plan-execution development evidence（仅 synthetic review evidence）：[current action](docs/assets/plan-execution-current-action.png)、[advisor review](docs/assets/plan-execution-advisor-review.png)、[mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png) 与 [mobile recovery](docs/assets/plan-execution-recovery-mobile.png)。Semantic assertions 才是 acceptance authority；截图是评审证据，不是功能权威。
+
+</details>
 
 ## 工程证据
 
