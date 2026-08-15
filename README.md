@@ -1,50 +1,50 @@
 # Night Voyager
 
-Night Voyager helps study-abroad advisors turn confirmed facts, route analysis, advisor review, and client confirmation into an evidence-grounded decision workflow with a persisted receipt and timeline.
+Night Voyager helps study-abroad advisors turn confirmed facts into a clear, reviewable path from route comparison to client decision.
 
 ## Advisor workspace overview
 
 ![Advisor workspace overview](docs/assets/advisor-workspace-overview.png)
 
-This real Chromium frame shows the current local synthetic, provider-free advisor workspace in a static route-analysis state. It is review evidence, not production or admissions-outcome proof. The [showcase manifest](docs/evidence/advisor-showcase-manifest.json) records the source commit/tree, route/state, viewport, locale, and SHA-256 for all canonical assets.
+This real Chromium frame shows the current local synthetic advisor workspace. It is review evidence for a self-contained demo, not production or admissions-outcome proof. The [showcase manifest](docs/evidence/advisor-showcase-manifest.json) records the source commit/tree, route/state, viewport, locale, and SHA-256 for all four canonical assets.
 
 ## Who it is for and the real problem
 
-For study-abroad advisors comparing Japan, Malaysia, and Australia with a student/client. The real problem is keeping facts, route reasoning, approval state, and the final decision inspectable when assumptions or budget change; generating another untraceable recommendation is not enough.
+Night Voyager is for study-abroad advisors comparing Japan, Malaysia, and Australia with a student and client. The real problem is keeping the decision path clear when facts, preferences, timing, or budget change: people need to see what was confirmed, what was considered, who must decide, and how to recover safely.
 
 ## Five-stage workflow
 
-1. **Confirm facts:** keep source-backed facts and assumptions explicit.
-2. **Analyze routes:** compare eligible routes against the confirmed constraints.
+1. **Confirm facts:** separate confirmed facts from dialogue drafts and assumptions.
+2. **Compare routes:** use only explicit facts to compare eligible routes against the case constraints.
 3. **Advisor review:** let the advisor approve, revise, or stop the proposed plan.
-4. **Client confirmation:** record the client’s explicit confirmation as a separate authority step.
-5. **Persist the outcome:** issue a receipt and TimelinePlan that can be inspected later.
+4. **Client confirmation:** keep the client’s responsibility and explicit choice visible.
+5. **Record the outcome:** preserve the decision as a receipt and TimelinePlan that can be reviewed later.
 
 ## Normal path and blocked recovery
 
 ![Advisor normal path](docs/assets/advisor-normal-path.png)
 
-The normal frame shows the connected same-Case path through advisor review and client confirmation to the persisted receipt and TimelinePlan.
+The normal frame shows the connected same-Case path from route analysis through advisor review and client confirmation to the persisted receipt and TimelinePlan.
 
 ![Advisor blocked recovery](docs/assets/advisor-blocked-recovery.png)
 
-The blocked frame is an independently seeded deterministic execution scenario: a premise or budget change blocks the checkpoint, and the workflow hands back to advisor reassessment or a safe stop. It does not imply a connected Case or a production outcome.
+The blocked frame shows an independently seeded deterministic execution scenario: a premise or budget change blocks the checkpoint, and the workflow returns to advisor reassessment or a safe stop. It does not imply a connected Case or a production outcome.
 
 ![Advisor workspace on mobile](docs/assets/advisor-workspace-mobile.png)
 
-The mobile frame is the same real route-analysis workspace at the canonical `390x844` viewport. All four frames are local synthetic, provider-free Chromium evidence.
+The mobile frame shows the same real route-analysis workspace at the canonical `390x844` viewport. The four frames cover the overview, normal, blocked, and mobile views of this showcase.
 
-## Three engineering judgments
+## Three product judgments
 
-- **Durable facts versus live events:** confirmed facts and the receipt/timeline are persisted records; progress and recovery events remain a separate live execution seam.
-- **Explicit execution and recovery:** each turn moves through step, model/tool result, and a deterministic stop or recovery boundary that can be inspected.
-- **Capabilities versus authority:** capability providers and consumers meet through explicit boundaries, while approval and sandbox constraints keep agent output untrusted until advisor/client authority is applied.
+- **Facts before planning:** Confirmed facts are kept separate from dialogue drafts; planning consumes only explicit facts.
+- **Recommendations do not replace responsibility:** The Agent analyzes and recommends, but responsibility-bearing decisions and actions remain with the advisor and client, not the model.
+- **Recover instead of continuing stale state:** When premises change or execution is blocked, preserve versions, receipts, and recovery entry points instead of continuing with stale state.
 
 ## Quickstart, architecture, and release
 
 - **Quickstart:** run `make help`, `make doctor`, `make demo`, and `make proof`; then open `http://127.0.0.1:3000/`.
 - **Architecture:** read the [architecture and milestone history](DESIGN.md) and the [documentation index](docs/README.md).
-- **Release:** the [v0.1.5 release notes](docs/releases/v0.1.5.md) and [release verification guide](docs/how-to/verify-v0.1.5-release.md) describe the current released local synthetic baseline; this showcase is presentation-only and release-neutral.
+- **Release:** the [v0.1.5 release notes](docs/releases/v0.1.5.md) and [release verification guide](docs/how-to/verify-v0.1.5-release.md) describe the current v0.1.5 baseline; this showcase is presentation-only and release-neutral.
 
 ## Detailed proof
 

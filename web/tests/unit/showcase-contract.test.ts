@@ -10,6 +10,16 @@ import {
 } from "../../lib/presentation/showcase";
 
 const MANIFEST_PATH = resolve(process.cwd(), "../docs/evidence/advisor-showcase-manifest.json");
+const README_PATH = resolve(process.cwd(), "../README.md");
+const README_CN_PATH = resolve(process.cwd(), "../README_CN.md");
+
+function readFirstLayer(path: string, boundary: string): string {
+  const readme = readFileSync(path, "utf8");
+  const boundaryIndex = readme.indexOf(boundary);
+
+  expect(boundaryIndex).toBeGreaterThan(0);
+  return readme.slice(0, boundaryIndex);
+}
 
 describe("advisor showcase contract", () => {
   it("freezes the four canonical real-state frames", () => {
@@ -86,6 +96,64 @@ describe("advisor showcase contract", () => {
       expect(asset.locale).toBe(SHOWCASE_ASSET_CONTRACT[name].locale);
       expect(asset.proof_segment).toBe(SHOWCASE_ASSET_CONTRACT[name].proofSegment);
       expect(asset.viewport).toEqual(SHOWCASE_ASSET_CONTRACT[name].viewport);
+    }
+  });
+
+  it("keeps the first layer anchored in the frozen product judgments", () => {
+    const readme = readFirstLayer(README_PATH, "\n## Detailed proof\n");
+    const readmeCn = readFirstLayer(README_CN_PATH, "\n## 详细证明\n");
+
+    expect(readme).toContain(
+      "Confirmed facts are kept separate from dialogue drafts; planning consumes only explicit facts.",
+    );
+    expect(readme).toContain(
+      "The Agent analyzes and recommends, but responsibility-bearing decisions and actions remain with the advisor and client, not the model.",
+    );
+    expect(readme).toContain(
+      "When premises change or execution is blocked, preserve versions, receipts, and recovery entry points instead of continuing with stale state.",
+    );
+
+    expect(readmeCn).toContain(
+      "已确认事实与对话草稿分开保存；后续规划只使用明确确认的事实。",
+    );
+    expect(readmeCn).toContain(
+      "智能助手可以分析并提出建议，但承担责任的决定和行动仍由顾问与客户负责，不能由模型代替。",
+    );
+    expect(readmeCn).toContain(
+      "当前提变化或执行受阻时，保留版本、回执和恢复入口，不沿用过期状态继续执行。",
+    );
+    expect(readmeCn).toContain("## 顾问工作台概览");
+    expect(readmeCn).toContain("## 三个产品判断");
+    expect(readmeCn).not.toContain("## Advisor workspace overview");
+  });
+
+  it("keeps internal execution language below the detailed-proof boundary", () => {
+    const readme = readFirstLayer(README_PATH, "\n## Detailed proof\n").toLowerCase();
+    const readmeCn = readFirstLayer(README_CN_PATH, "\n## 详细证明\n").toLowerCase();
+
+    for (const phrase of [
+      "durable facts versus live events",
+      "live execution seam",
+      "model/tool result",
+      "capability providers and consumers",
+      "approval and sandbox",
+      "agent output",
+      "each turn moves through step",
+    ]) {
+      expect(readme).not.toContain(phrase);
+    }
+
+    for (const phrase of [
+      "durable facts 与 live events",
+      "live execution seam",
+      "model/tool result",
+      "provider/consumer",
+      "approval 与 sandbox",
+      "agent output",
+      "capability 与 authority",
+      "每个 turn 经过 step",
+    ]) {
+      expect(readmeCn).not.toContain(phrase);
     }
   });
 });

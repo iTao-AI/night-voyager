@@ -1,50 +1,50 @@
 # Night Voyager
 
-Night Voyager 帮助留学顾问把已确认事实、路线研判、顾问审核和客户确认，组织成带有持久化 receipt 与 timeline 的 evidence-grounded 决策工作流。
+Night Voyager 帮助留学顾问把已确认事实整理成从路线比较到客户决定的清晰、可复核路径。
 
-## Advisor workspace overview
+## 顾问工作台概览
 
-![Advisor workspace overview](docs/assets/advisor-workspace-overview.png)
+![顾问工作台概览](docs/assets/advisor-workspace-overview.png)
 
-这张真实 Chromium 截图展示当前 local synthetic、provider-free 的 advisor workspace 静态路线研判状态。它是评审证据，不是 production 或 admissions-outcome proof。[Showcase manifest](docs/evidence/advisor-showcase-manifest.json) 记录了四张 canonical asset 的 source commit/tree、route/state、viewport、locale 与 SHA-256。
+这张真实 Chromium 截图展示当前基于本地合成数据的顾问工作台。它是该演示的评审证据，不代表生产环境或录取结果。[展示清单](docs/evidence/advisor-showcase-manifest.json) 记录四张标准展示图的 source commit/tree、route/state、viewport、locale 和 SHA-256。
 
 ## 目标用户与真实问题
 
-目标用户是需要围绕日本、马来西亚和澳大利亚进行比较的留学顾问，以及参与确认的 student/client。真实问题不是再生成一条无法追溯的推荐，而是在前提或预算变化时，仍能检查事实、路线理由、审批状态和最终决定。
+Night Voyager 面向需要比较日本、马来西亚和澳大利亚的留学顾问，以及参与确认的学生和客户。真实问题不是再生成一条无法追溯的推荐，而是在事实、偏好、时间或预算变化时，让所有人都能看清哪些内容已确认、考虑过哪些路线、谁需要作出决定，以及如何安全恢复。
 
 ## 五阶段工作流
 
-1. **确认事实：** 保持 source-backed facts 与 assumptions 可见且可区分。
-2. **路线研判：** 按已确认约束比较具备资格的路线。
+1. **确认事实：** 将已确认事实与对话草稿、待核实假设分开。
+2. **比较路线：** 后续规划只使用明确确认的事实，按个案约束比较具备条件的路线。
 3. **顾问审核：** 由顾问批准、修改或停止拟议方案。
-4. **客户确认：** 将客户的显式确认记录为独立的 authority step。
-5. **持久化结果：** 生成可回看的 receipt 与 TimelinePlan。
+4. **客户确认：** 保留客户的责任和明确选择。
+5. **记录结果：** 保留可供后续查看的回执与 TimelinePlan。
 
 ## 正常路径与阻塞恢复
 
-![Advisor normal path](docs/assets/advisor-normal-path.png)
+![顾问正常路径](docs/assets/advisor-normal-path.png)
 
-正常帧展示 connected same-Case 路径经过顾问审核与客户确认，最终到达持久化 receipt 与 TimelinePlan。
+正常帧展示同一 connected same-Case 路径：从路线研判经过顾问审核和客户确认，最终形成持久化回执与 TimelinePlan。
 
-![Advisor blocked recovery](docs/assets/advisor-blocked-recovery.png)
+![顾问阻塞恢复](docs/assets/advisor-blocked-recovery.png)
 
-阻塞帧来自独立播种的确定性执行场景：前提或预算变化使 checkpoint blocked，工作流回到顾问重新评估或 safe stop；它不表示 connected Case 或 production outcome。
+阻塞帧展示一个独立播种的确定性执行场景：当前提或预算发生变化，检查点受阻时，工作流回到顾问重新评估或安全停止。它不表示 connected Case 或生产结果。
 
-![Advisor workspace on mobile](docs/assets/advisor-workspace-mobile.png)
+![移动端顾问工作台](docs/assets/advisor-workspace-mobile.png)
 
-移动帧是同一个真实路线研判 workspace 在 canonical `390x844` viewport 下的呈现。四张帧均为 local synthetic、provider-free 的 Chromium 证据。
+移动帧展示同一个真实路线研判工作台在标准 `390x844` viewport 下的呈现。四张展示图对应概览、正常路径、阻塞恢复和移动端视图。
 
-## 三个工程判断
+## 三个产品判断
 
-- **Durable facts 与 live events 分离：** confirmed facts 以及 receipt/timeline 是持久记录；进度与恢复事件属于独立的 live execution seam。
-- **执行与恢复显式化：** 每个 turn 经过 step、model/tool result 和确定性的 stop 或 recovery boundary，并可被检查。
-- **Capability 与 authority 分离：** provider/consumer 通过显式边界连接；approval 与 sandbox 约束确保 agent output 在顾问/client authority 生效前始终是不受信任的候选结果。
+- **事实先于规划：** 已确认事实与对话草稿分开保存；后续规划只使用明确确认的事实。
+- **建议不能替代责任：** 智能助手可以分析并提出建议，但承担责任的决定和行动仍由顾问与客户负责，不能由模型代替。
+- **变化时保留恢复入口：** 当前提变化或执行受阻时，保留版本、回执和恢复入口，不沿用过期状态继续执行。
 
-## Quickstart、architecture 与 release
+## 快速开始、架构与发布
 
-- **Quickstart：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
-- **Architecture：** 阅读 [architecture and milestone history](DESIGN.md) 与 [documentation index](docs/README.md)。
-- **Release：** [v0.1.5 release notes](docs/releases/v0.1.5.md) 与 [release verification guide](docs/how-to/verify-v0.1.5-release.md) 描述当前已发布的 local synthetic baseline；本 showcase 仅 presentation-only 且 release-neutral。
+- **快速开始：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
+- **架构：** 阅读 [架构与里程碑历史](DESIGN.md) 与 [文档索引](docs/README.md)。
+- **发布：** [v0.1.5 发布说明](docs/releases/v0.1.5.md) 与 [v0.1.5 发布验证指南](docs/how-to/verify-v0.1.5-release.md) 说明当前发布基线；本展示层仅用于呈现，不改变发布状态。
 
 ## 详细证明
 
