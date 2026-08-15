@@ -1,10 +1,61 @@
 # Night Voyager
 
-Night Voyager 是面向留学顾问的 AI 协作平台。它把本地合成咨询整理为可核对的客户信息、方案研判、顾问判断、客户确认以及持久化 receipt 与 TimelinePlan，同时保留既有 authority 边界。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell，属于静态（static）、local synthetic、provider-free presentation evidence，仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
+Night Voyager 帮助留学顾问把已确认事实、路线研判、顾问审核和客户确认，组织成带有持久化 receipt 与 timeline 的 evidence-grounded 决策工作流。
 
-当前 presentation authority 是 [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) 及其 [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md)。它们定义当前构图、responsive behavior、same-Case projection、独立执行场景与 bounded material treatment，不改变产品 authority。
+## Advisor workspace overview
 
-完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。四个 route 共享 advisor workspace shell。
+![Advisor workspace overview](docs/assets/advisor-workspace-overview.png)
+
+这张真实 Chromium 截图展示当前 local synthetic、provider-free 的 advisor workspace 静态路线研判状态。它是评审证据，不是 production 或 admissions-outcome proof。[Showcase manifest](docs/evidence/advisor-showcase-manifest.json) 记录了四张 canonical asset 的 source commit/tree、route/state、viewport、locale 与 SHA-256。
+
+## 目标用户与真实问题
+
+目标用户是需要围绕日本、马来西亚和澳大利亚进行比较的留学顾问，以及参与确认的 student/client。真实问题不是再生成一条无法追溯的推荐，而是在前提或预算变化时，仍能检查事实、路线理由、审批状态和最终决定。
+
+## 五阶段工作流
+
+1. **确认事实：** 保持 source-backed facts 与 assumptions 可见且可区分。
+2. **路线研判：** 按已确认约束比较具备资格的路线。
+3. **顾问审核：** 由顾问批准、修改或停止拟议方案。
+4. **客户确认：** 将客户的显式确认记录为独立的 authority step。
+5. **持久化结果：** 生成可回看的 receipt 与 TimelinePlan。
+
+## 正常路径与阻塞恢复
+
+![Advisor normal path](docs/assets/advisor-normal-path.png)
+
+正常帧展示 connected same-Case 路径经过顾问审核与客户确认，最终到达持久化 receipt 与 TimelinePlan。
+
+![Advisor blocked recovery](docs/assets/advisor-blocked-recovery.png)
+
+阻塞帧来自独立播种的确定性执行场景：前提或预算变化使 checkpoint blocked，工作流回到顾问重新评估或 safe stop；它不表示 connected Case 或 production outcome。
+
+![Advisor workspace on mobile](docs/assets/advisor-workspace-mobile.png)
+
+移动帧是同一个真实路线研判 workspace 在 canonical `390x844` viewport 下的呈现。四张帧均为 local synthetic、provider-free 的 Chromium 证据。
+
+## 三个工程判断
+
+- **Durable facts 与 live events 分离：** confirmed facts 以及 receipt/timeline 是持久记录；进度与恢复事件属于独立的 live execution seam。
+- **执行与恢复显式化：** 每个 turn 经过 step、model/tool result 和确定性的 stop 或 recovery boundary，并可被检查。
+- **Capability 与 authority 分离：** provider/consumer 通过显式边界连接；approval 与 sandbox 约束确保 agent output 在顾问/client authority 生效前始终是不受信任的候选结果。
+
+## Quickstart、architecture 与 release
+
+- **Quickstart：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
+- **Architecture：** 阅读 [architecture and milestone history](DESIGN.md) 与 [documentation index](docs/README.md)。
+- **Release：** [v0.1.5 release notes](docs/releases/v0.1.5.md) 与 [release verification guide](docs/how-to/verify-v0.1.5-release.md) 描述当前已发布的 local synthetic baseline；本 showcase 仅 presentation-only 且 release-neutral。
+
+## 详细证明
+
+当前 runtime、contracts、authority boundaries 与 release evidence 继续保留在下方。历史视觉资产仍用于 proof 与 context，但不再作为 README 首层画廊。
+
+当前 development candidate 仍是面向留学顾问的 AI 协作平台。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell，属于静态（static）、local synthetic、provider-free presentation evidence，仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
+
+完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。截图是评审证据，不是功能权威；semantic assertions 才是 acceptance authority。
+
+<details>
+<summary>历史视觉证明截图</summary>
 
 ![Chinese-first Night Voyager 作品集入口](docs/assets/night-voyager-portfolio-entry.png)
 
@@ -16,12 +67,9 @@ Night Voyager 是面向留学顾问的 AI 协作平台。它把本地合成咨�
 
 ![Planning revision comparison 与 renewed review](docs/assets/night-voyager-planning-revision.png)
 
-Governed plan-execution development evidence（仅 synthetic review evidence）：
-[current action](docs/assets/plan-execution-current-action.png)、
-[advisor review](docs/assets/plan-execution-advisor-review.png)、
-[mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png) 与
-[mobile recovery](docs/assets/plan-execution-recovery-mobile.png)。Semantic
-assertions 才是 acceptance authority；截图是评审证据，不是功能权威。
+Governed plan-execution development evidence（仅 synthetic review evidence）：[current action](docs/assets/plan-execution-current-action.png)、[advisor review](docs/assets/plan-execution-advisor-review.png)、[mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png) 与 [mobile recovery](docs/assets/plan-execution-recovery-mobile.png)。Semantic assertions 才是 acceptance authority；截图是评审证据，不是功能权威。
+
+</details>
 
 ## 工程证据
 

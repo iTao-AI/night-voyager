@@ -1,10 +1,61 @@
 # Night Voyager
 
-Night Voyager is an AI collaboration platform for study-abroad advisors. It turns a local synthetic consultation into reviewable client facts, route analysis, advisor judgment, client confirmation, and a durable receipt and TimelinePlan while preserving the existing authority boundaries. The current development candidate presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
+Night Voyager helps study-abroad advisors turn confirmed facts, route analysis, advisor review, and client confirmation into an evidence-grounded decision workflow with a persisted receipt and timeline.
 
-The current presentation authority is the [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) and its [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md). They define the current composition, responsive behavior, same-Case projection, independent execution scenario, and bounded material treatment without changing product authority.
+## Advisor workspace overview
 
-The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. All four routes share the advisor workspace shell.
+![Advisor workspace overview](docs/assets/advisor-workspace-overview.png)
+
+This real Chromium frame shows the current local synthetic, provider-free advisor workspace in a static route-analysis state. It is review evidence, not production or admissions-outcome proof. The [showcase manifest](docs/evidence/advisor-showcase-manifest.json) records the source commit/tree, route/state, viewport, locale, and SHA-256 for all canonical assets.
+
+## Who it is for and the real problem
+
+For study-abroad advisors comparing Japan, Malaysia, and Australia with a student/client. The real problem is keeping facts, route reasoning, approval state, and the final decision inspectable when assumptions or budget change; generating another untraceable recommendation is not enough.
+
+## Five-stage workflow
+
+1. **Confirm facts:** keep source-backed facts and assumptions explicit.
+2. **Analyze routes:** compare eligible routes against the confirmed constraints.
+3. **Advisor review:** let the advisor approve, revise, or stop the proposed plan.
+4. **Client confirmation:** record the client’s explicit confirmation as a separate authority step.
+5. **Persist the outcome:** issue a receipt and TimelinePlan that can be inspected later.
+
+## Normal path and blocked recovery
+
+![Advisor normal path](docs/assets/advisor-normal-path.png)
+
+The normal frame shows the connected same-Case path through advisor review and client confirmation to the persisted receipt and TimelinePlan.
+
+![Advisor blocked recovery](docs/assets/advisor-blocked-recovery.png)
+
+The blocked frame is an independently seeded deterministic execution scenario: a premise or budget change blocks the checkpoint, and the workflow hands back to advisor reassessment or a safe stop. It does not imply a connected Case or a production outcome.
+
+![Advisor workspace on mobile](docs/assets/advisor-workspace-mobile.png)
+
+The mobile frame is the same real route-analysis workspace at the canonical `390x844` viewport. All four frames are local synthetic, provider-free Chromium evidence.
+
+## Three engineering judgments
+
+- **Durable facts versus live events:** confirmed facts and the receipt/timeline are persisted records; progress and recovery events remain a separate live execution seam.
+- **Explicit execution and recovery:** each turn moves through step, model/tool result, and a deterministic stop or recovery boundary that can be inspected.
+- **Capabilities versus authority:** capability providers and consumers meet through explicit boundaries, while approval and sandbox constraints keep agent output untrusted until advisor/client authority is applied.
+
+## Quickstart, architecture, and release
+
+- **Quickstart:** run `make help`, `make doctor`, `make demo`, and `make proof`; then open `http://127.0.0.1:3000/`.
+- **Architecture:** read the [architecture and milestone history](DESIGN.md) and the [documentation index](docs/README.md).
+- **Release:** the [v0.1.5 release notes](docs/releases/v0.1.5.md) and [release verification guide](docs/how-to/verify-v0.1.5-release.md) describe the current released local synthetic baseline; this showcase is presentation-only and release-neutral.
+
+## Detailed proof
+
+The current runtime, contracts, authority boundaries, and release evidence remain below. Historical visual assets are retained for proof and context, but are no longer the README first layer.
+
+The current development candidate remains an AI collaboration platform for study-abroad advisors. The current development candidate presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
+
+The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. Screenshots are review evidence, not functional authority; semantic assertions remain the acceptance authority.
+
+<details>
+<summary>Historical visual proof captures</summary>
 
 ![Chinese-first Night Voyager portfolio entry](docs/assets/night-voyager-portfolio-entry.png)
 
@@ -16,12 +67,9 @@ The complete governed walkthrough begins at `/demo/collaboration` and continues 
 
 ![Planning revision comparison and renewed review](docs/assets/night-voyager-planning-revision.png)
 
-Governed plan-execution development evidence (synthetic review evidence only):
-[current action](docs/assets/plan-execution-current-action.png),
-[advisor review](docs/assets/plan-execution-advisor-review.png),
-[mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png), and
-[mobile recovery](docs/assets/plan-execution-recovery-mobile.png). Semantic
-assertions remain the acceptance authority; Screenshots are review evidence, not functional authority.
+Governed plan-execution development evidence (synthetic review evidence only): [current action](docs/assets/plan-execution-current-action.png), [advisor review](docs/assets/plan-execution-advisor-review.png), [mobile reassessment](docs/assets/plan-execution-reassessment-mobile.png), and [mobile recovery](docs/assets/plan-execution-recovery-mobile.png). Semantic assertions remain the acceptance authority; screenshots are review evidence, not functional authority.
+
+</details>
 
 ## Engineering proof
 

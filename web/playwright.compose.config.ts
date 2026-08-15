@@ -1,6 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 const presentationAudit = process.env.PRESENTATION_AUDIT === "1";
+const showcaseCapture = process.env.PRESENTATION_SHOWCASE_CAPTURE === "1";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -14,6 +15,7 @@ export default defineConfig({
     ...(presentationAudit
       ? ["bootstrap.spec.ts", "portfolio-design-review.spec.ts", "presentation.spec.ts"]
       : []),
+    ...(showcaseCapture ? ["showcase.spec.ts"] : []),
   ],
   timeout: 120_000,
   expect: { timeout: 15_000 },
