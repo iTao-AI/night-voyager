@@ -6,11 +6,11 @@ Night Voyager helps study-abroad advisors turn confirmed facts into a clear, rev
 
 ![Advisor workspace overview](docs/assets/advisor-workspace-overview.png)
 
-This real Chromium frame shows the current local synthetic advisor workspace. It is review evidence for a self-contained demo, not production or admissions-outcome proof. The [showcase manifest](docs/evidence/advisor-showcase-manifest.json) records the source commit/tree, route/state, viewport, locale, and SHA-256 for all four canonical assets.
+This real Chromium frame shows the current local synthetic advisor workspace. It is review evidence for a self-contained demo, not production or admissions-outcome proof. The [showcase manifest](docs/evidence/advisor-showcase-manifest.json) records the source revision, page state, image dimensions, and SHA-256 for all four canonical assets.
 
 ## Who it is for and the real problem
 
-Night Voyager is for study-abroad advisors comparing Japan, Malaysia, and Australia with a student and client. The real problem is keeping the decision path clear when facts, preferences, timing, or budget change: people need to see what was confirmed, what was considered, who must decide, and how to recover safely.
+Night Voyager is for study-abroad advisor teams comparing Japan, Malaysia, and Australia with the students and parents involved in a case. The real problem is keeping the decision path clear when facts, preferences, timing, or budget change: people need to see what was confirmed, what was considered, who must decide, and how to recover safely.
 
 ## Five-stage workflow
 
@@ -18,21 +18,21 @@ Night Voyager is for study-abroad advisors comparing Japan, Malaysia, and Austra
 2. **Compare routes:** use only explicit facts to compare eligible routes against the case constraints.
 3. **Advisor review:** let the advisor approve, revise, or stop the proposed plan.
 4. **Client confirmation:** keep the client’s responsibility and explicit choice visible.
-5. **Record the outcome:** preserve the decision as a receipt and TimelinePlan that can be reviewed later.
+5. **Record the outcome:** preserve the decision as a decision receipt and action timeline that can be reviewed later.
 
 ## Normal path and blocked recovery
 
 ![Advisor normal path](docs/assets/advisor-normal-path.png)
 
-The normal frame shows the connected same-Case path from route analysis through advisor review and client confirmation to the persisted receipt and TimelinePlan.
+The normal frame follows the same consultation case from route analysis through advisor review and client confirmation to the persisted decision receipt and action timeline.
 
 ![Advisor blocked recovery](docs/assets/advisor-blocked-recovery.png)
 
-The blocked frame shows an independently seeded deterministic execution scenario: a premise or budget change blocks the checkpoint, and the workflow returns to advisor reassessment or a safe stop. It does not imply a connected Case or a production outcome.
+The blocked frame shows an independently seeded deterministic execution scenario: a premise or budget change blocks the checkpoint, and the workflow returns to advisor reassessment or a safe stop. It does not carry the preceding case into this independent scenario or imply a production outcome.
 
 ![Advisor workspace on mobile](docs/assets/advisor-workspace-mobile.png)
 
-The mobile frame shows the same real route-analysis workspace at the canonical `390x844` viewport. The four frames cover the overview, normal, blocked, and mobile views of this showcase.
+The mobile frame shows the same real route-analysis workspace at the standard 390x844 mobile size. The four frames cover the overview, normal, blocked, and mobile views of this showcase.
 
 ## Three product judgments
 

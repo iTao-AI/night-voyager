@@ -125,6 +125,15 @@ describe("advisor showcase contract", () => {
     expect(readmeCn).toContain("## 顾问工作台概览");
     expect(readmeCn).toContain("## 三个产品判断");
     expect(readmeCn).not.toContain("## Advisor workspace overview");
+    expect(readme).toContain(
+      "The normal frame follows the same consultation case from route analysis through advisor review and client confirmation to the persisted decision receipt and action timeline.",
+    );
+    expect(readme).toContain("the preceding case");
+    expect(readmeCn).toContain("留学顾问团队");
+    expect(readmeCn).toContain("参与确认的学生和家长");
+    expect(readmeCn).toContain("来源版本、页面状态、图像尺寸和 SHA-256");
+    expect(readmeCn).toContain("标准 390x844 视口");
+    expect(readmeCn).toContain("决策回执与行动时间线");
   });
 
   it("keeps internal execution language below the detailed-proof boundary", () => {
@@ -152,6 +161,38 @@ describe("advisor showcase contract", () => {
       "agent output",
       "capability 与 authority",
       "每个 turn 经过 step",
+    ]) {
+      expect(readmeCn).not.toContain(phrase);
+    }
+  });
+
+  it("keeps reader-facing case and manifest vocabulary natural in the first layer", () => {
+    const readme = readFirstLayer(README_PATH, "\n## Detailed proof\n").toLowerCase();
+    const readmeCn = readFirstLayer(README_CN_PATH, "\n## 详细证明\n").toLowerCase();
+
+    for (const phrase of [
+      "connected same-case",
+      "connected case",
+      "student/client",
+      "source commit/tree",
+      "route/state",
+      "viewport",
+      "locale",
+      "timelineplan",
+    ]) {
+      expect(readme).not.toContain(phrase);
+    }
+
+    for (const phrase of [
+      "connected same-case",
+      "connected case",
+      "student/client",
+      "学生和客户",
+      "source commit/tree",
+      "route/state",
+      "viewport",
+      "locale",
+      "timelineplan",
     ]) {
       expect(readmeCn).not.toContain(phrase);
     }
