@@ -1,5 +1,10 @@
 # Projection matrix
 
+This is the current authority map for the reference-driven presentation. The root
+uses a static same-Case projection with `¥300,000–400,000`; the persisted connected
+outcome remains `¥305,500–400,000`. `/demo/plan` is an independently seeded
+execution scenario and does not consume the connected Case or session.
+
 | Source concept | Advisor projection | Family projection | Authority |
 | --- | --- | --- | --- |
 | `EvidenceRef` | citation, status, provenance, gap | family-safe evidence note | current forced-RLS rows |
@@ -18,6 +23,7 @@
 | presentation locale | exact `zh-CN` or `en` labels over the same projection | exact `zh-CN` or `en` labels over the same projection | presentation-only `localStorage`; no business authority |
 | `TimelineExecution` current action | milestone/state/due date/accountable role/risk/next handoff plus advisor controls | the same server-owned facts plus only the accountable family action | PostgreSQL projection, immutable receipt, and fresh GET |
 | execution activity | localized bounded technical disclosure | localized bounded technical disclosure | latest 64 durable rows plus exact total/truncation from PostgreSQL |
+| portfolio presentation | static route/story preview and public boundary copy | absent; no session, task, or API effect | presentation-only React projection |
 
 Before task creation, the checked-in fixture contract only limits the canonical
 synthetic input identity and must match the existing source-pack row. It is not

@@ -25,7 +25,7 @@ function Probe({ onMount = () => undefined }: { onMount?: () => void }) {
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.lang = "zh-CN";
-  document.title = "Night Voyager｜留学顾问的 AI 协作工作台";
+  document.title = "Night Voyager｜为留学顾问打造的 AI 协作平台";
   document.head.innerHTML = '<meta name="description" content="中文默认描述">';
 });
 
@@ -42,7 +42,7 @@ describe("PresentationProvider", () => {
       </PresentationProvider>,
     );
     expect(html).toContain("zh-CN");
-    expect(html).toContain("留学顾问的 AI 协作工作台");
+    expect(html).toContain("为留学顾问打造的 AI 协作平台");
     expect(html).not.toContain("navigator.language");
   });
 
@@ -53,11 +53,11 @@ describe("PresentationProvider", () => {
     await waitFor(() => expect(screen.getByText("en")).toBeInTheDocument());
     expect(document.documentElement.lang).toBe("en");
     expect(document.title).toBe(
-      "Night Voyager | AI Collaboration Workspace for Study-Abroad Advisors",
+      "Night Voyager | An AI Collaboration Platform Built for Study-Abroad Advisors",
     );
     expect(document.querySelector('meta[name="description"]')).toHaveAttribute(
       "content",
-      "Turn fragmented conversations, evidence, and route research into a reviewable client plan.",
+      "Night Voyager helps advisors organize the budgets, goals, timelines, and practical constraints scattered across conversations, then compare routes, explain recommendations, and move the next step forward.",
     );
   });
 
@@ -107,10 +107,10 @@ describe("PresentationProvider", () => {
     expect(() => render(<PresentationProvider><Probe /></PresentationProvider>)).not.toThrow();
     await waitFor(() => expect(screen.getByText("zh-CN")).toBeInTheDocument());
     expect(document.documentElement.lang).toBe("zh-CN");
-    expect(document.title).toBe("Night Voyager｜留学顾问的 AI 协作工作台");
+    expect(document.title).toBe("Night Voyager｜为留学顾问打造的 AI 协作平台");
     expect(document.querySelector('meta[name="description"]')).toHaveAttribute(
       "content",
-      "把分散在聊天、资料和研究中的信息，整理成可核对、可沟通、可推进的留学方案。",
+      "Night Voyager 帮助顾问把散落在对话里的预算、目标、时间和现实条件整理清楚，再据此比较不同路线、说明推荐理由，并推进下一步。",
     );
   });
 
@@ -130,7 +130,7 @@ describe("PresentationProvider", () => {
     expect(screen.getByText("en")).toBeInTheDocument();
     expect(document.documentElement.lang).toBe("en");
     expect(document.title).toBe(
-      "Night Voyager | AI Collaboration Workspace for Study-Abroad Advisors",
+      "Night Voyager | An AI Collaboration Platform Built for Study-Abroad Advisors",
     );
     expect(onMount).toHaveBeenCalledTimes(1);
     expect(fetchSpy).not.toHaveBeenCalled();

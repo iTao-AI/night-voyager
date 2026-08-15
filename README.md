@@ -1,6 +1,8 @@
 # Night Voyager
 
-Night Voyager is an AI collaboration workspace for study-abroad advisors. It turns a local synthetic consultation into reviewable client facts, route analysis, advisor judgment, client confirmation, and a durable receipt and TimelinePlan while preserving the existing authority boundaries. The current development candidate presents the redesigned advisor-centered root and four-route workspace as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
+Night Voyager is an AI collaboration platform for study-abroad advisors. It turns a local synthetic consultation into reviewable client facts, route analysis, advisor judgment, client confirmation, and a durable receipt and TimelinePlan while preserving the existing authority boundaries. The current development candidate presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
+
+The current presentation authority is the [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) and its [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md). They define the current composition, responsive behavior, same-Case projection, independent execution scenario, and bounded material treatment without changing product authority.
 
 The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. All four routes share the advisor workspace shell.
 
@@ -51,8 +53,8 @@ make down
 Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` into `/demo`. For the independent deterministic execution scenario, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at `/demo/plan`. The [v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md) defines the current release gates.
 
 For the current same-Case development walkthrough, begin at `/demo/collaboration`,
-confirm the synthetic family fact, choose `继续进入受治理规划` (`Continue to governed
-planning` in English), and use the explicit task action on `/demo`. The handoff itself
+confirm the synthetic family fact, choose `继续进入规划` (`Continue to planning` in
+English), and use the explicit task action on `/demo`. The handoff itself
 performs read-only validation and creates no task.
 
 The current focused planning-revision proof uses

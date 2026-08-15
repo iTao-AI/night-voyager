@@ -55,7 +55,32 @@ def test_release_verifier_checks_the_public_v0_1_5_surface(
     verifier.verify_release_surface()
 
     output = capsys.readouterr().out
-    assert "proof release surface: v0.1.5 local synthetic portfolio contract confirmed" in output
+    assert (
+        "proof release surface: current development candidate + stable v0.1.5 "
+        "historical boundary confirmed"
+    ) in output
+
+
+def test_release_verifier_rejects_candidate_token_that_exists_only_in_html_comment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    verifier = load_verifier()
+    copy_release_surface(tmp_path)
+    target = tmp_path / "README.md"
+    source = target.read_text(encoding="utf-8")
+    candidate = (
+        "The current development candidate presents the reference-driven advisor-centered root "
+        "and three demo routes through one shared workspace shell"
+    )
+    assert candidate in source
+    target.write_text(
+        source.replace(candidate, "", 1) + f"\n<!-- {candidate} -->\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+
+    with pytest.raises(SystemExit, match="missing v0.1.5 README contract: README.md"):
+        verifier.verify_release_surface()
 
 
 def test_release_verifier_checks_the_governed_mixed_planning_surface(
@@ -347,7 +372,7 @@ def test_fact_to_plan_walkthrough_is_publicly_discoverable_and_evidenced() -> No
     combined = " ".join((readmes, docs_index, walkthrough, connected))
 
     assert "same-Case" in combined
-    assert "Continue to governed planning" in combined
+    assert "Continue to planning" in combined
     assert "local synthetic" in combined
     assert "provider-free" in combined
     assert "released in v0.1.3" in combined

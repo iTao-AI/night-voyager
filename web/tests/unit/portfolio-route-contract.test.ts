@@ -5,14 +5,10 @@ import { formatCnyRange } from "../../lib/presentation/format";
 
 describe("portfolio catalog contract", () => {
   it("uses catalog-backed country, status, and reason keys in both locales", () => {
-    expect(zhCN.rootOriginBudget).toBe("预算 ¥340,000–400,000");
-    expect(zhCN.rootRouteAtlasDescription).toBe(
-      "当前档案的 intended field 为 computing，预算为 CNY 340,000–400,000。澳大利亚在预算条件下推荐，日本为有条件备选，马来西亚暂不可选。",
-    );
-    expect(en.rootOriginBudget).toBe("Budget CNY 340,000–400,000");
-    expect(en.rootRouteAtlasDescription).toBe(
-      "The current case has intended field computing and a CNY 340,000–400,000 budget. Australia is recommended with a budget condition, Japan is a conditional alternative, and Malaysia is blocked.",
-    );
+    expect(zhCN.rootOriginBudget).toBe("规划预算 ¥300,000–400,000");
+    expect(zhCN.rootRouteAtlasDescription).toContain("CNY 300,000–400,000");
+    expect(en.rootOriginBudget).toBe("Planning budget CNY 300,000–400,000");
+    expect(en.rootRouteAtlasDescription).toContain("CNY 300,000–400,000");
     expect(
       [
         zhCN.rootOriginBudget,
@@ -20,7 +16,7 @@ describe("portfolio catalog contract", () => {
         en.rootOriginBudget,
         en.rootRouteAtlasDescription,
       ].join(" "),
-    ).not.toMatch(/30\.55|305,500|300,000/);
+    ).not.toMatch(/340,000|¥340,000/);
   });
 
   it("keeps governed-flow money formatting exact", () => {

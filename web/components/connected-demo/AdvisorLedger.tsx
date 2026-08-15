@@ -21,27 +21,115 @@ function actionKey(phase: Ledger["phase"]): PresentationCopyKey | null {
   return null;
 }
 
+function stageTitle(ledger: Ledger, primaryAction: string | null, copy: (key: PresentationCopyKey) => string, locale: "zh-CN" | "en") {
+  return ledger.phase === "revision_blocked"
+    ? copy("revisionBlockedTitle")
+    : ledger.phase === "terminal_task_failure"
+      ? copy("terminalFailureTitle")
+      : primaryAction ?? presentCode(locale, "demoPhase", ledger.phase);
+}
+
+function stageDescription(ledger: Ledger, primaryAction: string | null, copy: (key: PresentationCopyKey) => string) {
+  return ledger.phase === "revision_blocked"
+    ? copy("revisionBlockedBody")
+    : primaryAction
+      ? copy("advisorActionExplanation")
+      : copy("noBusinessAction");
+}
+
+function ActionControls({
+  ledger,
+  primaryAction,
+  busy,
+  onPrimaryAction,
+  onSecondaryAction,
+}: {
+  ledger: Ledger;
+  primaryAction: string | null;
+  busy: boolean;
+  onPrimaryAction: () => void;
+  onSecondaryAction?: () => void;
+}) {
+  const { copy } = usePresentation();
+  if (primaryAction) {
+    return (
+      <div className="action-row">
+        <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" disabled={busy} onClick={onPrimaryAction}>{primaryAction}</button>
+        {ledger.phase === "review_required" && onSecondaryAction ? (
+          <button className="secondary-action" type="button" disabled={busy} onClick={onSecondaryAction}>
+            {copy("requestRevisionAction")}
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  if (["revision_blocked", "terminal_task_failure"].includes(ledger.phase)) {
+    return <Link className="secondary-action" href="/">{copy("safeNavigationExit")}</Link>;
+  }
+  return null;
+}
+
+export function AdvisorLedgerAction({
+  ledger,
+  onPrimaryAction,
+  onSecondaryAction,
+  busy = false,
+}: {
+  ledger: Ledger;
+  onPrimaryAction: () => void;
+  onSecondaryAction?: () => void;
+  busy?: boolean;
+}) {
+  const { locale, copy } = usePresentation();
+  const primaryActionKey = actionKey(ledger.phase);
+  const primaryAction = primaryActionKey ? copy(
+    ledger.phase === "replan_required" ? "createRevisedTaskAction" : primaryActionKey,
+  ) : null;
+  return (
+    <section className="advisor-ledger-action" data-authority-action="true" aria-labelledby="advisor-ledger-action-title">
+      <div className="current-stage">
+        <div>
+          <h2 id="advisor-ledger-action-title">{stageTitle(ledger, primaryAction, copy, locale)}</h2>
+          <p>{stageDescription(ledger, primaryAction, copy)}</p>
+        </div>
+        <ActionControls
+          ledger={ledger}
+          primaryAction={primaryAction}
+          busy={busy}
+          onPrimaryAction={onPrimaryAction}
+          onSecondaryAction={onSecondaryAction}
+        />
+      </div>
+      {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
+    </section>
+  );
+}
+
 export function AdvisorLedger({
   ledger,
   confirmedFacts = null,
   onPrimaryAction,
   onSecondaryAction,
   busy = false,
+  renderAction = true,
 }: {
   ledger: Ledger;
   confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
   busy?: boolean;
+  renderAction?: boolean;
 }) {
   const { locale, copy } = usePresentation();
   const routes = ledger.routes;
-  const [selectedCountry, setSelectedCountry] = useState<string>(String(routes[0]?.country ?? ""));
+  const defaultCountry = routes.find((route) => route.country === "australia")?.country ?? routes[0]?.country ?? "";
+  const [selectedCountry, setSelectedCountry] = useState<string>(String(defaultCountry));
   const selectedRoute = routes.find((route) => route.country === selectedCountry) ?? routes[0];
   const primaryActionKey = actionKey(ledger.phase);
   const primaryAction = primaryActionKey ? copy(
     ledger.phase === "replan_required" ? "createRevisedTaskAction" : primaryActionKey,
   ) : null;
+  const dominantCountry = routes.some((route) => route.country === "australia") ? "australia" : String(routes[0]?.country ?? "");
   const presentClaims = (values: readonly string[], kind: "evidenceClaim" | "knownGap", emptyKey: PresentationCopyKey) =>
     values.length ? values.map((value, index) => <span key={`${kind}-${value}-${index}`}>{presentCode(locale, kind, value)}{index < values.length - 1 ? ", " : ""}</span>) : copy(emptyKey);
 
@@ -53,42 +141,19 @@ export function AdvisorLedger({
         <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", "advisor")}</p>
         <p className="stage-outcome"><strong>{presentCode(locale, "demoPhase", ledger.phase)}</strong></p>
         <p>{copy("advisorRoleAuthority")}</p>
-        <p><span>{copy("caseRevisionLabel")} {ledger.case_revision}</span>{copy("caseRevisionLabel") === copy("caseRevisionTechnicalLabel") ? null : <span className="technical-label"> {copy("caseRevisionTechnicalLabel")} {ledger.case_revision}</span>}</p>
+        <p>{copy("caseRevisionLabel")} {ledger.case_revision}</p>
       </header>
 
       {ledger.comparison ? <PlanningRevisionComparison comparison={ledger.comparison} /> : null}
 
-      <div className="current-stage">
+      <div className="current-stage" data-stage-summary="true">
         <div>
-          <h2>
-            {ledger.phase === "revision_blocked"
-              ? copy("revisionBlockedTitle")
-              : ledger.phase === "terminal_task_failure"
-                ? copy("terminalFailureTitle")
-                : primaryAction ?? presentCode(locale, "demoPhase", ledger.phase)}
-          </h2>
-          <p>
-            {ledger.phase === "revision_blocked"
-              ? copy("revisionBlockedBody")
-              : primaryAction
-                ? copy("advisorActionExplanation")
-                : copy("noBusinessAction")}
-          </p>
+          <h2>{stageTitle(ledger, primaryAction, copy, locale)}</h2>
+          <p>{stageDescription(ledger, primaryAction, copy)}</p>
         </div>
-        {primaryAction ? (
-          <div className="action-row">
-            <button className="primary-action" data-primary-action="true" type="button" disabled={busy} onClick={onPrimaryAction}>{primaryAction}</button>
-            {ledger.phase === "review_required" && onSecondaryAction ? (
-              <button className="secondary-action" type="button" disabled={busy} onClick={onSecondaryAction}>
-                {copy("requestRevisionAction")}
-              </button>
-            ) : null}
-          </div>
-        ) : ["revision_blocked", "terminal_task_failure"].includes(ledger.phase) ? (
-          <Link className="secondary-action" href="/">{copy("safeNavigationExit")}</Link>
-        ) : null}
+        {renderAction ? <ActionControls ledger={ledger} primaryAction={primaryAction} busy={busy} onPrimaryAction={onPrimaryAction} onSecondaryAction={onSecondaryAction} /> : null}
       </div>
-      {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
+      {renderAction && busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
 
       {!ledger.comparison && routes.length ? (
         <>
@@ -100,7 +165,7 @@ export function AdvisorLedger({
                   const country = String(route.country);
                   const blocked = route.eligible === false || route.outcome === "blocked";
                   return (
-                    <tr key={`${country}-${index}`}>
+                    <tr key={`${country}-${index}`} data-route-country={country} data-route-priority={country === dominantCountry ? "dominant" : "alternative"}>
                       <th scope="row">{presentCode(locale, "country", country)}</th>
                       <td>{presentRouteOutcome(locale, route.outcome)}</td>
                       <td>{presentRouteReason(locale, route.reason_code)}</td>

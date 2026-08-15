@@ -17,12 +17,12 @@ export function MemoryCandidateCard({ candidate }: { candidate: MemoryCandidateP
     ? formatCnyRange(locale, candidate.value.preferred_minor, candidate.value.hard_ceiling_minor, candidate.value.currency)
     : copy("statusUnavailable");
   return (
-    <section className="collaboration-panel candidate-card" aria-labelledby="candidate-title">
+    <section className="collaboration-panel candidate-card" data-candidate-record="true" data-candidate-state={candidate.state} aria-labelledby="candidate-title">
       <p className="overline">{copy("candidateOverline")}</p>
       <h2 id="candidate-title">{copy("candidateTitle")}</h2>
       <p className={`status ${candidate.state === "confirmed" ? "trust" : ""}`}>{presentCode(locale, "candidateState", candidate.state)}</p>
       <dl className="collaboration-facts">
-        <div><dt>{copy("candidateBudgetLabel")}</dt><dd>{budgetValue}</dd></div>
+        <div><dt>{copy("candidateBudgetLabel")}</dt><dd>{candidate.state === "confirmed" ? <strong>{budgetValue}</strong> : budgetValue}</dd></div>
         <div><dt>{copy("candidateSourceLabel")}</dt><dd>{copy("candidateParentMessage")}{advisor ? ` ${advisor.source_message_sequence_no}` : ""}</dd></div>
         {advisor ? <div><dt>{copy("candidatePinnedRevision")}</dt><dd>{advisor.case_revision}</dd></div> : null}
       </dl>

@@ -9,6 +9,8 @@ It does not continue the connected Case or session from `/demo/collaboration` an
 `/demo`; Happy and Blocked are separately seeded scenarios. Screenshots are review
 evidence, while the semantic browser and database assertions remain authoritative.
 
+The current presentation authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The route uses the shared Midnight Editorial Advisor Workspace, but its scenario and authority remain independent.
+
 ## Routes and identities
 
 - Happy: `http://127.0.0.1:3000/demo/plan`
@@ -29,13 +31,9 @@ All paths require `make doctor` first. They are complementary:
 | Human-readable walkthrough | `make demo`, then this page's Happy/Blocked steps | seed, connect, start, family attestation, advisor verification or reassessment, explicit `make down` | completed execution or `reassessment_required` remains after reload | functional review; screenshots are review evidence |
 | Full browser-to-database proof | task-scoped `COMPOSE_PROJECT_NAME=... make compose-proof` | build/migrate/seed, exact `zh-CN`/`en` Happy/Blocked, recovery, PostgreSQL verification, teardown | `proof compose: PASS` | semantic assertions plus persisted browser-to-database authority |
 
-`make proof` is the quick provider-free path; in the PR C development environment
-it took 5.90 seconds with the Python/uv and Docker builder cache already shared.
-The final rendered matrix took 8.9 seconds and its two state-capture lanes took
-5.2 seconds against task-local images and a warm shared cache. These are
-observations, not performance commitments or synthetic cold-start claims. The
-successful full Compose gate took 408.08 seconds on the same task-scoped project
-with task-local images rebuilt from warm shared caches.
+`make proof` is the quick provider-free path. The full task-scoped Compose path is
+the authority for browser, persistence, recovery, and teardown proof; command
+duration and cache behavior are environment-dependent and are not product claims.
 
 The quick path proves the proof configuration and installed-wheel contract
 confirmed by its exact public markers. The manual path is for evaluator

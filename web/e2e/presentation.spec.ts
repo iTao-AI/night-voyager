@@ -8,7 +8,7 @@ const PUBLIC_EVIDENCE_ROOT = process.env.PRESENTATION_PUBLIC_EVIDENCE_ROOT;
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const ROUTES = ["/", "/demo/collaboration", "/demo", "/demo/plan"] as const;
 const LOCALES = ["zh-CN", "en"] as const;
-const WIDTHS = [1440, 1024, 768, 390, 320] as const;
+const WIDTHS = [1440, 1280, 1024, 768, 390, 320] as const;
 const MOTION_MODES = ["no-preference", "reduce"] as const;
 const APPROVED_PUBLIC_EVIDENCE_FILENAMES = [
   "night-voyager-portfolio-entry.png",
@@ -258,7 +258,7 @@ async function renderedMetrics(page: Page) {
         requiredRatio: number;
         text: string;
       } => sample !== null)
-      .sort((left, right) => left.ratio - right.ratio)
+      .sort((left, right) => left.ratio - right.ratio);
     const motion = visible.map((element) => {
       const style = getComputedStyle(element);
       return {
@@ -267,6 +267,56 @@ async function renderedMetrics(page: Page) {
         transitionMs: maximumTimeline(style.transitionDuration, style.transitionDelay),
       };
     });
+    const blurred = visible.filter((element) => {
+      const style = getComputedStyle(element);
+      const backdrop = style.backdropFilter || (style as CSSStyleDeclaration & { webkitBackdropFilter?: string }).webkitBackdropFilter;
+      return Boolean(backdrop && backdrop !== "none" && /blur\(/i.test(backdrop));
+    });
+    const materialTransitionOffenders = visible
+      .map((element) => {
+        const style = getComputedStyle(element);
+        const properties = style.transitionProperty.split(",").map((property) => property.trim());
+        const materialProperty = properties.some((property) =>
+          property === "all" || /filter|backdrop-filter|box-shadow/i.test(property),
+        );
+        return materialProperty && maximumTimeline(style.transitionDuration, style.transitionDelay) > 10
+          ? {
+              properties,
+              name: element.getAttribute("aria-label") ?? (element.className || element.tagName),
+            }
+          : null;
+      })
+      .filter((entry): entry is { properties: string[]; name: string } => entry !== null);
+    const denseDataSelectors = [
+      ".advisor-product-frame-top-band",
+      ".advisor-product-frame-workflow",
+      ".advisor-product-frame-context",
+      ".advisor-product-frame-work",
+      ".advisor-product-frame-evidence",
+      ".advisor-product-frame-technical",
+      ".workspace-context-facts",
+      ".workspace-current-work",
+      ".workspace-route-row",
+      ".workspace-supporting-evidence-content",
+    ].join(",");
+    const material = {
+      denseDataBlur: blurred
+        .filter((element) => element.matches(denseDataSelectors) || Boolean(element.closest(denseDataSelectors)))
+        .map((element) => element.className || element.tagName),
+      materialTransitionOffenders,
+      unexpectedBlurSurfaces: blurred
+        .filter((element) => !element.matches(".workspace-header, .workspace-authority-plane"))
+        .map((element) => element.className || element.tagName),
+      visibleBlurSurfaces: blurred.map((element) => element.className || element.tagName),
+    };
+    const storySticky = visible
+      .filter((element) => element.matches(".portfolio-story-frame, .portfolio-story-chapter"))
+      .filter((element) => getComputedStyle(element).position === "sticky")
+      .map((element) => element.className || element.tagName);
+    const storyTransforms = visible
+      .filter((element) => element.matches(".portfolio-story-frame, .portfolio-story-chapter, .portfolio-product-preview"))
+      .filter((element) => getComputedStyle(element).transform !== "none")
+      .map((element) => element.className || element.tagName);
     const maxMotionMs = motion.reduce(
       (maximum, entry) => Math.max(maximum, entry.animationMs, entry.transitionMs),
       0,
@@ -329,10 +379,13 @@ async function renderedMetrics(page: Page) {
         .filter((element) => element.hasAttribute("aria-live") || element.getAttribute("role") === "status")
         .map((element) => element.textContent?.trim().slice(0, 120)),
       "long-copy": longCopy,
+      material,
       maxMotionMs,
       motionOffenders: motion.filter(
         (entry) => entry.animationMs > 10 || entry.transitionMs > 10,
       ),
+      storySticky,
+      storyTransforms,
       overflow: {
         clientWidth: document.documentElement.clientWidth,
         horizontal: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
@@ -353,9 +406,19 @@ async function assertSemanticPresentation(page: Page) {
   ).toEqual([]);
   expect(metrics["long-copy"].filter((entry) => entry.clipped)).toEqual([]);
   expect(metrics.headings.filter((heading) => heading.level === "H1")).toHaveLength(1);
+  expect(metrics.headings[0]?.level).toBe("H1");
+  expect(metrics.headings.every((heading, index) =>
+    index === 0 || Number(heading.level.slice(1)) <= Number(metrics.headings[index - 1]!.level.slice(1)) + 1,
+  )).toBe(true);
   expect(metrics.landmarks).toContain("main");
   expect(metrics.targets.filter((target) => target.height < 44 || target.width < 44)).toEqual([]);
   expect(metrics.journeyCopy.filter((copy) => copy.fontSize < 16)).toEqual([]);
+  const width = await page.evaluate(() => window.innerWidth);
+  const blurLimit = width <= 560 ? 0 : width <= 900 ? 1 : 2;
+  expect(metrics.material.visibleBlurSurfaces.length).toBeLessThanOrEqual(blurLimit);
+  expect(metrics.material.unexpectedBlurSurfaces).toEqual([]);
+  expect(metrics.material.denseDataBlur).toEqual([]);
+  expect(metrics.material.materialTransitionOffenders).toEqual([]);
   const journeyStage = page.url().includes("/demo/collaboration")
     ? "consultation_intake"
     : page.url().includes("/demo/plan")
@@ -370,15 +433,24 @@ async function assertSemanticPresentation(page: Page) {
   const shell = page.locator(".advisor-workspace-shell");
   if (page.url().endsWith("/") || new URL(page.url()).pathname === "/") {
     await expect(page.locator(".portfolio-category")).toContainText(
-      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+      /An AI collaboration platform built for study-abroad advisors|为留学顾问打造的 AI 协作平台/,
     );
-    await expect(page.locator(".advisor-workspace-preview")).toContainText(
+    await expect(page.locator(".advisor-workspace-preview").first()).toContainText(
       /澳大利亚|Australia/,
     );
+    const rootWidth = await page.evaluate(() => window.innerWidth);
+    if (metrics.reducedMotion || rootWidth <= 860) {
+      const staticSubjects = page.locator(".portfolio-story-static-subject:visible .advisor-workspace-preview");
+      await expect(staticSubjects).toHaveCount(3);
+      await expect(staticSubjects.nth(0)).toHaveAttribute("data-preview-scene", "confirmed");
+      await expect(staticSubjects.nth(1)).toHaveAttribute("data-preview-scene", "route");
+      await expect(staticSubjects.nth(2)).toHaveAttribute("data-preview-scene", "outcome");
+      await expect(page.locator(".portfolio-story-frame:visible")).toHaveCount(0);
+    }
   } else {
     await expect(shell).toBeVisible();
     await expect(page.locator(".workspace-category")).toContainText(
-      /AI collaboration workspace for study-abroad advisors|留学顾问的 AI 协作工作台/,
+      /An AI collaboration platform built for study-abroad advisors|为留学顾问打造的 AI 协作平台/,
     );
     const expectedProofSegment = page.url().includes("/demo/plan")
       ? "independent_execution_scenario"
@@ -387,7 +459,7 @@ async function assertSemanticPresentation(page: Page) {
     await expect(page.locator(".workflow-rail")).toBeVisible();
     expect(await page.locator("[data-primary-action='true']:visible").count()).toBeLessThanOrEqual(1);
     expect((await page.locator(
-      ".workspace-header, .workspace-context-bar, .workflow-rail, .workspace-route-heading",
+      ".workspace-header, [data-frame-slot='top-band'], .workflow-rail, .workspace-route-heading",
     ).allTextContents()).join("\n")).not.toMatch(
       /家庭表达|家庭决定|顾问到家庭决策流程|Family input|Family decision|Advisor-to-family decision flow/,
     );
@@ -396,6 +468,8 @@ async function assertSemanticPresentation(page: Page) {
     expect(metrics.maxMotionMs).toBeLessThanOrEqual(10);
     expect(metrics.motionOffenders).toEqual([]);
     expect(metrics.scrollBehavior).not.toBe("smooth");
+    expect(metrics.storySticky).toEqual([]);
+    expect(metrics.storyTransforms).toEqual([]);
   }
   if (page.url().includes("/demo/plan")) {
     await expect(page.locator("body")).not.toContainText(
@@ -404,6 +478,17 @@ async function assertSemanticPresentation(page: Page) {
     expect(metrics.liveRegions).toHaveLength(1);
   }
   return metrics;
+}
+
+async function installMaterialFallback(page: Page) {
+  await page.addStyleTag({
+    content: `
+      *, *::before, *::after {
+        backdrop-filter: none !important;
+        -webkit-backdrop-filter: none !important;
+      }
+    `,
+  });
 }
 
 const PLAN_COPY = {
@@ -562,6 +647,23 @@ test.describe("provider-free governed presentation audit", () => {
             `${JSON.stringify(evidence, null, 2)}\n`,
             { encoding: "utf8", mode: 0o600 },
           );
+          await context.close();
+        });
+      }
+
+      for (const width of [1440, 768, 390] as const) {
+        const cell: AuditCell = {
+          route,
+          locale,
+          width,
+          motion: "no-preference",
+          zoom: "default",
+        };
+        test(`${slug(cell)} material fallback`, async ({ browser }) => {
+          const { context, page } = await openCell(browser, cell);
+          await installMaterialFallback(page);
+          const metrics = await assertSemanticPresentation(page);
+          expect(metrics.material.visibleBlurSurfaces).toEqual([]);
           await context.close();
         });
       }

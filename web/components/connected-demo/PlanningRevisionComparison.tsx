@@ -70,11 +70,11 @@ export function PlanningRevisionComparison({ comparison }: { comparison: Compari
       <div className="revision-plan-labels" aria-label={copy("revisionComparisonTitle")}>
         <div className="revision-plan-history">
           <strong>{copy("previousPlanLabel")}</strong>
-          <span>{copy("historyOnlyLabel")} · {copy("caseRevisionLabel")} {comparison.previous_revision}{copy("caseRevisionLabel") === copy("caseRevisionTechnicalLabel") ? null : <span className="technical-label"> {copy("caseRevisionTechnicalLabel")} {comparison.previous_revision}</span>}</span>
+          <span>{copy("historyOnlyLabel")} · {copy("caseRevisionLabel")} {comparison.previous_revision}</span>
         </div>
         <div className="revision-plan-current">
           <strong>{copy("currentRevisedPlanLabel")}</strong>
-          <span>{copy("currentPlanLabel")} · {copy("caseRevisionLabel")} {comparison.current_revision}{copy("caseRevisionLabel") === copy("caseRevisionTechnicalLabel") ? null : <span className="technical-label"> {copy("caseRevisionTechnicalLabel")} {comparison.current_revision}</span>}</span>
+          <span>{copy("currentPlanLabel")} · {copy("caseRevisionLabel")} {comparison.current_revision}</span>
         </div>
       </div>
       <div className="revision-comparison-table">

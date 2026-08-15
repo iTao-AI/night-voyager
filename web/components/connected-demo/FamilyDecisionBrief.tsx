@@ -5,7 +5,7 @@ import { presentCode, presentTradeOff } from "../../lib/presentation/codes";
 import { usePresentation } from "../../lib/presentation/context";
 import { formatCnyMinor } from "../../lib/presentation/format";
 
-export function FamilyDecisionBrief({
+export function FamilyDecisionAction({
   brief,
   confirmed,
   onConfirm,
@@ -15,6 +15,32 @@ export function FamilyDecisionBrief({
   confirmed: boolean;
   onConfirm: (confirmed: boolean) => void;
   onSubmit: () => void;
+}) {
+  const { copy } = usePresentation();
+  return (
+    <div className="family-decision-action" data-authority-action="true" data-brief-version={brief.brief_version}>
+      <label className="confirmation-summary">
+        <input type="checkbox" checked={confirmed} onChange={(event) => onConfirm(event.target.checked)} />
+        {copy("familyConfirmLabel")}
+      </label>
+      <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" disabled={!confirmed} onClick={onSubmit}>{copy("continueFamilyDecisionAction")}</button>
+      {!confirmed ? <p className="disabled-reason">{copy("familyConfirmationRequired")}</p> : null}
+    </div>
+  );
+}
+
+export function FamilyDecisionBrief({
+  brief,
+  confirmed,
+  onConfirm,
+  onSubmit,
+  renderAction = true,
+}: {
+  brief: CurrentDecisionBrief;
+  confirmed: boolean;
+  onConfirm: (confirmed: boolean) => void;
+  onSubmit: () => void;
+  renderAction?: boolean;
 }) {
   const { locale, copy } = usePresentation();
   const requirements = brief.decision_requirements;
@@ -43,12 +69,7 @@ export function FamilyDecisionBrief({
         <div><dt>{copy("hardCeilingLabel")}</dt><dd>{formatCnyMinor(locale, requirements.hard_ceiling_minor, requirements.currency)}</dd></div>
         <div><dt>{copy("requiredTradeOffLabel")}</dt><dd>{requirements.required_trade_offs.map((item) => presentTradeOff(locale, item)).join(", ")}</dd></div>
       </dl>
-      <label className="confirmation-summary">
-        <input type="checkbox" checked={confirmed} onChange={(event) => onConfirm(event.target.checked)} />
-        {copy("familyConfirmLabel")}
-      </label>
-      <button className="primary-action" data-primary-action="true" type="button" disabled={!confirmed} onClick={onSubmit}>{copy("continueFamilyDecisionAction")}</button>
-      {!confirmed ? <p className="disabled-reason">{copy("familyConfirmationRequired")}</p> : null}
+      {renderAction ? <FamilyDecisionAction brief={brief} confirmed={confirmed} onConfirm={onConfirm} onSubmit={onSubmit} /> : null}
     </article>
   );
 }

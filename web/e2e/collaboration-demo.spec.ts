@@ -41,7 +41,7 @@ async function verifyNegative(page: Page, caseId: string, key: string, expectedC
 }
 
 async function expectCollapsedNoTaskInspector(page: Page) {
-  const technicalEvidence = page.locator(".workspace-technical-evidence");
+  const technicalEvidence = page.locator("[data-frame-slot='technical']");
   const technicalSummary = technicalEvidence.locator(":scope > summary");
   await expect(technicalSummary).toBeVisible();
   await expect(technicalEvidence).not.toHaveAttribute("open", "");
@@ -65,7 +65,7 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: /跳到主要内容|Skip to main content/ })).toBeFocused();
   await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
-  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
   await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
 
   await page.getByRole("button", { name: /开始家长流程|Start parent flow/ }).click();
@@ -109,14 +109,17 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   });
   await page.getByRole("button", { name: /确认家庭预算|Confirm family budget/ }).click();
   await expect(page.getByRole("heading", { name: /协作流程已安全暂停|Collaboration paused safely/ })).toBeVisible();
-  await page.getByRole("button", { name: /重新载入协作 authority|Reload collaboration authority/ }).click();
+  await page.getByRole("button", { name: /重新载入协作信息|Reload collaboration information/ }).click();
   await expect(page.getByRole("heading", { name: /需要重新规划|Re-plan required/ })).toBeFocused();
   expect(confirmationKeys).toHaveLength(2);
   expect(confirmationKeys[0]).toBe(confirmationKeys[1]);
   await page.unroute("**/api/demo/memory-candidates/*/verification-decisions");
 
-  await expect(page.getByText("Fact version 1")).toBeVisible();
-  await expect(page.getByText("Case revision 2")).toBeVisible();
+  const confirmedRecord = page.locator("[data-confirmed-record]");
+  await expect(confirmedRecord).toHaveAttribute("data-fact-version", "1");
+  await expect(confirmedRecord).toHaveAttribute("data-case-revision", "2");
+  await expect(confirmedRecord.getByText(/事实版本|Information version/)).toBeVisible();
+  await expect(confirmedRecord.getByText(/档案版本|Record version/)).toBeVisible();
   await expectCollapsedNoTaskInspector(page);
   await expect(page.getByRole("button", { name: /create.*task/i })).toHaveCount(0);
   const raw = /schema_version|confirmed_fact_id|candidate_id|night_voyager_api|\/Users\/|41000000-/;
@@ -125,7 +128,7 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   for (const viewport of [{ width: 1440, height: 900 }, { width: 768, height: 900 }, { width: 390, height: 844 }]) {
     await page.setViewportSize(viewport);
     await expect(page.getByText("Our confirmed program budget is 300,000 to 400,000 CNY.")).toBeVisible();
-    await expect(page.getByText("Fact version 1")).toBeVisible();
+    await expect(confirmedRecord).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const shortTargets = await page.locator("button:visible, a.primary-action:visible").evaluateAll((nodes) => nodes.filter((node) => node.getBoundingClientRect().height < 44).length);
     expect(shortTargets).toBe(0);

@@ -26,7 +26,7 @@ describe("presentation accessibility contract", () => {
     expect(container.querySelector(".advisor-workspace-preview")).toBeInTheDocument();
     expect(container.querySelector(".portfolio-route-list")).toBeInTheDocument();
     expect(container.querySelector("details > summary")).toBeInstanceOf(HTMLElement);
-    expect(screen.getAllByRole("link", { name: "查看一次完整咨询流程" })[0].closest("details")).toBeNull();
+    expect(screen.getAllByRole("link", { name: "查看完整咨询流程" })[0].closest("details")).toBeNull();
   });
 
   it("declares durable focus, target, wrapping, link, CJK, and reduced-motion CSS", () => {
@@ -41,8 +41,10 @@ describe("presentation accessibility contract", () => {
     expect(css).toMatch(/text-decoration:\s*underline/);
     expect(css).toMatch(/overflow-wrap:\s*anywhere/);
     expect(css).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
-    expect(css).toContain("--nv-frame: #081113");
-    expect(css).toContain("--nv-canvas: #f2ede3");
+    expect(css).toContain("--nv-environment: #061117");
+    expect(css).toContain("--nv-work-surface: #fcfdfc");
+    expect(css).toContain("--nv-action: #2b7486");
+    expect(css).toContain("--nv-intervention: #ce765f");
     expect(css).toMatch(/\.workflow-rail-item\[data-state="current"\][\s\S]*border/);
     expect(css).toMatch(/\.portfolio-primary-action[\s\S]*min-block-size:\s*48px/);
     expect(css).toMatch(/@media\s*\(max-width:\s*767px\)[\s\S]*\.portfolio-workflow-list/);
@@ -56,7 +58,7 @@ describe("presentation accessibility contract", () => {
     const e2e = readFileSync(resolve(process.cwd(), "e2e/presentation.spec.ts"), "utf8");
     const composeConfig = readFileSync(resolve(process.cwd(), "playwright.compose.config.ts"), "utf8");
     const composeProof = readFileSync(resolve(process.cwd(), "../scripts/verify_compose.sh"), "utf8");
-    const currentText = css.match(/--nv-attention:\s*(#[0-9a-f]{6})/i)?.[1];
+    const currentText = css.match(/--nv-intervention:\s*(#[0-9a-f]{6})/i)?.[1];
     const rgb = (value: string) => value.match(/[0-9a-f]{2}/gi)!.map((channel) => Number.parseInt(channel, 16) / 255);
     const luminance = (value: string) => rgb(value).reduce((sum, channel, index) => {
       const linear = channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
@@ -69,15 +71,25 @@ describe("presentation accessibility contract", () => {
     };
 
     expect(currentText).toBeDefined();
-    expect(contrast(currentText!, "#fffdf8")).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(currentText!, "#061117")).toBeGreaterThanOrEqual(4.5);
     expect(css).toMatch(/\.workflow-rail-item\[data-state="current"\]\s*\{[^}]*border-left-color:/);
     expect(css).toMatch(/\.portfolio-brand[\s\S]*min-block-size:\s*44px/);
     expect(css).toMatch(/\.workspace-context-facts[\s\S]*grid-template-columns/);
     expect(css).toMatch(/\.portfolio-primary-action[\s\S]*min-block-size:\s*48px/);
     expect(css).toContain("@media (max-width: 1023px)");
     expect(css).toContain("@media (min-width: 1280px)");
+    expect(css).toMatch(
+      /@media \(max-width: 560px\)[\s\S]*\.advisor-product-frame \.workflow-rail-list\s*\{[\s\S]*display:\s*flex;[\s\S]*flex-direction:\s*row;[\s\S]*overflow-x:\s*auto;/,
+    );
+    expect(css).toMatch(/\.advisor-product-frame \.workflow-rail-item[\s\S]*min-block-size:\s*4rem/);
     expect(css).toContain("200% zoom");
+    expect(css).toMatch(/backdrop-filter/);
+    expect(css).toMatch(/max-width:\s*560px[\s\S]*backdrop-filter:\s*none/);
     expect(e2e).toContain("target.height < 44 || target.width < 44");
+    expect(e2e).toContain("visibleBlurSurfaces");
+    expect(e2e).toContain("backdrop-filter: none !important");
+    expect(e2e).toContain("storySticky");
+    expect(e2e).toContain("storyTransforms");
     expect(composeConfig).toContain("presentation.spec.ts");
     expect(composeProof).toContain("PRESENTATION_AUDIT_OUTPUT_DIR");
     expect(composeProof).toContain("presentation.spec.ts");

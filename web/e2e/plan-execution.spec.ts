@@ -90,7 +90,7 @@ async function rotate(page: Page, role: keyof typeof copy.en): Promise<string> {
 
 async function expectLiveAndVisibleCopy(page: Page, message: string) {
   await expect(page.getByRole("status")).toHaveText(message);
-  await expect(page.locator(".workspace-status-copy")).toHaveText(message);
+  await expect(page.locator("[data-frame-slot='work'] .workspace-status-copy")).toHaveText(message);
 }
 
 async function progress(
@@ -158,8 +158,8 @@ test("complete governed plan execution browser-to-database proof", async ({ page
     "data-proof-segment",
     "independent_execution_scenario",
   );
-  await expect(page.locator(".workspace-context-bar")).toContainText(
-    /独立的确定性执行场景|Independent deterministic execution scenario/,
+  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(
+    /独立演示场景，不沿用当前客户档案。|Independent demo scenario; it does not reuse the current client case\./,
   );
   await rotate(page, "student");
   const contextResponse = await page.request.get("/api/demo/plan-execution-context");

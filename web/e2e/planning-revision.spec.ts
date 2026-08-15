@@ -61,6 +61,47 @@ const copy = locale === "en"
       safeExit: "返回产品概览",
     };
 
+async function expectTransitionSurfacesReadable(page: Page, selectors: string, state: string) {
+  const measurements = await page.locator(selectors).evaluateAll((elements) => {
+    const parse = (value: string) => {
+      const channels = (value.match(/[\d.]+/g) ?? []).map(Number);
+      const alpha = channels.length >= 4 ? channels[3] : 1;
+      return alpha >= 0.99 ? channels.slice(0, 3) : [];
+    };
+    const luminance = (rgb: number[]) => rgb.reduce((sum, channel, index) => {
+      const normalized = channel / 255;
+      const linear = normalized <= 0.04045
+        ? normalized / 12.92
+        : ((normalized + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index]!;
+    }, 0);
+    const contrast = (foreground: number[], background: number[]) => {
+      const light = Math.max(luminance(foreground), luminance(background));
+      const dark = Math.min(luminance(foreground), luminance(background));
+      return (light + 0.05) / (dark + 0.05);
+    };
+    return elements.map((element) => {
+      let surface: HTMLElement | null = element as HTMLElement;
+      let background = parse(getComputedStyle(surface).backgroundColor);
+      while (surface && background.length < 3) {
+        surface = surface.parentElement;
+        if (surface) background = parse(getComputedStyle(surface).backgroundColor);
+      }
+      const foreground = parse(getComputedStyle(element).color);
+      const box = element.getBoundingClientRect();
+      const frame = element.closest<HTMLElement>(".advisor-product-frame-grid")?.getBoundingClientRect();
+      return {
+        contrast: foreground.length === 3 && background.length === 3 ? contrast(foreground, background) : 0,
+        outsideFrame: frame ? box.left < frame.left - 1 || box.right > frame.right + 1 : false,
+      };
+    });
+  });
+  expect(measurements, state).not.toHaveLength(0);
+  expect(measurements.filter((measurement) => measurement.contrast < 4.5), state).toEqual([]);
+  expect(measurements.filter((measurement) => measurement.outsideFrame), state).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), state).toBe(true);
+}
+
 type Json = Record<string, unknown>;
 type FlowProof = {
   case_id: string;
@@ -430,8 +471,8 @@ async function blockedFlow(page: Page, advisorCsrf: string): Promise<FlowProof> 
   await hydrate(page, BLOCKED_CASE, "advisor", nextAdvisorCsrf);
   await page.goto("/demo");
   await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
-  await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
-  await expect(page.getByRole("heading", { name: copy.blocked })).toBeVisible();
+  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+  await expect(page.locator("[data-frame-slot='authority']").getByRole("heading", { name: copy.blocked })).toBeVisible();
   await expect(page.getByRole("link", { name: copy.safeExit })).toBeVisible();
   await expect(
     page.getByRole("button", { name: copy.approve }),
@@ -473,7 +514,7 @@ test(
     await hydrate(page, HAPPY_CASE, "advisor", csrf);
     await page.goto("/demo");
     await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute("data-proof-segment", "connected_same_case");
-    await expect(page.locator(".workspace-context-bar")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
+    await expect(page.locator("[data-frame-slot='top-band']")).toContainText(/同一 Case 的连接证明|Connected same-Case proof/);
     const initialLedger = await read(
       page,
       `/api/demo/cases/${HAPPY_CASE}/advisor-ledger`,
@@ -573,6 +614,11 @@ test(
     await expect(
       page.getByRole("heading", { name: copy.comparison }),
     ).toBeVisible();
+    await expectTransitionSurfacesReadable(
+      page,
+      ".revision-comparison-table table, .changed-fact-summary dl > div",
+      "planning revision transition",
+    );
     const finalLedger = await read(
       page,
       `/api/demo/cases/${HAPPY_CASE}/advisor-ledger`,

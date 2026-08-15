@@ -13,11 +13,11 @@ import { connectedWorkflowStage, type WorkflowStateReference } from "../../lib/p
 import { AdvisorWorkspaceShell } from "../presentation/AdvisorWorkspaceShell";
 import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
 import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
-import { AdvisorLedger } from "./AdvisorLedger";
+import { AdvisorLedger, AdvisorLedgerAction } from "./AdvisorLedger";
 import { DecisionReceiptTimeline } from "./DecisionReceiptTimeline";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
-import { FamilyDecisionBrief } from "./FamilyDecisionBrief";
-import { RecoveryNotice } from "./RecoveryNotice";
+import { FamilyDecisionAction, FamilyDecisionBrief } from "./FamilyDecisionBrief";
+import { RecoveryAction, RecoveryNotice } from "./RecoveryNotice";
 import { RevisionFactEditor } from "./RevisionFactEditor";
 
 function retainedLedger(state: DemoDisplayState): Ledger | null {
@@ -106,6 +106,7 @@ export function ConnectedDemo() {
         ? { title: "demoSwitchingAdvisorTitle" as const, body: "demoSwitchingAdvisorBody" as const, action: "continueAsAdvisorAction" as const, run: () => demo.rotateToAdvisor(state.caseId) }
         : { title: "demoSwitchingTitle" as const, body: "demoSwitchingBody" as const, action: "continueAsParentAction" as const, run: () => demo.rotateToParent(state.caseId) }
     : null;
+  const ledgerOwnsAction = Boolean(ledger && !["role_switching", "recoverable_error"].includes(state.value));
   const status = (() => {
     if (ledger) return presentCode(locale, "demoPhase", ledger.phase);
     switch (state.value) {
@@ -118,6 +119,45 @@ export function ConnectedDemo() {
       case "role_switching": return rotateAction ? copy(rotateAction.body) : copy("statusUnavailable");
     }
   })();
+  const authorityAction = demo.journeyConflict ? (
+    <JourneyConflictNotice
+      currentJourney="collaboration"
+      returnHref="/demo/collaboration"
+      headingRef={conflictHeading}
+      onEnd={() => void demo.endConflictingJourney()}
+    />
+  ) : state.value === "bootstrapping" ? (
+    <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => runUserAction(() => demo.connectAdvisor())}>{copy("demoStartAction")}</button>
+  ) : state.value === "revision_requested" ? (
+    <RevisionFactEditor
+      currentFacts={demo.currentFacts}
+      expectedCaseRevision={state.status.current_revision}
+      onSubmit={() => runUserAction(() => demo.submitPreferredCountries())}
+    />
+  ) : rotateAction ? (
+    <section className="collaboration-action" aria-live="polite">
+      <h3>{copy(rotateAction.title)}</h3>
+      <p>{copy(rotateAction.body)}</p>
+      <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => runUserAction(rotateAction.run)}>{copy(rotateAction.action)}</button>
+    </section>
+  ) : state.value === "family_review" ? (
+    <FamilyDecisionAction brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} />
+  ) : state.value === "recoverable_error" ? (
+    <RecoveryAction onReconnect={() => runUserAction(() => demo.retry())} />
+  ) : ledgerOwnsAction && ledger ? (
+    <AdvisorLedgerAction
+      ledger={ledger}
+      busy={busy}
+      onPrimaryAction={() => runUserAction(primaryFor(ledger))}
+      onSecondaryAction={ledger.phase === "review_required" ? () => runUserAction(() => demo.requestRevision()) : undefined}
+    />
+  ) : state.value === "decision_submitting" ? (
+    <p className="workspace-authority-status" aria-live="polite">{copy("demoRecordingDecision")}</p>
+  ) : state.value === "plan_ready" ? (
+    <p className="workspace-authority-status">{copy("parentRoleAuthority")}</p>
+  ) : (
+    <p className="workspace-authority-status">{copy("workspaceAwaitingAction")}</p>
+  );
 
   return (
     <AdvisorWorkspaceShell
@@ -128,6 +168,7 @@ export function ConnectedDemo() {
       proofSegment="connected_same_case"
       status={<p className="status workspace-status-copy">{status}</p>}
       supportingEvidence={ledger?.evidence?.length ? <EvidenceDisclosure evidence={ledger.evidence} /> : undefined}
+      authority={authorityAction}
       technicalEvidence={
         demo.inspector && inspectorVisible
           ? <PlanningSkillInspector inspector={demo.inspector} />
@@ -135,17 +176,10 @@ export function ConnectedDemo() {
       }
       titleKey="connectedWorkspaceTitle"
     >
-      {demo.journeyConflict === "collaboration" ? (
-        <JourneyConflictNotice
-          currentJourney="collaboration"
-          returnHref="/demo/collaboration"
-          headingRef={conflictHeading}
-          onEnd={() => void demo.endConflictingJourney()}
-        />
-      ) : null}
+      {demo.journeyConflict === "collaboration" ? <p className="workspace-authority-status">{copy("journeyConflictBody")}</p> : null}
 
       {!demo.journeyConflict && state.value === "bootstrapping" ? (
-        <section className="ledger-hero"><p className="overline">{copy("demoStartOverline")}</p><h3>{copy("demoStartTitle")}</h3><p className="lede">{copy("demoStartBody")}</p><button className="primary-action" data-primary-action="true" type="button" onClick={() => runUserAction(() => demo.connectAdvisor())}>{copy("demoStartAction")}</button></section>
+        <section className="ledger-hero"><p className="overline">{copy("demoStartOverline")}</p><h3>{copy("demoStartTitle")}</h3><p className="lede">{copy("demoStartBody")}</p></section>
       ) : null}
 
       {!demo.journeyConflict && ledger ? (
@@ -153,6 +187,7 @@ export function ConnectedDemo() {
           ledger={ledger}
           confirmedFacts={confirmedFactsFor(ledger.case_id, ledger.case_revision)}
           busy={busy}
+          renderAction={false}
           onPrimaryAction={() => runUserAction(primaryFor(ledger))}
           onSecondaryAction={ledger.phase === "review_required"
             ? () => runUserAction(() => demo.requestRevision())
@@ -166,25 +201,14 @@ export function ConnectedDemo() {
           <h3 id="revision-proposal-title">{copy("revisionProposalTitle")}</h3>
           <p>{copy("studentRoleAuthority")}</p>
           <p>{copy("revisionProposalBody")}</p>
-          <RevisionFactEditor
-            currentFacts={demo.currentFacts}
-            expectedCaseRevision={state.status.current_revision}
-            onSubmit={() => runUserAction(() => demo.submitPreferredCountries())}
-          />
         </section>
       ) : null}
 
       {!demo.journeyConflict && rotateAction ? (
-        <section className="ledger-hero" aria-live="polite">
-          <h3>{copy(rotateAction.title)}</h3>
-          <p>{copy(rotateAction.body)}</p>
-          <button className="primary-action" data-primary-action="true" type="button" onClick={() => runUserAction(rotateAction.run)}>
-            {copy(rotateAction.action)}
-          </button>
-        </section>
+        <section className="ledger-hero" aria-live="polite"><h3>{copy(rotateAction.title)}</h3><p>{copy(rotateAction.body)}</p></section>
       ) : null}
 
-      {!demo.journeyConflict && state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} /> : null}
+      {!demo.journeyConflict && state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} renderAction={false} /> : null}
       {!demo.journeyConflict && state.value === "decision_submitting" ? <section className="ledger-hero" aria-live="polite"><h3>{copy("demoRecordingDecision")}</h3></section> : null}
       {!demo.journeyConflict && state.value === "plan_ready" ? (
         <>
@@ -196,7 +220,7 @@ export function ConnectedDemo() {
           <p className="separate-scenario-handoff"><Link className="secondary-action" href="/demo/plan">{copy("separateExecutionScenario")}</Link></p>
         </>
       ) : null}
-      {!demo.journeyConflict && state.value === "recoverable_error" ? <RecoveryNotice code={state.code} onReconnect={() => runUserAction(() => demo.retry())} headingRef={recoveryHeading} /> : null}
+      {!demo.journeyConflict && state.value === "recoverable_error" ? <RecoveryNotice code={state.code} onReconnect={() => runUserAction(() => demo.retry())} headingRef={recoveryHeading} renderAction={false} /> : null}
     </AdvisorWorkspaceShell>
   );
 }

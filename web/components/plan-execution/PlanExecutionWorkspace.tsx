@@ -97,6 +97,89 @@ export function PlanExecutionWorkspace({
             ? copy("planExecutionRecoverableError")
             : "";
 
+  const authorityAction = (
+    <div className="plan-execution-authority" data-execution-authority>
+      <div className="current-action-controls" data-current-action-controls>
+        {state.value === "loading" && <p>{copy("planExecutionConnectPrompt")}</p>}
+        {state.value === "ready_to_start" && (
+          <>
+            {role === "advisor" && <p>{copy("planExecutionConnectPrompt")}</p>}
+            <button
+              className="execution-primary-action workspace-primary-action"
+              data-primary-action="true"
+              disabled={busy || role === "advisor"}
+              onClick={() => void controller.start()}
+            >
+              {copy("planExecutionStart")}
+            </button>
+          </>
+        )}
+        {canAttest && (
+          <CheckpointAttestationForm
+            disabled={busy}
+            onProgress={() => void controller.attest("progress")}
+            onCompletion={() => void controller.attest("completion")}
+            onBlocked={(reason) => void controller.attest("blocked", reason)}
+            labels={{
+              group: copy("planExecutionAttestationLabel"),
+              progress: copy("planExecutionProgress"),
+              completion: copy("planExecutionSubmitCompletion"),
+              blocked: copy("planExecutionRecordBlocked"),
+              blockedReason: copy("planExecutionBlockedReason"),
+              missingInput: copy("planExecutionMissingInput"),
+              externalUnavailable: copy("planExecutionExternalUnavailable"),
+              deadlineRisk: copy("planExecutionDeadlineRisk"),
+            }}
+          />
+        )}
+        {isBlocked && <p>{copy("planExecutionBlocked")}</p>}
+        {isOverdue && <p>{copy("planExecutionOverdue")}</p>}
+        {canReassess && (
+          <>
+            <p>{copy("planExecutionReassessmentStop")}</p>
+            <button
+              className="execution-primary-action workspace-primary-action"
+              data-primary-action="true"
+              disabled={busy}
+              onClick={() => void controller.reassess(isBlocked ? "blocked_attestation" : "deadline_elapsed")}
+            >
+              {copy("planExecutionRequestReassessment")}
+            </button>
+          </>
+        )}
+        {state.value === "awaiting_advisor" && !canVerify && (
+          <p>{copy("planExecutionWaitingAdvisor")}</p>
+        )}
+        {canVerify && (
+          <AdvisorVerificationPanel
+            disabled={busy}
+            onVerify={() => void controller.verify("verify")}
+            onRequestUpdate={() => void controller.verify("request_update")}
+            labels={{
+              group: copy("planExecutionVerificationLabel"),
+              verify: copy("planExecutionVerify"),
+              requestUpdate: copy("planExecutionRequestUpdate"),
+            }}
+          />
+        )}
+        {state.value === "execution_completed" && <p>{copy("planExecutionCompleted")}</p>}
+        {state.value === "reassessment_required" && <p>{copy("planExecutionReassessment")}</p>}
+        {(state.value === "session_changed" || state.value === "recoverable_error") && (
+          <ExecutionRecoveryNotice
+            sessionChanged={state.value === "session_changed"}
+            disabled={busy}
+            onRecover={() => void controller.recover()}
+            labels={{
+              sessionChanged: copy("planExecutionSessionChanged"),
+              recoverable: copy("planExecutionRecoverableError"),
+              recover: copy("planExecutionRecover"),
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <AdvisorWorkspaceShell
       activeRole={role ?? null}
@@ -163,6 +246,7 @@ export function PlanExecutionWorkspace({
           />
         </>
       }
+      authority={authorityAction}
       technicalEvidence={<p>{copy("planExecutionApprovedPlanBody")}</p>}
       titleKey="planExecutionWorkspaceTitle"
     >
@@ -196,84 +280,6 @@ export function PlanExecutionWorkspace({
               <p className="field-label">{copy("planExecutionNextHandoff")}</p>
               <p>{nextHandoff}</p>
             </div>
-          </div>
-          <div className="current-action-controls" data-current-action-controls>
-            {state.value === "loading" && <p>{copy("planExecutionConnectPrompt")}</p>}
-            {state.value === "ready_to_start" && (
-              <>
-                {role === "advisor" && <p>{copy("planExecutionConnectPrompt")}</p>}
-                <button
-                  className="execution-primary-action"
-                  data-primary-action="true"
-                  disabled={busy || role === "advisor"}
-                  onClick={() => void controller.start()}
-                >
-                  {copy("planExecutionStart")}
-                </button>
-              </>
-            )}
-            {canAttest && (
-              <CheckpointAttestationForm
-                disabled={busy}
-                onProgress={() => void controller.attest("progress")}
-                onCompletion={() => void controller.attest("completion")}
-                onBlocked={(reason) => void controller.attest("blocked", reason)}
-                labels={{
-                  group: copy("planExecutionAttestationLabel"),
-                  progress: copy("planExecutionProgress"),
-                  completion: copy("planExecutionSubmitCompletion"),
-                  blocked: copy("planExecutionRecordBlocked"),
-                  blockedReason: copy("planExecutionBlockedReason"),
-                  missingInput: copy("planExecutionMissingInput"),
-                  externalUnavailable: copy("planExecutionExternalUnavailable"),
-                  deadlineRisk: copy("planExecutionDeadlineRisk"),
-                }}
-              />
-            )}
-            {isBlocked && <p>{copy("planExecutionBlocked")}</p>}
-            {isOverdue && <p>{copy("planExecutionOverdue")}</p>}
-            {canReassess && (
-              <>
-                <p>{copy("planExecutionReassessmentStop")}</p>
-                <button
-                  className="execution-primary-action"
-                  data-primary-action="true"
-                  disabled={busy}
-                  onClick={() => void controller.reassess(isBlocked ? "blocked_attestation" : "deadline_elapsed")}
-                >
-                  {copy("planExecutionRequestReassessment")}
-                </button>
-              </>
-            )}
-            {state.value === "awaiting_advisor" && !canVerify && (
-              <p>{copy("planExecutionWaitingAdvisor")}</p>
-            )}
-            {canVerify && (
-              <AdvisorVerificationPanel
-                disabled={busy}
-                onVerify={() => void controller.verify("verify")}
-                onRequestUpdate={() => void controller.verify("request_update")}
-                labels={{
-                  group: copy("planExecutionVerificationLabel"),
-                  verify: copy("planExecutionVerify"),
-                  requestUpdate: copy("planExecutionRequestUpdate"),
-                }}
-              />
-            )}
-            {state.value === "execution_completed" && <p>{copy("planExecutionCompleted")}</p>}
-            {state.value === "reassessment_required" && <p>{copy("planExecutionReassessment")}</p>}
-            {(state.value === "session_changed" || state.value === "recoverable_error") && (
-              <ExecutionRecoveryNotice
-                sessionChanged={state.value === "session_changed"}
-                disabled={busy}
-                onRecover={() => void controller.recover()}
-                labels={{
-                  sessionChanged: copy("planExecutionSessionChanged"),
-                  recoverable: copy("planExecutionRecoverableError"),
-                  recover: copy("planExecutionRecover"),
-                }}
-              />
-            )}
           </div>
         </div>
       </section>

@@ -13,6 +13,8 @@ The historical label "focused advisor-family/evidence route" is retained only in
 
 Current presentation wording: advisor-centered route-analysis and downstream client-confirmation.
 
+The current visual authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The root projects `¥300,000–400,000` for the same Case; the persisted connected result remains `¥305,500–400,000`; `/demo/plan` remains independent.
+
 `/demo` also remains independently available as the advisor route-analysis and
 downstream client-confirmation surface. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI
 identity, task, review, decision, SSE, and three connected read endpoints, including
@@ -57,7 +59,8 @@ and has no runtime dependency. All connected state is local synthetic PostgreSQL
 state.
 
 The implemented route map was verified by the local `scripts/verify_compose.sh`
-presentation lane: `71/71` presentation assertions passed across both locales, the
-five audited widths, reduced motion, 200% zoom, and normal/blocked keyboard paths.
+presentation lane: `103/103` presentation assertions passed across both locales, the
+six audited widths, reduced motion, 200% zoom, material fallback, and normal/blocked
+keyboard paths.
 The connected same-Case proof ends at its receipt and `TimelinePlan`; `/demo/plan`
 remains a separately seeded execution scenario.
