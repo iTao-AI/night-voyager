@@ -23,7 +23,7 @@ PRIVATE_OR_METADATA_MARKERS = (
 )
 LOCKED_DEPENDENCY_IDENTITIES = {
     "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
-    "uv.lock": "42ed354a51331efb9c7566dcdce628f78baff1723a494741cf7fe78bdab9823f",
+    "uv.lock": "370ed4ef110cb8e050e276a9baf752c0e2cfe8c50e7ee143115b113b5a4bd253",
     "web/package.json": "4cfef58fd5ae42dede2984558ddd6541709b7021f34ddbbde50f22b027b163d0",
     "web/package-lock.json": (
         "00abdf8c8818dee085a428e21673969d6badcce3c6fbc46f974e2a1fa34697cc"
