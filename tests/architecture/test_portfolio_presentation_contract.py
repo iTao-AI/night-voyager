@@ -24,9 +24,9 @@ PRIVATE_OR_METADATA_MARKERS = (
 LOCKED_DEPENDENCY_IDENTITIES = {
     "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
     "uv.lock": "370ed4ef110cb8e050e276a9baf752c0e2cfe8c50e7ee143115b113b5a4bd253",
-    "web/package.json": "4cfef58fd5ae42dede2984558ddd6541709b7021f34ddbbde50f22b027b163d0",
+    "web/package.json": "66d2aec9caa2b142888c22eb71c2affb41a3e49022024f876a78462cad5fe195",
     "web/package-lock.json": (
-        "00abdf8c8818dee085a428e21673969d6badcce3c6fbc46f974e2a1fa34697cc"
+        "8c733d67f79a1879e2e67c06a5883ca34da79923ef411227904e240695929d3d"
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"

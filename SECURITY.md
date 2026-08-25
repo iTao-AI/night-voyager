@@ -12,7 +12,7 @@ Do not open a public issue containing credentials, private records, or exploit d
 
 Synthetic defaults are for local development and tests only. Production mode rejects the repository's default secret. Never use `.env.example` values for a public deployment.
 
-The current development web manifest and lock use Next.js and `eslint-config-next` `16.3.0`, with `postcss@8.5.23` and compatible transitive `nanoid@3.3.18`. The repository has no direct postcss, nanoid, or sharp dependency and no npm override. Dependabot hosted alert status is a post-merge read-only gate; this local change makes no hosted alert claim.
+The current development web manifest and lock use Next.js and `eslint-config-next` `16.3.2`, with `postcss@8.5.23` and compatible transitive `nanoid@3.3.18`. The repository has no direct postcss, nanoid, or sharp dependency and no npm override. Dependabot hosted alert status is a post-merge read-only gate; this local change makes no hosted alert claim.
 
 The Python runtime graph for the optional `mke` extra resolves `cryptography==50.0.0` transitively through `mcp` and `PyJWT[crypto]`. This is the first patched version for Dependabot alert #14 (`GHSA-g6cj-pr64-35w5` / `CVE-2026-69247`). The local graph is outside the affected range; hosted alert closure is evaluated only after merge and is not claimed by local validation. Post-merge GitHub readback remains mandatory. A source and test scan found no Night Voyager use of cryptography's PKCS#7 decryption or finite-field Diffie-Hellman APIs, so this upgrade requires no product compatibility shim.
 
