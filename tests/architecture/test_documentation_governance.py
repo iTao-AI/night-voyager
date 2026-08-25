@@ -767,7 +767,7 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "release candidate" not in source.lower()
         assert "sharp 0.35.3" in source
         assert "GHSA-f88m-g3jw-g9cj" in source
-        assert "16.3.0" in source
+        assert "16.3.2" in source
         assert "after merge" in source
         assert "audit-zero" in source
         assert "postcss@8.5.23" in source
@@ -830,7 +830,7 @@ def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
 def test_current_security_policy_tracks_the_development_dependency_path() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 
-    assert "16.3.0" in security
+    assert "16.3.2" in security
     assert "sharp 0.35.3" in security
     assert "GHSA-f88m-g3jw-g9cj" in security
     assert "no direct postcss, nanoid, or sharp dependency" in security
