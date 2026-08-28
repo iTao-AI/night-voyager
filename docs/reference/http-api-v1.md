@@ -22,18 +22,24 @@ public error while expiring both identity cookies, after which the client may
 bootstrap and mint again. Unexpected persistence and connectivity failures are
 not normalized as authentication failures. M2 does not enable CORS; M5 connects
 `/demo` through same-origin explicit BFF handlers without changing this identity authority.
-The plan-execution page accepts only `scenario=happy|blocked` and maps scenario
-plus role to one server-owned principal. It never sends a `case_id` selector.
-Rotation is allowed only within generic, Happy, or Blocked scope.
+The plan-execution page accepts either one canonical lowercase `case_id` for the
+connected same-Case mode or `scenario=happy|blocked` for the independent seeded
+mode. These query identities are mutually exclusive; mixed or contradictory values
+fail closed. Connected mode derives the current Case execution context and maps the
+assigned role through the existing session authority. Seeded mode maps scenario
+plus role to one server-owned principal. Rotation is allowed only within the active
+generic, connected Case, Happy, or Blocked scope.
 
 ## Governed timeline execution endpoints
 
-Migration `0014` adds six strict, `no-store` routes:
+The existing timeline execution surface includes six strict, `no-store` routes plus
+the current connected Case context read:
 
 | Method and path | Assigned actor | Result |
 | --- | --- | --- |
 | `GET /api/v1/plan-execution-context?scenario=governed-plan-execution-v1` | advisor/student/parent | server-selected Case, decision receipt, timeline, execution, and verified active role |
 | `GET /api/v1/cases/{case_id}/timeline-execution` | advisor/student/parent | bounded authoritative execution projection |
+| `GET /api/v1/cases/{case_id}/plan-execution-context` | assigned advisor/student/parent | exact current Case/revision/decision/receipt/timeline and optional execution context |
 | `POST /api/v1/timeline-plans/{timeline_plan_id}/executions` | student/parent | immutable start receipt |
 | `POST /api/v1/timeline-executions/{execution_id}/checkpoint-attestations` | accountable student/parent | structured attestation receipt |
 | `POST /api/v1/timeline-executions/{execution_id}/checkpoint-verifications` | advisor | verify/request-update receipt |
@@ -334,9 +340,10 @@ explicit historical status.
 
 ## M5 same-origin BFF
 
-The connected browser uses twelve explicit `/api/demo/*` Route Handlers for
+The connected browser uses thirteen explicit `/api/demo/*` Route Handlers for
 session bootstrap/create/delete, Ledger read, task create/read/cancel/events,
-advisor review, current Brief read, journey-status read, and family decision. There is no catch-all
+advisor review, current Brief read, journey-status read, case-scoped plan-execution
+context read, and family decision. There is no catch-all
 proxy. The BFF validates UUID path segments, bounded bodies and deadlines,
 forwards direct SSE bytes, and maps only a closed set of public problems.
 
@@ -360,8 +367,9 @@ or decide a non-current Brief.
 
 ## Governed timeline execution transport
 
-The development-only `/demo/plan` BFF preserves the existing FastAPI contract:
-closed scenario identity is resolved server-side, every mutation returns an
+The development-only `/demo/plan` BFF supports two exclusive authority modes:
+`case_id` mirrors the connected Case context read, while bare/`scenario` routes
+resolve the existing seeded scenario identity server-side. Every mutation returns an
 immutable receipt, and the browser then performs a fresh timeline-execution GET.
 The UI cannot submit role, current action, due date, risk, or an authority date.
 Lost acknowledgements may replay only the exact persisted request body and

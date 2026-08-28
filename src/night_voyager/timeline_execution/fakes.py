@@ -7,6 +7,7 @@ from uuid import UUID
 from night_voyager.identity.models import ActorContext
 from night_voyager.timeline_execution.hashing import canonical_json_bytes
 from night_voyager.timeline_execution.models import (
+    ConnectedPlanExecutionContextV1,
     PlanExecutionContextV1,
     TimelineExecutionViewV1,
     TimelineMutationReceiptV1,
@@ -24,6 +25,7 @@ class FakeTimelineExecutionRepository:
     context_result: PlanExecutionContextV1 | None
     view_result: TimelineExecutionViewV1 | None
     receipts: dict[str, TimelineMutationReceiptV1]
+    connected_context_result: ConnectedPlanExecutionContextV1 | None = None
     calls: list[tuple[str, bytes]] = field(
         default_factory=lambda: list[tuple[str, bytes]]()
     )
@@ -35,6 +37,14 @@ class FakeTimelineExecutionRepository:
     ) -> PlanExecutionContextV1 | None:
         self.calls.append(("context", canonical_json_bytes({"scenario": scenario})))
         return self.context_result
+
+    async def connected_context(
+        self, actor: ActorContext, case_id: UUID
+    ) -> ConnectedPlanExecutionContextV1 | None:
+        self.calls.append(
+            ("connected_context", canonical_json_bytes({"case_id": str(case_id)}))
+        )
+        return self.connected_context_result
 
     async def read(
         self, actor: ActorContext, case_id: UUID

@@ -2,8 +2,9 @@
 
 This is the current authority map for the reference-driven presentation. The root
 uses a static same-Case projection with `¥300,000–400,000`; the persisted connected
-outcome remains `¥305,500–400,000`. `/demo/plan` is an independently seeded
-execution scenario and does not consume the connected Case or session.
+outcome remains `¥305,500–400,000`. `/demo/plan` supports either the connected
+`case_id` continuation or an independently seeded execution scenario; the two
+authority sources never consume one another's Case or session.
 
 | Source concept | Advisor projection | Family projection | Authority |
 | --- | --- | --- | --- |
@@ -23,6 +24,8 @@ execution scenario and does not consume the connected Case or session.
 | presentation locale | exact `zh-CN` or `en` labels over the same projection | exact `zh-CN` or `en` labels over the same projection | presentation-only `localStorage`; no business authority |
 | `TimelineExecution` current action | milestone/state/due date/accountable role/risk/next handoff plus advisor controls | the same server-owned facts plus only the accountable family action | PostgreSQL projection, immutable receipt, and fresh GET |
 | execution activity | localized bounded technical disclosure | localized bounded technical disclosure | latest 64 durable rows plus exact total/truncation from PostgreSQL |
+| connected plan execution context | exact Case revision, decision, DecisionReceipt, TimelinePlan, optional execution, assignment, and active role | same exact anchors with role-scoped execution action | direct PostgreSQL projection under existing RLS and SELECT grants |
+| seeded plan execution context | closed Happy or Blocked execution anchors | same independently seeded authority | existing seeded context projection and principal mapping |
 | portfolio presentation | static route/story preview and public boundary copy | absent; no session, task, or API effect | presentation-only React projection |
 
 Before task creation, the checked-in fixture contract only limits the canonical
@@ -40,3 +43,6 @@ Existing advisor-ledger and current-decision-brief routes return V1 by default;
 one exact `contract_version=2` selects V2. `/journey-status` returns only Case,
 revision, phase, and verified active role. The browser cannot submit or retain
 predecessor, run hash, comparison, candidate, or renewed-authorization authority.
+The connected plan-execution context adds no mutation authority; it is available
+only to an assigned participant and fails closed on missing or contradictory
+identities.

@@ -45,7 +45,7 @@ resume/prior state remains fail-closed.
 | `revision_review_required` | exact successor and deterministic old/new comparison | perform renewed advisor review | reuse the predecessor review |
 | `revision_blocked` | successor is blocked and comparison remains visible to advisor | remediate Evidence/facts | fabricate review inputs or success |
 | `family_review` | current family-safe Brief identity | real advisor-to-parent rotation | decide as advisor |
-| `plan_ready` | completion status or parent receipt/timeline | continue as family/read result | create a task |
+| `plan_ready` | completion status or parent receipt/timeline | continue the exact Case into execution or read result | create a task implicitly |
 | `terminal_task_failure` | public failure and recovery guidance | explicit retry/remediation | synthesize success |
 
 The task-free collaboration route has its own closed lifecycle:
@@ -90,6 +90,17 @@ provider-free: the reducer adopts only closed V2/V3 projections, presents the
 controlled student preferred-country editor and deterministic old/new comparison,
 requires fresh advisor authorization, and keeps `revision_blocked` free of approval
 and family-decision actions.
+
+The plan-execution route has two mutually exclusive authority sources:
+
+| Authority | Route identity | Server-derived source | Recovery boundary |
+| --- | --- | --- | --- |
+| `connected` | canonical `case_id` only | assigned participant, current Case revision, decision, receipt, timeline, optional execution, and active role | exact Case identity; never restored as a seeded scenario |
+| `seeded` | bare route or exact `scenario=happy|blocked` | existing independently seeded execution context and principal | exact scenario identity; never restored as a connected Case |
+
+Unknown, mixed, cross-Case, stale, or contradictory identities fail closed. Both
+sources reuse the existing execution reducer, mutation authority, receipt-then-GET
+reconciliation, and presentation components.
 
 The governed plan-execution route has a separate closed lifecycle:
 

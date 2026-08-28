@@ -1135,10 +1135,12 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
         ):
             assert token in current_readme
     assert "AI collaboration platform for study-abroad advisors" in readme
-    assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
+    assert "/demo/plan?case_id=<case_id>" in readme
+    assert "pending_future_authorization" in readme
     assert "independent deterministic execution scenario" in readme
     assert "面向留学顾问的 AI 协作平台" in readme_cn
-    assert "同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束" in readme_cn
+    assert "/demo/plan?case_id=<case_id>" in readme_cn
+    assert "pending_future_authorization" in readme_cn
     assert "独立播种" in readme_cn
 
     for token in (
@@ -1286,7 +1288,7 @@ def test_fact_to_plan_walkthrough_documents_same_case_explicit_authority() -> No
     assert "same Case" in normalized["storyboard"]
     assert "explicit task action" in normalized["storyboard"]
     assert "same-Case handoff" in normalized["route_map"]
-    assert "no new BFF" in normalized["route_map"]
+    assert "case-context read handler" in normalized["route_map"]
     assert "`handoff_validating`" in normalized["state_matrix"]
     assert "transient" in normalized["state_matrix"]
     assert "current confirmed facts" in normalized["projection_matrix"]

@@ -2,9 +2,10 @@
 
 M5 connects the focused `/demo` route to the local synthetic FastAPI, worker, SSE,
 and PostgreSQL paths. It is the route-analysis segment of the advisor workspace and
-proves advisor review followed by client confirmation; its connected same-Case proof
-ends at the receipt and TimelinePlan. It is not production tenancy, live
-institutional coverage, or admissions advice.
+proves advisor review followed by client confirmation. The current local candidate
+continues that same Case from its receipt and TimelinePlan into the existing plan
+execution workspace; bare `/demo/plan` remains an independent seeded scenario. It
+is not production tenancy, live institutional coverage, or admissions advice.
 
 The current shared presentation uses the reference-driven Midnight Editorial Advisor
 Workspace: a dark product frame, warm decision surface, five-stage display rail,
@@ -27,9 +28,12 @@ or enter the `sessionStorage` journey envelope.
 The connected same-Case walkthrough begins at `/demo/collaboration` and is documented
 in the [governed collaboration walkthrough](collaboration-walkthrough.md). It shares
 the session envelope and read-only inspector. Its controlled handoff creates no task
-or SSE connection; `/demo` owns both only after explicit advisor action.
-The independently seeded Happy/Blocked execution scenario at `/demo/plan` is not a
-continuation of this Case or session.
+or SSE connection; `/demo` owns both only after explicit advisor action. After the
+family decision reaches `plan_ready`, its primary action carries only the current
+`case_id` to `/demo/plan?case_id=<case_id>`, where the server re-derives the exact
+execution context. The independently seeded Happy/Blocked execution scenario at
+bare `/demo/plan` or `?scenario=blocked` is not a continuation of this Case or
+session.
 
 ## Run the walkthrough
 
@@ -60,7 +64,7 @@ The revision-aware backend phases expose one primary action:
 | `revision_review_required` | successor PlanningRun and deterministic old/new comparison | fresh advisor authorization |
 | `revision_blocked` | comparison plus deterministic block reason | evidence/fact remediation only |
 | `family_review` | current family-safe Brief plus renewed authorization | revoke advisor and mint parent |
-| `plan_ready` | completed status plus persisted receipt/timeline | continue as family or read result |
+| `plan_ready` | completed status plus persisted receipt/timeline | continue this Case into execution or read result |
 | `terminal_task_failure` | public failure and explicit recovery guidance | allowed retry/remediation only |
 
 Absent task, run, route, or review data is rendered as absent, never as placeholder
@@ -70,15 +74,17 @@ fails and never performs a client-only role flip.
 
 ## Authority and transport boundaries
 
-FastAPI exposes three connected read endpoints:
+FastAPI exposes four connected read endpoints:
 
 - `GET /api/v1/cases/{case_id}/advisor-ledger`
 - `GET /api/v1/cases/{case_id}/current-decision-brief`
 - `GET /api/v1/cases/{case_id}/journey-status`
+- `GET /api/v1/cases/{case_id}/plan-execution-context`
 
-The Next.js BFF exposes twelve explicit handlers: bootstrap, session create,
+The Next.js BFF exposes thirteen explicit handlers: bootstrap, session create,
 session delete, Ledger read, task create/read/cancel/events, advisor review,
-current Brief read, journey-status read, and family decision. There is no catch-all proxy. All
+current Brief read, journey-status read, case-scoped plan-execution-context read,
+and family decision. There is no catch-all proxy. All
 identity upstream calls use the server-configured fixed public Origin. Browser
 mutations must first pass exact Origin validation; caller Origin is neither
 trusted nor reflected. Each upstream `Set-Cookie` field is appended separately,
@@ -90,10 +96,12 @@ checked-in validated fixture contract only restricts the canonical synthetic
 input identity and must match the existing source-pack row. The BFF and browser
 do not derive policy, route eligibility, or authority.
 
-The same-Case continuation adds no BFF route. The destination reuses the existing
-advisor-ledger, confirmed-facts, inspector, task, event, review, Brief, and decision
-handlers. Every later read and mutation uses the continued Case. Task identity comes
-only from `advisor-ledger`, never from the collaboration envelope or URL state.
+The same-Case continuation adds one explicit read-only BFF route for its strict
+case-scoped execution context. The destination otherwise reuses the existing
+advisor-ledger, confirmed-facts, inspector, task, event, review, Brief, decision,
+and timeline-execution handlers. Every later read and mutation uses the continued
+Case. Task identity comes only from `advisor-ledger`, never from the collaboration
+envelope or URL state; execution identity comes only from the server-derived context.
 
 The family Brief projects the selected Australia route, `CNY`, pinned cost, hard
 ceiling, and the exact required trade-off `budget_elasticity` from persisted
@@ -118,8 +126,10 @@ pending mutation identity. An existing other journey must be explicitly revoked,
 tab cannot run the two workflows concurrently. `/demo` preserves one active
 `EventSource` and a monotonic durable cursor. The explicit task action creates
 at most one task and opens exactly one initial `/events?after=0` stream. Reloads
-recover the stored cursor, review state, parent rotation, receipt, and timeline for
-the continued Case.
+recover the stored cursor, review state, parent rotation, receipt, timeline, and
+case-scoped execution authority for the continued Case. The plan-execution envelope
+binds its authority kind and exact Case or seeded scenario, so it never restores a
+connected Case as a seeded scenario or a seeded scenario as a connected Case.
 
 Run the real browser-to-database proof with:
 
@@ -137,12 +147,12 @@ dedicated asset is updated only with `UPDATE_PLANNING_REVISION_SCREENSHOT=1`;
 `UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the current development captures;
 these screenshots are review evidence for the unreleased presentation candidate.
 
-The current task-scoped Compose proof uses the containerized browser against the
-Compose-served PostgreSQL/API/worker state. It passed both locales, the presentation
-matrix, same-Case persistence, independent Happy/Blocked execution, stale-tab and
-restart recovery, and database verification before removing its task-owned resources.
-Earlier host-browser fallback notes are historical evidence and do not replace the
-current containerized proof.
+The current task-scoped Compose proof is the required containerized browser gate for
+the Compose-served PostgreSQL/API/worker state. When available, it must cover both
+locales, the presentation matrix, same-Case persistence, independent Happy/Blocked
+execution, stale-tab and restart recovery, and database verification before removing
+its task-owned resources. A local Docker omission does not replace the hosted
+Compose/database/browser gate required before merge.
 
 The proof exercises PostgreSQL roles/RLS, identity cookies and fixed Origin,
 worker/SSE replay, advisor review, real role rotation, family decision,

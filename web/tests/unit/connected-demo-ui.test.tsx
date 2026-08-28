@@ -100,7 +100,7 @@ it("presents connected route analysis inside the advisor workspace shell", () =>
   expect(screen.queryByText("顾问到家庭决策流程")).toBeNull();
 });
 
-it("labels the receipt handoff as an independent execution scenario", () => {
+it("makes same-Case execution the primary receipt handoff and retains independent recovery", () => {
   const brief = briefFixture("plan-ready");
   setConnectedDemo({ value: "plan_ready", status: { ...statusFor("plan_ready"), active_role: "parent" }, brief });
   renderPresentation(<ConnectedDemo />);
@@ -109,6 +109,10 @@ it("labels the receipt handoff as an independent execution scenario", () => {
   expect(screen.getByRole("heading", { name: "家庭决定回执" })).toBeVisible();
   expect(screen.getByRole("heading", { name: "家庭决定回执" }).closest("[data-persisted-result='true']")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "家庭决定回执" }).closest("[data-frame-slot='work']")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: /继续当前 Case/ })).toHaveAttribute(
+    "href",
+    `/demo/plan?case_id=${brief.case_id}`,
+  );
   expect(screen.getByRole("link", { name: /执行跟进使用独立播种/ })).toHaveAttribute("href", "/demo/plan");
   expect(screen.getByText(/不承接当前 Case 或 session/)).toBeVisible();
 });

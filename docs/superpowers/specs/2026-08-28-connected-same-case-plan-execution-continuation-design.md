@@ -1,7 +1,7 @@
 # Connected same-Case plan execution continuation v1
 
 Status: Approved
-Implementation: Not started
+Implementation: Complete locally; provider-free; not released
 
 ## Problem
 

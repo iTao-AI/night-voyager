@@ -66,6 +66,19 @@ it("presents execution follow-up in the shared independent-scenario workspace sh
   expect(container.querySelector("[data-frame-slot='technical']:not([open])")).toBeInTheDocument();
 });
 
+it("marks connected execution as the connected same-Case proof segment", () => {
+  const { container } = render(
+    <PresentationProvider>
+      <PlanExecutionWorkspace
+        controller={activeController()}
+        authority={{ kind: "connected", caseId: contextFixture.case_id }}
+      />
+    </PresentationProvider>,
+  );
+
+  expect(container.querySelector("[data-proof-segment='connected_same_case']")).toBeInTheDocument();
+});
+
 it("renders the current action first without raw hashes or row versions", () => {
   const controller = activeController();
   const { container } = render(

@@ -1,7 +1,7 @@
 # Connected same-Case plan execution continuation v1 implementation plan
 
 Status: Approved
-Implementation: Not started
+Implementation: Complete locally; provider-free; not released
 Delivery: One pull request
 
 ## Constraints

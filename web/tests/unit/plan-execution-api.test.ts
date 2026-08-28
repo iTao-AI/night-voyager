@@ -6,6 +6,7 @@ import {
   isPlanExecutionStaleAuthority,
   PlanExecutionApiError,
 } from "../../lib/plan-execution/api";
+import { connectedContextFixture } from "./plan-execution-contracts.test";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -49,4 +50,21 @@ it("keeps session-loss and stale-authority problem codes mutually exclusive", ()
   const transport = new PlanExecutionApiError(503, "bff_upstream_unavailable");
   expect(isPlanExecutionSessionLoss(transport)).toBe(false);
   expect(isPlanExecutionStaleAuthority(transport)).toBe(false);
+});
+
+it("uses only the connected case identity at the authority seam", async () => {
+  const caseId = connectedContextFixture.case_id;
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    if (url === "/api/demo/sessions") return Response.json({ role: "student", csrf_token: "csrf" });
+    return Response.json(connectedContextFixture);
+  }));
+  const api = createPlanExecutionApi({ kind: "connected", caseId });
+
+  await api.mint("student", "bootstrap-csrf");
+  await expect(api.context()).resolves.toEqual(connectedContextFixture);
+  expect(calls[0]?.init?.body).toContain('"demo_actor":"student"');
+  expect(calls.at(-1)?.url).toBe(`/api/demo/cases/${caseId}/plan-execution-context`);
+  expect(calls.map(({ url }) => url)).not.toContain("/api/demo/plan-execution-context");
 });

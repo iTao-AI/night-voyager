@@ -15,6 +15,7 @@ from night_voyager.timeline_execution.models import (
     CheckpointStatusCode,
     CheckpointVerificationAction,
     CheckpointVerificationReasonCode,
+    ConnectedPlanExecutionContextV1,
     ReassessmentTrigger,
     TimelineMutationReceiptV1,
 )
@@ -48,6 +49,29 @@ class RecordingSession:
         return self.values.pop(0)
 
 
+class MappingResult:
+    def __init__(self, rows: list[dict[str, object]]) -> None:
+        self.rows = rows
+
+    def mappings(self) -> MappingResult:
+        return self
+
+    def all(self) -> list[dict[str, object]]:
+        return self.rows
+
+
+class MappingSession:
+    def __init__(self, rows: list[list[dict[str, object]]]) -> None:
+        self.rows = rows
+        self.calls: list[tuple[str, dict[str, object]]] = []
+
+    async def execute(
+        self, statement: object, parameters: dict[str, object]
+    ) -> MappingResult:
+        self.calls.append((str(statement), parameters))
+        return MappingResult(self.rows.pop(0))
+
+
 def actor() -> ActorContext:
     return ActorContext(
         organization_id=ORG,
@@ -69,6 +93,33 @@ def context_payload() -> dict[str, object]:
         "execution_id": None,
         "active_role": "student",
         "assignment_status": "assigned",
+    }
+
+
+def connected_context_row(
+    *, execution_id: UUID | None = None, contradictory_execution: bool = False
+) -> dict[str, object]:
+    has_execution = execution_id is not None
+    return {
+        "schema_version": 1,
+        "journey": "connected-advisor-family",
+        "case_id": CASE,
+        "case_revision": 2,
+        "decision_id": DECISION,
+        "decision_receipt_id": DECISION_RECEIPT,
+        "timeline_plan_id": TIMELINE,
+        "execution_id": execution_id,
+        "active_role": "student",
+        "assignment_status": "assigned",
+        "execution_case_id": (
+            UUID(int=999) if contradictory_execution else CASE
+        ) if has_execution else None,
+        "execution_case_revision": (1 if contradictory_execution else 2)
+        if has_execution
+        else None,
+        "execution_decision_id": DECISION if has_execution else None,
+        "execution_decision_receipt_id": DECISION_RECEIPT if has_execution else None,
+        "execution_timeline_plan_id": TIMELINE if has_execution else None,
     }
 
 
@@ -103,6 +154,63 @@ async def test_context_calls_only_the_frozen_projection_and_decodes_strictly() -
         "role": ActorRole.STUDENT,
         "scenario": "governed-plan-execution-v1",
     }
+
+
+@pytest.mark.asyncio
+async def test_connected_context_selects_the_case_scoped_projection_without_a_function() -> None:
+    session = MappingSession([[connected_context_row()]])
+    repository = PostgresTimelineExecutionRepository(session)  # type: ignore[arg-type]
+
+    result = await repository.connected_context(actor(), CASE)
+
+    assert isinstance(result, ConnectedPlanExecutionContextV1)
+    assert result.case_id == CASE
+    assert result.case_revision == 2
+    sql, parameters = session.calls[0]
+    assert "student_case_participants" in sql
+    assert "student_case_revisions" in sql
+    assert "decision_briefs" in sql
+    assert "family_decisions" in sql
+    assert "d.planning_run_id = b.planning_run_id" in sql
+    assert "timeline_plans" in sql
+    assert "timeline_executions" in sql
+    assert "read_plan_execution_context" not in sql
+    assert parameters == {
+        "org": ORG,
+        "actor": ACTOR,
+        "role": ActorRole.STUDENT,
+        "case": CASE,
+    }
+
+
+@pytest.mark.asyncio
+async def test_connected_context_returns_none_for_missing_projection() -> None:
+    repository = PostgresTimelineExecutionRepository(
+        MappingSession([[]])  # type: ignore[arg-type]
+    )
+
+    assert await repository.connected_context(actor(), CASE) is None
+
+
+@pytest.mark.asyncio
+async def test_connected_context_fails_closed_for_multiple_or_contradictory_rows() -> None:
+    multiple = PostgresTimelineExecutionRepository(
+        MappingSession([[connected_context_row(), connected_context_row()]])  # type: ignore[arg-type]
+    )
+    with pytest.raises(TimelineExecutionProjectionError):
+        await multiple.connected_context(actor(), CASE)
+
+    contradictory = PostgresTimelineExecutionRepository(
+        MappingSession(
+            [[
+                connected_context_row(
+                    execution_id=EXECUTION, contradictory_execution=True
+                )
+            ]]
+        )  # type: ignore[arg-type]
+    )
+    with pytest.raises(TimelineExecutionProjectionError):
+        await contradictory.connected_context(actor(), CASE)
 
 
 @pytest.mark.asyncio

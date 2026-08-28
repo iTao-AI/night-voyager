@@ -20,10 +20,13 @@ PLANNING_REVISION_REVIEW_DIR=${PLANNING_REVISION_REVIEW_DIR:-tmp/planning-revisi
 PRESENTATION_AUDIT_OUTPUT_DIR=${PRESENTATION_AUDIT_OUTPUT_DIR:-/tmp/night-voyager-presentation-audit}
 PRESENTATION_PUBLIC_EVIDENCE_ROOT=${PRESENTATION_PUBLIC_EVIDENCE_ROOT:-}
 FACT_TO_PLAN_ZH_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-proof.json
+FACT_TO_PLAN_ZH_CONNECTED_EXECUTION_PROOF_FILE=docs/assets/.fact-to-plan-zh-CN-connected-plan-execution-proof.json
 FACT_TO_PLAN_ZH_WORKER_READY_FILE=docs/assets/.fact-to-plan-zh-CN-worker-ready
 FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json
+FACT_TO_PLAN_EN_CONNECTED_EXECUTION_PROOF_FILE=docs/assets/.fact-to-plan-en-connected-plan-execution-proof.json
 FACT_TO_PLAN_EN_WORKER_READY_FILE=docs/assets/.fact-to-plan-en-worker-ready
 FACT_TO_PLAN_PROOF_FILE=
+FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE=
 FACT_TO_PLAN_WORKER_READY_FILE=
 FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"
 PLANNING_REVISION_ZH_PROOF_FILE=docs/assets/.planning-revision-zh-CN-proof.json
@@ -74,8 +77,10 @@ cleanup() {
         wait "$barrier_pid" 2>/dev/null || true
     fi
     rm -f \
-        "$FACT_TO_PLAN_ZH_PROOF_FILE" "$FACT_TO_PLAN_ZH_WORKER_READY_FILE" \
-        "$FACT_TO_PLAN_EN_PROOF_FILE" "$FACT_TO_PLAN_EN_WORKER_READY_FILE" \
+        "$FACT_TO_PLAN_ZH_PROOF_FILE" "$FACT_TO_PLAN_ZH_CONNECTED_EXECUTION_PROOF_FILE" \
+        "$FACT_TO_PLAN_ZH_WORKER_READY_FILE" \
+        "$FACT_TO_PLAN_EN_PROOF_FILE" "$FACT_TO_PLAN_EN_CONNECTED_EXECUTION_PROOF_FILE" \
+        "$FACT_TO_PLAN_EN_WORKER_READY_FILE" \
         "$PLANNING_REVISION_ZH_PROOF_FILE" "$PLANNING_REVISION_ZH_WORKER_READY_FILE" \
         "$PLANNING_REVISION_EN_PROOF_FILE" "$PLANNING_REVISION_EN_WORKER_READY_FILE" \
         "$PLANNING_REVISION_BARRIER_FIFO" "$PLANNING_REVISION_BARRIER_OUTPUT" \
@@ -291,19 +296,22 @@ run_fact_to_plan_lane() {
     esac
     if [ "$lane_locale" = "zh-CN" ]; then
         FACT_TO_PLAN_PROOF_FILE=$FACT_TO_PLAN_ZH_PROOF_FILE
+        FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE=$FACT_TO_PLAN_ZH_CONNECTED_EXECUTION_PROOF_FILE
         FACT_TO_PLAN_WORKER_READY_FILE=$FACT_TO_PLAN_ZH_WORKER_READY_FILE
     else
         FACT_TO_PLAN_PROOF_FILE=$FACT_TO_PLAN_EN_PROOF_FILE
+        FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE=$FACT_TO_PLAN_EN_CONNECTED_EXECUTION_PROOF_FILE
         FACT_TO_PLAN_WORKER_READY_FILE=$FACT_TO_PLAN_EN_WORKER_READY_FILE
     fi
 
     docker compose down --volumes --remove-orphans
     docker compose up --no-build --wait
     printf 'compose-proof: fresh fact-to-plan baseline seeded locale=%s\n' "$lane_locale"
-    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
     : > "$FACT_TO_PLAN_PROOF_FILE"
+    : > "$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE"
     : > "$FACT_TO_PLAN_WORKER_READY_FILE"
-    chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
     docker compose pause worker
     (
         for attempt in $(seq 1 120); do
@@ -319,17 +327,23 @@ run_fact_to_plan_lane() {
     worker_start_pid=$!
     docker compose --profile browser-proof run --rm --no-deps "$@" \
         -e FACT_TO_PLAN_PROOF_FILE="/workspace/$FACT_TO_PLAN_PROOF_FILE" \
+        -e FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE="/workspace/$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" \
         -e FACT_TO_PLAN_WORKER_READY_FILE="/workspace/$FACT_TO_PLAN_WORKER_READY_FILE" \
         -e FACT_TO_PLAN_WORKER_READY_SENTINEL="$FACT_TO_PLAN_WORKER_READY_SENTINEL" \
         browser-proof npx playwright test --config playwright.compose.config.ts fact-to-plan.spec.ts
     wait "$worker_start_pid"
     worker_start_pid=
     test -s "$FACT_TO_PLAN_PROOF_FILE"
+    test -s "$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE"
     docker compose run --rm --no-deps \
         -v "$PWD/$FACT_TO_PLAN_PROOF_FILE:/tmp/fact-to-plan-proof.json:ro" \
         demo-seed python scripts/verify_fact_to_plan_flow.py \
         --proof-file /tmp/fact-to-plan-proof.json
-    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
+    docker compose run --rm --no-deps \
+        -v "$PWD/$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE:/tmp/fact-to-plan-connected-plan-execution-proof.json:ro" \
+        demo-seed python scripts/verify_connected_plan_execution_flow.py \
+        --proof-file /tmp/fact-to-plan-connected-plan-execution-proof.json
+    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"
     printf 'compose-proof: governed fact-to-plan browser and database proof passed locale=%s\n' "$lane_locale"
 }
 

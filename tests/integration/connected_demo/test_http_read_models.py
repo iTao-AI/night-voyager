@@ -261,6 +261,7 @@ def test_connected_demo_read_routes_are_registered() -> None:
     assert "get" in paths["/api/v1/cases/{case_id}/advisor-ledger"]
     assert "get" in paths["/api/v1/cases/{case_id}/current-decision-brief"]
     assert "get" in paths["/api/v1/cases/{case_id}/journey-status"]
+    assert "get" in paths["/api/v1/cases/{case_id}/plan-execution-context"]
     phase_schema = app.openapi()["components"]["schemas"]["DemoPhaseV2"]
     assert set(phase_schema["enum"]) == {
         "task_ready",

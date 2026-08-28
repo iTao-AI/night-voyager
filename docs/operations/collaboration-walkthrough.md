@@ -3,9 +3,10 @@
 The connected same-Case proof begins at `/demo/collaboration`. This local synthetic
 advisor workspace shows how a client consultation record becomes an authoritative
 Case fact only after assigned advisor confirmation, then hands the same Case to
-route analysis at `/demo`. The proof ends at the persisted receipt and TimelinePlan;
-`/demo/plan` is a separate deterministic execution scenario. It is non-production
-proof, not messaging, admissions advice, or a claim about real users.
+route analysis at `/demo`. After the family decision, the primary action continues
+the same Case into `/demo/plan?case_id=<case_id>` and the existing execution flow;
+bare `/demo/plan` is a separate deterministic execution scenario. It is
+non-production proof, not messaging, admissions advice, or a claim about real users.
 
 The route server-renders exact `zh-CN`; the shared header can explicitly persist
 exact `en` at `night-voyager:presentation-locale:v1`. Locale is presentation-only and
@@ -22,7 +23,7 @@ The current presentation authority is the [reference-driven presentation spec](.
 make demo
 ```
 
-Open `http://127.0.0.1:3000/demo/collaboration` and follow the seven visible stages:
+Open `http://127.0.0.1:3000/demo/collaboration` and follow the eight visible stages:
 
 1. Start the parent walkthrough and append the bounded budget message.
 2. Explicitly turn that message into a typed parent proposal.
@@ -36,6 +37,10 @@ Open `http://127.0.0.1:3000/demo/collaboration` and follow the seven visible sta
    and Skill inspector, then replaces the same-tab envelope and navigates once.
 7. On `/demo`, confirm the continued same Case and revision, then use the explicit
    task action to start planning.
+8. After the family decision reaches `plan_ready`, choose `继续当前 Case 的执行计划`
+   (`Continue this Case into execution` in English). The route carries only the
+   current `case_id`; the execution context, receipt, timeline, role, and optional
+   execution are re-derived by the server.
 
 The handoff sends zero task POST requests, creates no `AgentTask`, and opens no
 `EventSource`; the collaboration route does not use polling. It keeps the same
@@ -59,7 +64,9 @@ advisor identity must still agree. Any active/review/terminal task identity is
 adopted only from `advisor-ledger`; the collaboration envelope transports no task
 inputs or Skill pin.
 
-Seven explicit BFF route modules expose exactly eight HTTP methods. They proxy only
+The collaboration route keeps its seven explicit BFF route modules and exactly eight
+HTTP methods. The connected execution continuation adds one separate read-only
+case-context handler. They proxy only
 the frozen collaboration and inspector endpoints; there is no catch-all, dynamic
 upstream, arbitrary header forwarding, or cookie joining. FastAPI and PostgreSQL
 retain participant, currentness, idempotency, fact, revision, activation, task, and
@@ -75,7 +82,9 @@ errors remain closed to the documented seven browser categories.
 `handoff_validating` is transient and never persisted. A validation failure leaves
 the original collaboration envelope byte-for-byte intact; retry re-reads authority.
 If navigation is interrupted after replacement, `/demo` recovers the advisor-family
-envelope for the same Case rather than substituting the default fixture.
+envelope for the same Case rather than substituting the default fixture. Execution
+recovery binds the authority kind and exact Case or seeded scenario; it never
+cross-restores those sources.
 
 The collaboration journey itself remains V2. Its handoff writes the V3
 advisor-family envelope with snake_case phase plus current revision/task/predecessor/
@@ -95,11 +104,14 @@ docker compose ps --all
 
 Each Chromium lane uses the real PostgreSQL seed, FastAPI, BFF, opaque cookies,
 Origin/CSRF checks, idempotency, worker, and SSE. The required gate proves the
-same complete chain twice from isolated database baselines: the first lane uses
+same complete collaboration-to-execution chain twice from isolated database
+baselines: the first lane uses
 the deterministic Chinese default without locale injection, and the second uses
 `PRESENTATION_LOCALE=en`. Both run the browser-to-database verifier after the
-parent message, receipt, and timeline flow, with the explicit `/demo` task action
-as the only task-creation point. They cover 1440, 768, and 390 px, keyboard focus,
+parent message, receipt, timeline, connected execution, blocked checkpoint, and
+reassessment flow, with the explicit `/demo` task action as the only task-creation
+point. The independently seeded Happy/Blocked scenarios remain retained regressions.
+They cover 1440, 768, and 390 px, keyboard focus,
 semantic landmarks, at least 44 px action targets, and horizontal-overflow checks.
 The screenshot above is the current Chinese capture from the same deterministic
 Chromium flow. It preserves server-authored synthetic message/reason text verbatim,

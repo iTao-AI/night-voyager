@@ -15,16 +15,23 @@ import { ExecutionActivity } from "./ExecutionActivity";
 import { ExecutionRecoveryNotice } from "./ExecutionRecoveryNotice";
 import { ReassessmentHandoff } from "./ReassessmentHandoff";
 import { AdvisorWorkspaceShell } from "../presentation/AdvisorWorkspaceShell";
-import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
+import {
+  normalizePlanExecutionAuthority,
+  type PlanExecutionAuthority,
+  type PlanExecutionDemoScenario,
+} from "../../lib/plan-execution/scenario";
 
 export function PlanExecutionWorkspace({
   controller: suppliedController,
+  authority: suppliedAuthority,
   scenario = "happy",
 }: {
   controller?: PlanExecutionController;
+  authority?: PlanExecutionAuthority;
   scenario?: PlanExecutionDemoScenario;
 }) {
-  const liveController = usePlanExecution(undefined, scenario);
+  const authority = normalizePlanExecutionAuthority(suppliedAuthority ?? scenario);
+  const liveController = usePlanExecution(undefined, authority);
   const controller = suppliedController ?? liveController;
   const { state, busy } = controller;
   const { copy } = usePresentation();
@@ -186,7 +193,9 @@ export function PlanExecutionWorkspace({
       contextKey="contextPlanExecution"
       currentStage={workflowStage}
       mainId="plan-execution-main"
-      proofSegment="independent_execution_scenario"
+      proofSegment={authority.kind === "connected"
+        ? "connected_same_case"
+        : "independent_execution_scenario"}
       status={<p className="status workspace-status-copy">{liveMessage || copy("planExecutionConnectPrompt")}</p>}
       supportingEvidence={
         <>
@@ -254,7 +263,9 @@ export function PlanExecutionWorkspace({
         {liveMessage}
       </p>
       <section data-section="current-action" className="ledger-hero plan-execution-hero">
-        <p className="eyebrow">{copy("planExecutionEyebrow")}</p>
+        <p className="eyebrow">{copy(authority.kind === "connected"
+          ? "planExecutionConnectedEyebrow"
+          : "planExecutionEyebrow")}</p>
         <h3 ref={headingRef} tabIndex={-1}>{copy("planExecutionCurrentAction")}</h3>
         <div className="plan-execution-current-grid">
           <div

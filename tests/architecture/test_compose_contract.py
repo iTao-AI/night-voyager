@@ -66,8 +66,10 @@ def _run_compose_cleanup_harness(
             barrier_fd_open=0
             barrier_pid=
             FACT_TO_PLAN_ZH_PROOF_FILE=fact-zh
+            FACT_TO_PLAN_ZH_CONNECTED_EXECUTION_PROOF_FILE=fact-zh-connected
             FACT_TO_PLAN_ZH_WORKER_READY_FILE=fact-zh-ready
             FACT_TO_PLAN_EN_PROOF_FILE=fact-en
+            FACT_TO_PLAN_EN_CONNECTED_EXECUTION_PROOF_FILE=fact-en-connected
             FACT_TO_PLAN_EN_WORKER_READY_FILE=fact-en-ready
             PLANNING_REVISION_ZH_PROOF_FILE=revision-zh
             PLANNING_REVISION_ZH_WORKER_READY_FILE=revision-zh-ready
@@ -321,7 +323,8 @@ def test_current_public_navigation_explains_the_advisor_workspace_and_two_proof_
     docs_index = Path("docs/README.md").read_text(encoding="utf-8")
 
     assert "AI collaboration platform for study-abroad advisors" in readme
-    assert "connected same-Case proof ends at the receipt and TimelinePlan" in readme
+    assert "/demo/plan?case_id=<case_id>" in readme
+    assert "pending_future_authorization" in readme
     assert "independent deterministic execution scenario" in readme
     assert "Screenshots are review evidence, not functional authority" in readme
     assert "面向留学顾问的 AI 协作平台" in readme_cn
@@ -578,10 +581,14 @@ def test_browser_proof_runs_isolated_fact_to_plan_and_database_verifier() -> Non
 
     assert '"fact-to-plan.spec.ts"' in config
     assert "FACT_TO_PLAN_PROOF_FILE" in browser
+    assert "FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" in browser
+    assert "/demo/plan?case_id=${caseId}" in browser
+    assert "pending_future_authorization" in browser
     assert "Continue to planning" in browser
     assert "events?after=0" in browser
     assert verifier.is_file()
     assert "verify_fact_to_plan_flow.py" in script
+    assert "verify_connected_plan_execution_flow.py" in script
     assert "fact-to-plan.spec.ts" in script
     assert "docker compose pause worker" in script
     assert "docker compose unpause worker" in script
@@ -656,6 +663,7 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
     assert "taskPostsForCase(caseId)).toHaveLength(0)" in browser
     assert "taskPostsForCase(caseId)).toHaveLength(1)" in browser
     assert "FACT_TO_PLAN_WORKER_READY_FILE" in browser
+    assert "FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" in browser
     assert "await firstStream" in browser
     assert browser.index("await firstStream") < browser.index("writeFile(workerReadyFile")
     assert "waitForFactToPlanReviewAuthority" in browser
@@ -703,6 +711,16 @@ def test_fact_to_plan_proof_gates_task_creation_worker_start_and_responsive_cont
         "docs/assets/.fact-to-plan-zh-CN-worker-ready"
     ) in script
     assert "FACT_TO_PLAN_EN_PROOF_FILE=docs/assets/.fact-to-plan-en-proof.json" in script
+    assert (
+        "FACT_TO_PLAN_ZH_CONNECTED_EXECUTION_PROOF_FILE="
+        "docs/assets/.fact-to-plan-zh-CN-connected-plan-execution-proof.json"
+        in script
+    )
+    assert (
+        "FACT_TO_PLAN_EN_CONNECTED_EXECUTION_PROOF_FILE="
+        "docs/assets/.fact-to-plan-en-connected-plan-execution-proof.json"
+        in script
+    )
     assert "FACT_TO_PLAN_EN_WORKER_READY_FILE=docs/assets/.fact-to-plan-en-worker-ready" in script
     assert "sleep 15" not in script
     assert "seq 1 120" in script
@@ -715,11 +733,18 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     script = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
 
     reset_prepare = (
-        '    rm -f "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"\n'
+        '    rm -f "$FACT_TO_PLAN_PROOF_FILE" '
+        '"$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" '
+        '"$FACT_TO_PLAN_WORKER_READY_FILE"\n'
         '    : > "$FACT_TO_PLAN_PROOF_FILE"\n'
+        '    : > "$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE"\n'
         '    : > "$FACT_TO_PLAN_WORKER_READY_FILE"'
     )
-    permission = 'chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" "$FACT_TO_PLAN_WORKER_READY_FILE"'
+    permission = (
+        'chmod 0666 "$FACT_TO_PLAN_PROOF_FILE" '
+        '"$FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" '
+        '"$FACT_TO_PLAN_WORKER_READY_FILE"'
+    )
     sentinel = 'FACT_TO_PLAN_WORKER_READY_SENTINEL="task accepted and initial SSE observed"'
     watcher = 'grep -Fqx "$FACT_TO_PLAN_WORKER_READY_SENTINEL" "$FACT_TO_PLAN_WORKER_READY_FILE"'
     browser_run = "browser-proof npx playwright test"
@@ -742,12 +767,14 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     proof_target.chmod(0o640)
     ready_target.chmod(0o640)
     proof_file = tmp_path / ".fact-to-plan-proof.json"
+    connected_proof_file = tmp_path / ".fact-to-plan-connected-proof.json"
     ready_file = tmp_path / ".fact-to-plan-worker-ready"
     proof_file.symlink_to(proof_target)
     ready_file.symlink_to(ready_target)
     environment = os.environ.copy()
     environment.update(
         FACT_TO_PLAN_PROOF_FILE=str(proof_file),
+        FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE=str(connected_proof_file),
         FACT_TO_PLAN_WORKER_READY_FILE=str(ready_file),
     )
     subprocess.run(
@@ -759,8 +786,10 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     assert not proof_file.is_symlink()
     assert not ready_file.is_symlink()
     assert proof_file.read_bytes() == b""
+    assert connected_proof_file.read_bytes() == b""
     assert ready_file.read_bytes() == b""
     assert stat.S_IMODE(proof_file.stat().st_mode) == 0o666
+    assert stat.S_IMODE(connected_proof_file.stat().st_mode) == 0o666
     assert stat.S_IMODE(ready_file.stat().st_mode) == 0o666
     assert proof_target.read_text(encoding="utf-8") == "preserve proof target\n"
     assert ready_target.read_text(encoding="utf-8") == "preserve ready target\n"
@@ -770,8 +799,10 @@ def test_fact_to_plan_ipc_prepares_exact_writable_files_and_requires_content(
     cleanup = script.split("cleanup() {", 1)[1].split("}", 1)[0]
     for path_variable in (
         "FACT_TO_PLAN_ZH_PROOF_FILE",
+        "FACT_TO_PLAN_ZH_CONNECTED_EXECUTION_PROOF_FILE",
         "FACT_TO_PLAN_ZH_WORKER_READY_FILE",
         "FACT_TO_PLAN_EN_PROOF_FILE",
+        "FACT_TO_PLAN_EN_CONNECTED_EXECUTION_PROOF_FILE",
         "FACT_TO_PLAN_EN_WORKER_READY_FILE",
     ):
         assert f'"${path_variable}"' in cleanup

@@ -50,9 +50,9 @@ Night Voyager 面向留学顾问团队，支持他们与参与确认的学生和
 
 当前 runtime、contracts、authority boundaries 与 release evidence 继续保留在下方。历史视觉资产仍用于 proof 与 context，但不再作为 README 首层画廊。
 
-当前 development candidate 仍是面向留学顾问的 AI 协作平台。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell，属于静态（static）、local synthetic、provider-free presentation evidence，仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
+当前 development candidate 仍是面向留学顾问的 AI 协作平台。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell。root 是 static presentation evidence，demo route 则是 local synthetic、provider-free。same-Case execution continuation 已在本地实现，但仍未发布或部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。这个 root 不发起 API、session、task 或 EventSource。
 
-完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；同一 Case 的连接证明在 receipt 与 TimelinePlan 处结束。`/demo/plan` 是独立播种的 Happy / Blocked 确定性执行场景，不承接连接证明中的 Case 或 session。截图是评审证据，不是功能权威；semantic assertions 才是 acceptance authority。
+完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；到达 `plan_ready` 后，主操作会进入 `/demo/plan?case_id=<case_id>`，继续使用现有 execution workspace。连接证明会保留 server-derived revision、decision、receipt、timeline、execution、role handoff、blocked checkpoint 与 `pending_future_authorization`。裸 `/demo/plan` 与 `?scenario=blocked` 仍是独立播种的 Happy / Blocked recovery 场景，不承接连接 Case 或 session。截图是评审证据，不是功能权威；semantic assertions 才是 acceptance authority。
 
 <details>
 <summary>历史视觉证明截图</summary>
@@ -83,6 +83,7 @@ Governed plan-execution development evidence（仅 synthetic review evidence）�
 - **Browser to database：** v0.1.3 `/demo/collaboration` 现在可在不创建 task 的情况下，把已确认的同一 Case 交给 `/demo`；advisor 随后显式启动真实 pinned task、SSE、review、parent decision、receipt 与 timeline 路径。整条 provider-free chain 在真实 Chromium 与 PostgreSQL 上运行，同时两个 route 仍可独立使用。
 - **Planning revision journey：** v0.1.4 发布 provider-free `request revision`、controlled student preferred-country change、retained predecessor lineage、successor PlanningRun、deterministic old/new comparison、fresh advisor authorization，以及 only the current family decision。blocked budget counterfactual 不会到达 approval 或 decision。
 - **Governed timeline execution：** v0.1.5 发布 provider-free `/demo/plan` vertical、closed Happy/Blocked scenario、structured family attestation、assigned-advisor verification、immutable receipt recovery、PostgreSQL-owned risk/date authority、reassessment stop，以及 bilingual responsive/action-hierarchy proof；不创建新 `AgentTask`、provider call、successor business row 或 deployment。
+- **Connected same-Case execution：** 当前本地 candidate 新增 server-derived case-scoped context，并通过既有 execution reducer、receipt、reload recovery、role handoff、blocked checkpoint 与 reassessment stop 延续 exact connected Case。独立播种的 Happy / Blocked scenario 继续保持独立；本 candidate 不新增 migration、mutation authority、successor、provider call 或 deployment。
 - **Portfolio 与 dependency boundary：** v0.1.5 包含 PR #78 合并的 frontend dependency maintenance。当前 development 已使用 Next.js 与 `eslint-config-next` `16.3.2`；Next.js resolves optional/transitive `sharp 0.35.3`，位于 `GHSA-f88m-g3jw-g9cj` advisory range 外，并使用 `postcss@8.5.23` 与兼容的 transitive `nanoid@3.3.18`。仓库没有 direct `sharp`、`postcss` 或 `nanoid` dependency，也没有 override。不可变的 v0.1.5 release 不是 audit-zero claim；这段 current-development wording 不改写其 historical release evidence。Fresh full 与 runtime/omit-dev npm audits 均报告 zero advisory objects，且没有 sharp advisory object。Dependabot #7 hosted alert status is evaluated after merge；本地变更不作 hosted alert claim。Recovery triggers 仍仅为 public deployment、untrusted image path 或 advisory change。
 - **Complementary-evidence Slice 0 status：** Slice 0 已永久以 local `evaluation_invalid` safe stop 结束。它没有 `MkeCaptureArtifactV2`、Slice 0 terminal receipt、information-gain conclusion、candidate persistence、Slice 1/2 work 或 v0.1.6 release。PR #87 已 merged；hosted CI 与 publication cleanup 已完成，且没有解锁后续阶段。
 
@@ -98,7 +99,7 @@ make proof
 make down
 ```
 
-当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md)从 `/demo/collaboration` 进入 `/demo`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md)访问 `/demo/plan`。[v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md)定义 current release gates。
+当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md) 从 `/demo/collaboration` 进入 `/demo`，再进入主操作 `/demo/plan?case_id=<case_id>`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md) 访问裸 `/demo/plan` 或 `?scenario=blocked`。[v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md)定义 current release gates。
 
 如需验证当前 same-Case development walkthrough，请从
 `/demo/collaboration` 开始，确认 synthetic family fact，选择
@@ -111,7 +112,7 @@ make down
 `UPDATE_PLANNING_REVISION_SCREENSHOT` 只能更新
 `night-voyager-planning-revision.png`。
 
-v0.1.5 发布的 governed execution path 位于 `/demo/plan`，操作步骤见
+v0.1.5 发布的 governed independent execution path 位于裸 `/demo/plan`，操作步骤见
 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md)。
 PR #80、PR #83、PR #84 与 PR #85 均已合并并纳入已发布的 v0.1.5；release
 包含 governed authority、recovery/reassessment closure、reconciliation，以及

@@ -13,6 +13,7 @@ from night_voyager.timeline_execution.models import (
     CheckpointStatusCode,
     CheckpointVerificationAction,
     CheckpointVerificationReasonCode,
+    ConnectedPlanExecutionContextV1,
     PlanExecutionContextV1,
     ReassessmentTrigger,
     TimelineExecutionViewV1,
@@ -77,6 +78,10 @@ class TimelineExecutionRepository(Protocol):
         actor: ActorContext,
         scenario: Literal["governed-plan-execution-v1"],
     ) -> PlanExecutionContextV1 | None: ...
+
+    async def connected_context(
+        self, actor: ActorContext, case_id: UUID
+    ) -> ConnectedPlanExecutionContextV1 | None: ...
 
     async def read(
         self, actor: ActorContext, case_id: UUID

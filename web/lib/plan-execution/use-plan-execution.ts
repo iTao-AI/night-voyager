@@ -14,6 +14,7 @@ import type {
   TimelineExecutionView,
   TimelineMutationReceipt,
 } from "./contracts";
+import { isConnectedPlanExecutionContext } from "./contracts";
 import { idempotencyFor, type PlanExecutionIdempotencyRecord } from "./idempotency";
 import {
   beginPlanExecutionMutation,
@@ -24,10 +25,15 @@ import {
 import {
   loadPlanExecutionEnvelope,
   clearPlanExecutionEnvelope,
+  planExecutionAuthorityFromEnvelope,
   savePlanExecutionEnvelope,
   type PlanExecutionEnvelopeV1,
 } from "./session-storage";
-import type { PlanExecutionDemoScenario } from "./scenario";
+import {
+  normalizePlanExecutionAuthority,
+  type PlanExecutionAuthority,
+  type PlanExecutionDemoScenario,
+} from "./scenario";
 
 export interface PlanExecutionController {
   state: PlanExecutionState;
@@ -48,6 +54,7 @@ interface PendingMutation {
   record: PlanExecutionIdempotencyRecord;
   role: PlanExecutionRole;
   caseId: string;
+  authority: PlanExecutionAuthority;
   call(csrfToken: string, key: string): Promise<TimelineMutationReceipt>;
 }
 
@@ -117,19 +124,85 @@ function receiptReconciles(
     && view.reassessment.checkpoint_id === bodyCheckpoint;
 }
 
+function contextMatchesAuthority(
+  context: PlanExecutionContext,
+  authority: PlanExecutionAuthority,
+): boolean {
+  return authority.kind === "connected"
+    ? isConnectedPlanExecutionContext(context) && context.case_id === authority.caseId
+    : authority.kind === "seeded"
+      && !isConnectedPlanExecutionContext(context)
+      && context.scenario === "governed-plan-execution-v1";
+}
+
+function sameContextIdentity(
+  left: PlanExecutionContext,
+  right: PlanExecutionContext,
+): boolean {
+  return left.case_id === right.case_id
+    && left.case_revision === right.case_revision
+    && left.decision_id === right.decision_id
+    && left.decision_receipt_id === right.decision_receipt_id
+    && left.timeline_plan_id === right.timeline_plan_id
+    && left.execution_id === right.execution_id;
+}
+
+function viewMatchesContext(
+  context: PlanExecutionContext,
+  view: TimelineExecutionView | null,
+): boolean {
+  return view === null
+    ? context.execution_id === null
+    : context.execution_id === view.execution.execution_id
+      && context.case_id === view.execution.case_id
+      && context.case_revision === view.execution.case_revision
+      && context.decision_id === view.execution.decision_id
+      && context.decision_receipt_id === view.execution.decision_receipt_id
+      && context.timeline_plan_id === view.execution.timeline_plan_id;
+}
+
+function envelopeMatchesAuthority(
+  envelope: PlanExecutionEnvelopeV1,
+  authority: PlanExecutionAuthority,
+): boolean {
+  try {
+    const storedAuthority = planExecutionAuthorityFromEnvelope(envelope);
+    return storedAuthority.kind === authority.kind
+      && (storedAuthority.kind === "connected"
+        ? authority.kind === "connected" && storedAuthority.caseId === authority.caseId
+        : authority.kind === "seeded" && storedAuthority.scenario === authority.scenario);
+  } catch {
+    return false;
+  }
+}
+
+function mintForAuthority(
+  api: PlanExecutionApi,
+  authority: PlanExecutionAuthority,
+  role: PlanExecutionRole,
+  csrf: string,
+): Promise<{ role: PlanExecutionRole; csrf_token: string }> {
+  return authority.kind === "seeded"
+    ? api.mint(role, csrf, authority.scenario)
+    : api.mint(role, csrf);
+}
+
 function envelopeFor(
   state: PlanExecutionState,
   role: PlanExecutionRole,
-  scenario: PlanExecutionDemoScenario,
+  authority: PlanExecutionAuthority,
   previous?: PlanExecutionEnvelopeV1 | null,
 ): PlanExecutionEnvelopeV1 {
   const checkpoint = state.view?.current_checkpoint ?? null;
   return {
     schema_version: 1,
     journey: "plan-execution",
-    scenario,
+    authorityKind: authority.kind,
+    scenario: authority.kind === "seeded" ? authority.scenario : null,
     role,
-    caseId: state.context?.case_id ?? previous?.caseId ?? "",
+    caseId: state.context?.case_id
+      ?? previous?.caseId
+      ?? (authority.kind === "connected" ? authority.caseId : ""),
     timelinePlanId: state.context?.timeline_plan_id ?? previous?.timelinePlanId ?? "",
     executionId: state.view?.execution.execution_id ?? state.context?.execution_id ?? null,
     executionVersion: state.view?.execution.row_version ?? null,
@@ -142,9 +215,10 @@ function envelopeFor(
 
 export function usePlanExecution(
   suppliedApi?: PlanExecutionApi,
-  scenario: PlanExecutionDemoScenario = "happy",
+  authorityInput: PlanExecutionAuthority | PlanExecutionDemoScenario = "happy",
 ): PlanExecutionController {
-  const api = suppliedApi ?? createPlanExecutionApi();
+  const authority = normalizePlanExecutionAuthority(authorityInput);
+  const api = suppliedApi ?? createPlanExecutionApi(authority);
   const [state, setState] = useState<PlanExecutionState>(loadingPlanExecutionState);
   const [busy, setBusy] = useState(false);
   const csrf = useRef<string | null>(null);
@@ -208,25 +282,29 @@ export function usePlanExecution(
   ) => {
     const context = await api.context();
     if (expectedGeneration !== generation.current) return;
-    if (context.active_role !== role) {
-      closeSessionChanged(new Error("session_changed"));
+    if (!contextMatchesAuthority(context, authority) || context.active_role !== role) {
+      closeSessionChanged(new Error("session_changed"), true);
       return;
     }
     const view = context.execution_id === null ? null : await api.read(context.case_id);
     if (expectedGeneration !== generation.current) return;
+    if (!viewMatchesContext(context, view)) {
+      closeSessionChanged(new Error("session_changed"), true);
+      return;
+    }
     const confirmed = view === null ? context : await api.context();
     if (expectedGeneration !== generation.current) return;
-    const crossCase = confirmed.case_id !== context.case_id
-      || confirmed.timeline_plan_id !== context.timeline_plan_id
-      || confirmed.execution_id !== context.execution_id;
-    if (crossCase || confirmed.active_role !== role) {
-      closeSessionChanged(new Error("session_changed"), crossCase);
+    const crossAuthority = !contextMatchesAuthority(confirmed, authority)
+      || !sameContextIdentity(confirmed, context)
+      || confirmed.active_role !== role;
+    if (crossAuthority) {
+      closeSessionChanged(new Error("session_changed"), true);
       return;
     }
     const next = derivePlanExecutionState(confirmed, view, receipt);
     setState(next);
-    savePlanExecutionEnvelope(envelopeFor(next, role, scenario, loadPlanExecutionEnvelope()));
-  }, [api, closeSessionChanged, scenario]);
+    savePlanExecutionEnvelope(envelopeFor(next, role, authority, loadPlanExecutionEnvelope()));
+  }, [api, authority, closeSessionChanged]);
 
   const connect = useCallback(async (role: PlanExecutionRole) => {
     if (locked.current) return;
@@ -235,7 +313,7 @@ export function usePlanExecution(
     setBusy(true);
     try {
       const bootstrap = await api.bootstrap();
-      const session = await api.mint(role, bootstrap.csrf_token, scenario);
+      const session = await mintForAuthority(api, authority, role, bootstrap.csrf_token);
       if (expectedGeneration !== generation.current) return;
       csrf.current = session.csrf_token;
       await loadAuthority(role, null, expectedGeneration);
@@ -246,7 +324,7 @@ export function usePlanExecution(
     } finally {
       finishGeneration(expectedGeneration);
     }
-  }, [api, beginGeneration, finishGeneration, loadAuthority, scenario]);
+  }, [api, authority, beginGeneration, finishGeneration, loadAuthority]);
 
   const switchRole = useCallback(async (role: PlanExecutionRole) => {
     if (locked.current || !csrf.current || !state.context
@@ -257,16 +335,19 @@ export function usePlanExecution(
     locked.current = true;
     setBusy(true);
     try {
-      const session = await api.mint(role, priorCsrf, scenario);
+      const session = await mintForAuthority(api, authority, role, priorCsrf);
       if (expectedGeneration !== generation.current) return;
       csrf.current = session.csrf_token;
       const context = await api.context();
       if (expectedGeneration !== generation.current) return;
-      const crossCase = context.case_id !== priorContext.case_id
-        || context.timeline_plan_id !== priorContext.timeline_plan_id
-        || context.execution_id !== priorContext.execution_id;
-      if (crossCase || context.active_role !== role) {
-        closeSessionChanged(new Error("session_changed"), crossCase);
+      const crossAuthority = !contextMatchesAuthority(context, authority)
+        || !sameContextIdentity(context, priorContext)
+        || context.active_role !== role;
+      if (crossAuthority) {
+        closeSessionChanged(
+          new Error("session_changed"),
+          !contextMatchesAuthority(context, authority),
+        );
         return;
       }
       await loadAuthority(role, null, expectedGeneration);
@@ -292,7 +373,7 @@ export function usePlanExecution(
     closeSessionChanged,
     finishGeneration,
     loadAuthority,
-    scenario,
+    authority,
     state.context,
   ]);
 
@@ -307,14 +388,14 @@ export function usePlanExecution(
     const expectedGeneration = generation.current;
     try {
       const stored = loadPlanExecutionEnvelope();
-      if (stored && (stored.scenario !== scenario
+      if (stored && (!envelopeMatchesAuthority(stored, authority)
         || stored.caseId !== state.context.case_id
         || stored.timelinePlanId !== state.context.timeline_plan_id
         || stored.role !== state.context.active_role)) {
         clearPlanExecutionEnvelope();
         throw new Error("session_changed");
       }
-      const previous = stored ?? envelopeFor(state, state.context.active_role, scenario);
+      const previous = stored ?? envelopeFor(state, state.context.active_role, authority);
       const record = await idempotencyFor(body, previous.mutations[operation]);
       const pending = {
         ...previous,
@@ -327,6 +408,7 @@ export function usePlanExecution(
         record,
         role: state.context.active_role,
         caseId: state.context.case_id,
+        authority,
         call,
       };
       setState(beginPlanExecutionMutation(state, operation));
@@ -339,13 +421,18 @@ export function usePlanExecution(
       if (expectedGeneration !== generation.current) return;
       const context = await api.context();
       if (expectedGeneration !== generation.current) return;
-      const crossCase = context.case_id !== state.context.case_id
+      const crossAuthority = !contextMatchesAuthority(context, authority)
+        || !viewMatchesContext(context, view)
+        || context.case_id !== state.context.case_id
         || context.timeline_plan_id !== state.context.timeline_plan_id
         || context.execution_id !== view.execution.execution_id;
-      if (crossCase || context.active_role !== state.context.active_role) {
+      if (crossAuthority || context.active_role !== state.context.active_role) {
         pendingMutation.current = null;
         clearMutationSlot(operation);
-        closeSessionChanged(new Error("session_changed"), crossCase);
+        closeSessionChanged(
+          new Error("session_changed"),
+          !contextMatchesAuthority(context, authority),
+        );
         return;
       }
       const activePending = pendingMutation.current;
@@ -358,7 +445,7 @@ export function usePlanExecution(
       }
       const next = derivePlanExecutionState(context, view, receipt);
       setState(next);
-      savePlanExecutionEnvelope(envelopeFor(next, context.active_role, scenario, { ...withReceipt, mutations: {} }));
+      savePlanExecutionEnvelope(envelopeFor(next, context.active_role, authority, { ...withReceipt, mutations: {} }));
       pendingMutation.current = null;
     } catch (error) {
       if (expectedGeneration === generation.current) {
@@ -408,7 +495,7 @@ export function usePlanExecution(
     closeSessionChanged,
     finishGeneration,
     loadAuthority,
-    scenario,
+    authority,
     state,
   ]);
 
@@ -497,6 +584,7 @@ export function usePlanExecution(
         if (!sessionCsrf) throw new Error("session_changed");
         const context = await api.context();
         if (expectedGeneration !== generation.current
+          || !contextMatchesAuthority(context, pending.authority)
           || context.active_role !== pending.role
           || context.case_id !== pending.caseId) {
           throw new Error("session_changed");
@@ -507,13 +595,16 @@ export function usePlanExecution(
         if (expectedGeneration !== generation.current) return;
         const confirmed = await api.context();
         if (expectedGeneration !== generation.current) return;
-        const crossCase = confirmed.case_id !== context.case_id
-          || confirmed.timeline_plan_id !== context.timeline_plan_id
-          || confirmed.execution_id !== view.execution.execution_id;
-        if (crossCase || confirmed.active_role !== pending.role) {
+        const crossAuthority = !contextMatchesAuthority(confirmed, pending.authority)
+          || !viewMatchesContext(confirmed, view)
+          || !sameContextIdentity(confirmed, context);
+        if (crossAuthority || confirmed.active_role !== pending.role) {
           pendingMutation.current = null;
           clearMutationSlot(pending.operation);
-          closeSessionChanged(new Error("session_changed"), crossCase);
+          closeSessionChanged(
+            new Error("session_changed"),
+            !contextMatchesAuthority(confirmed, pending.authority),
+          );
           return;
         }
         if (!receiptReconciles(pending, receipt, confirmed, view)) {
@@ -526,7 +617,7 @@ export function usePlanExecution(
           ...(loadPlanExecutionEnvelope() ?? envelopeFor(
             state,
             pending.role,
-            scenario,
+            authority,
           )),
           mutations: {},
           lastReceiptId: receipt.receipt_id,
@@ -536,7 +627,7 @@ export function usePlanExecution(
         savePlanExecutionEnvelope(envelopeFor(
           next,
           pending.role,
-          scenario,
+          authority,
           withReceipt,
         ));
         pendingMutation.current = null;
@@ -585,7 +676,7 @@ export function usePlanExecution(
       setState({ ...loadingPlanExecutionState, value: "recoverable_error", error: "recovery metadata unavailable" });
       return;
     }
-    if (stored.scenario !== scenario) {
+    if (!envelopeMatchesAuthority(stored, authority)) {
       clearPlanExecutionEnvelope();
       setState({
         ...loadingPlanExecutionState,
@@ -600,7 +691,8 @@ export function usePlanExecution(
     try {
       const priorContext = await api.context();
       if (expectedGeneration !== generation.current) return;
-      if (priorContext.active_role !== stored.role
+      if (!contextMatchesAuthority(priorContext, authority)
+        || priorContext.active_role !== stored.role
         || priorContext.case_id !== stored.caseId
         || priorContext.timeline_plan_id !== stored.timelinePlanId
         || (stored.executionId !== null
@@ -616,12 +708,13 @@ export function usePlanExecution(
           || error.message !== "bff_session_recovery_required") throw error;
         bootstrap = await api.bootstrap();
       }
-      const session = await api.mint(stored.role, bootstrap.csrf_token, scenario);
+      const session = await mintForAuthority(api, authority, stored.role, bootstrap.csrf_token);
       if (expectedGeneration !== generation.current) return;
       csrf.current = session.csrf_token;
       const context = await api.context();
       if (expectedGeneration !== generation.current) return;
-      if (context.active_role !== stored.role
+      if (!contextMatchesAuthority(context, authority)
+        || context.active_role !== stored.role
         || context.case_id !== stored.caseId
         || context.timeline_plan_id !== stored.timelinePlanId
         || (stored.executionId !== null
@@ -633,16 +726,19 @@ export function usePlanExecution(
       if (expectedGeneration !== generation.current) return;
       const confirmed = view === null ? context : await api.context();
       if (expectedGeneration !== generation.current) return;
-      const crossCase = confirmed.case_id !== context.case_id
-        || confirmed.timeline_plan_id !== context.timeline_plan_id
-        || confirmed.execution_id !== context.execution_id;
-      if (crossCase || confirmed.active_role !== stored.role) {
-        closeSessionChanged(new Error("session_changed"), crossCase);
+      if (!contextMatchesAuthority(confirmed, authority)
+        || !viewMatchesContext(confirmed, view)
+        || !sameContextIdentity(confirmed, context)
+        || confirmed.active_role !== stored.role) {
+        closeSessionChanged(
+          new Error("session_changed"),
+          !contextMatchesAuthority(confirmed, authority),
+        );
         return;
       }
       const next = derivePlanExecutionState(confirmed, view);
       setState(next);
-      savePlanExecutionEnvelope(envelopeFor(next, stored.role, scenario, stored));
+      savePlanExecutionEnvelope(envelopeFor(next, stored.role, authority, stored));
     } catch (error) {
       if (expectedGeneration === generation.current) {
         if (isPlanExecutionSessionLoss(error)) {
@@ -665,7 +761,7 @@ export function usePlanExecution(
     closeSessionChanged,
     finishGeneration,
     loadAuthority,
-    scenario,
+    authority,
     state,
   ]);
 

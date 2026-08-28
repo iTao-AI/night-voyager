@@ -4,9 +4,8 @@ export type PlanExecutionStateValue =
   | "execution_completed" | "reassessment_required" | "session_changed"
   | "recoverable_error";
 
-export interface PlanExecutionContext {
+interface PlanExecutionContextAnchors {
   schema_version: 1;
-  scenario: "governed-plan-execution-v1";
   case_id: string;
   case_revision: number;
   decision_id: string;
@@ -15,6 +14,19 @@ export interface PlanExecutionContext {
   execution_id: string | null;
   active_role: PlanExecutionRole;
   assignment_status: "assigned";
+}
+export interface SeededPlanExecutionContext extends PlanExecutionContextAnchors {
+  scenario: "governed-plan-execution-v1";
+}
+export interface ConnectedPlanExecutionContext extends PlanExecutionContextAnchors {
+  journey: "connected-advisor-family";
+}
+export type PlanExecutionContext = SeededPlanExecutionContext | ConnectedPlanExecutionContext;
+
+export function isConnectedPlanExecutionContext(
+  value: PlanExecutionContext,
+): value is ConnectedPlanExecutionContext {
+  return "journey" in value;
 }
 
 export interface TimelineExecution {
@@ -165,12 +177,18 @@ function currentAction(value: unknown): value is TimelineCurrentAction {
 }
 
 export function parsePlanExecutionContext(value: unknown): PlanExecutionContext {
-  if (!object(value) || !exact(value, ["schema_version", "scenario", "case_id", "case_revision", "decision_id", "decision_receipt_id", "timeline_plan_id", "execution_id", "active_role", "assignment_status"])
-    || value.schema_version !== 1 || value.scenario !== "governed-plan-execution-v1"
-    || !uuid(value.case_id) || !positive(value.case_revision) || !uuid(value.decision_id)
-    || !uuid(value.decision_receipt_id) || !uuid(value.timeline_plan_id)
-    || !nullableUuid(value.execution_id) || !oneOf(value.active_role, ["advisor", "student", "parent"])
-    || value.assignment_status !== "assigned") throw new Error("invalid plan execution context");
+  const common = ["schema_version", "case_id", "case_revision", "decision_id", "decision_receipt_id", "timeline_plan_id", "execution_id", "active_role", "assignment_status"];
+  const validCommon = object(value)
+    && value.schema_version === 1
+    && uuid(value.case_id) && positive(value.case_revision) && uuid(value.decision_id)
+    && uuid(value.decision_receipt_id) && uuid(value.timeline_plan_id)
+    && nullableUuid(value.execution_id) && oneOf(value.active_role, ["advisor", "student", "parent"])
+    && value.assignment_status === "assigned";
+  const seeded = object(value) && exact(value, [...common, "scenario"])
+    && value.scenario === "governed-plan-execution-v1";
+  const connected = object(value) && exact(value, [...common, "journey"])
+    && value.journey === "connected-advisor-family";
+  if (!validCommon || (!seeded && !connected)) throw new Error("invalid plan execution context");
   return value as unknown as PlanExecutionContext;
 }
 

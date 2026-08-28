@@ -10,6 +10,7 @@ from night_voyager.timeline_execution.models import (
     CheckpointAttestationKind,
     CheckpointAttestationReasonCode,
     CheckpointStatusCode,
+    ConnectedPlanExecutionContextV1,
     PlanExecutionContextV1,
     ReassessmentTrigger,
     TimelineActivityItemV1,
@@ -79,6 +80,41 @@ def test_context_is_closed_and_contains_no_browser_authority_fields() -> None:
             PlanExecutionContextV1.model_validate(
                 {**context.model_dump(), forbidden: "forbidden"}
             )
+
+
+def test_connected_context_is_a_strict_case_scoped_contract() -> None:
+    context = ConnectedPlanExecutionContextV1(
+        schema_version=1,
+        journey="connected-advisor-family",
+        case_id=U1,
+        case_revision=1,
+        decision_id=U1,
+        decision_receipt_id=U2,
+        timeline_plan_id=U1,
+        execution_id=None,
+        active_role="student",
+        assignment_status="assigned",
+    )
+    assert set(context.model_dump()) == {
+        "schema_version",
+        "journey",
+        "case_id",
+        "case_revision",
+        "decision_id",
+        "decision_receipt_id",
+        "timeline_plan_id",
+        "execution_id",
+        "active_role",
+        "assignment_status",
+    }
+    with pytest.raises(ValidationError):
+        ConnectedPlanExecutionContextV1.model_validate(
+            {**context.model_dump(), "scenario": "governed-plan-execution-v1"}
+        )
+    with pytest.raises(ValidationError):
+        ConnectedPlanExecutionContextV1.model_validate(
+            {**context.model_dump(), "organization_id": U1}
+        )
 
 
 def test_attestation_rejects_narrative_url_file_and_unknown_codes() -> None:

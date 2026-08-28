@@ -8,13 +8,15 @@ import {
   type TimelineMutationReceipt,
 } from "./contracts";
 import {
+  normalizePlanExecutionAuthority,
   planExecutionPrincipal,
+  type PlanExecutionAuthority,
   type PlanExecutionDemoScenario,
 } from "./scenario";
 
 export interface PlanExecutionApi {
   bootstrap(): Promise<{ csrf_token: string }>;
-  mint(role: PlanExecutionRole, csrf: string, scenario: PlanExecutionDemoScenario): Promise<{ role: PlanExecutionRole; csrf_token: string }>;
+  mint(role: PlanExecutionRole, csrf: string, scenario?: PlanExecutionDemoScenario): Promise<{ role: PlanExecutionRole; csrf_token: string }>;
   revoke(csrf: string): Promise<void>;
   context(): Promise<PlanExecutionContext>;
   read(caseId: string): Promise<TimelineExecutionView>;
@@ -76,7 +78,10 @@ function session(value: unknown): { role: PlanExecutionRole; csrf_token: string 
   if (!["advisor", "student", "parent"].includes(String(item.role)) || typeof item.csrf_token !== "string") throw new Error("invalid session");
   return item as unknown as { role: PlanExecutionRole; csrf_token: string };
 }
-export function createPlanExecutionApi(): PlanExecutionApi {
+export function createPlanExecutionApi(
+  authority: PlanExecutionAuthority | PlanExecutionDemoScenario = "happy",
+): PlanExecutionApi {
+  const resolvedAuthority = normalizePlanExecutionAuthority(authority);
   const mutation = async (path: string, body: unknown, csrf: string, key: string) =>
     parseTimelineMutationReceipt(await json(path, {
       method: "POST", headers: headers(csrf, key), body: JSON.stringify(body),
@@ -87,11 +92,15 @@ export function createPlanExecutionApi(): PlanExecutionApi {
       if (typeof value !== "object" || value === null || !("csrf_token" in value) || typeof value.csrf_token !== "string") throw new Error("invalid bootstrap");
       return { csrf_token: value.csrf_token };
     },
-    async mint(role, csrf, scenario) {
+    async mint(role, csrf) {
       return session(await json("/api/demo/sessions", {
         method: "POST",
         headers: headers(csrf),
-        body: JSON.stringify({ demo_actor: planExecutionPrincipal(scenario, role) }),
+        body: JSON.stringify({
+          demo_actor: resolvedAuthority.kind === "seeded"
+            ? planExecutionPrincipal(resolvedAuthority.scenario, role)
+            : role,
+        }),
       }));
     },
     async revoke(csrf) {
@@ -101,9 +110,15 @@ export function createPlanExecutionApi(): PlanExecutionApi {
       });
     },
     async context() {
-      return parsePlanExecutionContext(await json("/api/demo/plan-execution-context"));
+      const path = resolvedAuthority.kind === "connected"
+        ? `/api/demo/cases/${resolvedAuthority.caseId}/plan-execution-context`
+        : "/api/demo/plan-execution-context";
+      return parsePlanExecutionContext(await json(path));
     },
     async read(caseId) {
+      if (resolvedAuthority.kind === "connected" && caseId !== resolvedAuthority.caseId) {
+        throw new Error("session_changed");
+      }
       return parseTimelineExecutionView(await json(`/api/demo/cases/${caseId}/timeline-execution`));
     },
     start: (timelinePlanId, body, csrf, key) => mutation(`/api/demo/timeline-plans/${timelinePlanId}/executions`, body, csrf, key),

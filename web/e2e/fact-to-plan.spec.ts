@@ -3,6 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const proofFile = process.env.FACT_TO_PLAN_PROOF_FILE;
+const connectedExecutionProofFile = process.env.FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE;
 const workerReadyFile = process.env.FACT_TO_PLAN_WORKER_READY_FILE;
 const workerReadySentinel = process.env.FACT_TO_PLAN_WORKER_READY_SENTINEL;
 const presentationLocale = process.env.PRESENTATION_LOCALE === "en" ? "en" : "zh-CN";
@@ -52,6 +53,7 @@ const presentationCopy = presentationLocale === "en" ? {
   continueDecision: "Continue family decision",
   receipt: "Family Decision Receipt",
   timeline: "Action timeline",
+  continueExecution: "Continue this Case into execution",
 } : {
   startParent: "开始家长流程",
   addBudget: "添加已确认预算消息",
@@ -72,6 +74,28 @@ const presentationCopy = presentationLocale === "en" ? {
   continueDecision: "继续家庭决定",
   receipt: "家庭决定回执",
   timeline: "行动时间线",
+  continueExecution: "继续当前 Case 的执行计划",
+};
+const executionCopy = presentationLocale === "en" ? {
+  student: "Student",
+  advisor: "Advisor",
+  start: "Start the action plan",
+  progress: "Record progress",
+  blocked: "Record blocker and stop the current checkpoint",
+  reassess: "Request reassessment and stop execution",
+  recover: "Revalidate execution authority",
+  handoff: "Reassessment handoff",
+  pending: "Any next workflow awaits separate future authorization.",
+} : {
+  student: "学生",
+  advisor: "顾问",
+  start: "开始执行行动计划",
+  progress: "记录进行中",
+  blocked: "记录阻塞并停止当前 checkpoint",
+  reassess: "请求重新评估并停止执行",
+  recover: "重新验证执行 authority",
+  handoff: "重新评估交接",
+  pending: "后续流程等待未来单独授权。",
 };
 const rawPublicData = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|schema_version|confirmed_fact_id|candidate_id|request_sha256|night_voyager_(?:api|worker|migrator)|\/Users\/|Traceback|csrf|cookie/i;
 
@@ -278,6 +302,103 @@ async function capturePublicScreenshot(page: Page, filename: string) {
   await page.screenshot({ path: `/workspace/docs/assets/${filename}`, fullPage: true });
 }
 
+interface ConnectedExecutionContext {
+  schema_version: 1;
+  journey: "connected-advisor-family";
+  case_id: string;
+  case_revision: number;
+  decision_id: string;
+  decision_receipt_id: string;
+  timeline_plan_id: string;
+  execution_id: string | null;
+  active_role: "advisor" | "student" | "parent";
+  assignment_status: "assigned";
+}
+
+interface ConnectedExecutionReceipt {
+  schema_version: 1;
+  receipt_id: string;
+  operation: "start" | "attest" | "verify" | "reassess";
+  result_id: string;
+  execution_id: string;
+  checkpoint_id: string | null;
+}
+
+interface ConnectedExecutionView {
+  execution: {
+    execution_id: string;
+    case_id: string;
+    case_revision: number;
+    decision_id: string;
+    decision_receipt_id: string;
+    timeline_plan_id: string;
+    state: string;
+    row_version: number;
+  };
+  checkpoints: Array<{
+    checkpoint_id: string;
+    ordinal: number;
+    milestone_key: string;
+    state: string;
+    row_version: number;
+  }>;
+  current_checkpoint: {
+    checkpoint_id: string;
+    ordinal: number;
+    milestone_key: string;
+    state: string;
+    row_version: number;
+  } | null;
+  reassessment: {
+    reassessment_id: string;
+    execution_id: string;
+    checkpoint_id: string;
+    predecessor_case_id: string;
+    predecessor_case_revision: number;
+    predecessor_decision_id: string;
+    predecessor_decision_receipt_id: string;
+    predecessor_timeline_plan_id: string;
+    predecessor_execution_id: string;
+    predecessor_checkpoint_id: string;
+    successor_status: string;
+  } | null;
+}
+
+async function connectedMutate(
+  page: Page,
+  buttonName: string,
+  path: string,
+): Promise<{ receipt: ConnectedExecutionReceipt; view: ConnectedExecutionView }> {
+  const receiptResponse = page.waitForResponse(
+    (response) => response.request().method() === "POST" && response.url().includes(path),
+  );
+  const viewResponse = page.waitForResponse(
+    (response) => response.request().method() === "GET"
+      && response.url().includes("/timeline-execution"),
+  );
+  await page.getByRole("button", { name: buttonName, exact: true }).click();
+  const [receiptHttp, viewHttp] = await Promise.all([receiptResponse, viewResponse]);
+  expect(receiptHttp.status()).toBe(200);
+  expect(viewHttp.status()).toBe(200);
+  return {
+    receipt: await receiptHttp.json() as ConnectedExecutionReceipt,
+    view: await viewHttp.json() as ConnectedExecutionView,
+  };
+}
+
+function expectConnectedExecutionIdentity(
+  view: ConnectedExecutionView,
+  context: ConnectedExecutionContext,
+  executionId?: string,
+) {
+  expect(view.execution.case_id).toBe(context.case_id);
+  expect(view.execution.case_revision).toBe(context.case_revision);
+  expect(view.execution.decision_id).toBe(context.decision_id);
+  expect(view.execution.decision_receipt_id).toBe(context.decision_receipt_id);
+  expect(view.execution.timeline_plan_id).toBe(context.timeline_plan_id);
+  if (executionId) expect(view.execution.execution_id).toBe(executionId);
+}
+
 interface FactToPlanAuthoritySnapshot {
   ready: boolean;
   phase: unknown;
@@ -417,7 +538,10 @@ async function captureFactToPlanApprovalDiagnostic(
 }
 
 test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database journey", async ({ page }) => {
-  test.skip(!proofFile || !workerReadyFile || !workerReadySentinel, "runs only in the isolated fact-to-plan Compose lane");
+  test.skip(
+    !proofFile || !connectedExecutionProofFile || !workerReadyFile || !workerReadySentinel,
+    "runs only in the isolated fact-to-plan Compose lane",
+  );
   const storageReplacements: Array<{
     pathname: string;
     schemaVersion: 3;
@@ -741,4 +865,202 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   }
 
   await writeFile(proofFile!, `${JSON.stringify({ schema_version: 1, case_id: caseId, case_revision: 2, task_id: taskId })}\n`, { encoding: "utf8", mode: 0o600 });
+
+  const briefResponse = await page.request.get(
+    `/api/demo/cases/${caseId}/current-decision-brief?contract_version=2`,
+  );
+  expect(briefResponse.status()).toBe(200);
+  const brief = await briefResponse.json() as {
+    case_id: string;
+    revision_context: { current_case_revision: number };
+    receipt: { decision_id: string; receipt_id: string };
+    timeline: { country: string };
+  };
+  expect(brief.case_id).toBe(caseId);
+  expect(brief.revision_context.current_case_revision).toBe(2);
+  expect(brief.receipt).toBeTruthy();
+  expect(brief.timeline).toBeTruthy();
+
+  await expect(
+    page.getByRole("link", { name: presentationCopy.continueExecution, exact: true }),
+  ).toHaveAttribute("href", `/demo/plan?case_id=${caseId}`);
+  await page.getByRole("link", {
+    name: presentationCopy.continueExecution,
+    exact: true,
+  }).click();
+  await page.waitForURL(`**/demo/plan?case_id=${caseId}`);
+  await expect(page.locator(".advisor-workspace-shell")).toHaveAttribute(
+    "data-proof-segment",
+    "connected_same_case",
+  );
+  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(
+    /当前 Case 的执行延续|Continuation of this Case/,
+  );
+
+  const wrongCaseId = "40000000-0000-0000-0000-000000000001";
+  const wrongCaseResponse = await page.request.get(
+    `/api/demo/cases/${wrongCaseId}/plan-execution-context`,
+  );
+  expect(wrongCaseResponse.status()).toBe(404);
+  expect(await wrongCaseResponse.json()).toMatchObject({
+    code: "plan_execution_context_unavailable",
+  });
+
+  await page.getByRole("button", { name: executionCopy.student, exact: true }).click();
+  await expect(page.getByRole("button", {
+    name: executionCopy.student,
+    exact: true,
+  })).toHaveAttribute("aria-pressed", "true");
+  const contextResponse = await page.request.get(
+    `/api/demo/cases/${caseId}/plan-execution-context`,
+  );
+  expect(contextResponse.status()).toBe(200);
+  const context = await contextResponse.json() as ConnectedExecutionContext;
+  expect(Object.keys(context).sort()).toEqual([
+    "active_role",
+    "assignment_status",
+    "case_id",
+    "case_revision",
+    "decision_id",
+    "decision_receipt_id",
+    "execution_id",
+    "journey",
+    "schema_version",
+    "timeline_plan_id",
+  ].sort());
+  expect(context).toMatchObject({
+    schema_version: 1,
+    journey: "connected-advisor-family",
+    case_id: caseId,
+    case_revision: 2,
+    decision_id: brief.receipt.decision_id,
+    decision_receipt_id: brief.receipt.receipt_id,
+    execution_id: null,
+    active_role: "student",
+    assignment_status: "assigned",
+  });
+
+  const acceptedReceiptIds: string[] = [];
+  const checkpointIds: string[] = [];
+  const started = await connectedMutate(page, executionCopy.start, "/executions");
+  acceptedReceiptIds.push(started.receipt.receipt_id);
+  checkpointIds.push(...started.view.checkpoints.map((checkpoint) => checkpoint.checkpoint_id));
+  expect(checkpointIds).toHaveLength(4);
+  expect(started.view.current_checkpoint?.milestone_key).toBe("documents");
+  expectConnectedExecutionIdentity(started.view, context, started.receipt.execution_id);
+  const startedContextResponse = await page.request.get(
+    `/api/demo/cases/${caseId}/plan-execution-context`,
+  );
+  expect(startedContextResponse.status()).toBe(200);
+  expect((await startedContextResponse.json() as ConnectedExecutionContext).execution_id)
+    .toBe(started.receipt.execution_id);
+
+  await page.reload();
+  await expect(page.getByRole("button", {
+    name: executionCopy.progress,
+    exact: true,
+  })).toBeVisible();
+  const reloadedContextResponse = await page.request.get(
+    `/api/demo/cases/${caseId}/plan-execution-context`,
+  );
+  expect(reloadedContextResponse.status()).toBe(200);
+  const reloadedContext = await reloadedContextResponse.json() as ConnectedExecutionContext;
+  expect(reloadedContext).toMatchObject({
+    ...context,
+    execution_id: started.receipt.execution_id,
+  });
+
+  let lostReceipt: ConnectedExecutionReceipt | null = null;
+  let dropOnce = true;
+  await page.route("**/checkpoint-attestations", async (route) => {
+    if (!dropOnce) {
+      await route.continue();
+      return;
+    }
+    dropOnce = false;
+    const upstream = await route.fetch();
+    lostReceipt = await upstream.json() as ConnectedExecutionReceipt;
+    await route.abort("failed");
+  });
+  await page.getByRole("button", { name: executionCopy.progress, exact: true }).click();
+  await expect(page.getByRole("button", {
+    name: executionCopy.recover,
+    exact: true,
+  })).toBeVisible();
+  await page.unroute("**/checkpoint-attestations");
+  const recoveredReceiptResponse = page.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().includes("/checkpoint-attestations"),
+  );
+  const recoveredViewResponse = page.waitForResponse(
+    (response) => response.request().method() === "GET"
+      && response.url().includes("/timeline-execution"),
+  );
+  await page.getByRole("button", { name: executionCopy.recover, exact: true }).click();
+  const [recoveredReceiptHttp, recoveredViewHttp] = await Promise.all([
+    recoveredReceiptResponse,
+    recoveredViewResponse,
+  ]);
+  expect(recoveredReceiptHttp.status()).toBe(200);
+  expect(recoveredViewHttp.status()).toBe(200);
+  const recoveredReceipt = await recoveredReceiptHttp.json() as ConnectedExecutionReceipt;
+  const recoveredView = await recoveredViewHttp.json() as ConnectedExecutionView;
+  expect(lostReceipt).not.toBeNull();
+  expect(recoveredReceipt.receipt_id).toBe(lostReceipt!.receipt_id);
+  acceptedReceiptIds.push(lostReceipt!.receipt_id);
+  expectConnectedExecutionIdentity(recoveredView, context, started.receipt.execution_id);
+
+  const blocked = await connectedMutate(page, executionCopy.blocked, "/checkpoint-attestations");
+  acceptedReceiptIds.push(blocked.receipt.receipt_id);
+  expect(blocked.view.current_checkpoint?.state).toBe("blocked");
+  expectConnectedExecutionIdentity(blocked.view, context, started.receipt.execution_id);
+
+  const advisorSessionResponse = page.waitForResponse(
+    (response) => response.request().method() === "POST"
+      && response.url().endsWith("/api/demo/sessions"),
+  );
+  await page.getByRole("button", { name: executionCopy.advisor, exact: true }).click();
+  expect((await advisorSessionResponse).status()).toBe(201);
+  await expect(page.getByRole("button", {
+    name: executionCopy.reassess,
+    exact: true,
+  })).toBeVisible();
+  const reassessed = await connectedMutate(page, executionCopy.reassess, "/reassessments");
+  acceptedReceiptIds.push(reassessed.receipt.receipt_id);
+  expect(reassessed.view.execution.state).toBe("reassessment_required");
+  expect(reassessed.view.reassessment).toMatchObject({
+    execution_id: started.receipt.execution_id,
+    checkpoint_id: checkpointIds[0],
+    predecessor_case_id: caseId,
+    predecessor_case_revision: 2,
+    predecessor_decision_id: context.decision_id,
+    predecessor_decision_receipt_id: context.decision_receipt_id,
+    predecessor_timeline_plan_id: context.timeline_plan_id,
+    predecessor_execution_id: started.receipt.execution_id,
+    predecessor_checkpoint_id: checkpointIds[0],
+    successor_status: "pending_future_authorization",
+  });
+  await expect(page.getByRole("heading", { name: executionCopy.handoff })).toBeVisible();
+  await expect(page.getByText(executionCopy.pending)).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: executionCopy.handoff })).toBeVisible();
+  await expect(page.getByText(executionCopy.pending)).toBeVisible();
+  await expectPublicSurface(page);
+
+  await writeFile(connectedExecutionProofFile!, `${JSON.stringify({
+    schema_version: 1,
+    locale: presentationLocale,
+    case_id: caseId,
+    case_revision: 2,
+    task_id: taskId,
+    decision_id: context.decision_id,
+    decision_receipt_id: context.decision_receipt_id,
+    timeline_plan_id: context.timeline_plan_id,
+    execution_id: started.receipt.execution_id,
+    lost_ack_receipt_id: lostReceipt!.receipt_id,
+    blocked_attestation_id: blocked.receipt.result_id,
+    reassessment_request_id: reassessed.receipt.result_id,
+    accepted_receipt_ids: acceptedReceiptIds,
+    checkpoint_ids: checkpointIds,
+  })}\n`, { encoding: "utf8", mode: 0o600 });
 });
