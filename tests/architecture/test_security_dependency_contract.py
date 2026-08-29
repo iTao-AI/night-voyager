@@ -5,7 +5,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.3.2"
+NEXT_VERSION = "16.3.3"
 POSTCSS_VERSION = "8.5.23"
 NANOID_VERSION = "3.3.18"
 REACT_VERSION = "19.2.8"
