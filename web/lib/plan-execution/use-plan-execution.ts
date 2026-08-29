@@ -187,6 +187,19 @@ function mintForAuthority(
     : api.mint(role, csrf);
 }
 
+async function bootstrapForConnection(
+  api: PlanExecutionApi,
+): Promise<{ csrf_token: string }> {
+  try {
+    return await api.bootstrap();
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "bff_session_recovery_required") {
+      throw error;
+    }
+    return api.bootstrap();
+  }
+}
+
 function envelopeFor(
   state: PlanExecutionState,
   role: PlanExecutionRole,
@@ -312,7 +325,7 @@ export function usePlanExecution(
     locked.current = true;
     setBusy(true);
     try {
-      const bootstrap = await api.bootstrap();
+      const bootstrap = await bootstrapForConnection(api);
       const session = await mintForAuthority(api, authority, role, bootstrap.csrf_token);
       if (expectedGeneration !== generation.current) return;
       csrf.current = session.csrf_token;

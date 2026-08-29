@@ -177,6 +177,31 @@ it("connects a connected authority and persists its exact case binding", async (
   });
 });
 
+it("retries the first connected handoff after the BFF clears the current session", async () => {
+  let bootstrapAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => {
+      bootstrapAttempts += 1;
+      if (bootstrapAttempts === 1) {
+        throw new PlanExecutionApiError(409, "bff_session_recovery_required");
+      }
+      return { csrf_token: "fresh-bootstrap" };
+    }),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "student-csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => connectedContextFixture),
+    read: vi.fn(), start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const authority = { kind: "connected" as const, caseId: connectedContextFixture.case_id };
+  const { result } = renderHook(() => usePlanExecution(api, authority));
+
+  await act(async () => result.current.connect("student"));
+
+  expect(result.current.state.context).toEqual(connectedContextFixture);
+  expect(api.bootstrap).toHaveBeenCalledTimes(2);
+  expect(api.mint).toHaveBeenCalledWith("student", "fresh-bootstrap");
+});
+
 it("persists the operation, captures its receipt, then performs a fresh GET", async () => {
   const calls: string[] = [];
   const view = viewFixture();
