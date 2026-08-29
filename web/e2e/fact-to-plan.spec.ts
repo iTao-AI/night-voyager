@@ -77,6 +77,7 @@ const presentationCopy = presentationLocale === "en" ? {
   continueExecution: "继续当前 Case 的执行计划",
 };
 const executionCopy = presentationLocale === "en" ? {
+  connectedContext: "Execution follow-up · connected same-Case",
   student: "Student",
   advisor: "Advisor",
   start: "Start the action plan",
@@ -87,6 +88,7 @@ const executionCopy = presentationLocale === "en" ? {
   handoff: "Reassessment handoff",
   pending: "Any next workflow awaits separate future authorization.",
 } : {
+  connectedContext: "执行跟进 · 同一 Case",
   student: "学生",
   advisor: "顾问",
   start: "开始执行行动计划",
@@ -893,8 +895,8 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
     "data-proof-segment",
     "connected_same_case",
   );
-  await expect(page.locator("[data-frame-slot='top-band']")).toContainText(
-    /当前 Case 的执行延续|Continuation of this Case/,
+  await expect(page.locator("[data-frame-slot='top-band'] strong").first()).toHaveText(
+    executionCopy.connectedContext,
   );
 
   const wrongCaseId = "40000000-0000-0000-0000-000000000001";
