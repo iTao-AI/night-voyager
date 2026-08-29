@@ -107,6 +107,7 @@ def problem(status_code: int, code: str, detail: str) -> JSONResponse:
 def is_timeline_execution_http_path(path: str) -> bool:
     return (
         path == "/api/v1/plan-execution-context"
+        or path.endswith("/plan-execution-context")
         or "/timeline-execution" in path
         or "/timeline-plans/" in path
     )
@@ -178,6 +179,36 @@ def create_timeline_execution_router(
                     PostgresTimelineExecutionRepository(session)
                 ).context(actor, scenario)
             except (TimelineExecutionUnavailableError, TimelineExecutionProjectionError):
+                return problem(
+                    404,
+                    "plan_execution_context_unavailable",
+                    "plan execution context unavailable",
+                )
+        if result is None:
+            return problem(
+                404,
+                "plan_execution_context_unavailable",
+                "plan execution context unavailable",
+            )
+        response.headers["Cache-Control"] = "no-store"
+        return result.model_dump(mode="json")
+
+    @router.get("/cases/{case_id}/plan-execution-context", response_model=None)
+    async def get_connected_plan_execution_context(  # pyright: ignore[reportUnusedFunction]
+        case_id: UUID,
+        response: Response,
+        raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+    ) -> dict[str, object] | JSONResponse:
+        async with session_factory() as session, session.begin():
+            actor = await read_context(session, raw_session)
+            try:
+                result = await TimelineExecutionService(
+                    PostgresTimelineExecutionRepository(session)
+                ).connected_context(actor, case_id)
+            except (
+                TimelineExecutionUnavailableError,
+                TimelineExecutionProjectionError,
+            ):
                 return problem(
                     404,
                     "plan_execution_context_unavailable",

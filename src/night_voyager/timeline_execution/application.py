@@ -6,6 +6,7 @@ from uuid import UUID
 from night_voyager.identity.models import ActorContext, ActorRole
 from night_voyager.timeline_execution.errors import TimelineExecutionUnavailableError
 from night_voyager.timeline_execution.models import (
+    ConnectedPlanExecutionContextV1,
     PlanExecutionContextV1,
     TimelineExecutionViewV1,
     TimelineMutationReceiptV1,
@@ -32,6 +33,11 @@ class TimelineExecutionService:
         if scenario != SCENARIO:
             raise TimelineExecutionUnavailableError("execution context unavailable")
         return await self._repository.context(actor, SCENARIO)
+
+    async def connected_context(
+        self, actor: ActorContext, case_id: UUID
+    ) -> ConnectedPlanExecutionContextV1 | None:
+        return await self._repository.connected_context(actor, case_id)
 
     async def read(
         self, actor: ActorContext, case_id: UUID

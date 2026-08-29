@@ -40,6 +40,19 @@ export const contextFixture = {
   assignment_status: "assigned",
 } as const;
 
+export const connectedContextFixture = {
+  schema_version: 1,
+  journey: "connected-advisor-family",
+  case_id: CASE_ID,
+  case_revision: 1,
+  decision_id: id(7),
+  decision_receipt_id: id(8),
+  timeline_plan_id: id(9),
+  execution_id: null,
+  active_role: "student",
+  assignment_status: "assigned",
+} as const;
+
 export function viewFixture(
   checkpointState: "in_progress" | "awaiting_advisor" | "blocked" = "in_progress",
 ): ExpectedTimelineExecutionView {
@@ -104,8 +117,10 @@ export function viewFixture(
 
 it("strictly parses the server-owned context and execution projection", () => {
   expect(parsePlanExecutionContext(contextFixture)).toEqual(contextFixture);
+  expect(parsePlanExecutionContext(connectedContextFixture)).toEqual(connectedContextFixture);
   expect(parseTimelineExecutionView(viewFixture())).toEqual(viewFixture());
   expect(() => parsePlanExecutionContext({ ...contextFixture, csrf_token: "secret" })).toThrow();
+  expect(() => parsePlanExecutionContext({ ...connectedContextFixture, scenario: "governed-plan-execution-v1" })).toThrow();
   expect(() => parseTimelineExecutionView({ ...viewFixture(), as_of: "2026-01-01" })).toThrow();
 });
 

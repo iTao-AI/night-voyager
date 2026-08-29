@@ -28,6 +28,7 @@ BFF_PATHS = (
 )
 PLAN_EXECUTION_BFF_PATHS = (
     "/api/demo/plan-execution-context",
+    "/api/demo/cases/{case_id}/plan-execution-context",
     "/api/demo/cases/{case_id}/timeline-execution",
     "/api/demo/timeline-plans/{timeline_plan_id}/executions",
     "/api/demo/timeline-executions/{execution_id}/checkpoint-attestations",
@@ -103,8 +104,8 @@ def test_m5_freezes_exact_backend_and_bff_paths() -> None:
 
 
 def test_plan_execution_bff_paths_are_closed_and_separate_from_m5() -> None:
-    assert len(PLAN_EXECUTION_BFF_PATHS) == 6
-    assert len(set(PLAN_EXECUTION_BFF_PATHS)) == 6
+    assert len(PLAN_EXECUTION_BFF_PATHS) == 7
+    assert len(set(PLAN_EXECUTION_BFF_PATHS)) == 7
     assert set(PLAN_EXECUTION_BFF_PATHS).isdisjoint(BFF_PATHS)
 
 
@@ -155,6 +156,7 @@ def test_demo_bff_has_only_explicit_route_handlers() -> None:
     }
     plan_execution_routes = {
         "plan-execution-context/route.ts",
+        "cases/[caseId]/plan-execution-context/route.ts",
         "cases/[caseId]/timeline-execution/route.ts",
         "timeline-plans/[timelinePlanId]/executions/route.ts",
         "timeline-executions/[executionId]/checkpoint-attestations/route.ts",

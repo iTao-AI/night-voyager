@@ -217,6 +217,15 @@ export function ConnectedDemo() {
             <p>{copy("parentRoleAuthority")}</p>
           </div>
           <DecisionReceiptTimeline brief={state.brief} />
+          <p className="connected-same-case-handoff">
+            <Link
+              className="primary-action workspace-primary-action"
+              data-primary-action="true"
+              href={`/demo/plan?case_id=${state.brief.case_id}`}
+            >
+              {copy("continueConnectedExecution")}
+            </Link>
+          </p>
           <p className="separate-scenario-handoff"><Link className="secondary-action" href="/demo/plan">{copy("separateExecutionScenario")}</Link></p>
         </>
       ) : null}

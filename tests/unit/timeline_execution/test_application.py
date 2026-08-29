@@ -18,6 +18,7 @@ from night_voyager.timeline_execution.models import (
     CheckpointStatusCode,
     CheckpointVerificationAction,
     CheckpointVerificationReasonCode,
+    ConnectedPlanExecutionContextV1,
     PlanExecutionContextV1,
     ReassessmentTrigger,
     TimelineCheckpointState,
@@ -154,6 +155,33 @@ async def test_context_closes_scenario_before_repository_call() -> None:
     with pytest.raises(TimelineExecutionUnavailableError):
         await service.context(actor(ActorRole.STUDENT), "other")
     assert repo.calls == []
+
+
+@pytest.mark.asyncio
+async def test_connected_context_delegates_the_requested_case_identity() -> None:
+    repo = repository()
+    repo.connected_context_result = ConnectedPlanExecutionContextV1(
+        schema_version=1,
+        journey="connected-advisor-family",
+        case_id=U2,
+        case_revision=2,
+        decision_id=U1,
+        decision_receipt_id=U2,
+        timeline_plan_id=U3,
+        execution_id=None,
+        active_role="student",
+        assignment_status="assigned",
+    )
+
+    result = await TimelineExecutionService(repo).connected_context(
+        actor(ActorRole.STUDENT), U2
+    )
+
+    assert result is repo.connected_context_result
+    assert repo.calls[-1] == (
+        "connected_context",
+        b'{"case_id":"00000000-0000-0000-0000-000000000002"}',
+    )
 
 
 @pytest.mark.asyncio

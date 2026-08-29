@@ -3,12 +3,13 @@
 The implemented route map is advisor-centered and presentation-only. The previous
 cosmic root/family-heavy map is historical context; the replacement is locally
 verified. The complete governed walkthrough begins at `/demo/collaboration`
-and continues the same Case into `/demo` through receipt and `TimelinePlan`. The
-separately seeded `/demo/plan` execution scenario never claims a Case or session
-handoff from `/demo`. Seven explicit BFF route files expose exactly eight HTTP
-methods for the collaboration and Skill-inspector reads/mutations. The read-only
-same-Case handoff then composes the existing advisor-centered route-analysis and downstream
-client-confirmation surface; it adds no new BFF handler.
+and continues the same Case into `/demo` through receipt and `TimelinePlan`, then
+uses `/demo/plan?case_id=<case_id>` for the case-scoped execution continuation.
+The bare/`scenario` `/demo/plan` execution paths remain separately seeded and never
+claim a Case or session handoff from `/demo`. Seven explicit BFF route files expose
+exactly eight HTTP methods for the collaboration and Skill-inspector reads/mutations;
+the read-only same-Case handoff then adds one explicit case-context read handler for
+the connected execution continuation.
 The historical label "focused advisor-family/evidence route" is retained only in documentation history.
 
 Current presentation wording: advisor-centered route-analysis and downstream client-confirmation.
@@ -16,8 +17,8 @@ Current presentation wording: advisor-centered route-analysis and downstream cli
 The current visual authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The root projects `¥300,000–400,000` for the same Case; the persisted connected result remains `¥305,500–400,000`; `/demo/plan` remains independent.
 
 `/demo` also remains independently available as the advisor route-analysis and
-downstream client-confirmation surface. Twelve explicit same-origin BFF handlers connect it to the existing FastAPI
-identity, task, review, decision, SSE, and three connected read endpoints, including
+downstream client-confirmation surface. Thirteen explicit same-origin BFF handlers connect it to the existing FastAPI
+identity, task, review, decision, SSE, and four connected read endpoints, including
 participant-safe `journey-status`. The approved shell uses one dark product frame,
 warm decision surface, five-stage workflow rail, current-work canvas, evidence rail,
 and default-closed technical disclosure across all three demo routes.
@@ -43,6 +44,8 @@ and default-closed technical disclosure across all three demo routes.
   -> read-only candidate/fact/ledger/inspector validation
   -> one envelope replacement -> /demo with the same Case and advisor session
   -> explicit task action -> pinned task -> one EventSource -> existing decision flow
+  -> family decision -> exact receipt/timeline -> /demo/plan?case_id=<case_id>
+  -> existing execution -> blocked reassessment -> pending_future_authorization
 
 /demo/plan (independent execution scenario)
   -> independently seeded Happy or Blocked scenario
@@ -62,5 +65,6 @@ The implemented route map was verified by the local `scripts/verify_compose.sh`
 presentation lane: `103/103` presentation assertions passed across both locales, the
 six audited widths, reduced motion, 200% zoom, material fallback, and normal/blocked
 keyboard paths.
-The connected same-Case proof ends at its receipt and `TimelinePlan`; `/demo/plan`
-remains a separately seeded execution scenario.
+The connected same-Case proof continues from its receipt and `TimelinePlan` through
+the case-scoped execution route; bare `/demo/plan` remains a separately seeded
+execution scenario.

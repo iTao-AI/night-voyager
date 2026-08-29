@@ -1,12 +1,12 @@
 import { PlanExecutionWorkspace } from "../../../components/plan-execution/PlanExecutionWorkspace";
 import { notFound } from "next/navigation";
-import { parsePlanExecutionScenario } from "../../../lib/plan-execution/scenario";
+import { parsePlanExecutionRoute } from "../../../lib/plan-execution/scenario";
 
-async function resolveScenario(
+async function resolveAuthority(
   searchParams: Promise<Record<string, string | string[] | undefined>>,
 ) {
   try {
-    return parsePlanExecutionScenario(await searchParams);
+    return parsePlanExecutionRoute(await searchParams);
   } catch {
     notFound();
   }
@@ -17,6 +17,6 @@ export default async function PlanExecutionPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const scenario = await resolveScenario(searchParams);
-  return <PlanExecutionWorkspace scenario={scenario} />;
+  const authority = await resolveAuthority(searchParams);
+  return <PlanExecutionWorkspace authority={authority} />;
 }

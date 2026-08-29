@@ -1,25 +1,36 @@
 # Governed plan execution walkthrough
 
-This walkthrough is the independent deterministic execution scenario in the
-advisor workspace. It is a local synthetic, provider-free proof. It is not a release,
-deployment, live application workflow, admissions outcome, or successor-plan
-automation.
+This walkthrough covers the existing independent deterministic execution scenarios
+and the connected same-Case continuation in the advisor workspace. Both are local
+synthetic, provider-free proofs. They are not a release, deployment, live
+application workflow, admissions outcome, or successor-plan automation.
 
-It does not continue the connected Case or session from `/demo/collaboration` and
-`/demo`; Happy and Blocked are separately seeded scenarios. Screenshots are review
-evidence, while the semantic browser and database assertions remain authoritative.
+The independent Happy and Blocked paths do not continue the connected Case or
+session from `/demo/collaboration` and `/demo`. The connected route is selected only
+by `/demo/plan?case_id=<case_id>` from the current `plan_ready` action. Screenshots
+are review evidence, while the semantic browser and database assertions remain
+authoritative.
 
 The current presentation authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The route uses the shared Midnight Editorial Advisor Workspace, but its scenario and authority remain independent.
 
 ## Routes and identities
 
+- Connected Case: `http://127.0.0.1:3000/demo/plan?case_id=<case_id>`
 - Happy: `http://127.0.0.1:3000/demo/plan`
 - Blocked: `http://127.0.0.1:3000/demo/plan?scenario=blocked`
 
-Only `happy` and `blocked` are accepted. The server maps the closed scenario and
-role to one exact synthetic principal. Happy and Blocked use distinct assigned
-advisor/student/parent triads. No browser request or stored envelope selects an
-arbitrary `case_id`.
+Connected mode accepts only one canonical lowercase Case UUID and derives its
+current revision, decision, receipt, timeline, optional execution, active role,
+and assignment on the server. Seeded mode accepts only `happy` or `blocked`; the
+server maps the closed scenario and role to one exact synthetic principal. Happy
+and Blocked use distinct assigned advisor/student/parent triads. Mixed, unknown, or
+contradictory query identities fail closed. No browser request or stored envelope
+selects arbitrary business identities.
+
+Connected and seeded modes share one `PlanExecutionWorkspace`, reducer, mutation
+service, receipt-then-GET reconciliation, and recovery implementation. Recovery
+metadata binds the authority kind and exact Case or scenario, so source identities
+cannot be crossed during reload or lost-ack replay.
 
 ## Evaluator paths
 
@@ -40,9 +51,24 @@ confirmed by its exact public markers. The manual path is for evaluator
 understanding. Only the full path proves receipts, fresh GET order, browser
 recovery, and durable rows.
 
+## Connected same-Case continuation
+
+From the connected `/demo` `plan_ready` state, choose the primary action to enter
+`/demo/plan?case_id=<case_id>`. The server returns the exact current Case revision,
+family decision, DecisionReceipt, TimelinePlan, optional execution, active role,
+and assigned status. The browser carries only the Case route identity.
+
+The connected proof starts execution through the existing family mutation, reloads
+the same authority, replays a lost acknowledgement with the same receipt and
+idempotency key, rotates to the assigned advisor, records a blocked checkpoint, and
+reassesses the exact predecessor. Reassessment stops at
+`pending_future_authorization`; it creates no automatic successor. Wrong-Case,
+wrong-role, cross-Case, mixed-route, stale-session, and recovery-source mismatches
+fail closed.
+
 ## Happy journey
 
-Connect as Student, start, submit progress and completion, rotate to Advisor,
+In the independent seeded path, connect as Student, start, submit progress and completion, rotate to Advisor,
 request one update, return to Student for the replacement completion, and verify.
 Repeat for application and visa. Arrival is owned by Parent and is finally
 verified by Advisor. Reload must show the exact completed execution and immutable
@@ -56,7 +82,7 @@ automatically.
 
 ## Blocked journey
 
-Connect as Student, start, select one closed blocker reason, and record the
+In the independent seeded path, connect as Student, start, select one closed blocker reason, and record the
 blocked attestation. Rotate to Advisor and request reassessment. The execution
 stops at `reassessment_required`; the handoff retains predecessor identities and
 states `pending_future_authorization`. No resume, successor planning run,

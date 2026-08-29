@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 PATHS = {
     "/api/v1/plan-execution-context",
+    "/api/v1/cases/{case_id}/plan-execution-context",
     "/api/v1/timeline-plans/{timeline_plan_id}/executions",
     "/api/v1/cases/{case_id}/timeline-execution",
     "/api/v1/timeline-executions/{execution_id}/checkpoint-attestations",
@@ -21,6 +22,7 @@ def test_timeline_execution_routes_are_exact_and_have_no_task_or_sse_surface() -
     timeline_paths = {path for path in paths if "timeline-execution" in path}
     assert timeline_paths == PATHS - {
         "/api/v1/plan-execution-context",
+        "/api/v1/cases/{case_id}/plan-execution-context",
         "/api/v1/timeline-plans/{timeline_plan_id}/executions",
     }
     assert not any(

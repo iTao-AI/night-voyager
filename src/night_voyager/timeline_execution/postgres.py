@@ -19,6 +19,7 @@ from night_voyager.timeline_execution.errors import (
 )
 from night_voyager.timeline_execution.hashing import canonical_sha256
 from night_voyager.timeline_execution.models import (
+    ConnectedPlanExecutionContextV1,
     PlanExecutionContextV1,
     TimelineExecutionViewV1,
     TimelineMutationReceiptV1,
@@ -53,6 +54,118 @@ class PostgresTimelineExecutionRepository:
             },
         )
         return self._decode_optional(PlanExecutionContextV1, raw)
+
+    async def connected_context(
+        self, actor: ActorContext, case_id: UUID
+    ) -> ConnectedPlanExecutionContextV1 | None:
+        rows = await self._select_rows(
+            """
+            SELECT
+              1 AS schema_version,
+              'connected-advisor-family' AS journey,
+              c.id AS case_id,
+              c.current_revision AS case_revision,
+              d.id AS decision_id,
+              d.receipt_id AS decision_receipt_id,
+              tp.id AS timeline_plan_id,
+              te.id AS execution_id,
+              p.role AS active_role,
+              'assigned' AS assignment_status,
+              te.case_id AS execution_case_id,
+              te.case_revision AS execution_case_revision,
+              te.family_decision_id AS execution_decision_id,
+              te.decision_receipt_id AS execution_decision_receipt_id,
+              te.timeline_plan_id AS execution_timeline_plan_id
+            FROM app.student_cases AS c
+            JOIN app.student_case_participants AS p
+              ON p.organization_id = c.organization_id
+             AND p.case_id = c.id
+             AND p.actor_id = :actor
+             AND p.role = :role
+            JOIN app.student_case_revisions AS r
+              ON r.organization_id = c.organization_id
+             AND r.case_id = c.id
+             AND r.revision = c.current_revision
+            JOIN app.decision_briefs AS b
+             ON b.organization_id = c.organization_id
+             AND b.case_id = c.id
+             AND b.case_revision = c.current_revision
+            JOIN app.family_decisions AS d
+              ON d.organization_id = b.organization_id
+             AND d.case_id = b.case_id
+             AND d.decision_brief_id = b.id
+             AND d.brief_version = b.brief_version
+             AND d.planning_run_id = b.planning_run_id
+            JOIN app.timeline_plans AS tp
+              ON tp.organization_id = d.organization_id
+             AND tp.family_decision_id = d.id
+            LEFT JOIN app.timeline_executions AS te
+              ON te.organization_id = tp.organization_id
+             AND te.timeline_plan_id = tp.id
+            WHERE c.organization_id = :org
+              AND c.id = :case
+              AND c.state = 'plan_ready'
+            """,
+            {
+                "org": actor.organization_id,
+                "actor": actor.actor_id,
+                "role": actor.role,
+                "case": case_id,
+            },
+        )
+        if not rows:
+            return None
+        if len(rows) != 1:
+            raise TimelineExecutionProjectionError(
+                "connected plan execution projection is contradictory"
+            )
+        row = rows[0]
+        if row.get("case_id") != case_id or row.get("active_role") != actor.role:
+            raise TimelineExecutionProjectionError(
+                "connected plan execution projection is contradictory"
+            )
+        execution_id = row.get("execution_id")
+        execution_fields = (
+            "execution_case_id",
+            "execution_case_revision",
+            "execution_decision_id",
+            "execution_decision_receipt_id",
+            "execution_timeline_plan_id",
+        )
+        if execution_id is None:
+            if any(row.get(field) is not None for field in execution_fields):
+                raise TimelineExecutionProjectionError(
+                    "connected plan execution projection is contradictory"
+                )
+        elif (
+            row.get("execution_case_id") != row.get("case_id")
+            or row.get("execution_case_revision") != row.get("case_revision")
+            or row.get("execution_decision_id") != row.get("decision_id")
+            or row.get("execution_decision_receipt_id")
+            != row.get("decision_receipt_id")
+            or row.get("execution_timeline_plan_id") != row.get("timeline_plan_id")
+        ):
+            raise TimelineExecutionProjectionError(
+                "connected plan execution projection is contradictory"
+            )
+        payload = {field: row[field] for field in (
+            "schema_version",
+            "journey",
+            "case_id",
+            "case_revision",
+            "decision_id",
+            "decision_receipt_id",
+            "timeline_plan_id",
+            "execution_id",
+            "active_role",
+            "assignment_status",
+        )}
+        try:
+            return ConnectedPlanExecutionContextV1.model_validate(payload)
+        except ValidationError as error:
+            raise TimelineExecutionProjectionError(
+                "connected plan execution projection is malformed"
+            ) from error
 
     async def read(
         self, actor: ActorContext, case_id: UUID
@@ -231,6 +344,20 @@ class PostgresTimelineExecutionRepository:
             }
             if sqlstate in conflict_codes:
                 raise TimelineExecutionConflictError(conflict_codes[str(sqlstate)]) from error
+            raise
+
+    async def _select_rows(
+        self, statement: str, parameters: dict[str, object]
+    ) -> list[Mapping[str, object]]:
+        try:
+            result = await self._session.execute(text(statement), parameters)
+            return cast(list[Mapping[str, object]], result.mappings().all())
+        except DBAPIError as error:
+            sqlstate = getattr(error.orig, "sqlstate", None)
+            if sqlstate in {"NV003", "NV007"}:
+                raise TimelineExecutionUnavailableError(
+                    "execution authority unavailable"
+                ) from error
             raise
 
     @staticmethod

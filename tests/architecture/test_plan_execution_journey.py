@@ -2,8 +2,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "web/e2e/plan-execution.spec.ts"
+CONNECTED_SPEC = ROOT / "web/e2e/fact-to-plan.spec.ts"
 COMPOSE_PROOF = ROOT / "scripts/verify_compose.sh"
 VERIFIER = ROOT / "scripts/verify_timeline_execution.py"
+CONNECTED_VERIFIER = ROOT / "scripts/verify_connected_plan_execution_flow.py"
 CATALOG = ROOT / "web/lib/presentation/catalog.ts"
 
 
@@ -63,6 +65,37 @@ def test_browser_database_proof_binds_every_recovery_counterfactual() -> None:
         assert marker in verifier
     assert "run_plan_execution_recovery_lane" in compose
     assert "PLAN_EXECUTION_RECOVERY_PROOF_FILE" in compose
+
+
+def test_connected_browser_database_proof_binds_the_same_case_execution_chain() -> None:
+    source = CONNECTED_SPEC.read_text(encoding="utf-8")
+    verifier = CONNECTED_VERIFIER.read_text(encoding="utf-8")
+    compose = COMPOSE_PROOF.read_text(encoding="utf-8")
+
+    for marker in (
+        "FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE",
+        "/demo/plan?case_id=${caseId}",
+        "plan-execution-context",
+        "connected-advisor-family",
+        "wrongCaseId",
+        "lostReceipt",
+        "route.abort(\"failed\")",
+        "page.reload()",
+        "pending_future_authorization",
+        "acceptedReceiptIds",
+    ):
+        assert marker in source
+    for marker in (
+        "PROOF_KEYS",
+        "validate_authority_row",
+        "pending_future_authorization",
+        "timeline_mutation_receipts",
+        "idempotency_records",
+        "student_case_participants",
+    ):
+        assert marker in verifier
+    assert "verify_connected_plan_execution_flow.py" in compose
+    assert "FACT_TO_PLAN_CONNECTED_EXECUTION_PROOF_FILE" in compose
 
 
 def test_english_browser_proof_bootstraps_locale_before_first_navigation() -> None:

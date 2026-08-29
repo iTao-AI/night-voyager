@@ -306,3 +306,16 @@ class PlanExecutionContextV1(FrozenModel):
     execution_id: UUID | None
     active_role: Literal["advisor", "student", "parent"]
     assignment_status: Literal["assigned"]
+
+
+class ConnectedPlanExecutionContextV1(FrozenModel):
+    schema_version: Literal[1]
+    journey: Literal["connected-advisor-family"]
+    case_id: UUID
+    case_revision: PositiveInt
+    decision_id: UUID
+    decision_receipt_id: UUID
+    timeline_plan_id: UUID
+    execution_id: UUID | None
+    active_role: Literal["advisor", "student", "parent"]
+    assignment_status: Literal["assigned"]

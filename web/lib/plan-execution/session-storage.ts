@@ -1,11 +1,18 @@
 import type { PlanExecutionRole } from "./contracts";
 import type { PlanExecutionIdempotencyRecord } from "./idempotency";
 import type { PlanExecutionDemoScenario } from "./scenario";
+import {
+  connectedPlanExecutionAuthority,
+  seededPlanExecutionAuthority,
+  type PlanExecutionAuthority,
+} from "./scenario";
 
 export interface PlanExecutionEnvelopeV1 {
   schema_version: 1;
   journey: "plan-execution";
-  scenario: PlanExecutionDemoScenario;
+  /** Legacy envelopes omit authorityKind and are interpreted only as seeded. */
+  authorityKind?: "seeded" | "connected";
+  scenario: PlanExecutionDemoScenario | null;
   role: PlanExecutionRole;
   caseId: string;
   timelinePlanId: string;
@@ -27,9 +34,13 @@ function nullableVersion(value: unknown): value is number | null {
 function valid(value: unknown): value is PlanExecutionEnvelopeV1 {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   const item = value as Record<string, unknown>;
-  if (Object.keys(item).sort().join(",") !== "caseId,checkpointId,checkpointVersion,executionId,executionVersion,journey,lastReceiptId,mutations,role,scenario,schema_version,timelinePlanId") return false;
+  const keys = Object.keys(item).sort().join(",");
+  const legacyKeys = "caseId,checkpointId,checkpointVersion,executionId,executionVersion,journey,lastReceiptId,mutations,role,scenario,schema_version,timelinePlanId";
+  const currentKeys = `authorityKind,${legacyKeys}`;
+  if (keys !== legacyKeys && keys !== currentKeys) return false;
   if (item.schema_version !== 1 || item.journey !== "plan-execution"
-    || !["happy", "blocked"].includes(String(item.scenario))
+    || (keys === currentKeys && !["seeded", "connected"].includes(String(item.authorityKind)))
+    || (item.authorityKind === "connected" ? item.scenario !== null : !["happy", "blocked"].includes(String(item.scenario)))
     || !["advisor", "student", "parent"].includes(String(item.role))
     || !uuid(item.caseId) || !uuid(item.timelinePlanId) || !nullableUuid(item.executionId)
     || !nullableVersion(item.executionVersion) || !nullableUuid(item.checkpointId)
@@ -43,6 +54,22 @@ function valid(value: unknown): value is PlanExecutionEnvelopeV1 {
       && typeof candidate.fingerprint === "string" && SHA.test(candidate.fingerprint)
       && uuid(candidate.idempotencyKey);
   });
+}
+
+export function planExecutionAuthorityFromEnvelope(
+  value: PlanExecutionEnvelopeV1,
+): PlanExecutionAuthority {
+  if (value.authorityKind === "connected") {
+    if (value.scenario !== null) throw new Error("invalid plan execution envelope");
+    return connectedPlanExecutionAuthority(value.caseId);
+  }
+  if (value.authorityKind === "seeded" && value.scenario === null) {
+    throw new Error("invalid plan execution envelope");
+  }
+  if (value.scenario === "happy" || value.scenario === "blocked") {
+    return seededPlanExecutionAuthority(value.scenario);
+  }
+  throw new Error("invalid plan execution envelope");
 }
 export function loadPlanExecutionEnvelope(): PlanExecutionEnvelopeV1 | null {
   const raw = sessionStorage.getItem(KEY);

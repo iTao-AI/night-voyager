@@ -9,9 +9,10 @@ The current authority is the [reference-driven presentation spec](../superpowers
 
 The complete governed walkthrough begins at `/demo/collaboration`, confirms a
 synthetic client fact under explicit human authority, and continues the same Case
-into the focused route at `/demo` through its receipt and `TimelinePlan`. The
-independently seeded Happy/Blocked `/demo/plan` scenario is a separate execution
-proof segment; it is not a same-Case or same-session continuation.
+into the focused route at `/demo` through its receipt and `TimelinePlan`, then
+offers `/demo/plan?case_id=<case_id>` as the same-Case execution continuation. The
+independently seeded Happy/Blocked `/demo/plan` scenario remains a separate
+execution proof segment; it is not a same-Case or same-session continuation.
 
 The phrase “focused advisor-family/evidence route” remains only as a historical
 label for the prior presentation and is not the approved top-level product framing.
@@ -20,13 +21,15 @@ The current story is introduced by the [advisor-centered portfolio entry](../ass
 
 ## Local verification
 
-The implemented candidate was verified through the repository's local synthetic
+The presentation candidate was verified through the repository's local synthetic
 Compose and real-Chromium proof. The presentation audit passed `103/103` across `/`,
 `/demo/collaboration`, `/demo`, and `/demo/plan`, both locales, `1440`, `1280`,
 `1024`, `768`, `390`, and `320` CSS pixels, reduced motion, 200% zoom, material
-fallback, keyboard paths, normal paths, and blocked paths. The complete Compose proof also covered the
-connected collaboration-to-receipt flow and the independently seeded execution
-Happy, Blocked, recovery, stale-session, and session-change paths. Screenshots are
+fallback, keyboard paths, normal paths, and blocked paths. The earlier presentation
+Compose proof covered the connected collaboration-to-receipt flow and the
+independently seeded execution Happy, Blocked, recovery, stale-session, and
+session-change paths. The current same-Case execution continuation has a separate
+semantic browser/database gate. Screenshots are
 review evidence from coded product surfaces; semantic assertions remain the
 acceptance authority.
 
@@ -100,6 +103,10 @@ then continues the same Case into that existing route-analysis and client-confir
    task mutations.
 7. **Governed planning** — `/demo` restores the same Case and revision; only its
    explicit task action creates the pinned task and opens the durable EventSource.
+8. **Connected execution** — after the family decision reaches `plan_ready`, the
+   primary action opens `/demo/plan?case_id=<case_id>`, preserves the exact decision
+   and timeline anchors, and continues through start, reload, role handoff, a
+   blocked checkpoint, and advisor reassessment.
 
 The shared Skill inspector consumes a server-owned `no-store` projection. It remains
 `not_created` on collaboration and reaches `matched` only after the focused demo's
@@ -139,7 +146,9 @@ server-mapped assigned actor triad and exact Case. Happy proves receipt-then-GET
 lost-ack exact replay, request-update, role rotation, completion, and reload.
 Blocked proves one blocked attestation, one advisor reassessment request, and a
 terminal handoff with no successor action. Both locales render identical
-authority semantics; the browser never selects a Case identifier.
+authority semantics; the browser never selects a Case identifier in these seeded
+paths. They remain retained as independent evaluation and recovery scenarios beside
+the connected `case_id` path.
 
 Representative synthetic review evidence:
 

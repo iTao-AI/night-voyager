@@ -2,6 +2,7 @@
 import { afterAll, beforeAll, beforeEach, expect, it, vi } from "vitest";
 
 import { GET as context } from "../../app/api/demo/plan-execution-context/route";
+import { GET as connectedContext } from "../../app/api/demo/cases/[caseId]/plan-execution-context/route";
 import { POST as start } from "../../app/api/demo/timeline-plans/[timelinePlanId]/executions/route";
 import { GET as execution } from "../../app/api/demo/cases/[caseId]/timeline-execution/route";
 import { POST as attest } from "../../app/api/demo/timeline-executions/[executionId]/checkpoint-attestations/route";
@@ -62,6 +63,19 @@ it("forwards only the fixed context scenario and rejects arbitrary query", async
   vi.stubGlobal("fetch", fetchMock);
   expect((await context(new Request(`${origin}/api/demo/plan-execution-context`))).status).toBe(200);
   expect((await context(new Request(`${origin}/api/demo/plan-execution-context?case_id=${ID}`))).status).toBe(400);
+  expect(fetchMock).toHaveBeenCalledOnce();
+});
+
+it("forwards only the canonical connected case id and rejects query drift", async () => {
+  const fetchMock = vi.fn(async (url: string) => {
+    expect(url).toBe(`http://api:8000/api/v1/cases/${ID}/plan-execution-context`);
+    return Response.json({});
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const params = { params: Promise.resolve({ caseId: ID }) };
+  expect((await connectedContext(new Request(`${origin}/api`), params)).status).toBe(200);
+  expect((await connectedContext(new Request(`${origin}/api?scenario=happy`), params)).status).toBe(400);
+  expect((await connectedContext(new Request(`${origin}/api`), { params: Promise.resolve({ caseId: "not-a-uuid" }) })).status).toBe(400);
   expect(fetchMock).toHaveBeenCalledOnce();
 });
 

@@ -7,11 +7,12 @@ import {
 import type { TimelineMutationReceipt } from "../../lib/plan-execution/contracts";
 import {
   loadPlanExecutionEnvelope,
+  planExecutionAuthorityFromEnvelope,
   savePlanExecutionEnvelope,
   type PlanExecutionEnvelopeV1,
 } from "../../lib/plan-execution/session-storage";
 import { usePlanExecution } from "../../lib/plan-execution/use-plan-execution";
-import { contextFixture, viewFixture } from "./plan-execution-contracts.test";
+import { connectedContextFixture, contextFixture, viewFixture } from "./plan-execution-contracts.test";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -114,6 +115,91 @@ it("fails closed and clears a cross-scenario recovery envelope", async () => {
   expect(loadPlanExecutionEnvelope()).toBeNull();
   expect(api.bootstrap).not.toHaveBeenCalled();
   expect(api.start).not.toHaveBeenCalled();
+});
+
+it("binds connected recovery metadata to the exact case and never treats it as seeded", () => {
+  const connected = {
+    ...envelope,
+    authorityKind: "connected" as const,
+    scenario: null,
+    caseId: "4a000000-0000-0000-0000-000000000001",
+  };
+  savePlanExecutionEnvelope(connected);
+  expect(planExecutionAuthorityFromEnvelope(connected)).toEqual({
+    kind: "connected",
+    caseId: connected.caseId,
+  });
+  expect(() => planExecutionAuthorityFromEnvelope({
+    ...connected,
+    scenario: "happy",
+  })).toThrow();
+});
+
+it("fails closed and clears connected recovery metadata in seeded mode", async () => {
+  savePlanExecutionEnvelope({
+    ...envelope,
+    authorityKind: "connected",
+    scenario: null,
+    caseId: "4a000000-0000-0000-0000-000000000001",
+  });
+  const api = {
+    bootstrap: vi.fn(), mint: vi.fn(), revoke: vi.fn(), context: vi.fn(),
+    read: vi.fn(), start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const { result } = renderHook(() => usePlanExecution(api, "happy"));
+
+  await act(async () => result.current.recover());
+
+  expect(result.current.state.value).toBe("recoverable_error");
+  expect(loadPlanExecutionEnvelope()).toBeNull();
+  expect(api.context).not.toHaveBeenCalled();
+});
+
+it("connects a connected authority and persists its exact case binding", async () => {
+  const api = {
+    bootstrap: vi.fn(async () => ({ csrf_token: "bootstrap" })),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => connectedContextFixture),
+    read: vi.fn(), start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const authority = { kind: "connected" as const, caseId: connectedContextFixture.case_id };
+  const { result } = renderHook(() => usePlanExecution(api, authority));
+
+  await act(async () => result.current.connect("student"));
+
+  expect(result.current.state.context).toEqual(connectedContextFixture);
+  expect(api.mint).toHaveBeenCalledWith("student", "bootstrap");
+  expect(loadPlanExecutionEnvelope()).toMatchObject({
+    authorityKind: "connected",
+    scenario: null,
+    caseId: connectedContextFixture.case_id,
+  });
+});
+
+it("retries the first connected handoff after the BFF clears the current session", async () => {
+  let bootstrapAttempts = 0;
+  const api = {
+    bootstrap: vi.fn(async () => {
+      bootstrapAttempts += 1;
+      if (bootstrapAttempts === 1) {
+        throw new PlanExecutionApiError(409, "bff_session_recovery_required");
+      }
+      return { csrf_token: "fresh-bootstrap" };
+    }),
+    mint: vi.fn(async () => ({ role: "student" as const, csrf_token: "student-csrf" })),
+    revoke: vi.fn(async () => undefined),
+    context: vi.fn(async () => connectedContextFixture),
+    read: vi.fn(), start: vi.fn(), attest: vi.fn(), verify: vi.fn(), reassess: vi.fn(),
+  };
+  const authority = { kind: "connected" as const, caseId: connectedContextFixture.case_id };
+  const { result } = renderHook(() => usePlanExecution(api, authority));
+
+  await act(async () => result.current.connect("student"));
+
+  expect(result.current.state.context).toEqual(connectedContextFixture);
+  expect(api.bootstrap).toHaveBeenCalledTimes(2);
+  expect(api.mint).toHaveBeenCalledWith("student", "fresh-bootstrap");
 });
 
 it("persists the operation, captures its receipt, then performs a fresh GET", async () => {

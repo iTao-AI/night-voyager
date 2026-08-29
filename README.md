@@ -50,9 +50,9 @@ The mobile frame shows the same real route-analysis workspace at the standard 39
 
 The current runtime, contracts, authority boundaries, and release evidence remain below. Historical visual assets are retained for proof and context, but are no longer the README first layer.
 
-The current development candidate remains an AI collaboration platform for study-abroad advisors. The current development candidate presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell as static, local synthetic, provider-free presentation evidence; it is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
+The current development candidate remains an AI collaboration platform for study-abroad advisors. The current development candidate presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell. The root is static presentation evidence, while the demo routes are local synthetic and provider-free. The connected same-Case execution continuation is implemented locally but is not released or deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The root performs no API, session, task, or EventSource work.
 
-The complete governed walkthrough begins at `/demo/collaboration` and continues the same Case through `/demo`; the connected same-Case proof ends at the receipt and TimelinePlan. `/demo/plan` is an independent deterministic execution scenario with separately seeded Happy / Blocked paths and does not carry the connected Case or session forward. Screenshots are review evidence, not functional authority; semantic assertions remain the acceptance authority.
+The complete governed walkthrough begins at `/demo/collaboration`, continues the same Case through `/demo`, and at `plan_ready` offers `/demo/plan?case_id=<case_id>` as the primary continuation into the existing execution workspace. The connected proof preserves the server-derived revision, decision, receipt, timeline, execution, role handoff, blocked checkpoint, and `pending_future_authorization`; bare `/demo/plan` and `?scenario=blocked` remain independently seeded Happy / Blocked recovery scenarios. Screenshots are review evidence, not functional authority; semantic assertions remain the acceptance authority.
 
 <details>
 <summary>Historical visual proof captures</summary>
@@ -83,6 +83,7 @@ Governed plan-execution development evidence (synthetic review evidence only): [
 - **Browser to database:** v0.1.3 `/demo/collaboration` hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
 - **Planning revision journey:** v0.1.4 releases provider-free `request revision`, a controlled student preferred-country change, retained predecessor lineage, a successor PlanningRun, deterministic old/new comparison, fresh advisor authorization, and only the current family decision. The blocked budget counterfactual reaches neither approval nor decision.
 - **Governed timeline execution:** v0.1.5 releases a provider-free `/demo/plan` vertical, closed Happy/Blocked scenarios, structured family attestations, assigned-advisor verification, immutable receipt recovery, PostgreSQL-owned risk/date authority, a reassessment stop, and a bilingual responsive/action-hierarchy proof. It creates no new `AgentTask`, provider call, successor business row, or deployment.
+- **Connected same-Case execution:** the current local candidate adds a server-derived case-scoped context and continues the exact connected Case through the existing execution reducer, receipts, reload recovery, role handoff, blocked checkpoint, and reassessment stop. The independently seeded Happy / Blocked scenarios remain available and distinct; the candidate adds no migration, mutation authority, successor, provider call, or deployment.
 - **Portfolio and dependency boundary:** v0.1.5 includes the frontend dependency maintenance merged in PR #78. Current development now uses Next.js and `eslint-config-next` `16.3.2`; Next.js resolves optional/transitive `sharp 0.35.3`, outside `GHSA-f88m-g3jw-g9cj`, with `postcss@8.5.23` and compatible transitive `nanoid@3.3.18`. The repository has no direct `sharp`, `postcss`, or `nanoid` dependency and no override. The immutable v0.1.5 release was not an audit-zero claim; this current-development wording does not rewrite its historical release evidence. Fresh full and runtime/omit-dev npm audits report zero advisory objects, including no sharp advisory object. Dependabot #7 hosted alert status is evaluated after merge; this local change makes no hosted alert claim. Recovery triggers are public deployment, an untrusted image path, or an advisory change.
 - **Complementary-evidence Slice 0 status:** Slice 0 permanently ended as local `evaluation_invalid` safe stop. It has no `MkeCaptureArtifactV2`, Slice 0 terminal receipt, information-gain conclusion, candidate persistence, Slice 1/2 work, or v0.1.6 release. PR #87 is merged; hosted CI and publication cleanup are complete, and no later stage was unlocked.
 
@@ -98,12 +99,15 @@ make proof
 make down
 ```
 
-Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` into `/demo`. For the independent deterministic execution scenario, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at `/demo/plan`. The [v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md) defines the current release gates.
+Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` through `/demo` and the primary `/demo/plan?case_id=<case_id>` continuation. For the independent deterministic execution scenarios, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at bare `/demo/plan` or `?scenario=blocked`. The [v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md) defines the current release gates.
 
 For the current same-Case development walkthrough, begin at `/demo/collaboration`,
 confirm the synthetic family fact, choose `继续进入规划` (`Continue to planning` in
 English), and use the explicit task action on `/demo`. The handoff itself
-performs read-only validation and creates no task.
+performs read-only validation and creates no task. After the family decision reaches
+`plan_ready`, choose `Continue this Case into execution` and use the existing
+execution workspace through reload, role handoff, blocked checkpoint, and advisor
+reassessment. The bare `/demo/plan` route remains the independent evaluation path.
 
 The current focused planning-revision proof uses
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. Screenshot maintenance is
@@ -111,8 +115,8 @@ explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` updates the current
 development-candidate portfolio captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
 `night-voyager-planning-revision.png`.
 
-For the governed execution path released in v0.1.5, open `/demo/plan` and follow
-the [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md).
+For the governed execution path released in v0.1.5, open bare `/demo/plan` and
+follow the independent-scenario section of the [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md).
 PR #80, PR #83, PR #84, and PR #85 are merged and included in released v0.1.5;
 the release contains the governed authority, recovery/reassessment closure,
 reconciliation, and professional presentation/evaluator-first DX. PR #87 is merged;
