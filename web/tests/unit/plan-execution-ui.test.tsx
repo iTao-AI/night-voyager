@@ -47,7 +47,7 @@ function controllerFor(
   return controller;
 }
 
-it("presents execution follow-up in the shared independent-scenario workspace shell", () => {
+it("presents the exact independent authority in the seeded workspace shell", () => {
   const { container } = render(
     <PresentationProvider>
       <PlanExecutionWorkspace controller={activeController()} scenario="happy" />
@@ -56,6 +56,9 @@ it("presents execution follow-up in the shared independent-scenario workspace sh
 
   expect(screen.getByRole("banner")).toBeInTheDocument();
   expect(screen.getByRole("heading", { level: 1, name: "把当前执行节点推进到可复核状态" })).toBeVisible();
+  expect(container.querySelector("[data-frame-slot='top-band']")).toHaveTextContent(
+    "执行跟进 · 独立确定性场景",
+  );
   expect(screen.getAllByText("独立演示场景，不沿用当前客户档案。").length).toBeGreaterThanOrEqual(1);
   expect(screen.getByRole("list", { name: "顾问工作流阶段" })).toBeInTheDocument();
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
@@ -77,6 +80,9 @@ it("marks connected execution as the connected same-Case proof segment", () => {
   );
 
   expect(container.querySelector("[data-proof-segment='connected_same_case']")).toBeInTheDocument();
+  expect(container.querySelector("[data-frame-slot='top-band']")).toHaveTextContent(
+    "执行跟进 · 同一 Case",
+  );
 });
 
 it("renders the current action first without raw hashes or row versions", () => {

@@ -190,7 +190,9 @@ export function PlanExecutionWorkspace({
   return (
     <AdvisorWorkspaceShell
       activeRole={role ?? null}
-      contextKey="contextPlanExecution"
+      contextKey={authority.kind === "connected"
+        ? "contextConnectedPlanExecution"
+        : "contextPlanExecution"}
       currentStage={workflowStage}
       mainId="plan-execution-main"
       proofSegment={authority.kind === "connected"

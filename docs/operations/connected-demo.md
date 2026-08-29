@@ -25,6 +25,26 @@ or enter the `sessionStorage` journey envelope.
 
 ![Chinese planning revision comparison](../assets/night-voyager-planning-revision.png)
 
+The current family receipt/timeline frame is refreshed review evidence for the
+connected `/demo` `plan_ready` state. It includes the same-Case primary
+continuation and the retained independent scenario entry; it is not PostgreSQL or
+RLS proof.
+
+| Asset | Before | After |
+| --- | --- | --- |
+| `m5-family-receipt-timeline.png` | `1440x1575`; SHA-256 `e37190c48af9ee299cfb29f50be538260dee4aa738af9d48b687560e78bc7741` | `1440x1566`; SHA-256 `377879a7b840504101953236b79b6a0477ba4fe3a2790e67958e18bfe626f255` |
+
+Capture provenance: frozen source files were `ConnectedDemo.tsx` SHA-256
+`b6abbfb3f5299a62824fa5ad2d490c17aca285ceecff9c30a9de8550922989f0`,
+`PlanExecutionWorkspace.tsx` SHA-256
+`0779e23e71cc85c1a467994fcb6a6285f1576dbb3bb1e09f7ec87681343ab12a`, and
+`catalog.ts` SHA-256
+`f3bd0c5645311ffa5c5bdb15c789161974576831d6442dcf63a7a0b697b58ba5`. The
+capture used real Chromium through the repository Playwright CLI at `zh-CN`, a
+`1440x900` viewport, and an explicit local synthetic `plan_ready` contract. No
+Docker or database authority was used for this visual capture. Hosted
+Compose/database/browser proof remains mandatory before merge.
+
 The connected same-Case walkthrough begins at `/demo/collaboration` and is documented
 in the [governed collaboration walkthrough](collaboration-walkthrough.md). It shares
 the session envelope and read-only inspector. Its controlled handoff creates no task
