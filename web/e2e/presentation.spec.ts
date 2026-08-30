@@ -34,7 +34,7 @@ type AuditCell = {
 
 function slug(cell: AuditCell) {
   const route = cell.route === "/" ? "root" : cell.route.slice(1).replaceAll("/", "-");
-  return `${route}-${cell.locale}-${cell.width}-${cell.motion}-${cell.zoom.replace("%", "pct")}`;
+  return `${route}-${cell.locale}-${cell.width}-${cell.motion}-${cell.zoom.replaceAll("%", "pct")}`;
 }
 
 async function openCell(browser: Browser, cell: AuditCell) {
