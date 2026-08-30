@@ -18,7 +18,7 @@ Night Voyager is for study-abroad advisor teams comparing Japan, Malaysia, and A
 2. **Compare routes:** use only explicit facts to compare eligible routes against the case constraints.
 3. **Advisor review:** let the advisor approve, revise, or stop the proposed plan.
 4. **Client confirmation:** keep the client’s responsibility and explicit choice visible.
-5. **Record the outcome and hand off the next action:** preserve the decision receipt and action timeline, then continue the same case through the existing role-gated execution workspace.
+5. **Record the outcome and offer the next handoff:** preserve the decision receipt and action timeline, and offer the existing role-gated entry so the same case can continue into the execution workspace.
 
 ## Normal path and blocked recovery
 
