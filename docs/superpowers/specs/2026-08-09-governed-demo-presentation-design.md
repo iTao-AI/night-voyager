@@ -1,6 +1,6 @@
 # Governed Demo Presentation Surface
 
-**Status:** Approved for implementation
+**Status:** Merged in PR #94 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed
 
 ## Summary
 

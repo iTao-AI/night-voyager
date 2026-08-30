@@ -89,7 +89,7 @@ describe("reference-driven presentation contract", () => {
       .toEqual(["confirmed", "route", "outcome"]);
   });
 
-  it("keeps the plain wordmark and candidate status public-neutral", () => {
+  it("keeps the plain wordmark and merged presentation status public-neutral", () => {
     const css = ["app/styles.css", "app/portfolio.css", "app/workspace.css"]
       .map((file) => readFileSync(resolve(process.cwd(), file), "utf8"))
       .join("\n");
@@ -100,10 +100,21 @@ describe("reference-driven presentation contract", () => {
     expect(css).toMatch(/\.portfolio-brand[\s\S]*font-size:\s*20px[\s\S]*letter-spacing:\s*-\.035em/);
     expect(css).toMatch(/\.workspace-brand[\s\S]*font-size:\s*20px[\s\S]*letter-spacing:\s*-\.035em/);
     expect(css).not.toContain("brand-mark");
-    expect(spec).toContain("Status: `LOCAL CANDIDATE / IN REVIEW`");
-    expect(spec).toContain("Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`");
-    expect(plan).toContain("Status: `LOCAL CANDIDATE / IN REVIEW`");
-    expect(plan).toContain("Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`");
+    const currentStatus =
+      "Status: `Merged in PR #97 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed`";
+    const historicalProvenance =
+      "Historical provenance: the locally verified implementation candidate and source freeze are";
+    const staleStatus = "Status: `LOCAL CANDIDATE / IN REVIEW`";
+    const stalePublication = "Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`";
+
+    expect(spec).toContain(currentStatus);
+    expect(plan).toContain(currentStatus);
+    expect(spec).toContain(historicalProvenance);
+    expect(plan).toContain(historicalProvenance);
+    expect(spec).not.toContain(staleStatus);
+    expect(plan).not.toContain(staleStatus);
+    expect(spec).not.toContain(stalePublication);
+    expect(plan).not.toContain(stalePublication);
   });
 
   it("keeps the three public scenes and persisted outcome values typed and bounded", () => {

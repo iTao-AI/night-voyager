@@ -4,6 +4,8 @@
 > execution controller. Follow RED → GREEN for behavioral changes and run fresh
 > verification before any completion claim.
 
+**Status:** Merged in PR #94 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed
+
 **Goal:** Align `/demo/collaboration`, `/demo`, and `/demo/plan` around a
 shared five-stage presentation journey while preserving every existing business
 authority and deterministic synthetic flow.

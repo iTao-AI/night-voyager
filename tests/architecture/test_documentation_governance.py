@@ -167,6 +167,47 @@ PLAN_STATUS_BINDINGS = (
     ),
 )
 
+PRESENTATION_HISTORY_BINDINGS = (
+    (
+        "Governed demo presentation surface",
+        "Merged in PR #94 on the current default branch; presentation-only; not included "
+        "in stable v0.1.5; not deployed",
+        "specs/2026-08-09-governed-demo-presentation-design.md",
+        "plans/2026-08-09-governed-demo-presentation.md",
+        "#94",
+    ),
+    (
+        "Advisor-centered product experience",
+        "Merged in PR #95 on the current default branch; presentation-only; not included "
+        "in stable v0.1.5; not deployed",
+        "specs/2026-08-09-advisor-centered-product-experience.md",
+        "plans/2026-08-09-advisor-centered-product-experience.md",
+        "#95",
+    ),
+    (
+        "Reference-driven presentation",
+        "Merged in PR #97 on the current default branch; presentation-only; not included "
+        "in stable v0.1.5; not deployed",
+        "specs/2026-08-14-reference-driven-presentation.md",
+        "plans/2026-08-14-reference-driven-presentation.md",
+        "#97",
+    ),
+    (
+        "Native showcase closeout",
+        "Merged in PR #98 on the current default branch; presentation evidence/README "
+        "ordering only; not included in stable v0.1.5; not deployed",
+        None,
+        "plans/2026-08-15-native-showcase-closeout.md",
+        "#98",
+    ),
+)
+PRESENTATION_LEADING_STALE_MARKERS = (
+    "approved for implementation",
+    "local candidate / in review",
+    "implemented locally",
+    "not pushed / not merged",
+)
+
 
 def test_dra_full_recovery_freeze_and_non_claims_are_documented() -> None:
     runbook = (ROOT / "docs/operations/dra-consumer-proof.md").read_text()
@@ -397,6 +438,43 @@ def superpowers_status_binding_errors(index: str) -> list[str]:
         if filename in MERGED_FACT_TO_PLAN_BANNERS:
             errors.extend(merged_fact_to_plan_status_errors(filename, plan))
     return errors
+
+
+def leading_status_region(source: str) -> str:
+    lines = source.splitlines()
+    headings = [
+        index for index, line in enumerate(lines[1:], start=1) if line.startswith("## ")
+    ]
+    boundary = headings[0] if headings else len(lines)
+    if headings and lines[boundary].casefold() == "## status":
+        boundary = headings[1] if len(headings) > 1 else len(lines)
+    return " ".join("\n".join(lines[:boundary]).split())
+
+
+def test_presentation_history_records_bind_exact_merged_and_release_boundaries() -> None:
+    index = (ROOT / "docs/superpowers/README.md").read_text(encoding="utf-8")
+    rows: dict[str, str] = {}
+    for line in index.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) == 3 and cells[0] not in {"Scope", "---"}:
+            rows[cells[0]] = cells[1]
+
+    for scope, expected_status, spec_relative, plan_relative, pull_request in (
+        PRESENTATION_HISTORY_BINDINGS
+    ):
+        assert rows.get(scope) == expected_status
+        assert pull_request in expected_status
+
+        for relative in (spec_relative, plan_relative):
+            if relative is None:
+                continue
+            source = (ROOT / "docs/superpowers" / relative).read_text(encoding="utf-8")
+            leading = leading_status_region(source)
+            assert expected_status in leading, relative
+            for stale_marker in PRESENTATION_LEADING_STALE_MARKERS:
+                assert stale_marker not in leading.casefold(), (relative, stale_marker)
 
 
 def test_tracked_public_markdown_relative_file_links_resolve() -> None:
@@ -822,7 +900,7 @@ def test_current_development_dependency_path_and_release_surface_do_not_regress(
             assert stale not in normalized
 
 
-def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
+def test_current_advisor_redesign_keeps_development_and_release_boundaries() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     readme_cn = (ROOT / "README_CN.md").read_text(encoding="utf-8")
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
@@ -843,7 +921,10 @@ def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
     assert "未发布或部署" in readme_cn
     assert "current development candidate" in docs_index
     assert "not released or deployed" in docs_index
-    assert "Implemented locally; not released" in plans_index
+    assert (
+        "| Advisor-centered product experience | Merged in PR #95 on the current "
+        "default branch; presentation-only; not included in stable v0.1.5; not deployed |"
+    ) in plans_index
     assert "current development captures" in connected
     assert "advisor-centered route-analysis and downstream client-confirmation" in route_map
     assert "exact route/locale/width/motion/zoom coverage" in spec

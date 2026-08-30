@@ -3,9 +3,10 @@
 
 ## Status
 
-Implemented and locally verified on the local synthetic candidate. The stable
-release remains `v0.1.5`; this closeout records no release, deployment, provider,
-adoption, real-user, or production-use claim.
+Merged in PR #95 on the current default branch; presentation-only; not included in
+stable v0.1.5; not deployed. The historical verification record remains tied to the
+local synthetic candidate and makes no provider, adoption, real-user, or production-use
+claim.
 
 The implementation candidate verified for this redesign is
 `010802c65f356f0914fe0c6eec62c443f59cb343`. The fresh local verification record
