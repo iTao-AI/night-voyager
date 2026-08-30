@@ -18,13 +18,13 @@ Night Voyager is for study-abroad advisor teams comparing Japan, Malaysia, and A
 2. **Compare routes:** use only explicit facts to compare eligible routes against the case constraints.
 3. **Advisor review:** let the advisor approve, revise, or stop the proposed plan.
 4. **Client confirmation:** keep the client’s responsibility and explicit choice visible.
-5. **Record the outcome:** preserve the decision as a decision receipt and action timeline that can be reviewed later.
+5. **Record the outcome and hand off the next action:** preserve the decision receipt and action timeline, then continue the same case through the existing role-gated execution workspace.
 
 ## Normal path and blocked recovery
 
 ![Advisor normal path](docs/assets/advisor-normal-path.png)
 
-The normal frame follows the same consultation case from route analysis through advisor review and client confirmation to the persisted decision receipt and action timeline.
+The committed `advisor-normal-path.png` is the receipt and action-timeline handoff frame for the same consultation case: after route analysis, advisor review, and client confirmation, the existing primary action continues that same Case at `/demo/plan?case_id=<case_id>` in the server-derived, role-gated execution workspace. Bare `/demo/plan` remains an independently seeded Happy / Blocked scenario and does not carry the Case or session forward.
 
 ![Advisor blocked recovery](docs/assets/advisor-blocked-recovery.png)
 
