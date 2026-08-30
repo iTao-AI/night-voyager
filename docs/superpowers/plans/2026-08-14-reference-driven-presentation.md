@@ -6,9 +6,10 @@
 > contract change, `superpowers:receiving-code-review` for authority findings,
 > and `superpowers:verification-before-completion` before every readiness claim.
 
-Status: `LOCAL CANDIDATE / IN REVIEW`
-Implementation: `IMPLEMENTED LOCALLY`
-Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`
+Status: `Merged in PR #97 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed`
+Historical provenance: the locally verified implementation candidate and source freeze are
+retained as historical evidence; they do not change the current branch, stable-release,
+or deployment boundaries above.
 Target base: `main@e28efdb53d72c8b42c9636f3440dd41ebcb426e0`
 
 **Goal:** Implement the approved reference-driven Night Voyager public site and
@@ -929,8 +930,9 @@ Implementation is complete only after:
 6. no task-owned residue remains, or `DONE_WITH_RESIDUE` identifies the exact owner
    and recovery condition.
 
-The local candidate is implemented in the approved worktree and remains subject
-to authoritative review. It is not pushed, merged, released, or deployed.
+The local candidate was implemented in the approved worktree and remains retained as
+historical source-freeze provenance. It was merged on the current default branch in PR
+#97; it is not included in stable `v0.1.5` and is not deployed.
 
 ## Implementation Tasks
 

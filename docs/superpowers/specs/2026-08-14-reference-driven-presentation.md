@@ -1,8 +1,9 @@
 # Night Voyager Reference-Driven Presentation Spec
 
-Status: `LOCAL CANDIDATE / IN REVIEW`
-Implementation: `IMPLEMENTED LOCALLY`
-Publication: `NOT PUSHED / NOT MERGED / NOT RELEASED / NOT DEPLOYED`
+Status: `Merged in PR #97 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed`
+Historical provenance: the locally verified implementation candidate and source freeze are
+retained as historical evidence; they do not change the current branch, stable-release,
+or deployment boundaries above.
 Target repository baseline: `main@e28efdb53d72c8b42c9636f3440dd41ebcb426e0`
 
 This document specifies one presentation-only replacement of the current Night

@@ -7,6 +7,8 @@
 > shell, copy catalog, styles, browser matrix, and screenshots share state and must
 > stay under one write owner.
 
+**Status:** Merged in PR #95 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed.
+
 **Goal:** Rebuild Night Voyager's public root and three deterministic demo routes
 as one credible, advisor-centered study-abroad AI collaboration workspace, while
 preserving every existing domain authority, API/BFF contract, reducer transition,
@@ -23,7 +25,7 @@ types such as `FamilyDecision`, `DecisionReceipt`, `AdvisorReview`, and
 Library, Playwright, Python standard-library architecture tests, Docker Compose,
 and the existing GStack browser/design-review tooling. Add no package or framework.
 
-**Plan status:** Implementation complete and locally verified on the local synthetic
+**Plan provenance:** Implementation complete and locally verified on the local synthetic
 candidate. The audited baseline is `main@54b78ebda9fea263de68b5e3f623aef31c5ffe48`;
 the implementation candidate was `010802c65f356f0914fe0c6eec62c443f59cb343` before
 this documentation closeout. The exact-path documentation closeout commit remains
