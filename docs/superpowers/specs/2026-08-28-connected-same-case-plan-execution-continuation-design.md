@@ -1,7 +1,7 @@
 # Connected same-Case plan execution continuation v1
 
 Status: Approved
-Implementation: Complete locally; provider-free; not released
+Implementation: Merged on the current default branch in PR #103; local synthetic and provider-free; not included in stable v0.1.5; not deployed
 
 ## Problem
 

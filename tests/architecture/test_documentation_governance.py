@@ -1153,6 +1153,19 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
         ROOT
         / "docs/superpowers/plans/2026-07-23-high-end-portfolio-entry.md"
     ).read_text(encoding="utf-8")
+    connected_demo = (ROOT / "docs/operations/connected-demo.md").read_text(
+        encoding="utf-8"
+    )
+    continuation_spec = (
+        ROOT
+        / "docs/superpowers/specs"
+        / "2026-08-28-connected-same-case-plan-execution-continuation-design.md"
+    ).read_text(encoding="utf-8")
+    continuation_plan = (
+        ROOT
+        / "docs/superpowers/plans"
+        / "2026-08-28-connected-same-case-plan-execution-continuation.md"
+    ).read_text(encoding="utf-8")
 
     for current_readme in (readme, readme_cn):
         for token in (
@@ -1172,6 +1185,79 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
     assert "/demo/plan?case_id=<case_id>" in readme_cn
     assert "pending_future_authorization" in readme_cn
     assert "独立播种" in readme_cn
+    assert (
+        "same-Case execution continuation 已在当前 default branch 通过 PR #103 合并。"
+        in readme_cn
+    )
+    assert "未纳入 stable v0.1.5，也未部署。" in readme_cn
+
+    same_case_sources = {
+        "README.md": readme,
+        "docs/README.md": docs_index,
+        "docs/operations/connected-demo.md": connected_demo,
+        "docs/superpowers/README.md": plans_index,
+        "connected same-Case design": continuation_spec,
+        "connected same-Case plan": continuation_plan,
+    }
+    for source_name, source in same_case_sources.items():
+        assert "PR #103" in source, source_name
+        assert "local synthetic" in source, source_name
+        assert "provider-free" in source, source_name
+        assert "v0.1.5" in source, source_name
+        assert "not deployed" in source, source_name
+
+    assert (
+        "The connected same-Case execution continuation is merged on the current "
+        "default branch in PR #103. It remains local synthetic and provider-free, "
+        "is not included in stable v0.1.5, and is not deployed."
+    ) in readme
+    assert (
+        "merged on the current default branch in PR #103"
+        in docs_index
+    )
+    assert (
+        "The continuation is merged on the current default branch in PR #103; it "
+        "remains local synthetic and provider-free, is not included in stable "
+        "v0.1.5, and is not deployed."
+    ) in connected_demo
+    assert (
+        "| Connected same-Case plan execution continuation v1 | Merged on the "
+        "current default branch in PR #103; local synthetic and provider-free; "
+        "not included in stable v0.1.5; not deployed |"
+    ) in plans_index
+    for source in (continuation_spec, continuation_plan):
+        assert (
+            "Implementation: Merged on the current default branch in PR #103; "
+            "local synthetic and provider-free; not included in stable v0.1.5; "
+            "not deployed"
+        ) in source
+
+    route_sources = "\n".join(
+        (readme, readme_cn, docs_index, connected_demo)
+    )
+    assert "/demo/plan?case_id=<case_id>" in route_sources
+    assert "bare `/demo/plan`" in route_sources
+    assert "?scenario=blocked" in route_sources
+    assert "independent" in route_sources
+
+    assert (
+        "The connected same-Case execution continuation is implemented locally"
+        not in readme
+    )
+    assert "Connected same-Case execution: the current local candidate" not in readme
+    assert "same-Case execution continuation 已在本地实现" not in readme_cn
+    normalized_connected = " ".join(connected_demo.split())
+    assert "The current local candidate continues that same Case" not in (
+        normalized_connected
+    )
+    assert "implemented locally, provider-free, not released" not in docs_index
+    assert "| Connected same-Case plan execution continuation v1 | Implemented locally;" not in (
+        plans_index
+    )
+    for source in (continuation_spec, continuation_plan):
+        assert "Implementation: Complete locally; provider-free; not released" not in (
+            source
+        )
 
     for token in (
         "Virtual Night Voyage",
