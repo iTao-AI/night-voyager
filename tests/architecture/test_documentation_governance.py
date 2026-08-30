@@ -754,7 +754,7 @@ def test_root_readmes_bind_current_development_migration_head() -> None:
         assert "v0.1.3 migration `0009`" in source, relative
 
 
-def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -> None:
+def test_current_development_dependency_path_and_release_surface_do_not_regress() -> None:
     readmes = [
         (ROOT / "README.md").read_text(encoding="utf-8"),
         (ROOT / "README_CN.md").read_text(encoding="utf-8"),
@@ -768,7 +768,6 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "sharp 0.35.3" in source
         assert "GHSA-f88m-g3jw-g9cj" in source
         assert "16.3.3" in source
-        assert "after merge" in source
         assert "audit-zero" in source
         assert "postcss@8.5.23" in source
         assert "nanoid@3.3.18" in source
@@ -778,6 +777,20 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "js-yaml" not in source
         assert "brace-expansion" not in source
         assert "minimatch" not in source
+        assert "Dependabot #7" in source
+        assert "fixed_at=2026-08-08T09:16:53Z" in source
+        assert "2026-08-30" in source
+        assert "zero open Dependabot alerts" in source
+        assert "point-in-time default-branch readback" in source
+        assert (
+            "not a permanent audit-zero claim" in source
+            or "不是永久 audit-zero 声明" in source
+        )
+        assert (
+            "local package/audit validation did not fix or dismiss a GitHub alert"
+            .casefold()
+            in source.casefold()
+        )
         assert (
             "Fresh full and runtime/omit-dev npm audits report zero advisory objects"
             in source
@@ -787,7 +800,6 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         assert "direct" in source
         assert "override" in source
         assert "0.34.5" not in source
-        assert not re.search(r"Dependabot #7[^.\n]{0,100}FIXED", source, re.IGNORECASE)
         assert "immutable" in source or "不可变" in source
         for trigger in (
             "public deployment",
@@ -796,6 +808,18 @@ def test_current_release_and_candidate_freeze_status_surfaces_do_not_regress() -
         ):
             assert trigger in source
         assert "compatible upstream support for sharp >=0.35" not in source
+
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    for source in (*readmes, security):
+        normalized = " ".join(source.split()).lower()
+        for stale in (
+            "hosted alert status is evaluated after merge",
+            "hosted alert closure is evaluated only after merge",
+            "this local change makes no hosted alert claim",
+            "hosted status still awaits merge",
+            "hosted status 仍等待合并",
+        ):
+            assert stale not in normalized
 
 
 def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
@@ -827,7 +851,7 @@ def test_current_advisor_redesign_is_an_unreleased_candidate_surface() -> None:
     assert "compose-proof: presentation audit passed" in compose
 
 
-def test_current_security_policy_tracks_the_development_dependency_path() -> None:
+def test_current_dependency_and_security_truth_is_dated() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
 
     assert "16.3.3" in security
@@ -836,8 +860,19 @@ def test_current_security_policy_tracks_the_development_dependency_path() -> Non
     assert "no direct postcss, nanoid, or sharp dependency" in security
     assert "no npm override" in security
     assert "Dependabot #7" in security
-    assert "after merge" in security
-    assert not re.search(r"Dependabot #7[^.\n]{0,100}FIXED", security, re.IGNORECASE)
+    assert "fixed_at=2026-08-08T09:16:53Z" in security
+    assert "Dependabot alert #14" in security
+    assert "fixed_at=2026-08-08T11:18:13Z" in security
+    assert "Neither Dependabot alert #7 nor #14 was dismissed" in security
+    assert "2026-08-30" in security
+    assert "zero open Dependabot alerts" in security
+    assert "point-in-time default-branch readback" in security
+    assert "not a permanent audit-zero claim" in security
+    assert (
+        "local package/audit validation did not fix or dismiss GitHub alerts".casefold()
+        in security.casefold()
+    )
+    assert "GitHub post-merge analysis recorded the fixed states" in security
     assert "v0.1.5" in security
     assert "immutable" in security
     assert "not an audit-zero claim" in security
@@ -847,12 +882,7 @@ def test_current_security_policy_tracks_the_development_dependency_path() -> Non
     assert "mcp" in security
     assert "PyJWT[crypto]" in security
     assert "first patched version" in security
-    assert (
-        "The local graph is outside the affected range; hosted alert closure is "
-        "evaluated only after merge and is not claimed by local validation."
-    ) in security
     assert "the alert remains open until post-merge" not in security
-    assert "Post-merge GitHub readback" in security
     assert "no Night Voyager use of cryptography's PKCS#7 decryption" in security
     assert "finite-field Diffie-Hellman APIs" in security
     assert "postcss@8.5.18" not in security
