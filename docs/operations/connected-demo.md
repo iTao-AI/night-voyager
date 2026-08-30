@@ -2,10 +2,9 @@
 
 M5 connects the focused `/demo` route to the local synthetic FastAPI, worker, SSE,
 and PostgreSQL paths. It is the route-analysis segment of the advisor workspace and
-proves advisor review followed by client confirmation. The current local candidate
+proves advisor review followed by client confirmation. The current development candidate
 continues that same Case from its receipt and TimelinePlan into the existing plan
-execution workspace; bare `/demo/plan` remains an independent seeded scenario. It
-is not production tenancy, live institutional coverage, or admissions advice.
+execution workspace. The continuation is merged on the current default branch in PR #103; it remains local synthetic and provider-free, is not included in stable v0.1.5, and is not deployed. Bare `/demo/plan` remains an independent seeded scenario. It is not production tenancy, live institutional coverage, or admissions advice.
 
 The current shared presentation uses the reference-driven Midnight Editorial Advisor
 Workspace: a dark product frame, warm decision surface, five-stage display rail,
