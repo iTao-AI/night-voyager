@@ -8,6 +8,7 @@ import {
   SHOWCASE_ASSET_CONTRACT,
   SHOWCASE_ASSET_NAMES,
 } from "../../lib/presentation/showcase";
+import { en, zhCN } from "../../lib/presentation/catalog";
 
 const MANIFEST_PATH = resolve(process.cwd(), "../docs/evidence/advisor-showcase-manifest.json");
 const README_PATH = resolve(process.cwd(), "../README.md");
@@ -126,7 +127,7 @@ describe("advisor showcase contract", () => {
     expect(readmeCn).toContain("## 三个产品判断");
     expect(readmeCn).not.toContain("## Advisor workspace overview");
     expect(readme).toContain(
-      "The normal frame follows the same consultation case from route analysis through advisor review and client confirmation to the persisted decision receipt and action timeline.",
+      "The committed `advisor-normal-path.png` is the receipt and action-timeline handoff frame for the same consultation case: after route analysis, advisor review, and client confirmation, the existing primary action continues that same Case at `/demo/plan?case_id=<case_id>` in the server-derived, role-gated execution workspace. Bare `/demo/plan` remains an independently seeded Happy / Blocked scenario and does not carry the Case or session forward.",
     );
     expect(readme).toContain("the preceding case");
     expect(readmeCn).toContain("留学顾问团队");
@@ -167,6 +168,38 @@ describe("advisor showcase contract", () => {
     ]) {
       expect(readmeCn).not.toContain(phrase);
     }
+  });
+
+  it("describes the connected same-Case receipt handoff separately from independent scenarios", () => {
+    const readme = readFirstLayer(README_PATH, "\n## Detailed proof\n");
+    const readmeCn = readFirstLayer(README_CN_PATH, "\n## 详细证明\n");
+
+    expect(readme).toContain(
+      "5. **Record the outcome and offer the next handoff:** preserve the decision receipt and action timeline, and offer the existing role-gated entry so the same case can continue into the execution workspace.",
+    );
+    expect(readme).toContain(
+      "The committed `advisor-normal-path.png` is the receipt and action-timeline handoff frame for the same consultation case: after route analysis, advisor review, and client confirmation, the existing primary action continues that same Case at `/demo/plan?case_id=<case_id>` in the server-derived, role-gated execution workspace. Bare `/demo/plan` remains an independently seeded Happy / Blocked scenario and does not carry the Case or session forward.",
+    );
+
+    expect(readmeCn).toContain(
+      "5. **记录结果并提供下一步交接：** 持久化决策回执与行动时间线，并提供现有的角色受限入口，让同一 Case 可以继续进入执行工作区。",
+    );
+    expect(readmeCn).toContain(
+      "已提交的 `advisor-normal-path.png` 是同一咨询个案的回执与行动时间线交接帧：路线研判、顾问审核和客户确认完成后，现有主操作会在 `/demo/plan?case_id=<case_id>` 把同一 Case 继续带入由服务器推导、按角色限制的执行工作区。裸 `/demo/plan` 仍是单独设置的 Happy / Blocked 场景，不承接这个 Case 或 session。",
+    );
+
+    expect(zhCN.rootJourneyStepThreeBody).toBe(
+      "客户确认形成回执与计划；现有主操作会把同一 Case 交给服务器推导、角色受限的执行工作区。裸 /demo/plan 仍是单独设置的确定性场景，不承接当前 Case 或 session。",
+    );
+    expect(en.rootJourneyStepThreeBody).toBe(
+      "Client confirmation creates a receipt and plan; the existing primary action continues the same Case into the server-derived, role-gated execution workspace. Bare /demo/plan remains an independently seeded deterministic scenario and does not carry this Case or session forward.",
+    );
+    expect(zhCN.rootWorkflowBody).toBe(
+      "连接证明会继续通过回执与 TimelinePlan 交接：现有主操作把同一 Case 带入服务器推导、角色受限的执行工作区；裸 /demo/plan 的 Happy / Blocked 场景仍单独设置，不承接任何 Case 或 session。",
+    );
+    expect(en.rootWorkflowBody).toBe(
+      "The connected proof continues past the receipt and TimelinePlan handoff: the existing primary action carries the same Case into the server-derived, role-gated execution workspace. Bare /demo/plan Happy / Blocked scenarios remain independently seeded and carry no Case or session.",
+    );
   });
 
   it("keeps reader-facing case and manifest vocabulary natural in the first layer", () => {
