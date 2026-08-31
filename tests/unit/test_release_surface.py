@@ -40,6 +40,8 @@ def copy_release_surface(destination: Path) -> None:
         "docs/how-to/verify-v0.1.4-release.md",
         "docs/releases/v0.1.5.md",
         "docs/how-to/verify-v0.1.5-release.md",
+        "docs/releases/v0.1.6.md",
+        "docs/how-to/verify-v0.1.6-release.md",
     ):
         source = ROOT / relative
         target = destination / relative
@@ -47,7 +49,7 @@ def copy_release_surface(destination: Path) -> None:
         shutil.copyfile(source, target)
 
 
-def test_release_verifier_checks_the_public_v0_1_5_surface(
+def test_release_verifier_checks_the_public_v0_1_6_surface(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     verifier = load_verifier()
@@ -56,8 +58,8 @@ def test_release_verifier_checks_the_public_v0_1_5_surface(
 
     output = capsys.readouterr().out
     assert (
-        "proof release surface: current development candidate + stable v0.1.5 "
-        "historical boundary confirmed"
+        "proof release surface: current v0.1.6 local synthetic portfolio release "
+        "boundary confirmed"
     ) in output
 
 
@@ -69,8 +71,8 @@ def test_release_verifier_rejects_candidate_token_that_exists_only_in_html_comme
     target = tmp_path / "README.md"
     source = target.read_text(encoding="utf-8")
     candidate = (
-        "The current development candidate presents the reference-driven advisor-centered root "
-        "and three demo routes through one shared workspace shell"
+        "The current release boundary is v0.1.6, a local synthetic and provider-free "
+        "portfolio release."
     )
     assert candidate in source
     target.write_text(
@@ -79,7 +81,7 @@ def test_release_verifier_rejects_candidate_token_that_exists_only_in_html_comme
     )
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
-    with pytest.raises(SystemExit, match="missing v0.1.5 README contract: README.md"):
+    with pytest.raises(SystemExit, match="missing v0.1.6 README contract: README.md"):
         verifier.verify_release_surface()
 
 
@@ -194,7 +196,7 @@ def test_release_verifier_rejects_mutated_published_release_document(
 
 def test_release_verifier_registers_collaboration_authority_without_version_change() -> None:
     verifier = load_verifier()
-    assert verifier.VERSION == "0.1.5"
+    assert verifier.VERSION == "0.1.6"
     assert {
         "collaboration_threads",
         "message_events",
@@ -282,7 +284,7 @@ def test_release_verifier_freezes_the_cross_runtime_lock_order() -> None:
 def test_release_verifier_registers_skill_authority_without_version_change() -> None:
     verifier = load_verifier()
 
-    assert verifier.VERSION == "0.1.5"
+    assert verifier.VERSION == "0.1.6"
     assert not hasattr(verifier, "LOCKED_FASTAPI_VERSION")
     assert verifier.FASTAPI_VERSION_FLOOR == (0, 139, 2)
     assert verifier.FASTAPI_VERSION_CEILING == (0, 140)

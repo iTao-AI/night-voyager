@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 FASTAPI_VERSION_FLOOR = (0, 139, 2)
 FASTAPI_VERSION_CEILING = (0, 140)
 RELEASE_TAG = f"v{VERSION}"
@@ -311,6 +311,12 @@ PUBLISHED_RELEASE_DOCUMENTS = {
     "docs/how-to/verify-v0.1.4-release.md": (
         "6fab5465f24c6765910814a7f554c9c57971c6e6c613d194f1a25e8a9ddf0f45"
     ),
+    "docs/releases/v0.1.5.md": (
+        "2064dbd68d2058a8f0d8f0886a09cd980953f2191a54f1bc0349dbda586e9179"
+    ),
+    "docs/how-to/verify-v0.1.5-release.md": (
+        "d5e935c5d51f4492ea2f897540ce596bdc73e07b8999e4fc3afe066abef533ec"
+    ),
 }
 RELEASE_HEADINGS = (
     "## Summary",
@@ -323,44 +329,54 @@ RELEASE_HEADINGS = (
 RELEASE_NOTE_TOKENS = (
     "local synthetic portfolio release",
     "migration `0015`",
-    "PR #80",
-    "governed timeline execution",
-    "PR #83",
-    "recovery",
-    "PR #84",
-    "reassessment",
-    "session",
-    "task",
-    "receipt",
-    "reconciliation",
-    "PR #85",
-    "professional presentation",
-    "evaluator-first DX",
+    "governed complementary-evidence Slice 0 safe stop",
+    "evaluation_invalid",
+    "PR #87",
+    "information gain",
+    "MkeCaptureArtifactV2",
+    "candidate persistence",
+    "Slice 1/2",
+    "successful cross-project evidence loop",
+    "advisor-centered presentation",
+    "PR #94",
+    "PR #95",
+    "PR #97",
+    "PR #98",
+    "presentation evidence",
+    "connected same-Case",
+    "PR #103",
+    "provider-free",
+    "independent seeded Happy and Blocked scenarios",
+    "no new migration",
+    "no mutation authority",
+    "no state transition",
+    "no automatic retry",
+    "no automatic successor",
     "PR #78",
-    "dependency maintenance",
-    "GHSA-f88m-g3jw-g9cj",
-    "sharp",
-    "brace-expansion",
-    "minimatch",
+    "Next.js `16.3.3`",
+    "CodeQL",
     "not audit-zero",
-    "PR #81",
-    "PR #82",
-    "CI verification maintenance",
     "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
-    "zero cited Evidence",
     "no third provider attempt",
-    "GitHub-generated source archive",
+    "no third DRA provider attempt",
     "no production deployment",
-    "no real users",
-    "no real schools or student data",
+    "no real student records",
+    "no real institutional coverage",
+    "no advisor-team adoption",
     "no admissions outcome",
     "no business-benefit claim",
-    "no HA or SLA",
-    "except for the declared version identities, release-prep does not change "
-    "migrations, runtime behavior, backend/domain product logic, BFF/API endpoints "
-    "or schemas, dependency choices, Dockerfiles, or Compose policy",
+    "no HA/SLA",
+    "GitHub-generated source archive",
+    "release-prep does not change",
 )
 RELEASE_HOW_TO_TOKENS = (
+    "reviewed HEAD and hosted checks",
+    "squash tree equality",
+    "exact merge-SHA default-branch CI",
+    "clean-main Gate C",
+    "Git-free Gate D",
+    "annotated tag and GitHub Release",
+    "official public source archive Gate E",
     "git fetch origin --tags --prune",
     "git status --short --branch",
     "git rev-parse HEAD",
@@ -420,6 +436,8 @@ RELEASE_HOW_TO_TOKENS = (
     'release_view["body"].encode("utf-8") == expected_body',
     'release_api["body"].encode("utf-8") == expected_body',
     "GitHub-generated source archives remain the only release artifacts",
+    "one official GitHub-generated source archive",
+    "no custom assets",
     "fresh extraction",
     "public source archive",
     "scripts/verify_release.py --tree-mode release",
@@ -686,13 +704,13 @@ def verify_portfolio_entry_surface() -> None:
             or (
                 relative == "README.md"
                 and (
-                    "current development candidate" not in readme
-                    or "not released or deployed" not in readme
+                    "current release boundary is v0.1.6" not in readme
+                    or "not deployed" not in readme
                 )
             )
             or (
                 relative == "README_CN.md"
-                and ("当前 development candidate" not in readme or "未发布或部署" not in readme)
+                and ("当前 release boundary 是 v0.1.6" not in readme or "未部署" not in readme)
             )
         ):
             raise SystemExit(f"portfolio README discovery drift: {relative}")
@@ -1128,9 +1146,9 @@ def verify_release_surface() -> None:
     readme_contracts = (
         (
             "README.md",
-            "The current development candidate presents the reference-driven advisor-centered root "
-            "and three demo routes through one shared workspace shell",
-            "Stable v0.1.5 remains the prior local synthetic portfolio release.",
+            "The current release boundary is v0.1.6, a local synthetic and provider-free "
+            "portfolio release.",
+            "v0.1.6 is not deployed; publication remains separately gated.",
             "## Engineering proof",
             "## Evaluate the release",
             "## Synthetic and local limits",
@@ -1138,9 +1156,9 @@ def verify_release_surface() -> None:
         ),
         (
             "README_CN.md",
-            "当前 development candidate 展示 reference-driven advisor-centered root 与三个 "
-            "demo route 共享的 workspace shell",
-            "稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。",
+            "当前 release boundary 是 v0.1.6：local synthetic、provider-free 的 "
+            "portfolio release。",
+            "v0.1.6 尚未部署；publication 仍单独受 gate。",
             "## 工程证据",
             "## 验证 release",
             "## 合成与本地边界",
@@ -1210,8 +1228,8 @@ def verify_release_surface() -> None:
         if any(phrase in source for phrase in stale):
             raise SystemExit(f"stale bootstrap release wording: {relative}")
     print(
-        "proof release surface: current development candidate + stable v0.1.5 "
-        "historical boundary confirmed"
+        "proof release surface: current v0.1.6 local synthetic portfolio release "
+        "boundary confirmed"
     )
 
 

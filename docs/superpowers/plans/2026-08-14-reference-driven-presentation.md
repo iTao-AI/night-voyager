@@ -6,7 +6,7 @@
 > contract change, `superpowers:receiving-code-review` for authority findings,
 > and `superpowers:verification-before-completion` before every readiness claim.
 
-Status: `Merged in PR #97 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed`
+Status: `Merged in PR #97 on the current default branch; presentation-only; included in v0.1.6 local synthetic portfolio release; not deployed`
 Historical provenance: the locally verified implementation candidate and source freeze are
 retained as historical evidence; they do not change the current branch, stable-release,
 or deployment boundaries above.

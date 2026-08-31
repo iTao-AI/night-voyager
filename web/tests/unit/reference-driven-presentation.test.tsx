@@ -101,7 +101,7 @@ describe("reference-driven presentation contract", () => {
     expect(css).toMatch(/\.workspace-brand[\s\S]*font-size:\s*20px[\s\S]*letter-spacing:\s*-\.035em/);
     expect(css).not.toContain("brand-mark");
     const currentStatus =
-      "Status: `Merged in PR #97 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed`";
+      "Status: `Merged in PR #97 on the current default branch; presentation-only; included in v0.1.6 local synthetic portfolio release; not deployed`";
     const historicalProvenance =
       "Historical provenance: the locally verified implementation candidate and source freeze are";
     const staleStatus = "Status: `LOCAL CANDIDATE / IN REVIEW`";

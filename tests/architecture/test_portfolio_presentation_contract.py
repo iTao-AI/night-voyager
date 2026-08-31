@@ -22,11 +22,11 @@ PRIVATE_OR_METADATA_MARKERS = (
     b"http://ns.adobe.com/xap/",
 )
 LOCKED_DEPENDENCY_IDENTITIES = {
-    "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
-    "uv.lock": "370ed4ef110cb8e050e276a9baf752c0e2cfe8c50e7ee143115b113b5a4bd253",
-    "web/package.json": "de78770cde96ffc5e1041bb348d21c273be0f72eb1b404bf7aa0a7c8ba4d3051",
+    "pyproject.toml": "519c53ca3c5b11c4ef8e5497ef690d029c537e96354cb1175bf0fe285596adca",
+    "uv.lock": "ce51d47935a7fd7749e0ce3dd9ef02b6d62bc0ef816c46f9a5282cb20b1d4922",
+    "web/package.json": "35235629fb2ddf64cdaf50b4275939b3c02ebc79e49ef90d85d1fc1792c7fe19",
     "web/package-lock.json": (
-        "a197ff7f16618ff920de6fc83d14cea97476f4ed1fff6a9abd41aa49d76e71dc"
+        "bc96d7777912b76f2bfe4edf73f8a139d4112e0e50569523b7c9767ebd10cbd5"
     ),
 }
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"

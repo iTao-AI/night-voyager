@@ -15,8 +15,8 @@ MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 CURRENT_SLICE_0_STATUS = (
     "Slice 0 permanently ended as local `evaluation_invalid` safe stop; no "
     "`MkeCaptureArtifactV2`, terminal receipt, information-gain conclusion, candidate "
-    "persistence, Slice 1/2 unlock, or v0.1.6; PR #87 merged; hosted CI/publication "
-    "cleanup completed"
+    "persistence, Slice 1/2 unlock, or successful cross-project evidence loop; PR #87 "
+    "merged; hosted CI/publication cleanup completed; included in v0.1.6"
 )
 HISTORICAL_SLICE_0_STATUS = (
     "Slice 0 ended in local `evaluation_invalid` safe stop; retired holdout retained; "
@@ -170,24 +170,24 @@ PLAN_STATUS_BINDINGS = (
 PRESENTATION_HISTORY_BINDINGS = (
     (
         "Governed demo presentation surface",
-        "Merged in PR #94 on the current default branch; presentation-only; not included "
-        "in stable v0.1.5; not deployed",
+        "Merged in PR #94 on the current default branch; presentation-only; included in "
+        "v0.1.6 local synthetic portfolio release; not deployed",
         "specs/2026-08-09-governed-demo-presentation-design.md",
         "plans/2026-08-09-governed-demo-presentation.md",
         "#94",
     ),
     (
         "Advisor-centered product experience",
-        "Merged in PR #95 on the current default branch; presentation-only; not included "
-        "in stable v0.1.5; not deployed",
+        "Merged in PR #95 on the current default branch; presentation-only; included in "
+        "v0.1.6 local synthetic portfolio release; not deployed",
         "specs/2026-08-09-advisor-centered-product-experience.md",
         "plans/2026-08-09-advisor-centered-product-experience.md",
         "#95",
     ),
     (
         "Reference-driven presentation",
-        "Merged in PR #97 on the current default branch; presentation-only; not included "
-        "in stable v0.1.5; not deployed",
+        "Merged in PR #97 on the current default branch; presentation-only; included in "
+        "v0.1.6 local synthetic portfolio release; not deployed",
         "specs/2026-08-14-reference-driven-presentation.md",
         "plans/2026-08-14-reference-driven-presentation.md",
         "#97",
@@ -195,7 +195,7 @@ PRESENTATION_HISTORY_BINDINGS = (
     (
         "Native showcase closeout",
         "Merged in PR #98 on the current default branch; presentation evidence/README "
-        "ordering only; not included in stable v0.1.5; not deployed",
+        "ordering only; included in v0.1.6 local synthetic portfolio release; not deployed",
         None,
         "plans/2026-08-15-native-showcase-closeout.md",
         "#98",
@@ -838,7 +838,7 @@ def test_current_development_dependency_path_and_release_surface_do_not_regress(
         (ROOT / "README_CN.md").read_text(encoding="utf-8"),
     ]
     for source in readmes:
-        assert "v0.1.5" in source
+        assert "v0.1.6" in source
         assert "PR #87" in source
         assert "evaluation_invalid" in source
         assert "`0015`" in source
@@ -915,17 +915,23 @@ def test_current_advisor_redesign_keeps_development_and_release_boundaries() -> 
     ).read_text(encoding="utf-8")
     compose = (ROOT / "scripts/verify_compose.sh").read_text(encoding="utf-8")
 
-    assert "current development candidate" in readme
-    assert "not released or deployed" in readme
-    assert "当前 development candidate" in readme_cn
-    assert "未发布或部署" in readme_cn
-    assert "current development candidate" in docs_index
-    assert "not released or deployed" in docs_index
+    assert "current release boundary" in readme
+    assert "v0.1.6" in readme
+    assert "local synthetic and provider-free" in readme
+    assert "not deployed" in readme
+    assert "当前 release boundary" in readme_cn
+    assert "v0.1.6" in readme_cn
+    assert "local synthetic" in readme_cn
+    assert "未部署" in readme_cn
+    assert "current release boundary" in docs_index
+    assert "v0.1.6" in docs_index
+    assert "not deployed" in docs_index
     assert (
         "| Advisor-centered product experience | Merged in PR #95 on the current "
-        "default branch; presentation-only; not included in stable v0.1.5; not deployed |"
+        "default branch; presentation-only; included in v0.1.6 local synthetic portfolio "
+        "release; not deployed |"
     ) in plans_index
-    assert "current development captures" in connected
+    assert "current release captures" in connected
     assert "advisor-centered route-analysis and downstream client-confirmation" in route_map
     assert "exact route/locale/width/motion/zoom coverage" in spec
     assert "58-cell" not in spec
@@ -954,7 +960,7 @@ def test_current_dependency_and_security_truth_is_dated() -> None:
         in security.casefold()
     )
     assert "GitHub post-merge analysis recorded the fixed states" in security
-    assert "v0.1.5" in security
+    assert "v0.1.6" in security
     assert "immutable" in security
     assert "not an audit-zero claim" in security
     assert "postcss@8.5.23" in security
@@ -1255,7 +1261,7 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
             "provider-free",
             "/demo/collaboration",
             "/demo",
-            "v0.1.5",
+            "v0.1.6",
         ):
             assert token in current_readme
     assert "AI collaboration platform for study-abroad advisors" in readme
@@ -1270,7 +1276,7 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
         "same-Case execution continuation 已在当前 default branch 通过 PR #103 合并。"
         in readme_cn
     )
-    assert "未纳入 stable v0.1.5，也未部署。" in readme_cn
+    assert "已纳入 v0.1.6，仍未部署。" in readme_cn
 
     same_case_sources = {
         "README.md": readme,
@@ -1284,13 +1290,13 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
         assert "PR #103" in source, source_name
         assert "local synthetic" in source, source_name
         assert "provider-free" in source, source_name
-        assert "v0.1.5" in source, source_name
+        assert "v0.1.6" in source, source_name
         assert "not deployed" in source, source_name
 
     assert (
         "The connected same-Case execution continuation is merged on the current "
         "default branch in PR #103. It remains local synthetic and provider-free, "
-        "is not included in stable v0.1.5, and is not deployed."
+        "is included in v0.1.6 and is not deployed."
     ) in readme
     assert (
         "merged on the current default branch in PR #103"
@@ -1298,18 +1304,18 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
     )
     assert (
         "The continuation is merged on the current default branch in PR #103; it "
-        "remains local synthetic and provider-free, is not included in stable "
-        "v0.1.5, and is not deployed."
+        "remains local synthetic and provider-free, is included in v0.1.6, and is "
+        "not deployed."
     ) in connected_demo
     assert (
         "| Connected same-Case plan execution continuation v1 | Merged on the "
         "current default branch in PR #103; local synthetic and provider-free; "
-        "not included in stable v0.1.5; not deployed |"
+        "included in v0.1.6; not deployed |"
     ) in plans_index
     for source in (continuation_spec, continuation_plan):
         assert (
             "Implementation: Merged on the current default branch in PR #103; "
-            "local synthetic and provider-free; not included in stable v0.1.5; "
+            "local synthetic and provider-free; included in v0.1.6; "
             "not deployed"
         ) in source
 
@@ -1361,7 +1367,7 @@ def test_advisor_workspace_docs_separate_current_candidate_from_release_history(
     )
 
     for token in (
-        "v0.1.5 is the current local synthetic portfolio release",
+        "v0.1.6 is the current local synthetic portfolio release",
         "PRs #57–#59 are released in v0.1.3",
         "PR #60 and the route-presentation follow-up are released in v0.1.3",
     ):
@@ -1601,7 +1607,7 @@ def test_governed_plan_execution_dx_surface_is_evaluator_first() -> None:
         "semantic assertions",
         "screenshots are review evidence",
         "PR A/B/C are implemented, reviewed, merged",
-        "included in the v0.1.5 release candidate",
+        "included in the v0.1.6 release",
         "Publication remains separately gated",
     ):
         assert token in combined

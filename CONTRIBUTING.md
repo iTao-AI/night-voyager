@@ -1,6 +1,6 @@
 # Contributing
 
-Night Voyager v0.1.5 is a local synthetic portfolio release with the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, and evaluator-first presentation. Keep changes focused, public-neutral, and reproducible without remote credentials. Use Python 3.12.13, Node.js 24.18.0, a short-lived `codex/` branch, and test-first development for behavior.
+Night Voyager v0.1.6 is a local synthetic portfolio release; it is provider-free and not deployed. It includes the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, evaluator-first presentation, and connected same-Case continuation. It remains reproducible without remote credentials. Keep changes focused and public-neutral. Use Python 3.12.13, Node.js 24.18.0, a short-lived `codex/` branch, and test-first development for behavior.
 
 M1 fixture-only material is retained as historical visual context; current `/demo`
 behavior is the connected M5 local synthetic walkthrough.

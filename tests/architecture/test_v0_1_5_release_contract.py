@@ -12,7 +12,7 @@ from pathlib import Path
 from night_voyager.api import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
-VERSION = "0.1.5"
+CURRENT_VERSION = "0.1.6"
 DESCRIPTION = "Evidence-grounded advisor-to-family decision workflow with durable Agent tasks"
 HISTORICAL_RELEASE_DIGESTS = {
     "docs/releases/v0.1.0.md": "a3251cdb572b4d982f989917f7e44d111cf887cf7fc8d75629cdd69c393d3a93",
@@ -40,6 +40,12 @@ HISTORICAL_RELEASE_DIGESTS = {
     ),
     "docs/how-to/verify-v0.1.4-release.md": (
         "6fab5465f24c6765910814a7f554c9c57971c6e6c613d194f1a25e8a9ddf0f45"
+    ),
+    "docs/releases/v0.1.5.md": (
+        "2064dbd68d2058a8f0d8f0886a09cd980953f2191a54f1bc0349dbda586e9179"
+    ),
+    "docs/how-to/verify-v0.1.5-release.md": (
+        "d5e935c5d51f4492ea2f897540ce596bdc73e07b8999e4fc3afe066abef533ec"
     ),
 }
 
@@ -191,7 +197,7 @@ def test_v0_1_5_current_authority_and_public_claims_are_unambiguous() -> None:
     )
 
 
-def test_current_release_identity_is_v0_1_5_without_dependency_drift() -> None:
+def test_current_release_identity_is_v0_1_6_without_dependency_drift() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
@@ -202,37 +208,37 @@ def test_current_release_identity_is_v0_1_5_without_dependency_drift() -> None:
         item for item in uv_lock["package"] if item.get("name") == "night-voyager"
     )
 
-    assert pyproject["project"]["version"] == VERSION
+    assert pyproject["project"]["version"] == CURRENT_VERSION
     assert pyproject["project"]["description"] == DESCRIPTION
-    assert locked_project["version"] == VERSION
-    assert package["version"] == VERSION
-    assert package_lock["version"] == VERSION
-    assert package_lock["packages"][""]["version"] == VERSION
-    assert create_app().version == VERSION
+    assert locked_project["version"] == CURRENT_VERSION
+    assert package["version"] == CURRENT_VERSION
+    assert package_lock["version"] == CURRENT_VERSION
+    assert package_lock["packages"][""]["version"] == CURRENT_VERSION
+    assert create_app().version == CURRENT_VERSION
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert f'VERSION = "{VERSION}"' in verifier
+    assert f'VERSION = "{CURRENT_VERSION}"' in verifier
 
 
-def test_current_release_entries_point_to_v0_1_5_and_keep_history() -> None:
+def test_current_release_entries_point_to_v0_1_6_and_keep_history() -> None:
     current_entries = {
         "README.md": (
-            "docs/releases/v0.1.5.md",
-            "docs/how-to/verify-v0.1.5-release.md",
+            "docs/releases/v0.1.6.md",
+            "docs/how-to/verify-v0.1.6-release.md",
             "local synthetic portfolio release",
         ),
         "README_CN.md": (
-            "docs/releases/v0.1.5.md",
-            "docs/how-to/verify-v0.1.5-release.md",
+            "docs/releases/v0.1.6.md",
+            "docs/how-to/verify-v0.1.6-release.md",
             "local synthetic portfolio release",
         ),
         "docs/README.md": (
-            "releases/v0.1.5.md",
-            "how-to/verify-v0.1.5-release.md",
+            "releases/v0.1.6.md",
+            "how-to/verify-v0.1.6-release.md",
             "local synthetic portfolio release",
         ),
-        "CONTRIBUTING.md": ("v0.1.5", "local synthetic portfolio release"),
-        "SECURITY.md": ("v0.1.5", "local synthetic portfolio release"),
-        "DESIGN.md": ("v0.1.5", "local synthetic portfolio release"),
+        "CONTRIBUTING.md": ("v0.1.6", "local synthetic portfolio release"),
+        "SECURITY.md": ("v0.1.6", "local synthetic portfolio release"),
+        "DESIGN.md": ("v0.1.6", "local synthetic portfolio release"),
     }
     for relative, tokens in current_entries.items():
         source = (ROOT / relative).read_text(encoding="utf-8")
@@ -240,7 +246,14 @@ def test_current_release_entries_point_to_v0_1_5_and_keep_history() -> None:
 
     for relative in ("README.md", "README_CN.md", "docs/README.md"):
         source = (ROOT / relative).read_text(encoding="utf-8")
-        for historical_version in ("v0.1.0", "v0.1.1", "v0.1.2", "v0.1.3", "v0.1.4"):
+        for historical_version in (
+            "v0.1.0",
+            "v0.1.1",
+            "v0.1.2",
+            "v0.1.3",
+            "v0.1.4",
+            "v0.1.5",
+        ):
             assert historical_version in source, (relative, historical_version)
 
 

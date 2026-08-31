@@ -3,8 +3,8 @@
 
 ## Status
 
-Merged in PR #95 on the current default branch; presentation-only; not included in
-stable v0.1.5; not deployed. The historical verification record remains tied to the
+Merged in PR #95 on the current default branch; presentation-only; included in v0.1.6
+local synthetic portfolio release; not deployed. The historical verification record remains tied to the
 local synthetic candidate and makes no provider, adoption, real-user, or production-use
 claim.
 
