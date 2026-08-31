@@ -349,6 +349,19 @@ def test_v0_1_6_verification_guide_binds_gate_identity_archive_and_teardown() ->
     assert 'test ! -e "$tmp_dir/extracted/night-voyager-0.1.6/.git"' in how_to
 
 
+def test_gate_e_binds_task_namespace_before_cleanup_and_returns_to_repo_root() -> None:
+    how_to = _read(RELEASE_DOCUMENTS[1])
+    block = _gate_blocks(how_to, "E")[0]
+    namespace = 'export COMPOSE_PROJECT_NAME="night-voyager-v0-1-6-gate-e-$$"'
+    cleanup_start = block.index("cleanup_temp()")
+    cleanup_end = block.index("}\ntrap cleanup_temp EXIT", cleanup_start)
+    cleanup = block[cleanup_start:cleanup_end]
+
+    assert block.index(namespace) < cleanup_start
+    assert 'cd "$repo_root" || cleanup_status=$?' in cleanup
+    assert cleanup.index('cd "$repo_root"') < cleanup.index('rm -rf -- "$tmp_dir"')
+
+
 def test_current_guidance_reconciles_to_v0_1_6_without_unlocking_or_deploying() -> None:
     current_surfaces = (
         "README.md",

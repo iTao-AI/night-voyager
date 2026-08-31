@@ -193,6 +193,7 @@ repo_root="$(git rev-parse --show-toplevel)"
 tmp_dir="$(mktemp -d)"
 archive="$tmp_dir/night-voyager-v0.1.6.tar.gz"
 archive_root="$tmp_dir/night-voyager-0.1.6"
+export COMPOSE_PROJECT_NAME="night-voyager-v0-1-6-gate-e-$$"
 cleanup_temp() {
   gate_status=$?
   trap - EXIT
@@ -211,7 +212,12 @@ cleanup_temp() {
     fi
   fi
   cleanup_status=0
-  rm -rf -- "$tmp_dir" || cleanup_status=$?
+  cd "$repo_root" || cleanup_status=$?
+  rm_status=0
+  rm -rf -- "$tmp_dir" || rm_status=$?
+  if (( cleanup_status == 0 && rm_status != 0 )); then
+    cleanup_status="$rm_status"
+  fi
   if (( gate_status != 0 )); then
     exit "$gate_status"
   fi
@@ -230,7 +236,6 @@ python "$repo_root/scripts/validate_release_archive.py" "$archive" \
 tar -xzf "$archive" -C "$tmp_dir"
 test ! -e "$tmp_dir/night-voyager-0.1.6/.git"
 cd "$tmp_dir/night-voyager-0.1.6"
-export COMPOSE_PROJECT_NAME="night-voyager-v0-1-6-gate-e-$$"
 make doctor
 make proof
 make compose-proof
