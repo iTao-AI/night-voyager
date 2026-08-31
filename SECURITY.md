@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Night Voyager v0.1.5 is a local synthetic portfolio release with the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, and evaluator-first presentation. Security fixes apply to the current default branch; the release is not supported as a production service.
+Night Voyager v0.1.6 is a local synthetic portfolio release; it is provider-free and not deployed. It includes the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, and evaluator-first presentation. It is not supported as a production service. Security fixes apply to the current default branch.
 
 ## Reporting
 

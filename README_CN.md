@@ -44,13 +44,13 @@ Night Voyager 面向留学顾问团队，支持他们与参与确认的学生和
 
 - **快速开始：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
 - **架构：** 阅读 [架构与里程碑历史](DESIGN.md) 与 [文档索引](docs/README.md)。
-- **发布：** [v0.1.5 发布说明](docs/releases/v0.1.5.md) 与 [v0.1.5 发布验证指南](docs/how-to/verify-v0.1.5-release.md) 说明当前发布基线；本展示层仅用于呈现，不改变发布状态。
+- **发布：** [v0.1.6 发布说明](docs/releases/v0.1.6.md) 与 [v0.1.6 发布验证指南](docs/how-to/verify-v0.1.6-release.md) 说明当前 local synthetic portfolio release；本展示层仅用于呈现，publication 仍单独受 gate。
 
 ## 详细证明
 
 当前 runtime、contracts、authority boundaries 与 release evidence 继续保留在下方。历史视觉资产仍用于 proof 与 context，但不再作为 README 首层画廊。
 
-当前 development candidate 仍是面向留学顾问的 AI 协作平台。当前 development candidate 展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell。root 是 static presentation evidence，demo route 则是 local synthetic、provider-free。same-Case execution continuation 已在当前 default branch 通过 PR #103 合并。它仍是 local synthetic、provider-free，未纳入 stable v0.1.5，也未部署。稳定的 v0.1.5 仍是此前的 local synthetic portfolio release。presentation-only root 仍未发布或部署，且不发起 API、session、task 或 EventSource。
+当前 release boundary 是 v0.1.6：local synthetic、provider-free 的 portfolio release。v0.1.6 尚未部署；publication 仍单独受 gate。Night Voyager 仍是面向留学顾问的 AI 协作平台，展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell。root 是 static presentation evidence，demo route 则是 local synthetic、provider-free。same-Case execution continuation 已在当前 default branch 通过 PR #103 合并。它仍是 local synthetic、provider-free，已纳入 v0.1.6，仍未部署。presentation-only root 不发起 API、session、task 或 EventSource。
 
 完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；到达 `plan_ready` 后，主操作会进入 `/demo/plan?case_id=<case_id>`，继续使用现有 execution workspace。连接证明会保留 server-derived revision、decision、receipt、timeline、execution、role handoff、blocked checkpoint 与 `pending_future_authorization`。裸 `/demo/plan` 与 `?scenario=blocked` 仍是独立播种的 Happy / Blocked recovery 场景，不承接连接 Case 或 session。截图是评审证据，不是功能权威；semantic assertions 才是 acceptance authority。
 
@@ -73,7 +73,7 @@ Governed plan-execution development evidence（仅 synthetic review evidence）�
 
 ## 工程证据
 
-- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；released graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`，v0.1.5 identity 固定在 migration `0015`。
+- **PostgreSQL 与 forced RLS：** tenant-scoped runtime role 通过狭窄 authority path 读写；released graph 为 `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`，v0.1.6 identity 固定在 migration `0015`。
 - **Durable task 与 SSE：** `AgentTask` 可跨 worker/API restart 保持，使用 bounded lease 与 generation fencing，并恢复授权 event stream。
 - **Human gates：** deterministic evidence policy、advisor review 与显式 family confirmation 相互分离；模型或 adapter 输出不能自行获得 promotion authority。
 - **Governed DRA mixed planning：** optional offline proof 只导入 `UNTRUSTED_CANDIDATE`；assigned-advisor verification 与 promotion 共用一个原子数据库 gate，并通过既有 durable worker 物化一个 governed mixed PlanningRun。当前 provider-free prerequisite 将 strict new work 固定到 exact post-release commit `01ba21f2996769e68cbc88f4bb0596740df27f6b` 与 `generic-strict-citation@1`；它不属于 DRA v0.1.6 release。
@@ -83,9 +83,9 @@ Governed plan-execution development evidence（仅 synthetic review evidence）�
 - **Browser to database：** v0.1.3 `/demo/collaboration` 现在可在不创建 task 的情况下，把已确认的同一 Case 交给 `/demo`；advisor 随后显式启动真实 pinned task、SSE、review、parent decision、receipt 与 timeline 路径。整条 provider-free chain 在真实 Chromium 与 PostgreSQL 上运行，同时两个 route 仍可独立使用。
 - **Planning revision journey：** v0.1.4 发布 provider-free `request revision`、controlled student preferred-country change、retained predecessor lineage、successor PlanningRun、deterministic old/new comparison、fresh advisor authorization，以及 only the current family decision。blocked budget counterfactual 不会到达 approval 或 decision。
 - **Governed timeline execution：** v0.1.5 发布 provider-free `/demo/plan` vertical、closed Happy/Blocked scenario、structured family attestation、assigned-advisor verification、immutable receipt recovery、PostgreSQL-owned risk/date authority、reassessment stop，以及 bilingual responsive/action-hierarchy proof；不创建新 `AgentTask`、provider call、successor business row 或 deployment。
-- **Connected same-Case execution：** 该 continuation 已在当前 default branch 通过 PR #103 合并。它仍是 local synthetic、provider-free，未纳入 stable v0.1.5，也未部署。它新增 server-derived case-scoped context，并通过既有 execution reducer、receipt、reload recovery、role handoff、blocked checkpoint 与 reassessment stop 延续 exact connected Case。独立播种的 Happy / Blocked scenario 继续保持独立；它不新增 migration、mutation authority、successor、provider call 或 deployment。
-- **Portfolio 与 dependency boundary：** v0.1.5 包含 PR #78 合并的 frontend dependency maintenance。当前 development 已使用 Next.js 与 `eslint-config-next` `16.3.3`；Next.js resolves optional/transitive `sharp 0.35.3`，位于 `GHSA-f88m-g3jw-g9cj` advisory range 外，并使用 `postcss@8.5.23` 与兼容的 transitive `nanoid@3.3.18`。仓库没有 direct `sharp`、`postcss` 或 `nanoid` dependency，也没有 override。不可变的 v0.1.5 release 不是 audit-zero claim；这段 current-development wording 不改写其 historical release evidence。Fresh full 与 runtime/omit-dev npm audits 均报告 zero advisory objects，且没有 sharp advisory object。GitHub 于 2026-08-30 对 default branch 的 readback 记录为 zero open Dependabot alerts。Dependabot #7（sharp，`GHSA-f88m-g3jw-g9cj`）已 fixed，`fixed_at=2026-08-08T09:16:53Z`，且没有 dismissal fields。这是 point-in-time default-branch readback，不是永久 audit-zero 声明；local package/audit validation did not fix or dismiss a GitHub alert，GitHub post-merge analysis recorded this fixed state。Recovery triggers 仍仅为 public deployment、untrusted image path 或 advisory change。
-- **Complementary-evidence Slice 0 status：** Slice 0 已永久以 local `evaluation_invalid` safe stop 结束。它没有 `MkeCaptureArtifactV2`、Slice 0 terminal receipt、information-gain conclusion、candidate persistence、Slice 1/2 work 或 v0.1.6 release。PR #87 已 merged；hosted CI 与 publication cleanup 已完成，且没有解锁后续阶段。
+- **Connected same-Case execution：** 该 continuation 已在当前 default branch 通过 PR #103 合并。它仍是 local synthetic、provider-free，已纳入 v0.1.6，仍未部署。它新增 server-derived case-scoped context，并通过既有 execution reducer、receipt、reload recovery、role handoff、blocked checkpoint 与 reassessment stop 延续 exact connected Case。独立播种的 Happy / Blocked scenario 继续保持独立；它不新增 migration、mutation authority、successor、provider call 或 deployment。
+- **Portfolio 与 maintenance boundary：** v0.1.6 记录 v0.1.5 之后的 maintenance：PR #100 的 SQLAlchemy `2.0.52`、PR #101 的 routine frontend patches、PR #104 的 Next.js `16.3.3` security patch、CodeQL default setup，以及 PR #106 的 test-only all-percent repair。这些只是 point-in-time maintenance/hosted-proof facts，不是永久 audit-zero claim；不可变的 v0.1.5 release evidence 保持不变。
+- **Complementary-evidence Slice 0 status：** Slice 0 已永久以 local `evaluation_invalid` safe stop 结束。它没有 `MkeCaptureArtifactV2`、Slice 0 terminal receipt、information-gain conclusion、candidate persistence、Slice 1/2 unlock、successful cross-project evidence loop。PR #87 已 merged；hosted CI 与 publication cleanup 已完成；该状态已纳入 v0.1.6，且没有解锁后续阶段。
 
 ## 验证 release
 
@@ -99,16 +99,16 @@ make proof
 make down
 ```
 
-当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md) 从 `/demo/collaboration` 进入 `/demo`，再进入主操作 `/demo/plan?case_id=<case_id>`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md) 访问裸 `/demo/plan` 或 `?scenario=blocked`。[v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md)定义 current release gates。
+当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md) 从 `/demo/collaboration` 进入 `/demo`，再进入主操作 `/demo/plan?case_id=<case_id>`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md) 访问裸 `/demo/plan` 或 `?scenario=blocked`。[v0.1.6 release/source-archive verification guide](docs/how-to/verify-v0.1.6-release.md)定义 current release gates。
 
-如需验证当前 same-Case development walkthrough，请从
+如需验证当前 same-Case release walkthrough，请从
 `/demo/collaboration` 开始，确认 synthetic family fact，选择
 `继续进入规划`（English 为 `Continue to planning`），再在 `/demo` 执行显式 task action。Handoff
 本身只做 read-only validation，creates no task。
 
 当前 focused planning-revision proof 使用
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`。Screenshot 维护显式隔离：
-`UPDATE_PORTFOLIO_SCREENSHOTS` 更新当前 development-candidate portfolio captures，
+`UPDATE_PORTFOLIO_SCREENSHOTS` 更新当前 release captures，
 `UPDATE_PLANNING_REVISION_SCREENSHOT` 只能更新
 `night-voyager-planning-revision.png`。
 
@@ -123,19 +123,20 @@ publication cleanup 已完成。
 
 ## 合成与本地边界
 
-- v0.1.5 是 local synthetic portfolio release，在既有 portfolio workflow 上发布 governed timeline execution、recovery/reassessment authority、reconciliation 与 professional evaluator-facing presentation；不代表 production deployment 或 production tenancy。
+- v0.1.6 是 local synthetic portfolio release，在既有 portfolio workflow 上发布 governed timeline execution、recovery/reassessment authority、reconciliation、professional evaluator-facing presentation 与 connected same-Case continuation；仍未部署，也不代表 production deployment 或 production tenancy。
 - 仓库不包含真实学生记录，也不宣称录取结果、真实用户、SLA、可用性或业务收益。
 - worker 与 SSE 仅提供 deterministic local proof，不代表 distributed high availability。
 - Live DRA、OpenClaw、remote provider、消息通道与 product-path MKE 均未连接。Deterministic offline DRA candidate import、atomic promotion 与 governed mixed PlanningRun generation 已在本地实现。两次分别授权的 bounded live attempt 返回了 25 与 83 条 same-run Evidence，全部为 `uncited`，并都在 candidate import 前停止。第三次 provider attempt 未获授权；strict live acceptance 仍不完整。M4B 仍是 optional read-only compatibility adapter，所有投影保持 `UNTRUSTED_CANDIDATE`。
 - Planning-revision PR 1、PR 2、PR 3 已在 v0.1.4 作为 controlled provider-free evidence 发布。它保留 25 and 83 row 失败尝试为 zero cited rows；strict live acceptance remains incomplete，且 no third provider attempt。
 - Governed collaboration PR A、versioned Skill governance PR B 与 browser walkthrough/inspector PR C 已在 v0.1.2 作为 local synthetic capability 发布。`/demo/collaboration` 本身不创建 `AgentTask`；只有 same-Case handoff 后在 `/demo` 执行显式 action，才会启动既有 governed planning path。
-- v0.1.5 不新增 live provider、production deployment、distributed HA、SLA、真实学生数据、真实学校覆盖、顾问团队采用、录取结果或 business-benefit claim。
+- v0.1.6 不新增 live provider、production deployment、distributed HA、SLA、真实学生数据、真实学校覆盖、顾问团队采用、录取结果或 business-benefit claim。
 - Governed timeline-execution PR A/B/C 只作为 local synthetic、provider-free
   evidence 发布；不宣称 deployment、live provider、real user 或 outcome。
 
 ## Milestone 与历史
 
-- [v0.1.5 release notes](docs/releases/v0.1.5.md)
+- [v0.1.6 release notes](docs/releases/v0.1.6.md)
+- [v0.1.5 historical release notes](docs/releases/v0.1.5.md)
 - [v0.1.4 historical release notes](docs/releases/v0.1.4.md)
 - [v0.1.3 历史 release notes](docs/releases/v0.1.3.md)
 - [v0.1.2 历史 release notes](docs/releases/v0.1.2.md)

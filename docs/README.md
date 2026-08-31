@@ -1,11 +1,12 @@
 # Documentation
 
-v0.1.5 is the current local synthetic portfolio release of Night Voyager. It
+v0.1.6 is the current local synthetic portfolio release of Night Voyager. It
 includes the governed portfolio workflow plus governed timeline execution,
 recovery/reassessment authority, reconciliation, professional presentation,
 evaluator-first DX, and bounded dependency maintenance. Start with the
-[release notes](releases/v0.1.5.md) and
-[source-archive verification guide](how-to/verify-v0.1.5-release.md). The v0.1.4
+[release notes](releases/v0.1.6.md) and
+[source-archive verification guide](how-to/verify-v0.1.6-release.md). The v0.1.5
+[release notes](releases/v0.1.5.md) and [verification guide](how-to/verify-v0.1.5-release.md), the v0.1.4
 [release notes](releases/v0.1.4.md) and [verification guide](how-to/verify-v0.1.4-release.md),
 the v0.1.3
 [release notes](releases/v0.1.3.md) and [verification guide](how-to/verify-v0.1.3-release.md),
@@ -17,18 +18,19 @@ plus the v0.1.0 [release notes](releases/v0.1.0.md) and
 documents remain historical visual context; current `/demo` behavior is the M5 walkthrough.
 Current complementary-evidence Slice 0 status is a permanent local `evaluation_invalid`
 safe stop: no `MkeCaptureArtifactV2`, terminal receipt, information-gain conclusion,
-candidate persistence, Slice 1/2 unlock, or v0.1.6 release exists. PR #87 is merged; hosted CI and publication cleanup are complete.
+candidate persistence, Slice 1/2 unlock, or successful cross-project evidence loop exists.
+PR #87 is merged; hosted CI and publication cleanup are complete; this status is included in v0.1.6.
 
-The current development candidate is a reference-driven AI collaboration platform for study-abroad advisors and contains the connected same-Case execution continuation merged on the current default branch in PR #103, plus presentation evidence. The continuation remains local synthetic and provider-free; it is not included in stable v0.1.5 and is not deployed; the presentation-only root remains not released or deployed; stable v0.1.5 and its release documents remain unchanged.
+The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. It is not deployed; publication remains separately gated. The release contains the reference-driven AI collaboration platform for study-abroad advisors, the connected same-Case execution continuation merged on the current default branch in PR #103, and presentation evidence. The continuation remains local synthetic and provider-free; it is included in v0.1.6 and is not deployed.
 
 The current presentation authority is the [reference-driven presentation spec](superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](superpowers/plans/2026-08-14-reference-driven-presentation.md).
 
-- Connected same-Case plan execution continuation v1: [Approved design](superpowers/specs/2026-08-28-connected-same-case-plan-execution-continuation-design.md) and [implementation plan](superpowers/plans/2026-08-28-connected-same-case-plan-execution-continuation.md); merged on the current default branch in PR #103; local synthetic and provider-free; not included in stable v0.1.5; not deployed. The existing bare `/demo/plan` Happy and `?scenario=blocked` scenarios remain independent.
+- Connected same-Case plan execution continuation v1: [Approved design](superpowers/specs/2026-08-28-connected-same-case-plan-execution-continuation-design.md) and [implementation plan](superpowers/plans/2026-08-28-connected-same-case-plan-execution-continuation.md); merged on the current default branch in PR #103; local synthetic and provider-free; included in v0.1.6; not deployed. The existing bare `/demo/plan` Happy and `?scenario=blocked` scenarios remain independent.
 
 - Evaluators: use the Docker-only sequence in the [English quick start](../README.md) or [中文快速开始](../README_CN.md).
 - Portfolio reviewers: open `/` for the static Chinese-default advisor workspace, then use the four canonical [advisor showcase frames](evidence/advisor-showcase-manifest.json) for the overview, connected normal path, blocked recovery, and mobile workspace. The connected same-Case proof continues from its receipt and TimelinePlan through `/demo/plan?case_id=<case_id>`; bare `/demo/plan` remains an independent deterministic execution scenario. Historical long captures remain retained for detailed proof and context. Semantic assertions remain authority; screenshots are review evidence, not functional authority.
 - Interviewers: begin the connected same-Case proof at `/demo/collaboration` with the [collaboration runbook](operations/collaboration-walkthrough.md), continue through `/demo` and the case-scoped execution route with the [connected runbook](operations/connected-demo.md), or inspect the separately seeded Happy/Blocked execution scenario at bare `/demo/plan` with the [execution runbook](operations/plan-execution-walkthrough.md). The four routes share one reference-driven advisor workspace presentation and must not be treated as production.
-- Timeline-execution reviewers: use the case-scoped `/demo/plan?case_id=<case_id>` continuation or the independent bare `/demo/plan` vertical with the [execution runbook](operations/timeline-execution.md), [complete walkthrough](operations/plan-execution-walkthrough.md), [contract reference](reference/timeline-execution-contract.md), and [ADR 0013](decisions/0013-governed-timeline-execution-authority.md). The merged continuation adds no migration or mutation authority; released v0.1.5 remains the stable release baseline.
+- Timeline-execution reviewers: use the case-scoped `/demo/plan?case_id=<case_id>` continuation or the independent bare `/demo/plan` vertical with the [execution runbook](operations/timeline-execution.md), [complete walkthrough](operations/plan-execution-walkthrough.md), [contract reference](reference/timeline-execution-contract.md), and [ADR 0013](decisions/0013-governed-timeline-execution-authority.md). The merged continuation adds no migration or mutation authority; v0.1.6 remains the current local release boundary.
 - Contributors: follow the [change-to-test matrix and guardrails](../CONTRIBUTING.md).
 - Planning-history reviewers: use the [approved specs and plans status index](superpowers/README.md) to distinguish implemented, approved-but-not-implemented, historical, and superseded work from current runtime authority.
 - Design and domain reviewers: inspect the connected [demo storyboard](design/demo-storyboard.md), [route map](design/route-map.md), [state and interaction matrix](design/state-and-interaction-matrix.md), [projection matrix](design/projection-matrix.md), and current [domain and source-manifest reference](reference/domain-and-source-manifests.md).

@@ -1,6 +1,6 @@
 # Night Voyager Native Showcase Closeout Plan
 
-Status: `Merged in PR #98 on the current default branch; presentation evidence/README ordering only; not included in stable v0.1.5; not deployed`
+Status: `Merged in PR #98 on the current default branch; presentation evidence/README ordering only; included in v0.1.6 local synthetic portfolio release; not deployed`
 Base: `main@01de938af2faa06f129be581154cb61f51eed5e4`
 Scope: presentation evidence and public README ordering only
 

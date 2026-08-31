@@ -44,13 +44,13 @@ The mobile frame shows the same real route-analysis workspace at the standard 39
 
 - **Quickstart:** run `make help`, `make doctor`, `make demo`, and `make proof`; then open `http://127.0.0.1:3000/`.
 - **Architecture:** read the [architecture and milestone history](DESIGN.md) and the [documentation index](docs/README.md).
-- **Release:** the [v0.1.5 release notes](docs/releases/v0.1.5.md) and [release verification guide](docs/how-to/verify-v0.1.5-release.md) describe the current v0.1.5 baseline; this showcase is presentation-only and release-neutral.
+- **Release:** the [v0.1.6 release notes](docs/releases/v0.1.6.md) and [release verification guide](docs/how-to/verify-v0.1.6-release.md) describe the current local synthetic portfolio release; this showcase is presentation-only and publication remains separately gated.
 
 ## Detailed proof
 
 The current runtime, contracts, authority boundaries, and release evidence remain below. Historical visual assets are retained for proof and context, but are no longer the README first layer.
 
-The current development candidate remains an AI collaboration platform for study-abroad advisors. The current development candidate presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell. The root is static presentation evidence, while the demo routes are local synthetic and provider-free. The connected same-Case execution continuation is merged on the current default branch in PR #103. It remains local synthetic and provider-free, is not included in stable v0.1.5, and is not deployed. Stable v0.1.5 remains the prior local synthetic portfolio release. The presentation-only root remains not released or deployed and performs no API, session, task, or EventSource work.
+The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. v0.1.6 is not deployed; publication remains separately gated. Night Voyager remains an AI collaboration platform for study-abroad advisors. The current release presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell. The root is static presentation evidence, while the demo routes are local synthetic and provider-free. The connected same-Case execution continuation is merged on the current default branch in PR #103. It remains local synthetic and provider-free, is included in v0.1.6 and is not deployed. The presentation-only root performs no API, session, task, or EventSource work.
 
 The complete governed walkthrough begins at `/demo/collaboration`, continues the same Case through `/demo`, and at `plan_ready` offers `/demo/plan?case_id=<case_id>` as the primary continuation into the existing execution workspace. The connected proof preserves the server-derived revision, decision, receipt, timeline, execution, role handoff, blocked checkpoint, and `pending_future_authorization`; bare `/demo/plan` and `?scenario=blocked` remain independently seeded Happy / Blocked recovery scenarios. Screenshots are review evidence, not functional authority; semantic assertions remain the acceptance authority.
 
@@ -73,7 +73,7 @@ Governed plan-execution development evidence (synthetic review evidence only): [
 
 ## Engineering proof
 
-- **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the released graph `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`; the v0.1.5 identity is fixed at migration `0015`.
+- **PostgreSQL and forced RLS:** tenant-scoped runtime roles read and mutate through narrow authority paths backed by the released graph `0001 -> 0002 -> 0003 -> 0004 -> 0005 -> 0006 -> 0007 -> 0008 -> 0009 -> 0010 -> 0011 -> 0012 -> 0013 -> 0014 -> 0015`; the v0.1.6 identity is fixed at migration `0015`.
 - **Durable task and SSE:** an `AgentTask` survives worker/API restarts, uses bounded leases and generation fencing, and resumes an authorized event stream.
 - **Human gates:** deterministic evidence policy, advisor review, and explicit family confirmation remain separate authorities; model or adapter output cannot promote itself.
 - **Governed DRA mixed planning:** an optional offline proof imports only `UNTRUSTED_CANDIDATE` rows, keeps assigned-advisor verification and promotion in one atomic database gate, and materializes one governed mixed PlanningRun through the existing durable worker. The current provider-free prerequisite pins new strict work to exact post-release commit `01ba21f2996769e68cbc88f4bb0596740df27f6b` and `generic-strict-citation@1`; it is not part of the DRA v0.1.6 release.
@@ -83,9 +83,9 @@ Governed plan-execution development evidence (synthetic review evidence only): [
 - **Browser to database:** v0.1.3 `/demo/collaboration` hands the confirmed same Case to `/demo` without creating a task; the advisor then explicitly starts the real pinned task, SSE, review, parent decision, receipt, and timeline path. The provider-free chain runs in real Chromium against PostgreSQL, while both routes remain independently usable.
 - **Planning revision journey:** v0.1.4 releases provider-free `request revision`, a controlled student preferred-country change, retained predecessor lineage, a successor PlanningRun, deterministic old/new comparison, fresh advisor authorization, and only the current family decision. The blocked budget counterfactual reaches neither approval nor decision.
 - **Governed timeline execution:** v0.1.5 releases a provider-free `/demo/plan` vertical, closed Happy/Blocked scenarios, structured family attestations, assigned-advisor verification, immutable receipt recovery, PostgreSQL-owned risk/date authority, a reassessment stop, and a bilingual responsive/action-hierarchy proof. It creates no new `AgentTask`, provider call, successor business row, or deployment.
-- **Connected same-Case execution:** PR #103 merged the continuation on the current default branch. It remains local synthetic and provider-free, is not included in stable v0.1.5, and is not deployed. The continuation adds a server-derived case-scoped context and continues the exact connected Case through the existing execution reducer, receipts, reload recovery, role handoff, blocked checkpoint, and reassessment stop. The independently seeded Happy / Blocked scenarios remain available and distinct; it adds no migration, mutation authority, successor, provider call, or deployment.
-- **Portfolio and dependency boundary:** v0.1.5 includes the frontend dependency maintenance merged in PR #78. Current development now uses Next.js and `eslint-config-next` `16.3.3`; Next.js resolves optional/transitive `sharp 0.35.3`, outside `GHSA-f88m-g3jw-g9cj`, with `postcss@8.5.23` and compatible transitive `nanoid@3.3.18`. The repository has no direct `sharp`, `postcss`, or `nanoid` dependency and no override. The immutable v0.1.5 release was not an audit-zero claim; this current-development wording does not rewrite its historical release evidence. Fresh full and runtime/omit-dev npm audits report zero advisory objects, including no sharp advisory object. GitHub readback on 2026-08-30 recorded zero open Dependabot alerts on the default branch. Dependabot #7 (sharp, `GHSA-f88m-g3jw-g9cj`) is fixed with `fixed_at=2026-08-08T09:16:53Z` and no dismissal fields. This is a point-in-time default-branch readback, not a permanent audit-zero claim. Local package/audit validation did not fix or dismiss a GitHub alert; GitHub post-merge analysis recorded this fixed state. Recovery triggers are public deployment, an untrusted image path, or an advisory change.
-- **Complementary-evidence Slice 0 status:** Slice 0 permanently ended as local `evaluation_invalid` safe stop. It has no `MkeCaptureArtifactV2`, Slice 0 terminal receipt, information-gain conclusion, candidate persistence, Slice 1/2 work, or v0.1.6 release. PR #87 is merged; hosted CI and publication cleanup are complete, and no later stage was unlocked.
+- **Connected same-Case execution:** PR #103 merged the continuation on the current default branch. It remains local synthetic and provider-free, is included in v0.1.6 and is not deployed. The continuation adds a server-derived case-scoped context and continues the exact connected Case through the existing execution reducer, receipts, reload recovery, role handoff, blocked checkpoint, and reassessment stop. The independently seeded Happy / Blocked scenarios remain available and distinct; it adds no migration, mutation authority, successor, provider call, or deployment.
+- **Portfolio and maintenance boundary:** v0.1.6 records post-v0.1.5 maintenance: PR #100 SQLAlchemy `2.0.52`, PR #101 routine frontend patches, PR #104 Next.js `16.3.3` security patch, CodeQL default setup, and PR #106 test-only all-percent repair. These are point-in-time maintenance/hosted-proof facts, not a permanent audit-zero claim; the immutable v0.1.5 release evidence remains unchanged.
+- **Complementary-evidence Slice 0 status:** Slice 0 permanently ended as local `evaluation_invalid` safe stop. It has no `MkeCaptureArtifactV2`, Slice 0 terminal receipt, information-gain conclusion, candidate persistence, Slice 1/2 unlock, or successful cross-project evidence loop. PR #87 is merged; hosted CI and publication cleanup are complete; this status is included in v0.1.6 and no later stage was unlocked.
 
 ## Evaluate the release
 
@@ -99,9 +99,9 @@ make proof
 make down
 ```
 
-Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` through `/demo` and the primary `/demo/plan?case_id=<case_id>` continuation. For the independent deterministic execution scenarios, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at bare `/demo/plan` or `?scenario=blocked`. The [v0.1.5 release/source-archive verification guide](docs/how-to/verify-v0.1.5-release.md) defines the current release gates.
+Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` through `/demo` and the primary `/demo/plan?case_id=<case_id>` continuation. For the independent deterministic execution scenarios, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at bare `/demo/plan` or `?scenario=blocked`. The [v0.1.6 release/source-archive verification guide](docs/how-to/verify-v0.1.6-release.md) defines the current release gates.
 
-For the current same-Case development walkthrough, begin at `/demo/collaboration`,
+For the current same-Case release walkthrough, begin at `/demo/collaboration`,
 confirm the synthetic family fact, choose `继续进入规划` (`Continue to planning` in
 English), and use the explicit task action on `/demo`. The handoff itself
 performs read-only validation and creates no task. After the family decision reaches
@@ -112,7 +112,7 @@ reassessment. The bare `/demo/plan` route remains the independent evaluation pat
 The current focused planning-revision proof uses
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. Screenshot maintenance is
 explicitly separated: `UPDATE_PORTFOLIO_SCREENSHOTS` updates the current
-development-candidate portfolio captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
+release captures, while `UPDATE_PLANNING_REVISION_SCREENSHOT` may update only
 `night-voyager-planning-revision.png`.
 
 For the governed execution path released in v0.1.5, open bare `/demo/plan` and
@@ -126,20 +126,21 @@ its hosted CI and publication cleanup are complete.
 
 ## Synthetic and local limits
 
-- v0.1.5 is a local synthetic portfolio release with the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, and professional evaluator-facing presentation. It is not a production deployment or tenancy claim.
+- v0.1.6 is a local synthetic portfolio release with the prior portfolio workflow plus governed timeline execution, recovery/reassessment authority, reconciliation, professional evaluator-facing presentation, and the connected same-Case continuation. It is not deployed and is not a production deployment or tenancy claim.
 - The repository contains no real student records and makes no admissions outcome, real-user, SLA, availability, or business-impact claim.
 - The worker and SSE evidence is deterministic local proof, not distributed high availability.
 - Live DRA, OpenClaw, remote providers, messaging, and product-path MKE are not connected. Deterministic offline DRA candidate import and atomic promotion are implemented locally; governed mixed PlanningRun generation is implemented locally through the existing durable worker. Two separately authorized bounded live attempts returned 25 and 83 same-run Evidence rows, all `uncited`, and both stopped before candidate import. No third provider attempt is authorized; strict live acceptance remains incomplete. M4B remains an optional read-only compatibility adapter whose projections are `UNTRUSTED_CANDIDATE`.
 - PR 1, PR 2, and PR 3 of the planning-revision work are released in v0.1.4 as controlled provider-free evidence only. They preserve the failed 25 and 83 row attempts as zero cited rows; strict live acceptance remains incomplete and there is no third provider attempt.
 - Governed collaboration PR A, versioned Skill governance PR B, and browser walkthrough/inspector PR C are released in v0.1.2 as local synthetic capabilities. `/demo/collaboration` itself creates no `AgentTask`; only the explicit action after the same-Case handoff to `/demo` starts the existing governed planning path.
-- The v0.1.5 release does not add live providers, production deployment, distributed HA, SLA, real student data, real school coverage, advisor-team adoption, admissions outcomes, or business-benefit claims.
+- The v0.1.6 release does not add live providers, production deployment, distributed HA, SLA, real student data, real school coverage, advisor-team adoption, admissions outcomes, or business-benefit claims.
 - Governed timeline-execution PR A/B/C is released only as local synthetic,
   provider-free evidence; no deployment, live provider, real-user, or outcome
   claim is made.
 
 ## Milestones and history
 
-- [v0.1.5 release notes](docs/releases/v0.1.5.md)
+- [v0.1.6 release notes](docs/releases/v0.1.6.md)
+- [v0.1.5 historical release notes](docs/releases/v0.1.5.md)
 - [v0.1.4 historical release notes](docs/releases/v0.1.4.md)
 - [v0.1.3 historical release notes](docs/releases/v0.1.3.md)
 - [v0.1.2 historical release notes](docs/releases/v0.1.2.md)

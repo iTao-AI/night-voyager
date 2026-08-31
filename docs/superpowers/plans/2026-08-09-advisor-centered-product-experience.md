@@ -7,7 +7,7 @@
 > shell, copy catalog, styles, browser matrix, and screenshots share state and must
 > stay under one write owner.
 
-**Status:** Merged in PR #95 on the current default branch; presentation-only; not included in stable v0.1.5; not deployed.
+**Status:** Merged in PR #95 on the current default branch; presentation-only; included in v0.1.6 local synthetic portfolio release; not deployed.
 
 **Goal:** Rebuild Night Voyager's public root and three deterministic demo routes
 as one credible, advisor-centered study-abroad AI collaboration workspace, while

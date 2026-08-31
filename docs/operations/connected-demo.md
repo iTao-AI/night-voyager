@@ -2,9 +2,9 @@
 
 M5 connects the focused `/demo` route to the local synthetic FastAPI, worker, SSE,
 and PostgreSQL paths. It is the route-analysis segment of the advisor workspace and
-proves advisor review followed by client confirmation. The current development candidate
+proves advisor review followed by client confirmation. The current release boundary
 continues that same Case from its receipt and TimelinePlan into the existing plan
-execution workspace. The continuation is merged on the current default branch in PR #103; it remains local synthetic and provider-free, is not included in stable v0.1.5, and is not deployed. Bare `/demo/plan` remains an independent seeded scenario. It is not production tenancy, live institutional coverage, or admissions advice.
+execution workspace. The continuation is merged on the current default branch in PR #103; it remains local synthetic and provider-free, is included in v0.1.6, and is not deployed. Bare `/demo/plan` remains an independent seeded scenario. It is not production tenancy, live institutional coverage, or admissions advice.
 
 The current shared presentation uses the reference-driven Midnight Editorial Advisor
 Workspace: a dark product frame, warm decision surface, five-stage display rail,
@@ -163,8 +163,9 @@ revision, the controlled student preferred-country change, retained predecessor,
 successor PlanningRun, lost-ack recovery, deterministic comparison, renewed review,
 only the current family decision, and the blocked budget counterfactual. The
 dedicated asset is updated only with `UPDATE_PLANNING_REVISION_SCREENSHOT=1`;
-`UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the current development captures;
-these screenshots are review evidence for the unreleased presentation candidate.
+`UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the current release captures;
+these screenshots are review evidence for the current v0.1.6 local synthetic portfolio release;
+they do not provide functional authority.
 
 The current task-scoped Compose proof is the required containerized browser gate for
 the Compose-served PostgreSQL/API/worker state. When available, it must cover both
