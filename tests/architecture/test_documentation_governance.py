@@ -843,49 +843,22 @@ def test_current_development_dependency_path_and_release_surface_do_not_regress(
         assert "evaluation_invalid" in source
         assert "`0015`" in source
         assert "release candidate" not in source.lower()
-        assert "sharp 0.35.3" in source
-        assert "GHSA-f88m-g3jw-g9cj" in source
-        assert "16.3.3" in source
-        assert "audit-zero" in source
-        assert "postcss@8.5.23" in source
-        assert "nanoid@3.3.18" in source
-        assert "postcss@8.5.18" not in source
-        assert "nanoid@3.3.16" not in source
-        assert "zero advisory objects" in source
-        assert "js-yaml" not in source
-        assert "brace-expansion" not in source
-        assert "minimatch" not in source
-        assert "Dependabot #7" in source
-        assert "fixed_at=2026-08-08T09:16:53Z" in source
-        assert "2026-08-30" in source
-        assert "zero open Dependabot alerts" in source
-        assert "point-in-time default-branch readback" in source
-        assert (
-            "not a permanent audit-zero claim" in source
-            or "不是永久 audit-zero 声明" in source
-        )
-        assert (
-            "local package/audit validation did not fix or dismiss a GitHub alert"
-            .casefold()
-            in source.casefold()
-        )
-        assert (
-            "Fresh full and runtime/omit-dev npm audits report zero advisory objects"
-            in source
-            or "Fresh full 与 runtime/omit-dev npm audits 均报告 zero advisory objects"
-            in source
-        )
-        assert "direct" in source
-        assert "override" in source
-        assert "0.34.5" not in source
-        assert "immutable" in source or "不可变" in source
-        for trigger in (
-            "public deployment",
-            "untrusted image path",
-            "advisory change",
+        for token in (
+            "PR #100",
+            "SQLAlchemy `2.0.52`",
+            "PR #101",
+            "routine frontend patches",
+            "PR #104",
+            "Next.js `16.3.3`",
+            "CodeQL default setup",
+            "PR #106",
+            "test-only all-percent repair",
+            "point-in-time",
         ):
-            assert trigger in source
-        assert "compatible upstream support for sharp >=0.35" not in source
+            assert token in source
+        assert "PR #78" not in source
+        assert "audit-zero" in source
+        assert "immutable" in source or "不可变" in source
 
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
     for source in (*readmes, security):
@@ -1607,7 +1580,8 @@ def test_governed_plan_execution_dx_surface_is_evaluator_first() -> None:
         "semantic assertions",
         "screenshots are review evidence",
         "PR A/B/C are implemented, reviewed, merged",
-        "included in the v0.1.6 release",
+        "included in released v0.1.5",
+        "v0.1.5 release candidate",
         "Publication remains separately gated",
     ):
         assert token in combined

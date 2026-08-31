@@ -1,7 +1,7 @@
 # Governed Plan Execution and Reassessment
 
 **Status:** Implemented, reviewed, and merged through PR A/B/C; included in the
-v0.1.6 release. Publication remains separately gated.
+v0.1.5 release candidate. Publication remains separately gated.
 
 ## Summary
 

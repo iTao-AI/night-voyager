@@ -164,7 +164,8 @@ successor PlanningRun, lost-ack recovery, deterministic comparison, renewed revi
 only the current family decision, and the blocked budget counterfactual. The
 dedicated asset is updated only with `UPDATE_PLANNING_REVISION_SCREENSHOT=1`;
 `UPDATE_PORTFOLIO_SCREENSHOTS` remains scoped to the current release captures;
-these screenshots are review evidence for the unreleased presentation candidate.
+these screenshots are review evidence for the current v0.1.6 local synthetic portfolio release;
+they do not provide functional authority.
 
 The current task-scoped Compose proof is the required containerized browser gate for
 the Compose-served PostgreSQL/API/worker state. When available, it must cover both

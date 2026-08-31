@@ -66,12 +66,25 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 expected_commit="$(git -C "$repo_root" rev-parse HEAD)"
 tmp_dir="$(mktemp -d)"
+cleanup_temp() {
+  gate_status=$?
+  trap - EXIT
+  cleanup_status=0
+  rm -rf -- "$tmp_dir" || cleanup_status=$?
+  if (( gate_status != 0 )); then
+    exit "$gate_status"
+  fi
+  exit "$cleanup_status"
+}
+trap cleanup_temp EXIT
 archive="$tmp_dir/night-voyager-v0.1.6-prepublication.tar.gz"
 git -C "$repo_root" archive \
   --format=tar.gz \
   --prefix=night-voyager-0.1.6/ \
   --output "$archive" \
   "$expected_commit"
+python "$repo_root/scripts/validate_release_archive.py" "$archive" \
+  --expected-root night-voyager-0.1.6
 tar -xzf "$archive" -C "$tmp_dir"
 mkdir "$tmp_dir/extracted"
 mv "$tmp_dir/night-voyager-0.1.6" "$tmp_dir/extracted/"
@@ -108,19 +121,35 @@ Only after independent maintainer review, hosted checks, merge, and the prepubli
 
 ```bash
 set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
+tmp_dir="$(mktemp -d)"
+cleanup_temp() {
+  gate_status=$?
+  trap - EXIT
+  cleanup_status=0
+  rm -rf -- "$tmp_dir" || cleanup_status=$?
+  if (( gate_status != 0 )); then
+    exit "$gate_status"
+  fi
+  exit "$cleanup_status"
+}
+trap cleanup_temp EXIT
 git -C "$repo_root" fetch origin --tags --prune
+expected_commit="$(git -C "$repo_root" rev-parse origin/main)"
 git -C "$repo_root" describe --tags --exact-match "$expected_commit"
 git -C "$repo_root" cat-file -t v0.1.6
 git -C "$repo_root" rev-parse v0.1.6^{tag}
 git -C "$repo_root" rev-parse v0.1.6^{commit}
 test "$(git -C "$repo_root" rev-parse origin/main)" = "$expected_commit"
 test "$(git -C "$repo_root" rev-parse v0.1.6^{commit})" = "$expected_commit"
+tag_message="$(git -C "$repo_root" for-each-ref --format='%(contents)' refs/tags/v0.1.6)"
+test "$tag_message" = "Night Voyager v0.1.6"
 
 release_view_json="$tmp_dir/release-view.json"
 release_api_json="$tmp_dir/release-api.json"
 gh release view v0.1.6 \
   --repo iTao-AI/night-voyager \
-  --json tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body \
+  --json name,tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body \
   > "$release_view_json"
 gh api repos/iTao-AI/night-voyager/releases/tags/v0.1.6 \
   > "$release_api_json"
@@ -135,6 +164,7 @@ release_api = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
 expected_body = (repo_root / "docs/releases/v0.1.6.md").read_bytes()
 expected_url = "https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6"
 
+assert release_view["name"] == release_api["name"] == "Night Voyager v0.1.6"
 assert release_view["tagName"] == release_api["tag_name"] == "v0.1.6"
 assert release_view["targetCommitish"] == release_api["target_commitish"] == "main"
 assert release_view["isDraft"] is False
@@ -159,34 +189,48 @@ After the authorized GitHub Release exists, verify the public source archive fro
 
 ```bash
 set -euo pipefail
+repo_root="$(git rev-parse --show-toplevel)"
 tmp_dir="$(mktemp -d)"
 archive="$tmp_dir/night-voyager-v0.1.6.tar.gz"
+archive_root="$tmp_dir/night-voyager-0.1.6"
+cleanup_temp() {
+  gate_status=$?
+  trap - EXIT
+  teardown_status=0
+  if [[ -d "$archive_root" ]]; then
+    cd "$archive_root" || teardown_status=$?
+    if (( teardown_status == 0 )); then
+      docker compose down --volumes --remove-orphans --rmi local \
+        || teardown_status=$?
+      compose_residue="$(docker compose ps --all --quiet)" || teardown_status=$?
+      if [[ -n "$compose_residue" ]]; then
+        printf 'Gate E teardown left containers in %s: %s\n' \
+          "$COMPOSE_PROJECT_NAME" "$compose_residue" >&2
+        teardown_status=1
+      fi
+    fi
+  fi
+  cleanup_status=0
+  rm -rf -- "$tmp_dir" || cleanup_status=$?
+  if (( gate_status != 0 )); then
+    exit "$gate_status"
+  fi
+  if (( teardown_status != 0 )); then
+    exit "$teardown_status"
+  fi
+  exit "$cleanup_status"
+}
+trap cleanup_temp EXIT
 curl --fail --location --output "$archive" \
   https://github.com/iTao-AI/night-voyager/archive/refs/tags/v0.1.6.tar.gz
 wc -c "$archive"
 shasum -a 256 "$archive"
+python "$repo_root/scripts/validate_release_archive.py" "$archive" \
+  --expected-root night-voyager-0.1.6
 tar -xzf "$archive" -C "$tmp_dir"
 test ! -e "$tmp_dir/night-voyager-0.1.6/.git"
 cd "$tmp_dir/night-voyager-0.1.6"
 export COMPOSE_PROJECT_NAME="night-voyager-v0-1-6-gate-e-$$"
-cleanup_compose() {
-  gate_status=$?
-  trap - EXIT
-  teardown_status=0
-  docker compose down --volumes --remove-orphans --rmi local \
-    || teardown_status=$?
-  compose_residue="$(docker compose ps --all --quiet)" || teardown_status=$?
-  if [[ -n "$compose_residue" ]]; then
-    printf 'Gate E teardown left containers in %s: %s\n' \
-      "$COMPOSE_PROJECT_NAME" "$compose_residue" >&2
-    teardown_status=1
-  fi
-  if (( gate_status != 0 )); then
-    exit "$gate_status"
-  fi
-  exit "$teardown_status"
-}
-trap cleanup_compose EXIT
 make doctor
 make proof
 make compose-proof

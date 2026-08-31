@@ -42,6 +42,7 @@ def copy_release_surface(destination: Path) -> None:
         "docs/how-to/verify-v0.1.5-release.md",
         "docs/releases/v0.1.6.md",
         "docs/how-to/verify-v0.1.6-release.md",
+        "scripts/validate_release_archive.py",
     ):
         source = ROOT / relative
         target = destination / relative

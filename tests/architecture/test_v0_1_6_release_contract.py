@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import io
 import json
 import re
+import subprocess
+import sys
+import tarfile
 import tomllib
 from pathlib import Path
+
+import pytest
 
 from night_voyager.api import create_app
 
@@ -77,6 +83,39 @@ def _gate_blocks(how_to: str, gate: str) -> list[str]:
     return re.findall(r"```bash\n(.*?)```", section, flags=re.DOTALL)
 
 
+def _write_archive(path: Path, members: list[tuple[str, str]]) -> None:
+    with tarfile.open(path, "w:gz") as archive:
+        for name, member_kind in members:
+            member = tarfile.TarInfo(name)
+            if member_kind == "directory":
+                member.type = tarfile.DIRTYPE
+                archive.addfile(member)
+            elif member_kind == "symlink":
+                member.type = tarfile.SYMTYPE
+                member.linkname = "/tmp/outside"
+                archive.addfile(member)
+            else:
+                payload = b"synthetic release fixture\n"
+                member.size = len(payload)
+                archive.addfile(member, io.BytesIO(payload))
+
+
+def _run_archive_validator(archive: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/validate_release_archive.py"),
+            str(archive),
+            "--expected-root",
+            "night-voyager-0.1.6",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
 def test_v0_1_6_identity_changes_only_night_voyager_root_versions() -> None:
     pyproject = tomllib.loads(_read("pyproject.toml"))
     uv_lock = tomllib.loads(_read("uv.lock"))
@@ -112,6 +151,7 @@ def test_v0_1_6_identity_changes_only_night_voyager_root_versions() -> None:
 def test_v0_1_6_release_records_and_historical_documents_are_bound() -> None:
     for relative in RELEASE_DOCUMENTS:
         assert (ROOT / relative).is_file(), relative
+    assert (ROOT / "scripts/validate_release_archive.py").is_file()
 
     for relative, expected in HISTORICAL_RELEASE_DIGESTS.items():
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected, relative
@@ -160,9 +200,16 @@ def test_v0_1_6_release_notes_use_approved_capabilities_and_non_claims() -> None
         "no state transition",
         "no automatic retry",
         "no automatic successor",
-        "PR #78",
+        "PR #100",
+        "SQLAlchemy `2.0.52`",
+        "PR #101",
+        "routine frontend patches",
+        "PR #104",
         "Next.js `16.3.3`",
-        "CodeQL",
+        "CodeQL default setup",
+        "PR #106",
+        "test-only all-percent repair",
+        "point-in-time",
         "not audit-zero",
         "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
         "no third DRA provider attempt",
@@ -177,7 +224,33 @@ def test_v0_1_6_release_notes_use_approved_capabilities_and_non_claims() -> None
         "release-prep does not change",
     ):
         assert token in release
+    assert "PR #78" not in release
     assert "all vulnerabilities" not in release.lower()
+
+
+def test_v0_1_6_post_v0_1_5_maintenance_attribution_is_bound() -> None:
+    required = (
+        "PR #100",
+        "SQLAlchemy `2.0.52`",
+        "PR #101",
+        "routine frontend patches",
+        "PR #104",
+        "Next.js `16.3.3`",
+        "CodeQL default setup",
+        "PR #106",
+        "test-only all-percent repair",
+        "point-in-time",
+    )
+    for relative in (
+        "docs/releases/v0.1.6.md",
+        "README.md",
+        "README_CN.md",
+        "scripts/verify_release.py",
+    ):
+        source = _read(relative)
+        for token in required:
+            assert token in source, (relative, token)
+        assert "PR #78" not in source, relative
 
 
 def test_v0_1_6_verification_guide_binds_gate_identity_archive_and_teardown() -> None:
@@ -224,6 +297,13 @@ def test_v0_1_6_verification_guide_binds_gate_identity_archive_and_teardown() ->
         "no custom assets",
         "release_view[\"body\"].encode(\"utf-8\") == expected_body",
         "release_api[\"body\"].encode(\"utf-8\") == expected_body",
+        "release_view[\"name\"] == release_api[\"name\"] == \"Night Voyager v0.1.6\"",
+        "%(contents)",
+        'test "$tag_message" = "Night Voyager v0.1.6"',
+        'python "$repo_root/scripts/validate_release_archive.py" "$archive"',
+        "--expected-root night-voyager-0.1.6",
+        "trap cleanup_temp EXIT",
+        'rm -rf -- "$tmp_dir"',
         "Do not force-move `v0.1.6`",
     ):
         assert token in how_to
@@ -233,10 +313,32 @@ def test_v0_1_6_verification_guide_binds_gate_identity_archive_and_teardown() ->
         assert blocks, gate
         for block in blocks:
             assert block.splitlines()[0] == "set -euo pipefail"
+            result = subprocess.run(
+                ["bash", "-n"],
+                input=block,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            assert result.returncode == 0, result.stderr
         for block in (blocks[0],):
             assert "docker compose down --volumes --remove-orphans --rmi local" in block
             assert "docker compose ps --all --quiet" in block
             assert "make down" not in block
+    for gate in "DE":
+        blocks = _gate_blocks(how_to, gate)
+        assert blocks, gate
+        for block in blocks:
+            assert 'repo_root="$(git rev-parse --show-toplevel)"' in block
+            assert 'tmp_dir="$(mktemp -d)"' in block
+            assert "trap cleanup_temp EXIT" in block
+            assert 'rm -rf -- "$tmp_dir"' in block
+    gate_e = how_to.split("## Gate E", 1)[1].split("\n## ", 1)[0]
+    validator_position = gate_e.index(
+        'python "$repo_root/scripts/validate_release_archive.py" "$archive"'
+    )
+    extraction_position = gate_e.index('tar -xzf "$archive" -C "$tmp_dir"')
+    assert validator_position < extraction_position
     for project in (
         "night-voyager-v0-1-6-gate-c-$$",
         "night-voyager-v0-1-6-gate-d-$$",
@@ -288,6 +390,88 @@ def test_current_guidance_reconciles_to_v0_1_6_without_unlocking_or_deploying() 
     assert "production deployment" in readme
     assert "v0.1.6 release" in readme
     assert "not included in stable v0.1.5" not in connected
+    assert "current v0.1.6 local synthetic portfolio release" in connected
+    assert "unreleased presentation candidate" not in connected
+    design = _read("DESIGN.md")
+    assert "current v0.1.6 release offers" in design
+    assert "current local candidate" not in design
+
+
+@pytest.mark.parametrize(
+    ("members", "expected_error"),
+    (
+        (
+            [
+                ("night-voyager-0.1.6/", "directory"),
+                ("night-voyager-0.1.6/README.md", "file"),
+                ("night-voyager-0.1.6/link", "symlink"),
+            ],
+            "unsafe",
+        ),
+        (
+            [
+                ("night-voyager-0.1.6/", "directory"),
+                ("../outside", "file"),
+            ],
+            "unsafe",
+        ),
+        (
+            [
+                ("night-voyager-0.1.6/", "directory"),
+                ("/outside", "file"),
+            ],
+            "unsafe",
+        ),
+        (
+            [
+                ("night-voyager-0.1.6/", "directory"),
+                ("night-voyager-0.1.6/.git/config", "file"),
+            ],
+            "unsafe",
+        ),
+        (
+            [
+                ("night-voyager-0.1.6/", "directory"),
+                ("night-voyager-0.1.6/README.md", "file"),
+                ("other-root/", "directory"),
+            ],
+            "exactly one",
+        ),
+        (
+            [("night-voyager-0.1.5/", "directory"), ("night-voyager-0.1.5/README.md", "file")],
+            "expected root",
+        ),
+        ([], "empty"),
+    ),
+)
+def test_v0_1_6_archive_validator_rejects_unsafe_or_wrong_archives(
+    tmp_path: Path,
+    members: list[tuple[str, str]],
+    expected_error: str,
+) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _write_archive(archive, members)
+
+    result = _run_archive_validator(archive)
+
+    assert result.returncode != 0
+    assert expected_error in result.stderr
+
+
+def test_v0_1_6_archive_validator_accepts_one_safe_release_root(tmp_path: Path) -> None:
+    archive = tmp_path / "release.tar.gz"
+    _write_archive(
+        archive,
+        [
+            ("night-voyager-0.1.6/", "directory"),
+            ("night-voyager-0.1.6/README.md", "file"),
+            ("night-voyager-0.1.6/docs/", "directory"),
+        ],
+    )
+
+    result = _run_archive_validator(archive)
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_migration_head_and_provider_boundaries_remain_unchanged() -> None:

@@ -284,6 +284,7 @@ RELEASE_DOCUMENTS = (
     f"docs/releases/v{VERSION}.md",
     f"docs/how-to/verify-v{VERSION}-release.md",
 )
+RELEASE_ARCHIVE_VALIDATOR = "scripts/validate_release_archive.py"
 PUBLISHED_RELEASE_DOCUMENTS = {
     "docs/releases/v0.1.0.md": "a3251cdb572b4d982f989917f7e44d111cf887cf7fc8d75629cdd69c393d3a93",
     "docs/how-to/verify-v0.1.0-release.md": (
@@ -352,9 +353,16 @@ RELEASE_NOTE_TOKENS = (
     "no state transition",
     "no automatic retry",
     "no automatic successor",
-    "PR #78",
+    "PR #100",
+    "SQLAlchemy `2.0.52`",
+    "PR #101",
+    "routine frontend patches",
+    "PR #104",
     "Next.js `16.3.3`",
-    "CodeQL",
+    "CodeQL default setup",
+    "PR #106",
+    "test-only all-percent repair",
+    "point-in-time",
     "not audit-zero",
     "INCOMPLETE_PENDING_LIVE_ACCEPTANCE",
     "no third provider attempt",
@@ -421,7 +429,7 @@ RELEASE_HOW_TO_TOKENS = (
     "GitHub Release",
     f"gh release view {RELEASE_TAG}",
     "--repo iTao-AI/night-voyager",
-    "--json tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body",
+    "--json name,tagName,targetCommitish,isDraft,isPrerelease,assets,url,publishedAt,body",
     f"gh api repos/iTao-AI/night-voyager/releases/tags/{RELEASE_TAG}",
     f'release_view["tagName"] == release_api["tag_name"] == "{RELEASE_TAG}"',
     'release_view["targetCommitish"] == release_api["target_commitish"] == "main"',
@@ -435,6 +443,13 @@ RELEASE_HOW_TO_TOKENS = (
     f'repo_root / "docs/releases/{RELEASE_TAG}.md"',
     'release_view["body"].encode("utf-8") == expected_body',
     'release_api["body"].encode("utf-8") == expected_body',
+    'release_view["name"] == release_api["name"] == "Night Voyager v0.1.6"',
+    "%(contents)",
+    'test "$tag_message" = "Night Voyager v0.1.6"',
+    'python "$repo_root/scripts/validate_release_archive.py" "$archive"',
+    "--expected-root night-voyager-0.1.6",
+    "trap cleanup_temp EXIT",
+    'rm -rf -- "$tmp_dir"',
     "GitHub-generated source archives remain the only release artifacts",
     "one official GitHub-generated source archive",
     "no custom assets",
@@ -1184,6 +1199,8 @@ def verify_release_surface() -> None:
     for relative in RELEASE_DOCUMENTS:
         if not (ROOT / relative).is_file():
             raise SystemExit(f"missing {RELEASE_TAG} release document: {relative}")
+    if not (ROOT / RELEASE_ARCHIVE_VALIDATOR).is_file():
+        raise SystemExit(f"missing {RELEASE_TAG} archive validator: {RELEASE_ARCHIVE_VALIDATOR}")
 
     for relative, expected_digest in PUBLISHED_RELEASE_DOCUMENTS.items():
         actual_digest = hashlib.sha256((ROOT / relative).read_bytes()).hexdigest()
