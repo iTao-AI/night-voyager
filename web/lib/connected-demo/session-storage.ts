@@ -1,5 +1,6 @@
 import type { IdempotencyRecord } from "./idempotency";
 import type { DemoPhaseV2 } from "./contracts";
+import { isBudgetIntent, type CollaborationBudgetIntent } from "../collaboration-demo/budget";
 
 export type AdvisorFamilyMutationKind =
   | "request-revision" | "fact-proposal-message" | "fact-proposal-candidate"
@@ -45,7 +46,12 @@ export interface CollaborationJourneyEnvelopeV2 {
   mutations: Partial<Record<CollaborationMutationKind, IdempotencyRecord>>;
 }
 
-export type DemoJourneyEnvelope = AdvisorFamilyJourneyEnvelopeV3 | CollaborationJourneyEnvelopeV2;
+export interface CollaborationJourneyEnvelopeV3 extends Omit<CollaborationJourneyEnvelopeV2, "schema_version"> {
+  schema_version: 3;
+  budgetIntent: Readonly<CollaborationBudgetIntent> | null;
+}
+
+export type DemoJourneyEnvelope = AdvisorFamilyJourneyEnvelopeV3 | CollaborationJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV3;
 export type RecoveryMetadata = AdvisorFamilyJourneyEnvelopeV3;
 export type MutationOperation = AdvisorFamilyMutationKind;
 export interface CollaborationAdvisorFamilyAuthority {
@@ -98,12 +104,50 @@ function collaboration(value: Record<string, unknown>): value is Record<string, 
   return value.role === "advisor" && value.messageId !== null && value.candidateId !== null;
 }
 
+function collaborationV3(value: Record<string, unknown>): value is Record<string, unknown> & CollaborationJourneyEnvelopeV3 {
+  if (
+    !exact(value, ["schema_version", "journey", "role", "csrf", "caseId", "threadId", "messageId", "candidateId", "phase", "mutations", "budgetIntent"])
+    || value.schema_version !== 3
+    || value.journey !== "collaboration"
+    || !["parent", "advisor"].includes(String(value.role))
+    || typeof value.csrf !== "string"
+    || !value.csrf
+    || !uuid(value.caseId)
+    || !nullableUuid(value.threadId)
+    || !nullableUuid(value.messageId)
+    || !nullableUuid(value.candidateId)
+    || !COLLABORATION_PHASES.includes(value.phase as CollaborationPersistedPhase)
+    || !validMutations(value.mutations, COLLABORATION_OPERATIONS)
+    || !(value.budgetIntent === null || isBudgetIntent(value.budgetIntent))
+  ) return false;
+
+  const phase = value.phase as CollaborationPersistedPhase;
+  if (phase === "bootstrapping_parent") {
+    return value.role === "parent"
+      && value.threadId === null
+      && value.messageId === null
+      && value.candidateId === null
+      && value.budgetIntent === null;
+  }
+  if (phase === "switching_to_advisor") {
+    return value.threadId !== null && value.messageId !== null && value.candidateId === null && value.budgetIntent !== null;
+  }
+  if (value.threadId === null) return false;
+  if (["thread_ready", "message_submitting", "proposal_pending"].includes(phase)) {
+    if (value.role !== "parent" || value.candidateId !== null) return false;
+    if (phase === "proposal_pending" && value.messageId === null) return false;
+    const submitted = value.messageId !== null || Object.keys(value.mutations as Record<string, unknown>).length > 0;
+    return (!submitted && value.budgetIntent === null) || (submitted && value.budgetIntent !== null);
+  }
+  return value.role === "advisor" && value.messageId !== null && value.candidateId !== null && value.budgetIntent !== null;
+}
+
 export function loadDemoJourneyEnvelope(): DemoJourneyEnvelope | null {
   const raw = sessionStorage.getItem(KEY);
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as unknown;
-    if (!object(value) || (!advisorFamily(value) && !collaboration(value))) {
+    if (!object(value) || (!advisorFamily(value) && !collaborationV3(value) && !collaboration(value))) {
       sessionStorage.removeItem(KEY);
       return null;
     }
@@ -115,19 +159,19 @@ export function loadDemoJourneyEnvelope(): DemoJourneyEnvelope | null {
 }
 
 export function saveRecoveryMetadata(value: AdvisorFamilyJourneyEnvelopeV3): void { sessionStorage.setItem(KEY, JSON.stringify(value)); }
-export function saveCollaborationJourney(value: CollaborationJourneyEnvelopeV2): void { sessionStorage.setItem(KEY, JSON.stringify(value)); }
+export function saveCollaborationJourney(value: CollaborationJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV3): void { sessionStorage.setItem(KEY, JSON.stringify(value)); }
 export function clearDemoJourneyEnvelope(): void { sessionStorage.removeItem(KEY); }
 export const clearRecoveryMetadata = clearDemoJourneyEnvelope;
 export function loadRecoveryMetadata(): AdvisorFamilyJourneyEnvelopeV3 | null { const value = loadDemoJourneyEnvelope(); return value?.journey === "advisor-family" ? value : null; }
 
 export function continueCollaborationAsAdvisorFamily(
-  current: CollaborationJourneyEnvelopeV2,
+  current: CollaborationJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV3,
   authority: CollaborationAdvisorFamilyAuthority,
 ): AdvisorFamilyJourneyEnvelopeV3 {
   const authorityKeys = ["phase", "currentRevision", "currentTaskId", "predecessorRunId", "currentRunId"];
   if (
     !object(current)
-    || !collaboration(current)
+    || !(collaboration(current) || collaborationV3(current))
     || current.role !== "advisor"
     || current.phase !== "replan_required"
     || Object.keys(current.mutations).length !== 0
@@ -179,7 +223,9 @@ export function withMutation(metadata: AdvisorFamilyJourneyEnvelopeV3, operation
   return { ...metadata, mutations };
 }
 
-export function withCollaborationMutation(metadata: CollaborationJourneyEnvelopeV2, operation: CollaborationMutationKind, record: IdempotencyRecord | undefined): CollaborationJourneyEnvelopeV2 {
+export function withCollaborationMutation(metadata: CollaborationJourneyEnvelopeV2, operation: CollaborationMutationKind, record: IdempotencyRecord | undefined): CollaborationJourneyEnvelopeV2;
+export function withCollaborationMutation(metadata: CollaborationJourneyEnvelopeV3, operation: CollaborationMutationKind, record: IdempotencyRecord | undefined): CollaborationJourneyEnvelopeV3;
+export function withCollaborationMutation(metadata: CollaborationJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV3, operation: CollaborationMutationKind, record: IdempotencyRecord | undefined): CollaborationJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV3 {
   const mutations = { ...metadata.mutations };
   if (record) mutations[operation] = record; else delete mutations[operation];
   return { ...metadata, mutations };

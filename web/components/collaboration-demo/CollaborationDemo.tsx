@@ -11,6 +11,7 @@ import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
 import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
 import { CollaborationRecoveryNotice } from "./CollaborationRecoveryNotice";
 import { ConfirmedFactSummary } from "./ConfirmedFactSummary";
+import { BudgetIntakeForm } from "./BudgetIntakeForm";
 import { MemoryCandidateCard } from "./MemoryCandidateCard";
 import { SharedThread } from "./SharedThread";
 
@@ -72,11 +73,21 @@ export function CollaborationDemo() {
   ) : state.value === "bootstrapping_parent" ? (
     <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void demo.connectParent()}>{copy("collaborationStartParent")}</button>
   ) : state.value === "thread_ready" ? (
-    <section className="collaboration-action" aria-labelledby="parent-action-title">
-      <h3 id="parent-action-title">{copy(context.messages.length ? "parentProposeTitle" : "parentMessageTitle")}</h3>
-      <p>{copy(context.messages.length ? "parentProposalPending" : "parentMessageBoundary")}</p>
-      <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void (context.messages.length ? demo.proposeBudget() : demo.appendMessage())}>{copy(context.messages.length ? "parentProposeAction" : "parentMessageAction")}</button>
-    </section>
+    demo.budgetIntent ? (
+      <section className="collaboration-action" aria-labelledby="parent-action-title">
+        <h3 id="parent-action-title">{copy("parentProposeTitle")}</h3>
+        <p>{copy("parentProposalPending")}</p>
+        <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void demo.proposeBudget()}>{copy("parentProposeAction")}</button>
+      </section>
+    ) : (
+      <BudgetIntakeForm
+        draft={demo.budgetDraft}
+        expectedCaseRevision={context.caseRevision}
+        validation={demo.budgetValidation}
+        onDraftChange={demo.setBudgetDraft}
+        onSubmit={() => void demo.appendMessage()}
+      />
+    )
   ) : state.value === "message_submitting" ? (
     <section className="collaboration-action" aria-live="polite">
       <h3>{copy("recordingMessageTitle")}</h3>

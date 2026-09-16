@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { CollaborationDemoApiError } from "../../lib/collaboration-demo/api";
+import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
 import { ConnectedDemoApiError } from "../../lib/connected-demo/api";
 import { idempotencyFor } from "../../lib/connected-demo/idempotency";
 import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
@@ -120,6 +121,54 @@ it("switches locale without bootstrap, role, mutation, retry, handoff read, enve
   expect(sessionStorage.getItem("night-voyager:m5")).toBe(envelopeBefore);
   expect(JSON.stringify(result.current.demo.state)).toBe(stateBefore);
   expect(navigate).not.toHaveBeenCalled();
+});
+
+it("upgrades a legacy thread-ready envelope only from one exact default budget message", async () => {
+  save({ role: "parent", messageId: null, phase: "thread_ready" });
+  const { result } = renderHook(() => useCollaborationDemo());
+
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+  expect(loadDemoJourneyEnvelope()).toMatchObject({
+    schema_version: 3,
+    phase: "thread_ready",
+    messageId: MESSAGE,
+    budgetIntent: { value: BUDGET, expected_case_revision: 1 },
+  });
+});
+
+it("reconciles an existing default message during a fresh parent bootstrap", async () => {
+  const { result } = renderHook(() => useCollaborationDemo());
+
+  await act(async () => result.current.connectParent());
+  expect(result.current.state.value).toBe("thread_ready");
+  expect(loadDemoJourneyEnvelope()).toMatchObject({
+    schema_version: 3,
+    phase: "thread_ready",
+    messageId: MESSAGE,
+    budgetIntent: defaultBudgetIntent(1),
+  });
+});
+
+it("fails closed when the stored budget intent revision differs from the advisor candidate", async () => {
+  sessionStorage.setItem("night-voyager:m5", JSON.stringify({
+    schema_version: 3,
+    journey: "collaboration",
+    role: "advisor",
+    csrf: "stored-csrf",
+    caseId: CASE,
+    threadId: THREAD,
+    messageId: MESSAGE,
+    candidateId: CANDIDATE,
+    phase: "advisor_reviewing",
+    mutations: {},
+    budgetIntent: defaultBudgetIntent(1),
+  }));
+  mocks.collaboration.candidates.mockResolvedValue([{ ...advisor, case_revision: 2 }]);
+  mocks.identity.advisorLedger.mockResolvedValue(ledger(2));
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+  expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
 });
 
 it("requires candidate, confirmed fact, and advisor ledger before recovering confirmation lost acknowledgement", async () => {

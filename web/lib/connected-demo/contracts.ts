@@ -219,7 +219,30 @@ function phaseValid(value: Record<string, unknown>): boolean {
     case "revision_review_required": return value.case_revision !== 1 && hasTask && (value.task as TaskProjection).status === "needs_advisor_review" && hasRun && (value.planning_run as PlanningRunProjection).state === "review_required" && value.comparison !== null && value.review_inputs !== null && value.current_brief_id === null && value.recovery === null;
     case "revision_blocked": return value.case_revision !== 1 && hasTask && (value.task as TaskProjection).status === "needs_evidence" && hasRun && (value.planning_run as PlanningRunProjection).state === "blocked" && value.comparison !== null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
     case "family_review": case "plan_ready": return value.canonical_task_inputs === null && !hasRun && !hasRoutes && !hasEvidence && value.comparison === null && value.current_brief_id !== null && value.review_inputs === null && value.recovery === null;
-    case "terminal_task_failure": return hasTask && ["needs_evidence", "timed_out", "failed", "cancelled", "outdated"].includes((value.task as TaskProjection).status) && !hasRun && !hasRoutes && !hasEvidence && value.comparison === null && value.review_inputs === null && value.current_brief_id === null && value.recovery !== null;
+    case "terminal_task_failure": {
+      const ordinaryFailure = hasTask
+        && ["needs_evidence", "timed_out", "failed", "cancelled", "outdated"].includes((value.task as TaskProjection).status)
+        && !hasRun
+        && !hasRoutes
+        && !hasEvidence
+        && value.comparison === null
+        && value.review_inputs === null
+        && value.current_brief_id === null
+        && value.recovery !== null;
+      const initialBlocked = hasTask
+        && (value.task as TaskProjection).status === "needs_evidence"
+        && (value.task as TaskProjection).planning_run_id !== null
+        && hasRun
+        && (value.planning_run as PlanningRunProjection).state === "blocked"
+        && (value.task as TaskProjection).planning_run_id === (value.planning_run as PlanningRunProjection).planning_run_id
+        && hasRoutes
+        && hasEvidence
+        && value.comparison === null
+        && value.review_inputs === null
+        && value.current_brief_id === null
+        && value.recovery === null;
+      return ordinaryFailure || initialBlocked;
+    }
     default: return false;
   }
 }

@@ -75,7 +75,9 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   expect(parentInspector.status()).toBe(404);
 
   await createActiveTaskBlockedCandidate(page);
-  await page.getByRole("button", { name: /添加已确认预算消息|Add confirmed budget message/ }).click();
+  await expect(page.locator("[data-budget-input='preferred']")).toHaveValue("300000");
+  await expect(page.locator("[data-budget-input='hard-ceiling']")).toHaveValue("400000");
+  await page.getByRole("button", { name: /提交预算说明|Submit budget details/ }).click();
   await expect(page.getByText("Our confirmed program budget is 300,000 to 400,000 CNY.")).toBeVisible();
   await page.getByRole("button", { name: /提交预算供顾问审核|Submit the budget for advisor review/ }).click();
   await expect(page.getByText(/等待顾问确认|Awaiting advisor confirmation/)).toBeVisible();

@@ -102,9 +102,16 @@ make down
 当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md) 从 `/demo/collaboration` 进入 `/demo`，再进入主操作 `/demo/plan?case_id=<case_id>`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md) 访问裸 `/demo/plan` 或 `?scenario=blocked`。[v0.1.6 release/source-archive verification guide](docs/how-to/verify-v0.1.6-release.md)定义 current release gates。
 
 如需验证当前 same-Case release walkthrough，请从
-`/demo/collaboration` 开始，确认 synthetic family fact，选择
+`/demo/collaboration` 开始，先输入 preferred 与 hard-ceiling total program budget：默认示例为
+`300,000` / `400,000` CNY，`紧预算`示例为 `100,000` / `120,000`。输入必须是正的整元金额，
+本地校验通过前不会发送 mutation；提交后的 intent 会在 proposal、advisor review 与 reload recovery
+中保持 immutable。然后确认 synthetic family fact，选择
 `继续进入规划`（English 为 `Continue to planning`），再在 `/demo` 执行显式 task action。Handoff
-本身只做 read-only validation，creates no task。
+本身只做 read-only validation，creates no task。预算过紧时会保留 server-owned routes 与 Evidence，
+但不会进入 approval 或 family decision。
+
+Live intake 是 server-backed `/demo/collaboration` route；[collaboration walkthrough](docs/operations/collaboration-walkthrough.md)
+中的预算截图只是 static review evidence，不提供 route eligibility 或 authority。
 
 当前 focused planning-revision proof 使用
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`。Screenshot 维护显式隔离：

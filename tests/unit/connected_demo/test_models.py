@@ -370,3 +370,27 @@ def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs()
     }
     with pytest.raises(ValidationError, match="revision-blocked"):
         AdvisorLedgerV2.model_validate(with_review_inputs)
+
+
+def test_initial_blocked_terminal_ledger_may_carry_the_persisted_result() -> None:
+    payload = base_ledger("terminal_task_failure")
+    payload.update(
+        {
+            "schema_version": 2,
+            "case_state": "planning",
+            "task": {**task("needs_evidence"), "planning_run_id": RUN_ID},
+            "planning_run": {**planning_run(), "state": "blocked"},
+            "comparison": None,
+            "routes": (route(),),
+            "evidence": (evidence(),),
+        }
+    )
+    projection = AdvisorLedgerV2.model_validate(payload)
+    assert projection.phase is DemoPhaseV2.TERMINAL_TASK_FAILURE
+    assert projection.planning_run is not None
+    assert projection.planning_run.state == "blocked"
+
+    mismatched = deepcopy(payload)
+    mismatched["task"]["planning_run_id"] = "70000000-0000-0000-0000-000000000099"
+    with pytest.raises(ValidationError, match="terminal-task-failure"):
+        AdvisorLedgerV2.model_validate(mismatched)

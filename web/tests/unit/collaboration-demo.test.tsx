@@ -9,6 +9,7 @@ import { MemoryCandidateCard } from "../../components/collaboration-demo/MemoryC
 import { SharedThread } from "../../components/collaboration-demo/SharedThread";
 import type { CollaborationErrorCategory } from "../../lib/collaboration-demo/reducer";
 import type { MemoryCandidateProjection } from "../../lib/collaboration-demo/contracts";
+import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
 import { PresentationProvider } from "../../lib/presentation/context";
 
 const CASE = "41000000-0000-0000-0000-000000000001";
@@ -33,7 +34,24 @@ vi.mock("../../lib/collaboration-demo/use-collaboration-demo", async () => {
 });
 
 function setState(state: unknown, journeyConflict: "advisor-family" | null = null) {
-  hook.current = { state, inspector: null, journeyConflict, connectParent: vi.fn(), appendMessage: vi.fn(), proposeBudget: vi.fn(), switchToAdvisor: vi.fn(), confirmCandidate: vi.fn(), continueToPlanning: vi.fn(), retry: vi.fn(), endConflictingJourney: vi.fn() };
+  const context = (state as { context?: { messages?: readonly unknown[] } }).context;
+  hook.current = {
+    state,
+    inspector: null,
+    journeyConflict,
+    budgetDraft: { preferredYuan: "300000", hardCeilingYuan: "400000" },
+    setBudgetDraft: vi.fn(),
+    budgetIntent: context?.messages?.length ? defaultBudgetIntent(1) : null,
+    budgetValidation: null,
+    connectParent: vi.fn(),
+    appendMessage: vi.fn(),
+    proposeBudget: vi.fn(),
+    switchToAdvisor: vi.fn(),
+    confirmCandidate: vi.fn(),
+    continueToPlanning: vi.fn(),
+    retry: vi.fn(),
+    endConflictingJourney: vi.fn(),
+  };
 }
 
 function renderPresentation(ui: ReactElement) {

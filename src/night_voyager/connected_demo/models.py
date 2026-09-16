@@ -307,6 +307,41 @@ class AdvisorLedgerV2(FrozenModel):
             or self.recovery is not None
         ):
             raise ValueError("revision-blocked projection is invalid")
+        if self.phase is DemoPhaseV2.TERMINAL_TASK_FAILURE:
+            terminal = {
+                TaskViewStatus.NEEDS_EVIDENCE,
+                TaskViewStatus.TIMED_OUT,
+                TaskViewStatus.FAILED,
+                TaskViewStatus.CANCELLED,
+                TaskViewStatus.OUTDATED,
+            }
+            ordinary_failure = (
+                self.task is not None
+                and self.task.status in terminal
+                and self.planning_run is None
+                and not self.routes
+                and not self.evidence
+                and self.comparison is None
+                and self.review_inputs is None
+                and self.current_brief_id is None
+                and self.recovery is not None
+            )
+            initial_blocked = (
+                self.task is not None
+                and self.task.status is TaskViewStatus.NEEDS_EVIDENCE
+                and self.task.planning_run_id is not None
+                and self.planning_run is not None
+                and self.planning_run.state == "blocked"
+                and self.task.planning_run_id == self.planning_run.planning_run_id
+                and bool(self.routes)
+                and bool(self.evidence)
+                and self.comparison is None
+                and self.review_inputs is None
+                and self.current_brief_id is None
+                and self.recovery is None
+            )
+            if not ordinary_failure and not initial_blocked:
+                raise ValueError("terminal-task-failure projection is invalid")
         return self
 
 

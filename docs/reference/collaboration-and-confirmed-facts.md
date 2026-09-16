@@ -232,12 +232,16 @@ re-reads the same Case and consumes only `ledger.canonical_task_inputs`; active,
 review, or terminal task identity is adopted only from the ledger. Confirmation
 therefore remains separate from the explicit advisor task action.
 
-The collaboration envelope remains V2. The destination envelope is V3 and binds the
-exact current revision, optional current task, predecessor/current run, snake_case
-phase, durable cursor, and pending mutation fingerprints. A legacy V1 envelope,
-hyphen phase, or V2 advisor-family envelope is not accepted. The later request
-revision path uses the same collaboration authority for a controlled student
-preferred-country change before publishing the successor Case revision.
+The collaboration journey now writes a closed V3 record containing the immutable,
+case-revision-bound budget intent. A V2 collaboration record is accepted only when
+the observed server message and legacy mutation fingerprint support the fixed
+default budget; new values never fall back to those records. The destination
+envelope is V3 and binds the exact current revision, optional current task,
+predecessor/current run, snake_case phase, durable cursor, and pending mutation
+fingerprints. A legacy V1 envelope, hyphen phase, or V2 advisor-family envelope is
+not accepted. The later request revision path uses the same collaboration authority
+for a controlled student preferred-country change before publishing the successor
+Case revision.
 
 ### Role-safe projections
 

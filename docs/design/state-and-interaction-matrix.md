@@ -53,7 +53,7 @@ The task-free collaboration route has its own closed lifecycle:
 | Phase | Visible truth | Primary action | Forbidden action |
 | --- | --- | --- | --- |
 | `bootstrapping_parent` | no inferred identity or thread | start parent walkthrough | guess role or authority |
-| `thread_ready` | shared thread and current parent-safe messages | append the bounded message or explicitly propose it | treat message as fact |
+| `thread_ready` | shared thread and current parent-safe messages | enter or explicitly propose the exact budget intent | treat message as fact |
 | `message_submitting` | exact append fingerprint and key persisted | reconcile authority; retry only after an unknown outcome | generate a new body or key |
 | `proposal_pending` | typed parent-safe candidate survives reload | real parent-to-advisor role switch | mutate the Case |
 | `switching_to_advisor` | stored parent phase coordinated against the server role projection | complete the real revoke/bootstrap sequence or recover explicitly | trust the stored role over server authority |
@@ -73,7 +73,10 @@ cookie but missing or inconsistent metadata, the UI fails closed and cannot
 mutate, guess identity, silently rotate, or use a family-safe read as parent
 proof. A protected reset or natural expiry remains the recovery boundary.
 
-The collaboration envelope remains `schema_version=2`; advisor-family recovery uses
+The collaboration journey writes a closed `schema_version=3` envelope containing an
+immutable case-revision-bound budget intent. A legacy collaboration V2 envelope is
+accepted only for an observed exact default-budget message and mutation fingerprint;
+new values never fall back to old records. Advisor-family recovery continues to use
 closed `schema_version=3` fields for current revision, task, predecessor, run, phase,
 cursor, and pending mutations. One tab never runs both journeys concurrently. The
 inspector is read-only and server-owned: `/demo` progresses `not_created -> matched`,

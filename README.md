@@ -102,12 +102,20 @@ make down
 Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` through `/demo` and the primary `/demo/plan?case_id=<case_id>` continuation. For the independent deterministic execution scenarios, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at bare `/demo/plan` or `?scenario=blocked`. The [v0.1.6 release/source-archive verification guide](docs/how-to/verify-v0.1.6-release.md) defines the current release gates.
 
 For the current same-Case release walkthrough, begin at `/demo/collaboration`,
-confirm the synthetic family fact, choose `继续进入规划` (`Continue to planning` in
-English), and use the explicit task action on `/demo`. The handoff itself
+enter the preferred and hard-ceiling total program budgets (the default
+`300,000` / `400,000` CNY example or the `100,000` / `120,000` tight-budget
+example), confirm the synthetic family fact, choose `继续进入规划` (`Continue to
+planning` in English), and use the explicit task action on `/demo`. Whole-yuan
+validation happens locally before any mutation; the submitted intent is then
+immutable across proposal, advisor review, and reload recovery. The handoff itself
 performs read-only validation and creates no task. After the family decision reaches
 `plan_ready`, choose `Continue this Case into execution` and use the existing
 execution workspace through reload, role handoff, blocked checkpoint, and advisor
 reassessment. The bare `/demo/plan` route remains the independent evaluation path.
+
+The live intake is the server-backed `/demo/collaboration` route. The budget
+intake screenshot in the [collaboration walkthrough](docs/operations/collaboration-walkthrough.md)
+is static review evidence only; it does not provide route eligibility or authority.
 
 The current focused planning-revision proof uses
 `NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. Screenshot maintenance is

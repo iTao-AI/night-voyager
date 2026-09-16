@@ -335,6 +335,25 @@ class PostgresConnectedDemoRepository:
                 phase = DemoPhaseV2.REPLAN_REQUIRED
             elif legacy.task.status is TaskViewStatus.PREPARING:
                 phase = DemoPhaseV2.REVISION_TASK_ACTIVE
+        elif (
+            legacy.phase is DemoPhase.TERMINAL_TASK_FAILURE
+            and legacy.task is not None
+            and legacy.task.status is TaskViewStatus.NEEDS_EVIDENCE
+        ):
+            initial = await self._initial_blocked_projection(
+                context, case_id, legacy.case_revision, legacy.task
+            )
+            if initial is not None:
+                run, routes, evidence = initial
+                payload.update(
+                    {
+                        "planning_run": run,
+                        "routes": routes,
+                        "evidence": evidence,
+                        "review_inputs": None,
+                        "recovery": None,
+                    }
+                )
         payload.update(
             {
                 "schema_version": 2,
@@ -343,6 +362,56 @@ class PostgresConnectedDemoRepository:
             }
         )
         return AdvisorLedgerV2.model_validate(payload)
+
+    async def _initial_blocked_projection(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        revision: int,
+        task: PublicTaskProjection,
+    ) -> tuple[
+        PublicPlanningRunProjectionV2,
+        tuple[AdvisorRouteProjection, ...],
+        tuple[EvidenceDisclosure, ...],
+    ] | None:
+        run_id = task.planning_run_id
+        if run_id is None:
+            return None
+        row = (
+            await self._session.execute(
+                text(
+                    "SELECT r.case_id,r.case_revision,r.state,r.is_current "
+                    "FROM app.planning_runs r WHERE r.organization_id=:org "
+                    "AND r.id=:run"
+                ),
+                {"org": context.organization_id, "run": run_id},
+            )
+        ).mappings().one_or_none()
+        if row is None:
+            return None
+        if (
+            row["case_id"] != case_id
+            or row["case_revision"] != revision
+            or not row["is_current"]
+        ):
+            raise DemoContractUnavailableError(
+                "initial planning result identity is unavailable"
+            )
+        if row["state"] != "blocked":
+            return None
+        run, routes, evidence = await self._review_projection(
+            context, run_id, allow_blocked=True
+        )
+        if (
+            not isinstance(run, PublicPlanningRunProjectionV2)
+            or run.state != "blocked"
+            or not routes
+            or not evidence
+        ):
+            raise DemoContractUnavailableError(
+                "initial blocked planning projection is incomplete"
+            )
+        return run, routes, evidence
 
     async def _current_planning_revision_lineage(
         self,

@@ -17,6 +17,8 @@ The current presentation authority is the [reference-driven presentation spec](.
 
 ![Confirmed family fact and Case revision](../assets/collaboration-confirmed-fact.png)
 
+![Configurable budget intake](../assets/collaboration-budget-intake.png)
+
 ## Run the walkthrough
 
 ```bash
@@ -25,7 +27,12 @@ make demo
 
 Open `http://127.0.0.1:3000/demo/collaboration` and follow the eight visible stages:
 
-1. Start the parent walkthrough and append the bounded budget message.
+1. Start the parent walkthrough and enter the preferred and hard-ceiling total
+   program budgets as positive whole CNY amounts. The default example is
+   `300,000` / `400,000`; the compact `紧预算` (`Tight budget`) example is
+   `100,000` / `120,000`. Local validation rejects blank, decimal, exponent,
+   negative, zero, out-of-range, and preferred-above-ceiling inputs before any
+   request is sent.
 2. Explicitly turn that message into a typed parent proposal.
 3. Reload the pending candidate, then use the real role switch: revoke the parent
    session and mint the assigned advisor session.
@@ -48,6 +55,15 @@ opaque advisor cookie, CSRF value, and Case; it
 does not bootstrap, mint, revoke, or perform a client-only identity change. A
 successful handoff performs one exact closed V3 advisor-family storage replacement and
 one navigation. Standalone `/demo/collaboration` remains independently usable.
+
+The submitted budget is an immutable, case-revision-bound intent. After the
+first accepted submission, the message body, proposal value, idempotency
+fingerprint, and reload recovery all use that exact intent; editing the form
+cannot rewrite the recorded mutation. The advisor sees the submitted amounts,
+source message, and pending state before confirmation. A tight budget remains a
+deterministic blocked planning result: the advisor receives persisted routes and
+evidence with the plain-language outcome `当前条件下没有可直接确认的路线`,
+without review inputs, approval, or family-decision authority.
 
 ## Inspector and authority boundaries
 
@@ -86,9 +102,13 @@ envelope for the same Case rather than substituting the default fixture. Executi
 recovery binds the authority kind and exact Case or seeded scenario; it never
 cross-restores those sources.
 
-The collaboration journey itself remains V2. Its handoff writes the V3
-advisor-family envelope with snake_case phase plus current revision/task/predecessor/
-run fields. Legacy V1, hyphen phases, and V2 advisor-family envelopes fail closed.
+The collaboration journey now writes a closed V3 envelope with the submitted
+budget intent and expected Case revision. V2 is accepted only for an observed
+legacy default message/proposal fingerprint and is upgraded without replaying or
+rewriting its records; new amounts never fall back to the old fixed message.
+The handoff writes the existing V3 advisor-family envelope with snake_case phase
+plus current revision/task/predecessor/run fields. Legacy V1, hyphen phases, and
+V2 advisor-family envelopes fail closed.
 After the first review, the continued route can request revision, accept the
 controlled student preferred-country change, create the explicit successor task,
 render the deterministic old/new comparison, require fresh advisor authorization,
@@ -116,6 +136,10 @@ semantic landmarks, at least 44 px action targets, and horizontal-overflow check
 The screenshot above is the current Chinese capture from the same deterministic
 Chromium flow. It preserves server-authored synthetic message/reason text verbatim,
 while all presentation-owned labels follow the selected locale.
+
+The live configurable intake is the server-backed `/demo/collaboration` route
+described above. The PNGs in this runbook and README are static review evidence;
+they do not supply budget values, route eligibility, or authority to the browser.
 
 All fixtures are synthetic. Live providers, external message routing, production
 deployment, and release publication remain outside this walkthrough.

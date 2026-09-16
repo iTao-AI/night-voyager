@@ -55,6 +55,10 @@ describe("connected demo presentation contract", () => {
     ],
     ["synthetic_high_risk_alternative", "Higher-risk synthetic alternative"],
     ["direct_program_fit_evidence_absent", "Program-fit evidence is missing"],
+    ["cost_or_fx_evidence_incomplete", "Cost or FX evidence is incomplete"],
+    ["budget_refused", "The family has not set a budget boundary"],
+    ["japan_risk_or_program_fit_unresolved", "Japan risk or program-fit evidence is unresolved"],
+    ["malaysia_program_fit_present", "Malaysia program-fit evidence is present"],
   ])("presents route reason %s", (code, copy) => {
     expect(presentRouteReason("en", code)).toBe(copy);
   });
