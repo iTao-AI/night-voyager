@@ -82,8 +82,11 @@ function verificationBody(caseRevision: number): VerificationBody {
 function envelopeBudgetIntent(value: CollaborationJourneyEnvelopeV2 | CollaborationJourneyEnvelopeV3): Readonly<CollaborationBudgetIntent> | null {
   return value.schema_version === 3 ? value.budgetIntent : null;
 }
+function matchingParticipantBudgets(items: readonly MemoryCandidateParticipant[], intent: CollaborationBudgetIntent | null): readonly MemoryCandidateParticipant[] {
+  return items.filter((item) => item.fact_key === "family.budget" && budgetValueMatchesIntent(item.value, intent));
+}
 function participantBudget(items: readonly MemoryCandidateParticipant[], intent: CollaborationBudgetIntent | null): MemoryCandidateParticipant | null {
-  const matches = items.filter((item) => item.fact_key === "family.budget" && budgetValueMatchesIntent(item.value, intent));
+  const matches = matchingParticipantBudgets(items, intent);
   return matches.length === 1 ? matches[0] : null;
 }
 function candidateMatchesIntent(item: MemoryCandidateAdvisor, intent: CollaborationBudgetIntent | null): boolean {
@@ -310,7 +313,9 @@ export function useCollaborationDemo() {
       if (current.role === "parent") {
         const projectedMessage = matchingMessage(messages.items, current.messageId, current.budgetIntent);
         const participants = projectedMessage ? await api.candidates(current.caseId, "parent") : [];
-        const candidate = participantBudget(participants, current.budgetIntent);
+        const participantMatches = matchingParticipantBudgets(participants, current.budgetIntent);
+        if (participantMatches.length > 1) throw new Error("participant projection is ambiguous");
+        const candidate = participantMatches.length === 1 ? participantMatches[0] : null;
         const context: CollaborationContext = { ...baseContext, role: "parent", candidate };
 
         if (current.phase === "message_submitting") {

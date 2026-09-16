@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { CollaborationDemoApiError } from "../../lib/collaboration-demo/api";
-import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
+import { createBudgetIntent, defaultBudgetIntent, messageRequestForBudget, proposalRequestForBudget, renderBudgetMessage } from "../../lib/collaboration-demo/budget";
 import { ConnectedDemoApiError } from "../../lib/connected-demo/api";
 import { idempotencyFor } from "../../lib/connected-demo/idempotency";
 import { continueCollaborationAsAdvisorFamily, loadDemoJourneyEnvelope, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
@@ -44,11 +44,20 @@ const AT = "2026-07-20T01:02:03Z";
 const SHA = "a".repeat(64);
 const MESSAGE_BODY = "Our confirmed program budget is 300,000 to 400,000 CNY.";
 const BUDGET = { schema_version: 1 as const, currency: "CNY" as const, period: "program_total" as const, preferred_minor: 30_000_000, hard_ceiling_minor: 40_000_000, elasticity_bps: 1000, refused: false };
+const CUSTOM_MESSAGE = "43000000-0000-0000-0000-000000000002";
+const CUSTOM_CANDIDATE = "44000000-0000-0000-0000-000000000002";
+const CUSTOM_FACT = "45000000-0000-0000-0000-000000000002";
+const CUSTOM_INTENT = createBudgetIntent({ preferredYuan: "320000", hardCeilingYuan: "420000" }, 1);
+const CUSTOM_BUDGET = CUSTOM_INTENT.value;
 const thread = { schema_version: 1 as const, thread_id: THREAD, case_id: CASE, created_by_actor_id: CASE, created_at: AT };
 const message = { schema_version: 1 as const, message_event_id: MESSAGE, thread_id: THREAD, case_id: CASE, sequence_no: 1, actor_id: CASE, actor_role: "parent" as const, body: MESSAGE_BODY, content_sha256: SHA, created_at: AT };
 const participant = { schema_version: 1 as const, fact_key: "family.budget" as const, value: BUDGET, state: "pending" as const, created_at: AT, expires_at: "2026-07-27T01:02:03Z" };
 const advisor = { ...participant, candidate_id: CANDIDATE, message_event_id: MESSAGE, source_message_sequence_no: 1, subject_actor_id: CASE, subject_role: "parent" as const, case_revision: 1, verification_id: null, decision: null, reason: null, request_sha256: SHA, value_sha256: SHA };
 const fact = { schema_version: 1 as const, fact_key: "family.budget" as const, value: BUDGET, fact_version: 1, confirmed_at: AT, subject_role: "parent" as const, confirming_advisor_role: "advisor" as const, confirmed_fact_id: FACT, candidate_id: CANDIDATE, verification_id: MESSAGE, source_message_event_id: MESSAGE, source_message_sequence_no: 1, source_message_sha256_prefix: "aaaaaaaaaaaa", confirming_advisor_actor_id: CASE, reason: "Confirmed by advisor.", supersedes_fact_id: null };
+const customMessage = { ...message, message_event_id: CUSTOM_MESSAGE, body: renderBudgetMessage(CUSTOM_INTENT), content_sha256: "b".repeat(64) };
+const customParticipant = { ...participant, value: CUSTOM_BUDGET };
+const customAdvisor = { ...advisor, value: CUSTOM_BUDGET, candidate_id: CUSTOM_CANDIDATE, message_event_id: CUSTOM_MESSAGE, request_sha256: "b".repeat(64), value_sha256: "b".repeat(64) };
+const customFact = { ...fact, value: CUSTOM_BUDGET, confirmed_fact_id: CUSTOM_FACT, candidate_id: CUSTOM_CANDIDATE, verification_id: CUSTOM_MESSAGE, source_message_event_id: CUSTOM_MESSAGE, source_message_sha256_prefix: "bbbbbbbbbbbb" };
 
 function ledger(caseRevision: number) {
   return { schema_version: 2 as const, proof_mode: "synthetic-demo" as const, phase: "task_ready" as const, case_id: CASE, case_revision: caseRevision, case_state: "intake" as const, canonical_task_inputs: { schema_version: 1 as const, operation: "generate_planning_run_v1" as const, case_id: CASE, expected_case_revision: caseRevision, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
@@ -77,6 +86,23 @@ function saveConfirmed() {
 
 function save(value: Record<string, unknown>) {
   sessionStorage.setItem("night-voyager:m5", JSON.stringify({ schema_version: 2, journey: "collaboration", csrf: "stored-csrf", caseId: CASE, threadId: THREAD, messageId: MESSAGE, candidateId: null, mutations: {}, ...value }));
+}
+
+function saveV3(value: Record<string, unknown>) {
+  sessionStorage.setItem("night-voyager:m5", JSON.stringify({
+    schema_version: 3,
+    journey: "collaboration",
+    role: "parent",
+    csrf: "stored-csrf",
+    caseId: CASE,
+    threadId: THREAD,
+    messageId: CUSTOM_MESSAGE,
+    candidateId: null,
+    phase: "thread_ready",
+    mutations: {},
+    budgetIntent: CUSTOM_INTENT,
+    ...value,
+  }));
 }
 
 beforeEach(() => {
@@ -487,6 +513,42 @@ it("turns an unknown message outcome into an explicit exact-body/key retry", asy
   await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
 });
 
+it("retries a lost non-default append with its exact V3 body and key after remount", async () => {
+  const body = messageRequestForBudget(CUSTOM_INTENT);
+  const record = await idempotencyFor(body);
+  saveV3({ role: "parent", messageId: null, phase: "message_submitting", mutations: { "append-message": record } });
+  const empty = { schema_version: 1 as const, items: [], next_after_sequence: null };
+  const observed = { schema_version: 1 as const, items: [customMessage], next_after_sequence: null };
+  mocks.collaboration.messages.mockResolvedValueOnce(empty).mockResolvedValueOnce(empty).mockResolvedValue(observed);
+  mocks.collaboration.appendMessage.mockResolvedValue(customMessage);
+
+  const first = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(first.result.current.state.value).toBe("recoverable_error"));
+  first.unmount();
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+  await act(async () => result.current.retry());
+
+  expect(mocks.collaboration.appendMessage).toHaveBeenCalledOnce();
+  expect(mocks.collaboration.appendMessage).toHaveBeenCalledWith(THREAD, body, "stored-csrf", record.idempotencyKey);
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "thread_ready", messageId: CUSTOM_MESSAGE, budgetIntent: CUSTOM_INTENT, mutations: {} });
+});
+
+it("does not append a non-default message again when reload observes it", async () => {
+  const body = messageRequestForBudget(CUSTOM_INTENT);
+  const record = await idempotencyFor(body);
+  saveV3({ role: "parent", messageId: null, phase: "message_submitting", mutations: { "append-message": record } });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [customMessage], next_after_sequence: null });
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("thread_ready"));
+
+  expect(mocks.collaboration.appendMessage).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "thread_ready", messageId: CUSTOM_MESSAGE, budgetIntent: CUSTOM_INTENT, mutations: {} });
+});
+
 it("reconciles a lost proposal acknowledgement from the parent projection", async () => {
   const body = { schema_version: 1 as const, case_revision: 1, proposal: { schema_version: 1 as const, fact_key: "family.budget", value: BUDGET } };
   const record = await idempotencyFor(body);
@@ -496,6 +558,21 @@ it("reconciles a lost proposal acknowledgement from the parent projection", asyn
   expect(result.current.state.context.candidate).toEqual(participant);
   expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "proposal_pending", mutations: {} });
   expect(mocks.collaboration.proposeCandidate).not.toHaveBeenCalled();
+});
+
+it("reconciles a lost non-default proposal acknowledgement without a duplicate write", async () => {
+  const body = proposalRequestForBudget(CUSTOM_INTENT);
+  const record = await idempotencyFor(body);
+  saveV3({ role: "parent", phase: "thread_ready", mutations: { "propose-memory-candidate": record } });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [customMessage], next_after_sequence: null });
+  mocks.collaboration.candidates.mockResolvedValue([customParticipant]);
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("proposal_pending"));
+
+  expect(result.current.state.context.candidate).toEqual(customParticipant);
+  expect(mocks.collaboration.proposeCandidate).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "proposal_pending", budgetIntent: CUSTOM_INTENT, mutations: {} });
 });
 
 it("reloads advisor_reviewing from advisor candidate and ledger authority", async () => {
@@ -524,6 +601,58 @@ it("requires an explicit same-body/key retry for a pending confirmation outcome"
   expect(mocks.collaboration.verifyCandidate).toHaveBeenCalledWith(CANDIDATE, body, "stored-csrf", record.idempotencyKey);
   await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
   expect(result.current.state.context.fact).toEqual(fact);
+});
+
+it("retries a lost non-default confirmation acknowledgement without changing value or identity", async () => {
+  const body = { schema_version: 1 as const, expected_case_revision: 1, decision: "confirm" as const, reason: "The family confirmed this bounded program budget." };
+  const record = await idempotencyFor(body);
+  const confirmed = { ...customAdvisor, state: "confirmed" as const, verification_id: CUSTOM_MESSAGE, decision: "confirm" as const, reason: "Confirmed by advisor." };
+  let isConfirmed = false;
+  saveV3({ role: "advisor", messageId: CUSTOM_MESSAGE, candidateId: CUSTOM_CANDIDATE, phase: "confirmation_submitting", mutations: { "verify-memory-candidate": record } });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [customMessage], next_after_sequence: null });
+  mocks.collaboration.candidates.mockImplementation(async () => [isConfirmed ? confirmed : customAdvisor]);
+  mocks.collaboration.confirmedFacts.mockImplementation(async () => ({ schema_version: 1, current: isConfirmed ? [customFact] : [], history: [], next_cursor: null }));
+  mocks.identity.advisorLedger.mockImplementation(async () => ledger(isConfirmed ? 2 : 1));
+  mocks.collaboration.verifyCandidate.mockImplementation(async () => {
+    isConfirmed = true;
+    return { schema_version: 1, verification_id: CUSTOM_MESSAGE, candidate_id: CUSTOM_CANDIDATE, decision: "confirm", result_fact_id: CUSTOM_FACT, result_revision: 2, replayed: true };
+  });
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+  expect(mocks.collaboration.verifyCandidate).not.toHaveBeenCalled();
+
+  await act(async () => result.current.retry());
+
+  expect(mocks.collaboration.verifyCandidate).toHaveBeenCalledOnce();
+  expect(mocks.collaboration.verifyCandidate).toHaveBeenCalledWith(CUSTOM_CANDIDATE, body, "stored-csrf", record.idempotencyKey);
+  await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  expect(result.current.state.context.fact).toEqual(customFact);
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "replan_required", messageId: CUSTOM_MESSAGE, candidateId: CUSTOM_CANDIDATE, budgetIntent: CUSTOM_INTENT, mutations: {} });
+});
+
+it("rejects a non-default V3 mutation fingerprint that does not match its stored intent", async () => {
+  const record = await idempotencyFor(messageRequestForBudget(defaultBudgetIntent(1)));
+  saveV3({ role: "parent", messageId: null, phase: "message_submitting", mutations: { "append-message": record } });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [], next_after_sequence: null });
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+
+  expect(mocks.collaboration.appendMessage).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "message_submitting", budgetIntent: CUSTOM_INTENT, mutations: { "append-message": record } });
+});
+
+it("rejects an ambiguous non-default participant projection instead of selecting one", async () => {
+  saveV3({ role: "parent", messageId: CUSTOM_MESSAGE, phase: "thread_ready" });
+  mocks.collaboration.messages.mockResolvedValue({ schema_version: 1, items: [customMessage], next_after_sequence: null });
+  mocks.collaboration.candidates.mockResolvedValue([customParticipant, { ...customParticipant }]);
+
+  const { result } = renderHook(() => useCollaborationDemo());
+  await waitFor(() => expect(result.current.state.value).toBe("recoverable_error"));
+
+  expect(mocks.collaboration.proposeCandidate).not.toHaveBeenCalled();
+  expect(loadDemoJourneyEnvelope()).toMatchObject({ phase: "thread_ready", messageId: CUSTOM_MESSAGE, budgetIntent: CUSTOM_INTENT });
 });
 
 it("clears a confirmed 401 and makes explicit retry start a fresh parent bootstrap", async () => {

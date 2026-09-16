@@ -141,5 +141,27 @@ The live configurable intake is the server-backed `/demo/collaboration` route
 described above. The PNGs in this runbook and README are static review evidence;
 they do not supply budget values, route eligibility, or authority to the browser.
 
+### Local refinement verification (2026-09-16)
+
+The focused refinement checks were run with the locked local dependencies:
+
+```bash
+cd web && npm run test -- --run tests/unit/collaboration-budget.test.ts tests/unit/collaboration-session.test.ts tests/unit/collaboration-demo.test.tsx tests/unit/collaboration-recovery.test.tsx tests/unit/use-collaboration-demo.test.tsx tests/unit/connected-demo-api.test.ts tests/unit/connected-demo-presentation.test.ts tests/unit/connected-demo-ui.test.tsx
+cd web && npm run typecheck
+cd web && npm run lint
+docker compose build web
+docker compose up --no-build --pull never --wait
+```
+
+The result was 8 frontend test files and 200 tests passed, with typecheck, lint,
+production build, and Compose health checks passing. The ordinary
+`/demo/collaboration` route was reviewed in Chromium at `1440x900` and `390x844`:
+the connected entry shows the budget heading and both field labels in the first
+mobile viewport, the submit action is one short scroll away, `scrollWidth` equals
+the mobile viewport width, invalid input produces no mutation request, and the
+pending message remains visible after submission. The custom-intent response-loss
+assertions are hook-level recovery tests; the browser observation verifies the
+ordinary server-backed flow and layout, not response loss itself.
+
 All fixtures are synthetic. Live providers, external message routing, production
 deployment, and release publication remain outside this walkthrough.

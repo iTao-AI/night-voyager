@@ -970,3 +970,72 @@
     color: var(--nv-primary-ink);
   }
 }
+
+/* The collaboration intake keeps the stage rail but gives the current action
+   the full work surface. Submitted journeys retain the same frame and only
+   hide the duplicate context aside. */
+.collaboration-product-frame .advisor-product-frame-context {
+  display: none;
+}
+
+.collaboration-product-frame .advisor-product-frame-context-column {
+  background: var(--nv-context-surface);
+}
+
+.collaboration-entry-frame .workspace-top-band-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.collaboration-entry-frame .workspace-top-band-grid > div {
+  min-block-size: 4.5rem;
+  padding-block: .75rem;
+}
+
+.collaboration-entry-frame .workspace-top-band-grid > div:first-child,
+.collaboration-entry-frame .workspace-top-band-grid > div:last-child {
+  display: none;
+}
+
+.collaboration-entry-frame .workspace-route-heading {
+  padding-bottom: 1rem;
+}
+
+.collaboration-entry-frame .workspace-route-heading h1 {
+  font-size: clamp(1.75rem, 3vw, 2.25rem);
+}
+
+.collaboration-entry-frame .workspace-current-work {
+  margin-top: 1rem;
+}
+
+@media (max-width: 560px) {
+  .collaboration-entry-frame .workspace-top-band-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .collaboration-entry-frame .workspace-top-band-grid > div:nth-child(3),
+  .collaboration-entry-frame .workspace-route-context,
+  .collaboration-entry-frame .workspace-route-heading > .workspace-status,
+  .collaboration-entry-frame .overline,
+  .collaboration-entry-frame .role-status {
+    display: none;
+  }
+
+  .collaboration-entry-frame .advisor-product-frame-workflow {
+    padding-block: .5rem 0;
+  }
+
+  .collaboration-entry-frame .advisor-product-frame .workflow-rail-item {
+    min-block-size: 3.25rem;
+    padding-block: .5rem;
+  }
+
+  .collaboration-entry-frame .workspace-top-band-grid > div {
+    min-block-size: 4.25rem;
+    padding: .65rem .8rem;
+  }
+
+  .collaboration-entry-frame .advisor-product-frame-work {
+    padding-block: 1rem 1.25rem;
+  }
+}

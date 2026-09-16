@@ -69,7 +69,8 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
 
   await page.getByRole("button", { name: /开始家长流程|Start parent flow/ }).click();
-  await expect(page.getByRole("heading", { name: /共享 Case 沟通记录|Shared Case communication record/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /先确认家庭预算|Confirm the family budget first/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /共享 Case 沟通记录|Shared Case communication record/ })).toHaveCount(0);
   await expect(page.getByText(/当前角色：家长|Current role：Parent/)).toBeVisible();
   const parentInspector = await page.request.get(`/api/demo/cases/${PRIMARY_CASE}/planning-skill-inspector`);
   expect(parentInspector.status()).toBe(404);

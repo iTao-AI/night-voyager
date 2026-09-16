@@ -22,6 +22,7 @@ type AdvisorWorkspaceShellProps = {
   technicalEvidence?: ReactNode;
   titleKey: PresentationCopyKey;
   authority?: ReactNode;
+  frameClassName?: string;
 };
 
 const ROLE_COPY: Record<NonNullable<AdvisorWorkspaceShellProps["activeRole"]>, PresentationCopyKey> = {
@@ -47,6 +48,7 @@ export function AdvisorWorkspaceShell({
   technicalEvidence,
   titleKey,
   authority,
+  frameClassName,
 }: AdvisorWorkspaceShellProps) {
   const { copy } = usePresentation();
 
@@ -70,6 +72,7 @@ export function AdvisorWorkspaceShell({
       <main id={mainId} tabIndex={-1}>
         <div className="workspace-page">
           <AdvisorProductFrame
+            className={frameClassName}
             topBand={
               <div className="workspace-top-band-grid">
                 <div>

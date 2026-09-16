@@ -36,7 +36,7 @@ export function BudgetIntakeForm({
 
   return (
     <section className="collaboration-action budget-intake-form" aria-labelledby="parent-action-title">
-      <h3 id="parent-action-title">{copy("parentMessageTitle")}</h3>
+      <h3 id="parent-action-title">{copy("budgetIntakeTitle")}</h3>
       <p>{copy("budgetFormBody")}</p>
       <form onSubmit={(event) => { event.preventDefault(); onSubmit(); }} noValidate>
         <div className="budget-input-grid">
