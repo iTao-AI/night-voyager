@@ -21,8 +21,24 @@ function actionKey(phase: Ledger["phase"]): PresentationCopyKey | null {
   return null;
 }
 
+export function isInitialBlockedLedger(ledger: Ledger): boolean {
+  return ledger.phase === "terminal_task_failure"
+    && ledger.task?.status === "needs_evidence"
+    && ledger.task.planning_run_id !== null
+    && ledger.planning_run?.state === "blocked"
+    && ledger.task.planning_run_id === ledger.planning_run.planning_run_id
+    && ledger.routes.length > 0
+    && ledger.evidence.length > 0
+    && ledger.comparison === null
+    && ledger.review_inputs === null
+    && ledger.current_brief_id === null
+    && ledger.recovery === null;
+}
+
 function stageTitle(ledger: Ledger, primaryAction: string | null, copy: (key: PresentationCopyKey) => string, locale: "zh-CN" | "en") {
-  return ledger.phase === "revision_blocked"
+  return isInitialBlockedLedger(ledger)
+    ? copy("initialBlockedTitle")
+    : ledger.phase === "revision_blocked"
     ? copy("revisionBlockedTitle")
     : ledger.phase === "terminal_task_failure"
       ? copy("terminalFailureTitle")
@@ -30,7 +46,9 @@ function stageTitle(ledger: Ledger, primaryAction: string | null, copy: (key: Pr
 }
 
 function stageDescription(ledger: Ledger, primaryAction: string | null, copy: (key: PresentationCopyKey) => string) {
-  return ledger.phase === "revision_blocked"
+  return isInitialBlockedLedger(ledger)
+    ? copy("initialBlockedBody")
+    : ledger.phase === "revision_blocked"
     ? copy("revisionBlockedBody")
     : primaryAction
       ? copy("advisorActionExplanation")

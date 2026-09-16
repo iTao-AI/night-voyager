@@ -69,13 +69,16 @@ test("collaboration-demo.spec.ts proves governed memory authority without creati
   await expect(page.locator(".workflow-rail-list > li")).toHaveCount(5);
 
   await page.getByRole("button", { name: /开始家长流程|Start parent flow/ }).click();
-  await expect(page.getByRole("heading", { name: /共享 Case 沟通记录|Shared Case communication record/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /先确认家庭预算|Confirm the family budget first/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /共享 Case 沟通记录|Shared Case communication record/ })).toHaveCount(0);
   await expect(page.getByText(/当前角色：家长|Current role：Parent/)).toBeVisible();
   const parentInspector = await page.request.get(`/api/demo/cases/${PRIMARY_CASE}/planning-skill-inspector`);
   expect(parentInspector.status()).toBe(404);
 
   await createActiveTaskBlockedCandidate(page);
-  await page.getByRole("button", { name: /添加已确认预算消息|Add confirmed budget message/ }).click();
+  await expect(page.locator("[data-budget-input='preferred']")).toHaveValue("300000");
+  await expect(page.locator("[data-budget-input='hard-ceiling']")).toHaveValue("400000");
+  await page.getByRole("button", { name: /提交预算说明|Submit budget details/ }).click();
   await expect(page.getByText("Our confirmed program budget is 300,000 to 400,000 CNY.")).toBeVisible();
   await page.getByRole("button", { name: /提交预算供顾问审核|Submit the budget for advisor review/ }).click();
   await expect(page.getByText(/等待顾问确认|Awaiting advisor confirmation/)).toBeVisible();

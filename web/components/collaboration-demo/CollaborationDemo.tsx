@@ -11,6 +11,7 @@ import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
 import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
 import { CollaborationRecoveryNotice } from "./CollaborationRecoveryNotice";
 import { ConfirmedFactSummary } from "./ConfirmedFactSummary";
+import { BudgetIntakeForm } from "./BudgetIntakeForm";
 import { MemoryCandidateCard } from "./MemoryCandidateCard";
 import { SharedThread } from "./SharedThread";
 
@@ -39,6 +40,9 @@ export function CollaborationDemo() {
   const busy = state.value === "message_submitting" || state.value === "confirmation_submitting" || state.value === "switching_to_advisor";
   const advisorCandidate = context.candidate && "candidate_id" in context.candidate ? context.candidate : null;
   const canConfirm = state.value === "advisor_reviewing" && advisorCandidate?.state === "pending" && advisorCandidate.case_revision === context.caseRevision;
+  const isInitialParent = demo.journeyConflict === null && state.value === "bootstrapping_parent";
+  const isEditableBudget = demo.journeyConflict === null && state.value === "thread_ready" && !demo.budgetIntent;
+  const isCompactEntry = isInitialParent || isEditableBudget;
   const status = (() => {
     switch (state.value) {
       case "bootstrapping_parent": return copy("collaborationStartParent");
@@ -62,6 +66,22 @@ export function CollaborationDemo() {
     </>
   );
 
+  const entryAction = isInitialParent ? (
+    <section className="collaboration-action collaboration-entry-action" aria-labelledby="parent-start-title">
+      <h3 id="parent-start-title">{copy("collaborationParentStartTitle")}</h3>
+      <p>{copy("collaborationParentStartBody")}</p>
+      <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void demo.connectParent()}>{copy("collaborationStartParent")}</button>
+    </section>
+  ) : isEditableBudget ? (
+    <BudgetIntakeForm
+      draft={demo.budgetDraft}
+      expectedCaseRevision={context.caseRevision}
+      validation={demo.budgetValidation}
+      onDraftChange={demo.setBudgetDraft}
+      onSubmit={() => void demo.appendMessage()}
+    />
+  ) : primaryRecord;
+
   const authorityAction = demo.journeyConflict === "advisor-family" ? (
     <JourneyConflictNotice
       currentJourney="advisor-family"
@@ -69,14 +89,26 @@ export function CollaborationDemo() {
       headingRef={conflictHeading}
       onEnd={() => void demo.endConflictingJourney()}
     />
-  ) : state.value === "bootstrapping_parent" ? (
-    <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void demo.connectParent()}>{copy("collaborationStartParent")}</button>
+  ) : isInitialParent ? (
+    <p className="workspace-authority-status">{copy("collaborationParentStartBody")}</p>
+  ) : isEditableBudget ? (
+    <p className="workspace-authority-status">{copy("collaborationBudgetNextStep")}</p>
   ) : state.value === "thread_ready" ? (
-    <section className="collaboration-action" aria-labelledby="parent-action-title">
-      <h3 id="parent-action-title">{copy(context.messages.length ? "parentProposeTitle" : "parentMessageTitle")}</h3>
-      <p>{copy(context.messages.length ? "parentProposalPending" : "parentMessageBoundary")}</p>
-      <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void (context.messages.length ? demo.proposeBudget() : demo.appendMessage())}>{copy(context.messages.length ? "parentProposeAction" : "parentMessageAction")}</button>
-    </section>
+    demo.budgetIntent ? (
+      <section className="collaboration-action" aria-labelledby="parent-action-title">
+        <h3 id="parent-action-title">{copy("parentProposeTitle")}</h3>
+        <p>{copy("parentProposalPending")}</p>
+        <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => void demo.proposeBudget()}>{copy("parentProposeAction")}</button>
+      </section>
+    ) : (
+      <BudgetIntakeForm
+        draft={demo.budgetDraft}
+        expectedCaseRevision={context.caseRevision}
+        validation={demo.budgetValidation}
+        onDraftChange={demo.setBudgetDraft}
+        onSubmit={() => void demo.appendMessage()}
+      />
+    )
   ) : state.value === "message_submitting" ? (
     <section className="collaboration-action" aria-live="polite">
       <h3>{copy("recordingMessageTitle")}</h3>
@@ -129,6 +161,7 @@ export function CollaborationDemo() {
       activeRole={context.role}
       contextKey="contextCollaboration"
       currentStage={journeyStage}
+      frameClassName={`collaboration-product-frame${isCompactEntry ? " collaboration-entry-frame" : ""}`}
       mainId="collaboration-main"
       proofSegment="connected_same_case"
       status={<p className="status workspace-status-copy">{status}</p>}
@@ -151,9 +184,9 @@ export function CollaborationDemo() {
     >
       {demo.journeyConflict === "advisor-family" ? <p className="workspace-authority-status">{copy("journeyConflictBody")}</p> : null}
       <p className="overline">{copy("collaborationHeroOverline")}</p>
-      <p className="lede">{copy("collaborationLede")}</p>
+      {!isCompactEntry ? <p className="lede">{copy("collaborationLede")}</p> : null}
       <p className="role-status">{copy("currentRoleLabel")}：{presentCode(locale, "role", context.role)}</p>
-      <div className="collaboration-primary-record">{primaryRecord}</div>
+      <div className="collaboration-primary-record">{entryAction}</div>
     </AdvisorWorkspaceShell>
   );
 }

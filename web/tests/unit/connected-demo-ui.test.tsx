@@ -17,7 +17,7 @@ import type {
 } from "../../lib/collaboration-demo/contracts";
 import type { CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
 import { PresentationProvider } from "../../lib/presentation/context";
-import { brief as briefFixture, comparison as comparisonFixture, CONFIRMED_FACT, ledger as ledgerFixture, status as statusFor } from "./connected-demo-test-data";
+import { brief as briefFixture, comparison as comparisonFixture, CONFIRMED_FACT, initialBlockedLedger, ledger as ledgerFixture, status as statusFor } from "./connected-demo-test-data";
 
 const connectedHook = vi.hoisted(() => ({ current: {} as Record<string, unknown> }));
 vi.mock("../../lib/connected-demo/use-connected-demo", async () => {
@@ -403,6 +403,21 @@ it("offers revision only on the initial review and no business action when block
     />,
   );
   expect(screen.getByText("此修订已被确定性规则阻止")).toBeVisible();
+  expect(screen.queryByRole("button", { name: /批准|请求|创建/ })).toBeNull();
+  expect(screen.getByRole("link", { name: "返回产品概览" })).toHaveAttribute("href", "/");
+});
+
+it("renders an initial budget block as a plain-language stop with persisted routes", () => {
+  renderPresentation(
+    <AdvisorLedger
+      ledger={initialBlockedLedger()}
+      onPrimaryAction={() => undefined}
+    />,
+  );
+
+  expect(screen.getByText("当前条件下没有可直接确认的路线")).toBeVisible();
+  expect(screen.getByText("当前条件下没有可直接确认的路线；规划结果与路线理由已保留，请调整预算或补充证据后再继续。")).toBeVisible();
+  expect(screen.getByRole("table", { name: "路线证据比较" })).toBeVisible();
   expect(screen.queryByRole("button", { name: /批准|请求|创建/ })).toBeNull();
   expect(screen.getByRole("link", { name: "返回产品概览" })).toHaveAttribute("href", "/");
 });

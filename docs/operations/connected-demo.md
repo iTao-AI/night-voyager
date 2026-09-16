@@ -139,10 +139,13 @@ support reload only in the same tab. If an opaque cookie exists while recovery
 metadata is missing or inconsistent, the UI fails closed: it does not mutate,
 guess a role, silently revoke, or show parent presentation.
 
-The collaboration journey remains V2; advisor-family recovery uses the closed V3
-envelope with snake_case phase, current revision/task/predecessor/run, cursor, and
-pending mutation identity. An existing other journey must be explicitly revoked, so a
-tab cannot run the two workflows concurrently. `/demo` preserves one active
+The collaboration journey now writes a closed V3 envelope with the immutable,
+case-revision-bound budget intent. V2 is accepted only for an observed exact legacy
+default-budget fingerprint; new amounts never fall back to old storage or mutation
+records. Advisor-family recovery continues to use its existing closed V3 envelope
+with snake_case phase, current revision/task/predecessor/run, cursor, and pending
+mutation identity. An existing other journey must be explicitly revoked, so a tab
+cannot run the two workflows concurrently. `/demo` preserves one active
 `EventSource` and a monotonic durable cursor. The explicit task action creates
 at most one task and opens exactly one initial `/events?after=0` stream. Reloads
 recover the stored cursor, review state, parent rotation, receipt, timeline, and

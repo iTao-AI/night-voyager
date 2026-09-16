@@ -10,7 +10,7 @@ import {
 } from "../../lib/connected-demo/contracts";
 import type { SkillLeafBindingV1, StandaloneTaskProjection } from "../../lib/connected-demo/contracts";
 import { requestFingerprint } from "../../lib/connected-demo/idempotency";
-import { CASE_ID, TASK_ID, brief, comparison, ledger, standaloneTask } from "./connected-demo-test-data";
+import { CASE_ID, TASK_ID, brief, comparison, initialBlockedLedger, ledger, standaloneTask } from "./connected-demo-test-data";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -142,6 +142,23 @@ it.each([
   })],
 ])("rejects V2 revision authority with %s", (_name, make) => {
   expect(() => parseLedger(make())).toThrow("invalid response");
+});
+
+it("accepts the initial blocked producer projection without review authority", () => {
+  const value = initialBlockedLedger();
+  expect(parseLedger(value)).toEqual(value);
+  expect(value.task?.status).toBe("needs_evidence");
+  expect(value.planning_run?.state).toBe("blocked");
+  expect(value.task?.planning_run_id).toBe(value.planning_run?.planning_run_id);
+  expect(value.comparison).toBeNull();
+  expect(value.review_inputs).toBeNull();
+  expect(value.recovery).toBeNull();
+});
+
+it("rejects an initial blocked projection without a task-to-run identity", () => {
+  const value = initialBlockedLedger();
+  value.task = { ...value.task!, planning_run_id: null };
+  expect(() => parseLedger(value)).toThrow("invalid response");
 });
 
 it("rejects receipt/timeline phase inconsistencies", () => {

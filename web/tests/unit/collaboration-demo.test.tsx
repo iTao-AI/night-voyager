@@ -9,6 +9,7 @@ import { MemoryCandidateCard } from "../../components/collaboration-demo/MemoryC
 import { SharedThread } from "../../components/collaboration-demo/SharedThread";
 import type { CollaborationErrorCategory } from "../../lib/collaboration-demo/reducer";
 import type { MemoryCandidateProjection } from "../../lib/collaboration-demo/contracts";
+import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
 import { PresentationProvider } from "../../lib/presentation/context";
 
 const CASE = "41000000-0000-0000-0000-000000000001";
@@ -33,7 +34,24 @@ vi.mock("../../lib/collaboration-demo/use-collaboration-demo", async () => {
 });
 
 function setState(state: unknown, journeyConflict: "advisor-family" | null = null) {
-  hook.current = { state, inspector: null, journeyConflict, connectParent: vi.fn(), appendMessage: vi.fn(), proposeBudget: vi.fn(), switchToAdvisor: vi.fn(), confirmCandidate: vi.fn(), continueToPlanning: vi.fn(), retry: vi.fn(), endConflictingJourney: vi.fn() };
+  const context = (state as { context?: { messages?: readonly unknown[] } }).context;
+  hook.current = {
+    state,
+    inspector: null,
+    journeyConflict,
+    budgetDraft: { preferredYuan: "300000", hardCeilingYuan: "400000" },
+    setBudgetDraft: vi.fn(),
+    budgetIntent: context?.messages?.length ? defaultBudgetIntent(1) : null,
+    budgetValidation: null,
+    connectParent: vi.fn(),
+    appendMessage: vi.fn(),
+    proposeBudget: vi.fn(),
+    switchToAdvisor: vi.fn(),
+    confirmCandidate: vi.fn(),
+    continueToPlanning: vi.fn(),
+    retry: vi.fn(),
+    endConflictingJourney: vi.fn(),
+  };
 }
 
 function renderPresentation(ui: ReactElement) {
@@ -106,6 +124,28 @@ it("presents consultation intake inside the advisor workspace shell", () => {
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
   expect(container.querySelectorAll('[data-primary-action="true"]')).toHaveLength(1);
   expect(container.querySelectorAll('[role="status"]').length).toBeLessThanOrEqual(1);
+});
+
+it("puts the parent connection and editable budget in the work surface without an empty thread", () => {
+  setState({ value: "bootstrapping_parent", context: { ...baseContext, thread: null, messages: [] } });
+  const view = renderPresentation(<CollaborationDemo />);
+
+  expect(screen.getByRole("heading", { name: "先连接家长流程" })).toBeVisible();
+  expect(view.container.querySelector("[data-frame-slot='work'] [data-primary-action='true']")).toBeInTheDocument();
+  expect(view.container.querySelector("[data-frame-slot='authority'] [data-primary-action='true']")).toBeNull();
+  expect(screen.queryByRole("heading", { name: "共享 Case 沟通记录" })).toBeNull();
+  expect(screen.queryByText("尚无参与者消息。")).toBeNull();
+
+  setState({ value: "thread_ready", context: { ...baseContext, messages: [] } });
+  view.rerender(<CollaborationDemo />);
+
+  expect(screen.getByRole("heading", { name: "先确认家庭预算" })).toBeVisible();
+  expect(screen.getByRole("textbox", { name: "常规预算" })).toHaveValue("300000");
+  expect(screen.getByRole("textbox", { name: "最高预算" })).toHaveValue("400000");
+  expect(view.container.querySelector("[data-frame-slot='work'] [data-primary-action='true']")).toBeInTheDocument();
+  expect(view.container.querySelector("[data-frame-slot='authority'] [data-primary-action='true']")).toBeNull();
+  expect(screen.getByText("提交预算说明后，生成提案，再由顾问确认。")).toBeVisible();
+  expect(screen.queryByRole("heading", { name: "共享 Case 沟通记录" })).toBeNull();
 });
 
 it("keeps a journey conflict in the route hierarchy and focuses its h2 on entry", async () => {

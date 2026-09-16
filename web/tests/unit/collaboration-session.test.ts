@@ -8,6 +8,7 @@ import {
   saveCollaborationJourney,
   saveRecoveryMetadata,
 } from "../../lib/connected-demo/session-storage";
+import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
 
 const CASE = "41000000-0000-0000-0000-000000000001";
 const THREAD = "42000000-0000-0000-0000-000000000001";
@@ -99,6 +100,29 @@ it("stores and restores the exact schema-v2 journey union", () => {
   expect(loadRecoveryMetadata()).toBeNull();
   expect(sessionStorage.getItem("night-voyager:m5")).toContain('"schema_version":2');
   clearDemoJourneyEnvelope();
+  expect(loadDemoJourneyEnvelope()).toBeNull();
+});
+
+it("stores the submitted budget intent only in the closed schema-v3 collaboration envelope", () => {
+  const current = {
+    schema_version: 3 as const,
+    journey: "collaboration" as const,
+    role: "parent" as const,
+    csrf: "csrf",
+    caseId: CASE,
+    threadId: THREAD,
+    messageId: MESSAGE,
+    candidateId: null,
+    phase: "proposal_pending" as const,
+    mutations: {},
+    budgetIntent: defaultBudgetIntent(1),
+  };
+  saveCollaborationJourney(current);
+  expect(loadDemoJourneyEnvelope()).toEqual(current);
+  sessionStorage.setItem("night-voyager:m5", JSON.stringify({
+    ...current,
+    budgetIntent: { ...current.budgetIntent, value: { ...current.budgetIntent.value, preferred_minor: 40_000_000, hard_ceiling_minor: 30_000_000 } },
+  }));
   expect(loadDemoJourneyEnvelope()).toBeNull();
 });
 

@@ -131,6 +131,31 @@ export function ledger(phaseInput: AdvisorLedger["phase"] | keyof typeof LEGACY_
   return base;
 }
 
+export function initialBlockedLedger(): AdvisorLedger {
+  const value = ledger("terminal_task_failure", "needs_evidence");
+  const review = ledger("review-required");
+  value.task = { ...value.task!, planning_run_id: review.planning_run!.planning_run_id };
+  value.planning_run = { ...review.planning_run!, state: "blocked" };
+  value.routes = review.routes.map((route) => {
+    const reason = route.country === "australia"
+      ? "budget_hard_ceiling_or_elasticity_exceeded"
+      : route.country === "japan"
+        ? "japan_risk_or_program_fit_unresolved"
+        : "direct_program_fit_evidence_absent";
+    return {
+      ...route,
+      outcome: "blocked",
+      eligible: false,
+      reason_code: reason,
+      dimensions: [{ key: "route_assessment", outcome: "blocked", reason_code: reason }],
+    };
+  });
+  value.evidence = review.evidence;
+  value.review_inputs = null;
+  value.recovery = null;
+  return value;
+}
+
 export function status(
   phase: DemoPhaseV2,
   caseId = CASE_ID,

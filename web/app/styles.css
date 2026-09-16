@@ -346,6 +346,109 @@ th {
   border-top: 4px solid var(--nv-trust);
 }
 
+.budget-intake-form form {
+  display: grid;
+  gap: 1rem;
+}
+
+.budget-input-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.budget-input-grid label {
+  display: grid;
+  gap: .4rem;
+  color: var(--nv-muted);
+  font-size: .86rem;
+  font-weight: 800;
+}
+
+.budget-input-grid input {
+  width: 100%;
+  min-block-size: 48px;
+  padding: .7rem .8rem;
+  border: 1px solid var(--nv-ink);
+  border-radius: 3px;
+  background: var(--nv-surface);
+  color: var(--nv-ink);
+  font: inherit;
+  font-weight: 800;
+}
+
+.budget-input-grid input[aria-invalid="true"] {
+  border: 2px solid var(--nv-danger);
+}
+
+.budget-currency-note {
+  margin: -.35rem 0 0;
+  color: var(--nv-muted);
+  font-size: .86rem;
+}
+
+.budget-example-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem .75rem;
+  align-items: center;
+  color: var(--nv-muted);
+  font-size: .86rem;
+  font-weight: 800;
+}
+
+.budget-example-row button {
+  min-block-size: 40px;
+  padding: .45rem .7rem;
+  border-color: var(--nv-border);
+  background: var(--nv-context-surface);
+  color: var(--nv-ink);
+  font-size: .86rem;
+}
+
+.budget-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border: 1px solid var(--nv-border);
+  background: var(--nv-border);
+}
+
+.budget-summary div {
+  min-width: 0;
+  padding: .85rem 1rem;
+  background: var(--nv-context-surface);
+}
+
+.budget-summary dt {
+  color: var(--nv-muted);
+  font-size: .78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.budget-summary dd {
+  margin: .25rem 0 0;
+  font-weight: 800;
+}
+
+@media (min-width: 901px) {
+  .advisor-product-frame-authority .budget-input-grid,
+  .advisor-product-frame-authority .budget-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-error {
+  margin: 0;
+  padding: .7rem .85rem;
+  border-left: 4px solid var(--nv-danger);
+  background: var(--nv-intervention-soft);
+  color: var(--nv-ink);
+  font-weight: 800;
+}
+
 .collaboration-facts,
 .decision-requirements,
 .inspector-grid {
@@ -395,6 +498,11 @@ th {
 @media (max-width: 767px) {
   .collaboration-facts,
   .decision-requirements {
+    grid-template-columns: 1fr;
+  }
+
+  .budget-input-grid,
+  .budget-summary {
     grid-template-columns: 1fr;
   }
 

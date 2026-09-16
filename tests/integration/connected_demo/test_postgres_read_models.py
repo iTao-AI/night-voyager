@@ -763,6 +763,135 @@ async def test_review_required_projection_reads_real_worker_result() -> None:
         await worker_engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_initial_budget_block_preserves_persisted_result_for_v2_ledger() -> None:
+    case_id = uuid4()
+    task_id = uuid4()
+    source = resolve_canonical_demo_source_contract()
+    family_payload = PLANNING_FIXTURE.case.family.model_dump(mode="json")
+    family_payload["budget"].update(
+        {
+            "preferred_minor": 10_000_000,
+            "hard_ceiling_minor": 12_000_000,
+            "elasticity_bps": 1000,
+        }
+    )
+    migrator = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
+    api = create_async_engine(os.environ["NIGHT_VOYAGER_API_DATABASE_URL"])
+    worker_engine = create_async_engine(os.environ["NIGHT_VOYAGER_WORKER_DATABASE_URL"])
+    try:
+        async with migrator.begin() as connection:
+            await connection.execute(
+                text("SELECT set_config('night_voyager.organization_id',:org,true)"),
+                {"org": str(DEMO_ORG)},
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.publish_case_revision(:org,:case,NULL,1,"
+                    "CAST(:student AS jsonb),CAST(:family AS jsonb))"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "student": json.dumps(
+                        PLANNING_FIXTURE.case.student.model_dump(mode="json")
+                    ),
+                    "family": json.dumps(family_payload),
+                },
+            )
+            await connection.execute(
+                text(
+                    "SELECT app.seed_case_participants("
+                    ":org,:case,:advisor,:student,:parent)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "case": case_id,
+                    "advisor": ADVISOR,
+                    "student": STUDENT,
+                    "parent": PARENT,
+                },
+            )
+            await connection.execute(
+                text("SELECT app.transition_case(:org,:case,'intake','planning')"),
+                {"org": DEMO_ORG, "case": case_id},
+            )
+
+        api_sessions = async_sessionmaker(api, expire_on_commit=False)
+        async with api_sessions() as session, session.begin():
+            for name, value in (
+                ("night_voyager.organization_id", str(DEMO_ORG)),
+                ("night_voyager.actor_id", str(ADVISOR)),
+                ("night_voyager.role", "advisor"),
+            ):
+                await session.execute(
+                    text("SELECT set_config(:name,:value,true)"),
+                    {"name": name, "value": value},
+                )
+            await TaskService(
+                PostgresTaskRepository(session),
+                registry=SkillRuntimeRegistry.load_packaged(),
+                id_factory=lambda: task_id,
+            ).create(
+                context(),
+                CreateTaskCommand(
+                    case_id=case_id,
+                    expected_case_revision=1,
+                    source_pack_id=source.source_pack_id,
+                    source_pack_version=source.source_pack_version,
+                    policy_version=source.policy_version,
+                ),
+                f"connected-demo-blocked-{task_id}",
+            )
+
+        worker_sessions = async_sessionmaker(worker_engine, expire_on_commit=False)
+        worker = TaskWorker(
+            postgres_worker_repository_factory(worker_sessions),
+            PlanningAdapterRouter(
+                synthetic=DeterministicPlanningAdapter(
+                    PersistedSyntheticSnapshotRepository(worker_sessions)
+                ),
+                mixed=GovernedMixedPlanningAdapter(
+                    PostgresMixedPlanningRepository(worker_sessions)
+                ),
+            ),
+            SkillRuntimeRegistry.load_packaged(),
+            worker_id=f"connected-demo-blocked-{case_id}",
+        )
+        assert await worker.run_once() is True
+
+        async with AsyncSession(api) as session, session.begin():
+            await set_context(session)
+            repository = PostgresConnectedDemoRepository(session)
+            legacy = await repository.advisor_ledger(context(), case_id, source)
+            projection = await repository.advisor_ledger_v2(
+                context(), case_id, source
+            )
+
+        assert legacy is not None
+        assert legacy.phase is DemoPhase.TERMINAL_TASK_FAILURE
+        assert legacy.task is not None
+        assert legacy.task.status.value == "needs_evidence"
+        assert legacy.recovery is not None
+        assert projection is not None
+        assert projection.phase is DemoPhaseV2.TERMINAL_TASK_FAILURE
+        assert projection.task is not None
+        assert projection.task.status.value == "needs_evidence"
+        assert projection.planning_run is not None
+        assert projection.planning_run.state == "blocked"
+        assert projection.task.planning_run_id == projection.planning_run.planning_run_id
+        assert projection.routes
+        assert projection.evidence
+        assert projection.comparison is None
+        assert projection.review_inputs is None
+        assert projection.current_brief_id is None
+        assert projection.recovery is None
+    finally:
+        await migrator.dispose()
+        await api.dispose()
+        await worker_engine.dispose()
+
+
 @pytest.mark.parametrize("blocked", (False, True))
 @pytest.mark.asyncio
 async def test_revision_two_ledger_projects_exact_predecessor_comparison(

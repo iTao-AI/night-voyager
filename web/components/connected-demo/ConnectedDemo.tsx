@@ -13,7 +13,7 @@ import { connectedWorkflowStage, type WorkflowStateReference } from "../../lib/p
 import { AdvisorWorkspaceShell } from "../presentation/AdvisorWorkspaceShell";
 import { JourneyConflictNotice } from "../demo-session/JourneyConflictNotice";
 import { PlanningSkillInspector } from "../skill-inspector/PlanningSkillInspector";
-import { AdvisorLedger, AdvisorLedgerAction } from "./AdvisorLedger";
+import { AdvisorLedger, AdvisorLedgerAction, isInitialBlockedLedger } from "./AdvisorLedger";
 import { DecisionReceiptTimeline } from "./DecisionReceiptTimeline";
 import { EvidenceDisclosure } from "./EvidenceDisclosure";
 import { FamilyDecisionAction, FamilyDecisionBrief } from "./FamilyDecisionBrief";
@@ -108,7 +108,7 @@ export function ConnectedDemo() {
     : null;
   const ledgerOwnsAction = Boolean(ledger && !["role_switching", "recoverable_error"].includes(state.value));
   const status = (() => {
-    if (ledger) return presentCode(locale, "demoPhase", ledger.phase);
+    if (ledger) return isInitialBlockedLedger(ledger) ? copy("initialBlockedTitle") : presentCode(locale, "demoPhase", ledger.phase);
     switch (state.value) {
       case "bootstrapping": return copy("demoStartBody");
       case "revision_requested": return copy("revisionProposalBody");

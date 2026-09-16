@@ -35,7 +35,7 @@ const portfolioCopy = presentationLocale === "en" ? {
 } as const;
 const presentationCopy = presentationLocale === "en" ? {
   startParent: "Start parent flow",
-  addBudget: "Add confirmed budget message",
+  submitBudget: "Submit budget details",
   proposeBudget: "Submit the budget for advisor review",
   continueAdvisor: "Continue as assigned advisor",
   confirmBudget: "Confirm family budget",
@@ -56,7 +56,7 @@ const presentationCopy = presentationLocale === "en" ? {
   continueExecution: "Continue this Case into execution",
 } : {
   startParent: "开始家长流程",
-  addBudget: "添加已确认预算消息",
+  submitBudget: "提交预算说明",
   proposeBudget: "提交预算供顾问审核",
   continueAdvisor: "以指定顾问身份继续",
   confirmBudget: "确认家庭预算",
@@ -663,7 +663,9 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: presentationLocale === "en" ? "Skip to main content" : "跳到主要内容" })).toBeFocused();
   await page.getByRole("button", { name: presentationCopy.startParent }).click();
-  await page.getByRole("button", { name: presentationCopy.addBudget }).click();
+  await expect(page.locator("[data-budget-input='preferred']")).toHaveValue("300000");
+  await expect(page.locator("[data-budget-input='hard-ceiling']")).toHaveValue("400000");
+  await page.getByRole("button", { name: presentationCopy.submitBudget }).click();
   await page.getByRole("button", { name: presentationCopy.proposeBudget }).click();
   await page.getByRole("button", { name: presentationCopy.continueAdvisor }).click();
   await page.getByRole("button", { name: presentationCopy.confirmBudget }).click();
