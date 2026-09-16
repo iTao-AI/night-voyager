@@ -391,6 +391,7 @@ def test_initial_blocked_terminal_ledger_may_carry_the_persisted_result() -> Non
     assert projection.planning_run.state == "blocked"
 
     mismatched = deepcopy(payload)
+    assert isinstance(mismatched["task"], dict)
     mismatched["task"]["planning_run_id"] = "70000000-0000-0000-0000-000000000099"
     with pytest.raises(ValidationError, match="terminal-task-failure"):
         AdvisorLedgerV2.model_validate(mismatched)
