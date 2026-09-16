@@ -19,6 +19,7 @@ import {
 } from "../../lib/presentation/journey";
 import { en, zhCN } from "../../lib/presentation/catalog";
 import type { CollaborationMessage, MemoryCandidateProjection } from "../../lib/collaboration-demo/contracts";
+import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
 import { brief, ledger as ledgerFixture, status } from "./connected-demo-test-data";
 
 const collaborationHook = vi.hoisted(() => ({ current: null as unknown }));
@@ -105,6 +106,10 @@ function collaborationState(value: string, role: "parent" | "advisor" = "parent"
     },
     inspector: null,
     journeyConflict: null,
+    budgetDraft: { preferredYuan: "300000", hardCeilingYuan: "400000" },
+    setBudgetDraft: vi.fn(),
+    budgetIntent: defaultBudgetIntent(1),
+    budgetValidation: null,
     connectParent: vi.fn(),
     appendMessage: vi.fn(),
     proposeBudget: vi.fn(),
