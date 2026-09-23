@@ -8,12 +8,44 @@ import { formatIsoDate } from "../../lib/presentation/format";
 export function EvidenceDisclosure({ evidence }: { evidence: Ledger["evidence"] }) {
   const { locale, copy } = usePresentation();
   if (!evidence?.length) return null;
+  const sourceExample = evidence[0];
+  const allEvidenceSummary = copy("evidenceAllSummary").replace(
+    "{count}",
+    String(evidence.length),
+  );
+
   return (
     <section className="evidence-disclosure" aria-labelledby="evidence-summary-title">
       <p className="overline" id="evidence-summary-title">{copy("evidenceTitle")}</p>
       <p>{copy("evidenceOverline")}</p>
+      <article
+        className="evidence-source-example"
+        aria-labelledby="evidence-source-example-title"
+      >
+        <p className="technical-label" id="evidence-source-example-title">
+          {copy("evidenceSourceExample")}
+        </p>
+        <dl>
+          <div>
+            <dt>{copy("evidenceClaimLabel")}</dt>
+            <dd>{presentCode(locale, "evidenceClaim", sourceExample.claim)}</dd>
+          </div>
+          <div>
+            <dt>{copy("evidencePublisherLabel")}</dt>
+            <dd>{sourceExample.publisher}</dd>
+          </div>
+          <div>
+            <dt>{copy("evidenceSnapshotLabel")}</dt>
+            <dd>{formatIsoDate(locale, sourceExample.snapshot_date)}</dd>
+          </div>
+          <div>
+            <dt>{copy("evidenceLimitationLabel")}</dt>
+            <dd className="evidence-raw-content">{sourceExample.limitation}</dd>
+          </div>
+        </dl>
+      </article>
       <details className="technical-details">
-        <summary>{copy("evidenceTitle")}</summary>
+        <summary>{allEvidenceSummary}</summary>
         <ul className="evidence-list">
           {evidence.map((item, index) => (
             <li key={`${item.snapshot_date}-${index}`}>

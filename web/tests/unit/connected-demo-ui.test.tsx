@@ -1,10 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
 import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
 import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
+import { EvidenceDisclosure } from "../../components/connected-demo/EvidenceDisclosure";
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
 import { PlanningRevisionComparison } from "../../components/connected-demo/PlanningRevisionComparison";
 import { RecoveryNotice } from "../../components/connected-demo/RecoveryNotice";
@@ -15,7 +16,7 @@ import type {
   FactKey,
   FactValue,
 } from "../../lib/collaboration-demo/contracts";
-import type { CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
+import type { AdvisorLedger as Ledger, CurrentDecisionBrief, TaskStatus } from "../../lib/connected-demo/contracts";
 import { PresentationProvider } from "../../lib/presentation/context";
 import { brief as briefFixture, comparison as comparisonFixture, CONFIRMED_FACT, initialBlockedLedger, ledger as ledgerFixture, status as statusFor } from "./connected-demo-test-data";
 
@@ -98,6 +99,74 @@ it("presents connected route analysis inside the advisor workspace shell", () =>
   expect(container.querySelector("[data-frame-slot='evidence']")).toBeInTheDocument();
   expect(container.querySelector("[data-frame-slot='technical']:not([open])")).toBeInTheDocument();
   expect(screen.queryByText("顾问到家庭决策流程")).toBeNull();
+});
+
+it("shows one source example outside the collapsed full evidence list", () => {
+  const baseEvidence = ledgerFixture("review-required").evidence[0]!;
+  const longLimitation = `Review notes <script>alert(1)</script> ${"x".repeat(1200)}`;
+  const evidence: Ledger["evidence"] = [
+    {
+      ...baseEvidence,
+      claim: "australia_program_fit",
+      publisher: "First <publisher>",
+      snapshot_date: "2026-07-01",
+      limitation: longLimitation,
+    },
+    {
+      ...baseEvidence,
+      claim: "japan_program_fit",
+      publisher: "Second publisher",
+      snapshot_date: "2026-07-02",
+      limitation: "The second source has a known gap.",
+    },
+  ];
+  const { container } = renderPresentation(<EvidenceDisclosure evidence={evidence} />);
+
+  const example = screen.getByRole("article", { name: "来源示例" });
+  const exampleContent = within(example);
+  expect(example).toBeVisible();
+  expect(exampleContent.getByText("来源主张")).toBeVisible();
+  expect(exampleContent.getByText("澳大利亚项目匹配")).toBeVisible();
+  expect(exampleContent.getByText("发布方")).toBeVisible();
+  expect(exampleContent.getByText("First <publisher>")).toBeVisible();
+  expect(exampleContent.getByText("2026年7月1日")).toBeVisible();
+  expect(exampleContent.getByText("证据限制")).toBeVisible();
+  expect(example.querySelector(".evidence-raw-content")?.textContent).toBe(longLimitation);
+  expect(example.querySelector("script")).toBeNull();
+  expect(example.querySelector(".evidence-raw-content")).toHaveClass("evidence-raw-content");
+
+  const details = container.querySelector(".evidence-disclosure details");
+  expect(details).not.toHaveAttribute("open");
+  expect(details?.querySelector("summary")).toHaveTextContent("查看全部依据（2）");
+  const rows = Array.from(details?.querySelectorAll(".evidence-list li") ?? []);
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toHaveTextContent("First <publisher>");
+  expect(rows[0]).toHaveTextContent(longLimitation);
+  expect(rows[1]).toHaveTextContent("Second publisher");
+  expect(rows[1]).toHaveTextContent("The second source has a known gap.");
+});
+
+it("localizes the source example labels and date in English", async () => {
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  const evidence = ledgerFixture("review-required").evidence;
+  renderPresentation(<EvidenceDisclosure evidence={evidence} />);
+
+  const example = await screen.findByRole("article", { name: "Source example" });
+  const exampleContent = within(example);
+  expect(exampleContent.getByText("Source claim")).toBeVisible();
+  expect(exampleContent.getByText("Australia program fit")).toBeVisible();
+  expect(exampleContent.getByText("Publisher")).toBeVisible();
+  expect(exampleContent.getByText("Synthetic publisher")).toBeVisible();
+  expect(exampleContent.getByText("Jul 1, 2026")).toBeVisible();
+  expect(exampleContent.getByText("Evidence limitation")).toBeVisible();
+  expect(screen.getByText("View all evidence (1)")).toBeVisible();
+});
+
+it("renders no source example when the server has no evidence", () => {
+  const { container } = renderPresentation(<EvidenceDisclosure evidence={[]} />);
+
+  expect(container.querySelector(".evidence-disclosure")).toBeNull();
+  expect(screen.queryByRole("article", { name: /source example|来源示例/i })).toBeNull();
 });
 
 it("makes same-Case execution the primary receipt handoff and retains independent recovery", () => {

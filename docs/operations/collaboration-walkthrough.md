@@ -15,6 +15,8 @@ navigation, task count, or EventSource count/URL.
 
 The current presentation authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The shared frame and five-stage rail are display-only; the route retains existing business and server authority.
 
+Before opening the native disclosure, readers can inspect an illustrative source example—the first accepted row in source order, showing its localized claim, publisher, snapshot date, and original limitation—while the collapsed disclosure retains the complete ordered list.
+
 ![Confirmed family fact and Case revision](../assets/collaboration-confirmed-fact.png)
 
 ![Configurable budget intake](../assets/collaboration-budget-intake.png)
