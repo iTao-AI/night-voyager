@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+import time
 import tomllib
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from threading import Thread
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -27,9 +30,86 @@ from night_voyager.dra.models import (
     DraRunProjectionV1,
     DraStrictConsumerIdentityV2,
 )
+from night_voyager.dra.reconciliation import (
+    DraAmbiguousOutcome,
+    DraTransportConflict,
+    DraTransportError,
+)
 from night_voyager.identity.models import ActorContext, ActorRole
 
 ROOT = Path(__file__).parents[2]
+
+
+@pytest.fixture
+def local_dra_http_service() -> Iterator[tuple[str, dict[str, object]]]:
+    state: dict[str, object] = {
+        "status": 200,
+        "body": b'{"status":"ok","service":"decision-research-agent"}',
+        "delay_seconds": 0.0,
+        "headers": {},
+        "requests": [],
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_GET(self) -> None:  # noqa: N802
+            self._respond()
+
+        def do_POST(self) -> None:  # noqa: N802
+            self._respond()
+
+        def _respond(self) -> None:
+            content_length = int(self.headers.get("Content-Length", "0"))
+            body = self.rfile.read(content_length)
+            requests = cast(list[dict[str, object]], state["requests"])
+            requests.append(
+                {
+                    "method": self.command,
+                    "path": self.path,
+                    "headers": {
+                        key.lower(): value for key, value in self.headers.items()
+                    },
+                    "body": body,
+                }
+            )
+            delay_seconds = cast(float, state["delay_seconds"])
+            if delay_seconds:
+                time.sleep(delay_seconds)
+            response_body = cast(bytes, state["body"])
+            response_headers = cast(dict[str, str], state["headers"])
+            try:
+                self.send_response(cast(int, state["status"]))
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Transfer-Encoding", "chunked")
+                self.send_header("Connection", "close")
+                for key, value in response_headers.items():
+                    self.send_header(key, value)
+                self.end_headers()
+                for offset in range(0, len(response_body), 16):
+                    chunk = response_body[offset : offset + 16]
+                    self.wfile.write(f"{len(chunk):X}\r\n".encode("ascii"))
+                    self.wfile.write(chunk + b"\r\n")
+                    self.wfile.flush()
+                self.wfile.write(b"0\r\n\r\n")
+                self.wfile.flush()
+            except OSError:
+                return
+
+        def log_message(self, format: str, *args: Any) -> None:
+            del format, args
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server.daemon_threads = True
+    thread = Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.server_address
+    try:
+        yield f"http://{host}:{port}", state
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
 
 
 @pytest.mark.parametrize(
@@ -179,6 +259,138 @@ async def test_transport_enforces_bounded_stream_read() -> None:
         client_factory=factory,
     )
     with pytest.raises(DraOutputLimitExceeded, match="dra_response_limit"):
+        await transport.health()
+
+
+@pytest.mark.asyncio
+async def test_real_httpx2_client_streams_local_json_and_preserves_idempotency(
+    local_dra_http_service: tuple[str, dict[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    base_url, state = local_dra_http_service
+    for name in ("HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"):
+        monkeypatch.setenv(name, "http://127.0.0.1:1")
+    for name in ("NO_PROXY", "no_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    state.update(
+        {
+            "status": 201,
+            "body": json.dumps(
+                {
+                    "thread_id": "thread-1",
+                    "run_id": "run-1",
+                    "segment_id": "segment-1",
+                    "idempotent_replay": True,
+                }
+            ).encode(),
+        }
+    )
+    transport = Httpx2DraTransport(
+        DraClientConfig(base_url=base_url, poll_seconds=1, deadline_seconds=2),
+        environ={},
+    )
+
+    accepted = await transport.create_run(
+        {"profile_id": "generic-strict-citation"}, "bounded-idempotency-key"
+    )
+
+    requests = cast(list[dict[str, object]], state["requests"])
+    assert accepted.idempotent_replay is True
+    assert len(requests) == 1
+    request = requests[0]
+    assert request["method"] == "POST"
+    assert request["path"] == "/api/runs"
+    headers = cast(dict[str, str], request["headers"])
+    assert headers["idempotency-key"] == "bounded-idempotency-key"
+    assert json.loads(cast(bytes, request["body"])) == {
+        "profile_id": "generic-strict-citation"
+    }
+
+
+@pytest.mark.asyncio
+async def test_real_httpx2_client_does_not_follow_local_redirects(
+    local_dra_http_service: tuple[str, dict[str, object]],
+) -> None:
+    base_url, state = local_dra_http_service
+    state.update(
+        {
+            "status": 302,
+            "headers": {"Location": f"{base_url}/redirect-target"},
+        }
+    )
+    transport = Httpx2DraTransport(
+        DraClientConfig(base_url=base_url, poll_seconds=1, deadline_seconds=2),
+        environ={},
+    )
+
+    with pytest.raises(DraTransportError, match="dra_transport_failed"):
+        await transport.health()
+
+    requests = cast(list[dict[str, object]], state["requests"])
+    assert [request["path"] for request in requests] == ["/health"]
+
+
+@pytest.mark.asyncio
+async def test_real_httpx2_client_maps_local_timeout_to_ambiguous_outcome(
+    local_dra_http_service: tuple[str, dict[str, object]],
+) -> None:
+    base_url, state = local_dra_http_service
+    state["delay_seconds"] = 0.3
+    transport = Httpx2DraTransport(
+        DraClientConfig(base_url=base_url, poll_seconds=1, deadline_seconds=0.1),
+        environ={},
+    )
+
+    with pytest.raises(DraAmbiguousOutcome, match="dra_transport_ambiguous"):
+        await transport.health()
+
+    requests = cast(list[dict[str, object]], state["requests"])
+    assert [request["path"] for request in requests] == ["/health"]
+
+
+@pytest.mark.asyncio
+async def test_real_httpx2_client_stops_after_bounded_chunked_response(
+    local_dra_http_service: tuple[str, dict[str, object]],
+) -> None:
+    base_url, state = local_dra_http_service
+    state["body"] = b'{"status":"ok","service":"' + b"x" * 256 + b'"}'
+    transport = Httpx2DraTransport(
+        DraClientConfig(
+            base_url=base_url,
+            poll_seconds=1,
+            deadline_seconds=2,
+            response_bytes=32,
+        ),
+        environ={},
+    )
+
+    with pytest.raises(DraOutputLimitExceeded, match="dra_response_limit"):
+        await transport.health()
+
+
+@pytest.mark.parametrize(
+    ("status", "body", "error_type"),
+    (
+        (409, b'{"error":"conflict"}', DraTransportConflict),
+        (503, b'{"error":"unavailable"}', DraTransportError),
+        (200, b"not-json", DraTransportError),
+    ),
+)
+@pytest.mark.asyncio
+async def test_real_httpx2_client_maps_local_status_and_json_errors(
+    local_dra_http_service: tuple[str, dict[str, object]],
+    status: int,
+    body: bytes,
+    error_type: type[DraTransportError],
+) -> None:
+    base_url, state = local_dra_http_service
+    state.update({"status": status, "body": body})
+    transport = Httpx2DraTransport(
+        DraClientConfig(base_url=base_url, poll_seconds=1, deadline_seconds=2),
+        environ={},
+    )
+
+    with pytest.raises(error_type):
         await transport.health()
 
 
@@ -446,11 +658,13 @@ def test_dra_transport_is_an_exact_optional_release_contract() -> None:
     lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
     assert pyproject["project"]["optional-dependencies"]["dra"] == [
-        "httpx2>=2.5,<2.6"
+        "httpx2>=2.12,<2.13"
     ]
+    assert "httpx2>=2.12,<2.13" in pyproject["dependency-groups"]["dev"]
     locked = {
         package["name"]: package.get("version") for package in lock["package"]
     }
-    assert locked["httpx2"] == "2.5.0"
+    assert locked["httpx2"] == "2.12.0"
+    assert locked["httpcore2"] == "2.12.0"
     assert 'optional_dependencies.get("dra")' in verifier
     assert '\\"httpx2\\" not in sys.modules' in verifier

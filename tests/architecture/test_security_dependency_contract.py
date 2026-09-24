@@ -33,13 +33,17 @@ def test_fastapi_and_starlette_stay_on_approved_security_lines() -> None:
     ]
     assert fastapi_dependencies == ["fastapi>=0.139,<0.140"]
     assert "starlette>=1.3.1,<1.4" in runtime_dependencies
-    assert "httpx2>=2,<3" in dev_dependencies
+    assert "httpx2>=2.12,<2.13" in dev_dependencies
     assert not any(dependency.startswith("httpx>=") for dependency in dev_dependencies)
 
     locked_fastapi = _locked_version(uv_lock["package"], "fastapi")
     locked_starlette = _locked_version(uv_lock["package"], "starlette")
+    locked_httpx2 = _locked_version(uv_lock["package"], "httpx2")
+    locked_httpcore2 = _locked_version(uv_lock["package"], "httpcore2")
     assert (0, 139, 2) <= locked_fastapi < (0, 140)
     assert (1, 3, 1) <= locked_starlette < (1, 4)
+    assert locked_httpx2 == (2, 12, 0)
+    assert locked_httpcore2 >= (2, 10, 0)
 
 
 def test_next_family_stays_on_approved_security_patch() -> None:
