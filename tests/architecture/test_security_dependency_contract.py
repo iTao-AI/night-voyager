@@ -10,7 +10,7 @@ POSTCSS_VERSION = "8.5.23"
 NANOID_VERSION = "3.3.18"
 REACT_VERSION = "19.2.8"
 PROJECT_VERSION = "0.1.6"
-SHARP_MINIMUM_VERSION = (0, 35, 3)
+SHARP_MINIMUM_VERSION = (0, 35, 4)
 
 
 def _locked_version(packages: list[dict[str, object]], name: str) -> tuple[int, ...]:
@@ -86,3 +86,17 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     )
     assert sharp_version >= SHARP_MINIMUM_VERSION
     assert locked_sharp["optional"] is True
+
+
+def test_locked_web_dependencies_meet_open_security_advisories() -> None:
+    web_lock = json.loads((ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
+    minimum_versions = {
+        "baseline-browser-mapping": (2, 11, 0),
+        "browserslist": (4, 28, 7),
+        "js-yaml": (4, 3, 2),
+        "sharp": SHARP_MINIMUM_VERSION,
+    }
+    locked_packages = web_lock["packages"]
+    for name, minimum in minimum_versions.items():
+        version = locked_packages[f"node_modules/{name}"]["version"]
+        assert tuple(int(part) for part in version.split(".")) >= minimum, name
