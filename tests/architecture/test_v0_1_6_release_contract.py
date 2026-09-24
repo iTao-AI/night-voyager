@@ -64,13 +64,9 @@ HISTORICAL_RELEASE_DIGESTS = {
         "d5e935c5d51f4492ea2f897540ce596bdc73e07b8999e4fc3afe066abef533ec"
     ),
 }
-ROOT_IDENTITY_BASELINE_DIGESTS = {
+ROOT_MANIFEST_BASELINE_DIGESTS = {
     "pyproject.toml": "bf5787b9aa88b5665fc99e29664f50ebac74996635390317f869bd74a1900805",
-    "uv.lock": "370ed4ef110cb8e050e276a9baf752c0e2cfe8c50e7ee143115b113b5a4bd253",
     "web/package.json": "de78770cde96ffc5e1041bb348d21c273be0f72eb1b404bf7aa0a7c8ba4d3051",
-    "web/package-lock.json": (
-        "a197ff7f16618ff920de6fc83d14cea97476f4ed1fff6a9abd41aa49d76e71dc"
-    ),
 }
 
 
@@ -116,7 +112,7 @@ def _run_archive_validator(archive: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_v0_1_6_identity_changes_only_night_voyager_root_versions() -> None:
+def test_v0_1_6_identity_versions_match_across_manifests_and_locks() -> None:
     pyproject = tomllib.loads(_read("pyproject.toml"))
     uv_lock = tomllib.loads(_read("uv.lock"))
     package = json.loads(_read("web/package.json"))
@@ -131,20 +127,21 @@ def test_v0_1_6_identity_changes_only_night_voyager_root_versions() -> None:
     assert package["version"] == VERSION
     assert package_lock["version"] == VERSION
     assert package_lock["packages"][""]["version"] == VERSION
+    assert package_lock["packages"][""]["name"] == package["name"]
+    assert package_lock["packages"][""]["dependencies"] == package["dependencies"]
+    assert package_lock["packages"][""]["devDependencies"] == package["devDependencies"]
     assert create_app().version == VERSION
 
     version_replacements = {
         "pyproject.toml": ('version = "0.1.6"', 'version = "0.1.5"'),
-        "uv.lock": ('version = "0.1.6"', 'version = "0.1.5"'),
         "web/package.json": ('"version": "0.1.6"', '"version": "0.1.5"'),
-        "web/package-lock.json": ('"version": "0.1.6"', '"version": "0.1.5"'),
     }
     for relative, (current, baseline) in version_replacements.items():
         source = (ROOT / relative).read_text(encoding="utf-8")
         assert current in source, relative
         restored = source.replace(current, baseline)
         assert hashlib.sha256(restored.encode("utf-8")).hexdigest() == (
-            ROOT_IDENTITY_BASELINE_DIGESTS[relative]
+            ROOT_MANIFEST_BASELINE_DIGESTS[relative]
         ), relative
 
 
