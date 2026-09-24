@@ -51,13 +51,50 @@ GOVERNED_PROOF = ROOT / "scripts/verify_dra_governed_flow.py"
 
 
 def _run(*arguments: str) -> subprocess.CompletedProcess[str]:
+    python = ROOT / ".venv" / "bin" / "python"
+    if not python.is_file():
+        raise FileNotFoundError(f"prepared candidate CLI Python is missing: {python}")
     return subprocess.run(
-        ("uv", "run", "python", str(CLI), *arguments),
+        (str(python), str(CLI), *arguments),
         cwd=ROOT,
         text=True,
         capture_output=True,
         check=False,
     )
+
+
+def test_cli_runner_uses_prepared_candidate_python(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    python = tmp_path / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(
+        '#!/bin/sh\nprintf \'candidate:%s:%s\\n\' "$1" "$2"\n',
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    cli = tmp_path / "cli.py"
+    cli.write_text("raise SystemExit('wrong interpreter')\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "ROOT", tmp_path)
+    monkeypatch.setitem(globals(), "CLI", cli)
+    monkeypatch.setenv("PATH", "")
+
+    result = _run("promote")
+
+    assert result.returncode == 0
+    assert result.stdout == f"candidate:{cli}:promote\n"
+
+
+def test_cli_runner_fails_before_starting_when_candidate_python_is_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(globals(), "ROOT", tmp_path)
+    monkeypatch.setenv("PATH", "")
+
+    with pytest.raises(FileNotFoundError, match="prepared candidate CLI Python is missing"):
+        _run("promote")
 
 
 def test_promote_is_a_real_stage_command_not_a_preflight_stub(
