@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { CollaborationDemo } from "../../components/collaboration-demo/CollaborationDemo";
@@ -352,8 +352,10 @@ it("preserves server-owned message, advisor reason, and evidence limitation exac
   const evidenceView = renderPresentation(<EvidenceDisclosure evidence={evidence} />);
   const disclosure = evidenceView.container.querySelector("details");
   if (disclosure) disclosure.open = true;
-  expect(screen.getByText("证据限制")).toBeVisible();
-  expect(screen.getByText(RAW_LIMITATION)).toBeVisible();
+  const evidenceList = evidenceView.container.querySelector<HTMLElement>(".evidence-list");
+  expect(evidenceList).not.toBeNull();
+  expect(within(evidenceList!).getByText("证据限制")).toBeVisible();
+  expect(within(evidenceList!).getByText(RAW_LIMITATION)).toBeVisible();
 });
 
 it("keeps the shared journey presentational and side-effect free", () => {

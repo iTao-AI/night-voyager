@@ -59,10 +59,10 @@ family decision, DecisionReceipt, TimelinePlan, optional execution, active role,
 and assigned status. The browser carries only the Case route identity.
 
 The connected proof starts execution through the existing family mutation, reloads
-the same authority, replays a lost acknowledgement with the same receipt and
-idempotency key, rotates to the assigned advisor, records a blocked checkpoint, and
-reassesses the exact predecessor. Reassessment stops at
-`pending_future_authorization`; it creates no automatic successor. Wrong-Case,
+the same authority, and replays a lost acknowledgement with the same receipt and
+idempotency key. The student then records a blocked checkpoint, the workflow rotates
+to the assigned advisor, and the advisor reassesses the exact predecessor.
+Reassessment stops at `pending_future_authorization`; it creates no automatic successor. Wrong-Case,
 wrong-role, cross-Case, mixed-route, stale-session, and recovery-source mismatches
 fail closed.
 

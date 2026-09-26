@@ -299,6 +299,44 @@ th {
   margin: 1.5rem 0 0;
 }
 
+.evidence-source-example {
+  margin: 1rem 0 1.25rem;
+  padding-top: .9rem;
+  border-top: 1px solid var(--nv-border);
+  color: var(--nv-ink);
+}
+
+.evidence-source-example > p {
+  margin: 0;
+}
+
+.evidence-source-example dl {
+  display: grid;
+  gap: .8rem;
+  margin: .75rem 0 0;
+}
+
+.evidence-source-example dl div {
+  min-width: 0;
+}
+
+.evidence-source-example dt {
+  color: var(--nv-muted);
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.evidence-source-example dd {
+  margin: .25rem 0 0;
+  color: var(--nv-ink);
+}
+
+.evidence-source-example .evidence-raw-content {
+  display: block;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .message-list {
   padding: 0;
   list-style: none;
