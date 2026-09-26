@@ -103,7 +103,8 @@ def local_dra_http_service() -> Iterator[tuple[str, dict[str, object]]]:
     server.daemon_threads = True
     thread = Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    host, port = server.server_address
+    host = server.server_address[0]
+    port = server.server_address[1]
     try:
         yield f"http://{host}:{port}", state
     finally:
