@@ -20,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION = "0.1.6"
 FASTAPI_VERSION_FLOOR = (0, 139, 2)
 FASTAPI_VERSION_CEILING = (0, 140)
+HTTPX2_VERSION = "2.12.0"
+HTTPCORE2_VERSION = "2.12.0"
 RELEASE_TAG = f"v{VERSION}"
 RELEASE_ARCHIVE_URL = (
     f"https://github.com/iTao-AI/night-voyager/archive/refs/tags/{RELEASE_TAG}.tar.gz"
@@ -1363,10 +1365,16 @@ def verify_config() -> None:
         raise SystemExit(f"identity version mismatch: {versions}")
     runtime_dependencies = pyproject["project"]["dependencies"]
     optional_dependencies = pyproject["project"].get("optional-dependencies", {})
-    if optional_dependencies.get("dra") != ["httpx2>=2.5,<2.6"]:
+    if optional_dependencies.get("dra") != ["httpx2>=2.12,<2.13"]:
         raise SystemExit("DRA must remain an exact optional dependency range")
-    if package_version(uv_lock["package"], "httpx2") != "2.5.0":
-        raise SystemExit("httpx2 optional lock must remain at the reviewed 2.5.0 version")
+    if "httpx2>=2.12,<2.13" not in pyproject["dependency-groups"]["dev"]:
+        raise SystemExit("development HTTPX2 must exclude affected versions below 2.12")
+    if package_version(uv_lock["package"], "httpx2") != HTTPX2_VERSION:
+        raise SystemExit(f"DRA HTTPX2 lock must remain at {HTTPX2_VERSION}")
+    if package_version(uv_lock["package"], "httpcore2") != HTTPCORE2_VERSION:
+        raise SystemExit(
+            f"DRA HTTPCore2 lock must match HTTPX2 metadata at {HTTPCORE2_VERSION}"
+        )
     if optional_dependencies.get("mke") != ["mcp>=1.28.1,<2"]:
         raise SystemExit("MKE must remain an exact optional dependency range")
     if package_version(uv_lock["package"], "mcp") != "1.28.1":

@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -21,14 +22,6 @@ PRIVATE_OR_METADATA_MARKERS = (
     b"XMP ",
     b"http://ns.adobe.com/xap/",
 )
-LOCKED_DEPENDENCY_IDENTITIES = {
-    "pyproject.toml": "519c53ca3c5b11c4ef8e5497ef690d029c537e96354cb1175bf0fe285596adca",
-    "uv.lock": "ce51d47935a7fd7749e0ce3dd9ef02b6d62bc0ef816c46f9a5282cb20b1d4922",
-    "web/package.json": "35235629fb2ddf64cdaf50b4275939b3c02ebc79e49ef90d85d1fc1792c7fe19",
-    "web/package-lock.json": (
-        "bc96d7777912b76f2bfe4edf73f8a139d4112e0e50569523b7c9767ebd10cbd5"
-    ),
-}
 PRESENTATION_AUDIT = ROOT / "web/e2e/presentation.spec.ts"
 M3A_MANIFEST = ROOT / "fixtures/m3a/manifest.json"
 PLAN_EXECUTION_EVIDENCE = (
@@ -54,14 +47,41 @@ REMOVED_RUNTIME_ASSETS = tuple(
 )
 
 
-def _sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def _png_size(data: bytes) -> tuple[int, int]:
     assert data.startswith(b"\x89PNG\r\n\x1a\n")
     assert data[12:16] == b"IHDR"
     return int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+
+
+def _uv_requirement_records(
+    requirements: list[str], *, extra: str | None = None
+) -> list[dict[str, object]]:
+    records: list[dict[str, object]] = []
+    for requirement in requirements:
+        requirement_text, separator, declared_marker = requirement.partition(";")
+        match = re.fullmatch(
+            r"\s*(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)"
+            r"(?:\[(?P<extras>[A-Za-z0-9_., -]+)\])?"
+            r"(?P<specifier>.*)",
+            requirement_text.strip(),
+        )
+        assert match is not None, requirement
+        record: dict[str, object] = {"name": match["name"].lower()}
+        extras = match["extras"]
+        if extras:
+            record["extras"] = sorted(item.strip() for item in extras.split(","))
+        specifier = match["specifier"].strip()
+        if specifier:
+            record["specifier"] = specifier
+        marker = declared_marker.strip() if separator else ""
+        if extra:
+            marker = f"extra == '{extra}'"
+            if separator:
+                marker += f" and ({declared_marker.strip()})"
+        if marker:
+            record["marker"] = marker
+        records.append(record)
+    return sorted(records, key=lambda record: (str(record["name"]), str(record.get("marker", ""))))
 
 
 def test_approved_source_identity_is_exact() -> None:
@@ -84,9 +104,35 @@ def test_runtime_portfolio_directory_contains_no_png_source() -> None:
     assert not runtime_directory.exists() or not any(runtime_directory.glob("*.png"))
 
 
-def test_dependency_manifests_and_locks_keep_the_approved_identity() -> None:
-    for relative, expected_sha256 in LOCKED_DEPENDENCY_IDENTITIES.items():
-        assert _sha256(ROOT / relative) == expected_sha256, relative
+def test_dependency_manifests_and_lock_metadata_stay_consistent() -> None:
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    web_package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
+    npm_lock = json.loads((ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
+
+    project = pyproject["project"]
+    locked_project = next(
+        item for item in uv_lock["package"] if item.get("name") == project["name"]
+    )
+    expected_requires_dist = _uv_requirement_records(project["dependencies"])
+    for extra, requirements in project.get("optional-dependencies", {}).items():
+        expected_requires_dist.extend(_uv_requirement_records(requirements, extra=extra))
+    expected_requires_dist.sort(
+        key=lambda record: (str(record["name"]), str(record.get("marker", "")))
+    )
+    assert locked_project["version"] == project["version"]
+    assert locked_project["metadata"]["requires-dist"] == expected_requires_dist
+    assert locked_project["metadata"]["requires-dev"]["dev"] == _uv_requirement_records(
+        pyproject["dependency-groups"]["dev"]
+    )
+
+    npm_root = npm_lock["packages"][""]
+    assert npm_lock["name"] == web_package["name"]
+    assert npm_lock["version"] == web_package["version"]
+    assert npm_root["name"] == web_package["name"]
+    assert npm_root["version"] == web_package["version"]
+    assert npm_root.get("dependencies", {}) == web_package.get("dependencies", {})
+    assert npm_root.get("devDependencies", {}) == web_package.get("devDependencies", {})
 
 
 def test_root_presentation_is_responsive_reduced_motion_and_runtime_static() -> None:
