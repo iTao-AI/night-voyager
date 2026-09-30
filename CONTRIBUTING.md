@@ -59,6 +59,9 @@ an external artifact, while the real candidate proof remains maintainer-operated
 - DRA import must remain `UNTRUSTED_CANDIDATE`; verification and promotion stay one atomic database authority. Mixed planning may use external authority only for `australia_program_fit` and must preserve the exact synthetic baseline for all other facts. Never put `make dra-consumer-proof` in required CI or run it without the [separate authorization gate](docs/operations/dra-consumer-proof.md).
 - Collaboration messages never grant Case authority. Participant proposals remain revision-pinned candidates until an assigned advisor confirms them through the atomic PostgreSQL gate; runtime code must not restore the legacy whole-revision writer.
 - Skill evaluation is evidence, not activation authority. Keep executable bindings packaged and checked in; database rows, catalog-only versions, browser input, or worker output must not invent runtime support. Every new planning task and execution retains the exact five-field pin and fails closed before adapter start when it is invalid.
-- Run `make check` and `git diff --check`, inspect the exact diff, and stage exact paths before committing.
+- Before committing, run the checks selected by the change-to-test matrix and `git diff --check`,
+  inspect the exact diff, and stage exact paths. Run `make check` for broad/shared behavior or when
+  the matrix or release scope requires it; a focused documentation edit does not require the full
+  PostgreSQL/Compose gate solely because it is being committed.
 
 Pull requests should state scope, actual verification, documentation impact, and remaining risk.

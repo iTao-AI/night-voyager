@@ -157,6 +157,22 @@ Use the lightest process that still produces trustworthy evidence:
 
 Do not make `autoplan`, a second-model review, subagents, repeated full-repository review, or heavyweight artifacts mandatory for every task. Use them only when the user asks or the change's actual risk justifies them.
 
+### Approved design and execution
+
+- Use the official `gstack-workflows` plugin for relevant design and review work, and Superpowers
+  for implementation, debugging, and verification; select only the current phase's method.
+- Accept a public-neutral brief or approved repository spec with scope, constraints, observable
+  acceptance, delivery owner, Git starting point, and authorization. Use the persistence rules
+  below; small work needs only a brief. Directory placement alone is not approval.
+- Reuse approved design, verify current rules and Git state, and use
+  `superpowers:writing-plans` only for implementation gaps. The delivery owner decides in-scope
+  details; changes to goals, key design, acceptance, or authorization return to the design owner.
+- Choose direct execution for small work, or one plan route: `superpowers:executing-plans` for
+  self-implementation, or `superpowers:subagent-driven-development` for managed implementation
+  and review. Do not restart the full manager workflow inside a task worker.
+- Return the exact HEAD and acceptance evidence with remaining work. Distinguish local completion
+  from hosted delivery; missing remote authorization does not prevent a reviewable local result.
+
 ## Design and planning records
 
 Persist an approved design or plan when the change introduces a public contract, crosses multiple modules, changes architecture, or is expected to span multiple PRs.
@@ -193,23 +209,23 @@ Use Diataxis-style documentation where it helps users find answers:
 
 Do not create empty documentation folders. Update docs with the code whenever API, configuration, architecture, domain semantics, setup, demo flow, or user-visible behavior changes.
 
-For important features, public-contract changes, architecture changes, and release PRs,
-run a targeted documentation-release audit before merge. Check reference, how-to,
+Every release PR must run the GStack `document-release` targeted audit before merge
+(`gstack-workflows:document-release`). Apply the same targeted audit to important features,
+public-contract changes, and architecture changes. Check reference, how-to,
 explanation, and tutorial coverage according to actual user need; verify commands,
 relative links, and discoverability from the README or docs index.
 
-Every release PR must run the GStack `document-release` targeted audit before merge.
 Invoking a Skill does not authorize push, PR mutation, merge, tag, GitHub Release, publish,
 or deploy actions; each still requires the repository's explicit user authorization.
 
 Use `document-generate` only to close a concrete, in-scope documentation gap confirmed by
-the audit. Do not generate every Diataxis quadrant mechanically or duplicate existing
+the audit (`gstack-workflows:document-generate`). Do not generate every Diataxis quadrant mechanically or duplicate existing
 material. For an internal change with no documentation effect, record
 `No documentation impact` in the PR.
 
 ## Implementation and testing
 
-- Write a failing test before behavioral implementation when practical.
+- Write a failing test before behavioral implementation; documentation-only changes do not require a TDD cycle.
 - Every bug fix needs a regression test that demonstrates the failure.
 - Prefer pure functions for deterministic policy and state transitions.
 - Keep remote-provider tests mocked in required CI. Real-provider checks are opt-in and separately documented.
