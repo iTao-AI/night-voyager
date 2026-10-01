@@ -4,8 +4,10 @@ import { parseLedger } from "../../lib/connected-demo/contracts";
 import { createConnectedDemoApi } from "../../lib/connected-demo/api";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import { loadRecoveryMetadata, saveRecoveryMetadata } from "../../lib/connected-demo/session-storage";
-import { AdvisorLedgerAction } from "../../components/connected-demo/AdvisorLedger";
+import { AdvisorLedger, AdvisorLedgerAction } from "../../components/connected-demo/AdvisorLedger";
 import { PresentationProvider } from "../../lib/presentation/context";
+import { getPresentationCopy } from "../../lib/presentation/catalog";
+import { PRESENTATION_LOCALE_STORAGE_KEY } from "../../lib/presentation/locales";
 import { CASE_ID, TASK_ID, ledger, standaloneTask, status } from "./connected-demo-test-data";
 
 function recoverable() {
@@ -110,4 +112,41 @@ it("creates a fresh consent key for a later failed source", async () => {
   expect(keys[0]).toBeTruthy();
   expect(keys[0]).not.toBe(previousKey);
   expect(loadRecoveryMetadata()?.mutations["retry-task"]?.idempotencyKey).toBe(keys[0]);
+});
+
+it.each(["zh-CN", "en"] as const)("describes the server-authorized terminal recovery action in both stage summaries (%s)", async (locale) => {
+  localStorage.setItem(PRESENTATION_LOCALE_STORAGE_KEY, locale);
+  const value = recoverable();
+  render(<PresentationProvider>
+    <AdvisorLedgerAction ledger={value} onPrimaryAction={vi.fn()} />
+    <AdvisorLedger ledger={value} renderAction={false} onPrimaryAction={vi.fn()} />
+  </PresentationProvider>);
+  await waitFor(() => expect(screen.getAllByText(getPresentationCopy(locale, "advisorActionExplanation"))).toHaveLength(2));
+  expect(screen.queryAllByText(getPresentationCopy(locale, "noBusinessAction"))).toHaveLength(0);
+  expect(screen.getByRole("checkbox")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: getPresentationCopy(locale, "terminalRetryAction") })).toBeDisabled();
+});
+
+it.each(["zh-CN", "en"] as const)("retains no-action guidance and hides retry without full terminal authority (%s)", async (locale) => {
+  localStorage.setItem(PRESENTATION_LOCALE_STORAGE_KEY, locale);
+  const negative = recoverable();
+  const ineligible = { ...negative, canonical_task_inputs: null, recovery: { ...negative.recovery!, retry_allowed: false } };
+  const cases = [
+    ineligible,
+    { ...ineligible, task: { ...negative.task!, public_code: "invalid_schema" }, recovery: { ...ineligible.recovery, code: "invalid_schema" } },
+    { ...ineligible, task: { ...negative.task!, public_code: "provider_unknown" }, recovery: { ...ineligible.recovery, code: "provider_unknown" } },
+    { ...negative, canonical_task_inputs: null },
+    { ...negative, task: null },
+  ];
+  for (const value of cases) {
+    const mounted = render(<PresentationProvider>
+      <AdvisorLedgerAction ledger={value} onPrimaryAction={vi.fn()} />
+      <AdvisorLedger ledger={value} renderAction={false} onPrimaryAction={vi.fn()} />
+    </PresentationProvider>);
+    await waitFor(() => expect(screen.getAllByText(getPresentationCopy(locale, "noBusinessAction"))).toHaveLength(2));
+    expect(screen.queryAllByText(getPresentationCopy(locale, "advisorActionExplanation"))).toHaveLength(0);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: getPresentationCopy(locale, "terminalRetryAction") })).toBeNull();
+    mounted.unmount();
+  }
 });

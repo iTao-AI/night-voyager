@@ -48,12 +48,19 @@ function stageTitle(ledger: Ledger, primaryAction: string | null, copy: (key: Pr
       : primaryAction ?? presentCode(locale, "demoPhase", ledger.phase);
 }
 
+function hasTerminalRecoveryAction(ledger: Ledger): ledger is Ledger & { task: NonNullable<Ledger["task"]> } {
+  return Boolean(ledger.phase === "terminal_task_failure"
+    && ledger.recovery?.retry_allowed
+    && ledger.canonical_task_inputs
+    && ledger.task);
+}
+
 function stageDescription(ledger: Ledger, primaryAction: string | null, copy: (key: PresentationCopyKey) => string) {
   return isInitialBlockedLedger(ledger)
     ? copy("initialBlockedBody")
     : ledger.phase === "revision_blocked"
     ? copy("revisionBlockedBody")
-    : primaryAction
+    : primaryAction || hasTerminalRecoveryAction(ledger)
       ? copy("advisorActionExplanation")
       : copy("noBusinessAction");
 }
@@ -104,7 +111,7 @@ function ActionControls({
     const candidate = pendingRevisionCandidate(revisionCandidates, ledger.case_revision);
     return <RevisionConfirmation key={`${ledger.case_revision}:${candidate?.candidate_id}:${JSON.stringify(candidate?.value)}`} candidate={candidate} busy={busy} onConfirm={onConfirmRevision} />;
   }
-  if (ledger.phase === "terminal_task_failure" && ledger.recovery?.retry_allowed && ledger.canonical_task_inputs && ledger.task) {
+  if (hasTerminalRecoveryAction(ledger)) {
     return <TerminalRetryConsent key={`${ledger.task.task_id}:${ledger.task.row_version}:${ledger.case_revision}`} busy={busy} onSubmit={onPrimaryAction} />;
   }
   if (primaryAction) {
