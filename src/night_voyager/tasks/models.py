@@ -91,3 +91,9 @@ class CreateTaskCommand(FrozenModel):
 class CancelTaskCommand(FrozenModel):
     task_id: UUID
     expected_row_version: PositiveInt
+
+
+class RetryTaskCommand(FrozenModel):
+    task_id: UUID
+    expected_row_version: PositiveInt
+    expected_case_revision: PositiveInt

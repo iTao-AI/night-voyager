@@ -57,7 +57,7 @@ export function ConnectedDemo() {
   };
 
   useEffect(() => {
-    const busy = ["task_creating", "review_submitting", "decision_submitting", "role_switching"].includes(state.value);
+    const busy = demo.retrySubmitting || ["task_creating", "review_submitting", "decision_submitting", "role_switching"].includes(state.value);
     if (userTransition.current && previousState.current !== state.value && !busy) {
       const heading = document.querySelector<HTMLElement>("#demo-main .workspace-current-work > h2");
       heading?.setAttribute("tabindex", "-1");
@@ -65,7 +65,7 @@ export function ConnectedDemo() {
       userTransition.current = false;
     }
     previousState.current = state.value;
-  }, [state.value]);
+  }, [state.value, demo.retrySubmitting]);
 
   useEffect(() => {
     if (demo.journeyConflict && previousConflict.current !== demo.journeyConflict) conflictHeading.current?.focus();
@@ -88,10 +88,11 @@ export function ConnectedDemo() {
     state.value,
     "prior" in state && state.prior ? workflowReference(state.prior) : undefined,
   );
-  const busy = ["task_creating", "task_streaming", "review_submitting", "role_switching", "recoverable_error"].includes(state.value);
+  const busy = demo.retrySubmitting || ["task_creating", "task_streaming", "review_submitting", "role_switching", "recoverable_error"].includes(state.value);
   const primaryFor = (current: Ledger) => {
     switch (current.phase) {
       case "task_ready": return () => demo.createTask();
+      case "terminal_task_failure": return () => demo.retryTerminalTask();
       case "review_required": return () => demo.approve();
       case "replan_required": return () => demo.createRevisionTask();
       case "revision_review_required": return () => demo.approveRevision();

@@ -197,8 +197,16 @@ class PostgresConnectedDemoRepository:
                 task=public_task,
                 recovery=PublicRecoveryProjection(
                     code=task["terminal_code"] or status.value,
-                    retry_allowed=status
-                    in {TaskViewStatus.TIMED_OUT, TaskViewStatus.FAILED},
+                    retry_allowed=bool(
+                        await self._session.scalar(
+                            text("SELECT app.project_agent_task_retry_eligible(:org,:actor,:task)"),
+                            {
+                                "org": context.organization_id,
+                                "actor": context.actor_id,
+                                "task": task["id"],
+                            },
+                        )
+                    ),
                     guidance="Review the public task status before retrying.",
                 ),
             )
@@ -354,6 +362,18 @@ class PostgresConnectedDemoRepository:
                         "recovery": None,
                     }
                 )
+        if (
+            phase is DemoPhaseV2.TERMINAL_TASK_FAILURE
+            and legacy.recovery is not None
+            and legacy.recovery.retry_allowed
+        ):
+            payload["canonical_task_inputs"] = CanonicalDemoTaskInputs(
+                case_id=case_id,
+                expected_case_revision=legacy.case_revision,
+                source_pack_id=source.source_pack_id,
+                source_pack_version=source.source_pack_version,
+                policy_version=source.policy_version,
+            )
         payload.update(
             {
                 "schema_version": 2,

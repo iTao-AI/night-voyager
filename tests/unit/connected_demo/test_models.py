@@ -312,7 +312,7 @@ def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs()
         "case_revision": 2,
         "case_state": "planning",
         "canonical_task_inputs": None,
-        "task": task("needs_evidence"),
+        "task": {**task("needs_evidence"), "planning_run_id": RUN_ID},
         "planning_run": {
             **planning_run(),
             "state": "blocked",
@@ -348,17 +348,17 @@ def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs()
         "retry_allowed": False,
         "guidance": "Review the public task status before retrying.",
     }
-    with pytest.raises(ValidationError, match="revision-blocked"):
+    with pytest.raises(ValidationError, match="revision-blocked|nonterminal phase"):
         AdvisorLedgerV2.model_validate(with_recovery)
 
     wrong_task_state = deepcopy(payload)
     wrong_task_state["task"]["status"] = "needs_advisor_review"
-    with pytest.raises(ValidationError, match="revision-blocked"):
+    with pytest.raises(ValidationError, match="revision-blocked|nonterminal phase"):
         AdvisorLedgerV2.model_validate(wrong_task_state)
 
     wrong_run_state = deepcopy(payload)
     wrong_run_state["planning_run"]["state"] = "review_required"
-    with pytest.raises(ValidationError, match="revision-blocked"):
+    with pytest.raises(ValidationError, match="revision-blocked|nonterminal phase"):
         AdvisorLedgerV2.model_validate(wrong_run_state)
 
     with_review_inputs = deepcopy(payload)
@@ -368,7 +368,7 @@ def test_revision_blocked_ledger_requires_comparison_and_forbids_review_inputs()
         "eligible_route_ids": (),
         "risk_acceptance_options": (),
     }
-    with pytest.raises(ValidationError, match="revision-blocked"):
+    with pytest.raises(ValidationError, match="revision-blocked|nonterminal phase"):
         AdvisorLedgerV2.model_validate(with_review_inputs)
 
 
@@ -381,6 +381,7 @@ def test_initial_blocked_terminal_ledger_may_carry_the_persisted_result() -> Non
             "task": {**task("needs_evidence"), "planning_run_id": RUN_ID},
             "planning_run": {**planning_run(), "state": "blocked"},
             "comparison": None,
+            "canonical_task_inputs": None,
             "routes": (route(),),
             "evidence": (evidence(),),
         }
@@ -393,5 +394,59 @@ def test_initial_blocked_terminal_ledger_may_carry_the_persisted_result() -> Non
     mismatched = deepcopy(payload)
     assert isinstance(mismatched["task"], dict)
     mismatched["task"]["planning_run_id"] = "70000000-0000-0000-0000-000000000099"
-    with pytest.raises(ValidationError, match="terminal-task-failure"):
+    with pytest.raises(ValidationError, match="terminal-task-failure|planning task identity"):
         AdvisorLedgerV2.model_validate(mismatched)
+
+
+def recovery_terminal_v2() -> dict[str, object]:
+    return {
+        **base_ledger("terminal_task_failure"),
+        "schema_version": 2,
+        "comparison": None,
+        "case_state": "planning",
+        "task": {**task("failed"), "public_code": "transport_interrupted"},
+        "recovery": {
+            "code": "transport_interrupted",
+            "retry_allowed": True,
+            "guidance": "Fresh task requires advisor consent.",
+        },
+        "canonical_task_inputs": canonical_inputs(),
+    }
+
+
+def test_terminal_recovery_v2_requires_inputs_iff_eligible_and_matching_identity() -> None:
+    payload = recovery_terminal_v2()
+    AdvisorLedgerV2.model_validate(payload)
+    for delta in (
+        {"canonical_task_inputs": None},
+        {"case_state": "intake"},
+        {"canonical_task_inputs": {**canonical_inputs(), "expected_case_revision": 2}},
+        {"task": {**task("failed"), "public_code": "invalid_schema"}},
+        {"recovery": {"code": "invalid_schema", "retry_allowed": True, "guidance": "No"}},
+    ):
+        with pytest.raises(ValidationError):
+            AdvisorLedgerV2.model_validate({**payload, **delta})
+
+
+def test_terminal_recovery_v1_keeps_canonical_inputs_null() -> None:
+    payload = recovery_terminal_v2()
+    payload.pop("comparison")
+    payload.update(schema_version=1, phase="terminal-task-failure")
+    with pytest.raises(ValidationError):
+        AdvisorLedgerV1.model_validate(payload)
+
+
+@pytest.mark.parametrize("phase", ["review_required", "family_review", "revision_requested"])
+def test_v2_nonterminal_phase_cannot_carry_recovery_authority(phase: str) -> None:
+    payload = review_required_payload()
+    payload.update(schema_version=2, phase=phase, comparison=None)
+    payload["recovery"] = {"code": "transport_interrupted", "retry_allowed": True, "guidance": "No"}
+    with pytest.raises(ValidationError):
+        AdvisorLedgerV2.model_validate(payload)
+
+
+def test_v2_replan_requires_a_successor_revision() -> None:
+    payload = base_ledger("replan_required")
+    payload.update(schema_version=2, comparison=None)
+    with pytest.raises(ValidationError):
+        AdvisorLedgerV2.model_validate(payload)

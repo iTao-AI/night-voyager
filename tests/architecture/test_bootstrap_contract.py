@@ -187,7 +187,7 @@ def test_dependabot_disables_docker_version_updates_without_disabling_security_u
 def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() -> None:
     script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     shared_main = script.split('if [ "${1:-}" = "inside" ]; then', 1)[1].split(
-        'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
+        'if [ "${1:-}" = "inside-terminal-recovery" ]; then', 1
     )[0]
     final_refusal = shared_main.split(
         "tests/integration/decision/test_http_decision.py", 1
@@ -200,15 +200,15 @@ def test_strict_migration_lane_is_closed_and_unknown_modes_fail_before_docker() 
     assert 'if [ "${1:-}" = "dra-strict-migration" ]' in script
     assert "tests/integration/dra/test_dra_strict_migration.py" in script
     assert "--ignore=tests/integration/dra/test_dra_strict_migration.py" in shared_main
-    assert "uv run alembic current | grep '0015'" in shared_main
+    assert "uv run alembic current | grep '0016'" in shared_main
     assert "uv run alembic downgrade 0014" in final_refusal
     assert "uv run alembic downgrade 0007" not in final_refusal
-    assert "expected plan execution identity downgrade refusal" in final_refusal
-    assert "0015 plan execution demo identity exists" in final_refusal
-    assert final_refusal.index("0015 plan execution demo identity exists") < (
-        final_refusal.index("uv run alembic current | grep '0015'")
+    assert "expected terminal task recovery history downgrade refusal" in final_refusal
+    assert "terminal task recovery history exists" in final_refusal
+    assert final_refusal.index("terminal task recovery history exists") < (
+        final_refusal.index("uv run alembic current | grep '0016'")
     )
-    assert final_refusal.index("uv run alembic current | grep '0015'") < (
+    assert final_refusal.index("uv run alembic current | grep '0016'") < (
         final_refusal.index(
             "uv run --no-editable python scripts/verify_release.py --check-db-roles"
         )
@@ -231,7 +231,7 @@ def test_database_runner_distinguishes_current_head_from_historical_0013_lanes()
 ):
     script = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     shared_main = script.split('if [ "${1:-}" = "inside" ]; then', 1)[1].split(
-        'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
+        'if [ "${1:-}" = "inside-terminal-recovery" ]; then', 1
     )[0]
     mixed_downgrade = script.split(
         'if [ "${1:-}" = "inside-mixed-downgrade" ]; then', 1
@@ -262,7 +262,7 @@ def test_database_runner_distinguishes_current_head_from_historical_0013_lanes()
         (planning_revision_journey, 2),
     )
     for lane, expected_count in current_head_slices:
-        assert lane.count("uv run alembic current | grep '0015'") == expected_count
+        assert lane.count("uv run alembic current | grep '0016'") == expected_count
         assert "uv run alembic current | grep '0013'" not in lane
 
     assert planning_revision_seed.count(

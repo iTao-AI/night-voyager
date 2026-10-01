@@ -104,6 +104,7 @@ function metadataFor(
     cursor: sameTask ? current.cursor : 0,
     phase: status.phase,
     mutations: { ...current?.mutations },
+    ...(current?.caseId === status.case_id && current.currentRevision === status.current_revision && current.retryIntent ? { retryIntent: current.retryIntent } : {}),
     ...(current?.caseId === status.case_id && current.currentRevision === status.current_revision && current.familyIntent ? { familyIntent: current.familyIntent } : {}),
     ...(current?.revisionIntent?.expectedCaseRevision === status.current_revision ? { revisionIntent: current.revisionIntent } : {}),
   };
@@ -160,6 +161,8 @@ export function useConnectedDemo() {
   const [revisionSubmitting, setRevisionSubmitting] = useState(false);
   const revisionMutationBusy = useRef(false);
   const recoveryStarted = useRef(false);
+  const terminalRetryBusy = useRef(false);
+  const [retrySubmitting, setRetrySubmitting] = useState(false);
   const inspectorGeneration = useRef(0);
 
   const refreshInspector = useCallback(async (caseId: string) => {
@@ -324,6 +327,23 @@ export function useConnectedDemo() {
     }
   }, [loadAuthoritative]);
 
+  const replayTerminalRetry = useCallback(async (metadata: RecoveryMetadata) => {
+    const intent = metadata.retryIntent;
+    const record = metadata.mutations["retry-task"];
+    if (!intent || !record || metadata.role !== "advisor") throw new Error("retry consent unavailable");
+    const task = await api.retryTask(intent.taskId, {
+      schema_version: 1, expected_row_version: intent.expectedRowVersion,
+      expected_case_revision: intent.expectedCaseRevision,
+    }, metadata.csrf, record.idempotencyKey);
+    if (task.task_id === intent.taskId) throw new Error("retry successor identity mismatch");
+    await loadAuthoritative(metadata.caseId, "advisor", metadata.csrf);
+    const loaded = loadRecoveryMetadata();
+    if (loaded?.currentTaskId !== task.task_id) throw new Error("retry successor authority mismatch");
+    delete loaded.retryIntent;
+    saveRecoveryMetadata(loaded);
+    retryAction.current = null;
+  }, [loadAuthoritative]);
+
   const recover = useCallback(async () => {
     const journey = loadDemoJourneyEnvelope();
     if (journey?.journey === "collaboration") {
@@ -340,13 +360,21 @@ export function useConnectedDemo() {
       return;
     }
     try {
-      await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
+      if (metadata.retryIntent) await replayTerminalRetry(metadata);
+      else await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
     } catch (error) {
       const code = failure(error);
       if (code === "session_expired") clearRecoveryMetadata();
+      if (code === "stale_conflict" && metadata.retryIntent) {
+        delete metadata.retryIntent;
+        delete metadata.mutations["retry-task"];
+        saveRecoveryMetadata(metadata);
+        await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
+        return;
+      }
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [connectAdvisor, loadAuthoritative, transitionRole]);
+  }, [connectAdvisor, loadAuthoritative, replayTerminalRetry, transitionRole]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -472,6 +500,32 @@ export function useConnectedDemo() {
     dispatch({ type: "CREATE_TASK" });
     await attempt();
   }, [handleMutationFailure, mutationRecord, refreshInspector, state]);
+
+  const retryTerminalTask = useCallback(async () => {
+    if (terminalRetryBusy.current || state.value !== "terminal_task_failure" || !state.ledger.recovery?.retry_allowed || !state.ledger.canonical_task_inputs || !state.ledger.task) return;
+    const metadata = loadRecoveryMetadata();
+    if (!metadata || metadata.role !== "advisor" || metadata.caseId !== state.ledger.case_id || metadata.currentRevision !== state.ledger.case_revision) return;
+    terminalRetryBusy.current = true;
+    setRetrySubmitting(true);
+    try {
+      const intent = Object.freeze({ taskId: state.ledger.task.task_id, expectedRowVersion: state.ledger.task.row_version, expectedCaseRevision: state.ledger.case_revision });
+      const record = await idempotencyFor(intent, metadata.retryIntent?.taskId === intent.taskId ? metadata.mutations["retry-task"] : undefined);
+      const submitted = { ...withMutation(metadata, "retry-task", record), retryIntent: intent };
+      saveRecoveryMetadata(submitted);
+      const attempt = async () => {
+        try { await replayTerminalRetry(loadRecoveryMetadata() ?? submitted); }
+        catch (error) {
+          if (failure(error) === "stale_conflict") {
+            const current = loadRecoveryMetadata();
+            if (current) { delete current.retryIntent; delete current.mutations["retry-task"]; saveRecoveryMetadata(current); }
+          }
+          await handleMutationFailure(error, "retry-task");
+        }
+      };
+      retryAction.current = attempt;
+      await attempt();
+    } finally { terminalRetryBusy.current = false; setRetrySubmitting(false); }
+  }, [handleMutationFailure, replayTerminalRetry, state]);
 
   const review = useCallback(async (action: "approve_for_consultation" | "request_revision") => {
     if (state.value !== "advisor_review" || !state.ledger.review_inputs) return;
@@ -698,6 +752,8 @@ export function useConnectedDemo() {
     recover,
     retry,
     createTask,
+    retryTerminalTask,
+    retrySubmitting,
     createRevisionTask: createTask,
     approve: () => review("approve_for_consultation"),
     requestRevision: () => review("request_revision"),

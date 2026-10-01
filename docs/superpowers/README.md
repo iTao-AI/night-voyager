@@ -34,3 +34,12 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 | Advisor-Governed Multimodal Evidence Composition | Slice 0 permanently ended as local `evaluation_invalid` safe stop; no `MkeCaptureArtifactV2`, terminal receipt, information-gain conclusion, candidate persistence, Slice 1/2 unlock, or successful cross-project evidence loop; PR #87 merged; hosted CI/publication cleanup completed; included in v0.1.6 | [Spec](specs/2026-07-31-advisor-governed-multimodal-evidence-composition-design.md) · [Plan](plans/2026-07-31-advisor-governed-multimodal-evidence-composition-implementation.md) · [ADR 0014](../decisions/0014-advisor-governed-multimodal-evidence-composition.md) |
 | Connected same-Case plan execution continuation v1 | Merged on the current default branch in PR #103; local synthetic and provider-free; included in v0.1.6; not deployed | [Spec](specs/2026-08-28-connected-same-case-plan-execution-continuation-design.md) · [Plan](plans/2026-08-28-connected-same-case-plan-execution-continuation.md) |
 | Configurable collaboration budget intake | Implemented in PR #118; local synthetic; not deployed | [Plan](plans/2026-09-16-configurable-budget-intake.md) |
+
+## Editable decisions and terminal recovery
+
+The [approved design](specs/2026-10-01-customer-revision-recovery.md) and
+[active implementation plan](plans/2026-10-01-customer-revision-recovery.md) cover
+supported household revisions, explicit family choices, and advisor-authorized
+fresh-task recovery. The revision and family input slices are implemented locally.
+Recovery implementation is under local verification and review; complete Compose
+and bilingual browser acceptance remain pending. This work is not released.

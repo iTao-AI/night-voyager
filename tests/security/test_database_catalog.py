@@ -134,11 +134,13 @@ def test_0014_inherits_planning_revision_and_api_only_timeline_authority() -> No
         "0013",
         "0014",
         "0015",
+        "0016",
     }
     assert verifier["PLANNING_REVISION_SEED_REVISIONS"] == {
         "0013",
         "0014",
         "0015",
+        "0016",
     }
     assert verifier["timeline_execution_function_identities"]("0013") == set()
     assert verifier["timeline_execution_function_identities"]("0014") == verifier[

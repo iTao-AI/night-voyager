@@ -9,23 +9,23 @@ if [ "${1:-}" = "inside" ]; then
     trap cleanup_output EXIT INT TERM
 
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run alembic downgrade 0007
     uv run alembic current | grep '0007'
     uv run alembic downgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run alembic downgrade 0005
     uv run alembic current | grep '0005'
     uv run alembic upgrade 0006
     uv run alembic current | grep '0006'
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run alembic downgrade 0001
     uv run alembic current | grep '0001'
     uv run python scripts/seed_demo.py --identity-only --without-plan-execution
@@ -34,7 +34,7 @@ if [ "${1:-}" = "inside" ]; then
     uv run --no-editable python scripts/seed_demo.py \
         --without-skills --without-planning-revision --without-plan-execution
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -44,6 +44,7 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
         tests/integration/connected_demo tests/integration/dra \
         tests/integration/collaboration \
+        --ignore=tests/integration/tasks/test_retry_skill_activation.py \
         --ignore=tests/integration/tasks/test_planning_start_migration.py \
         --ignore=tests/integration/dra/test_dra_live_migration.py \
         --ignore=tests/integration/dra/test_dra_strict_migration.py \
@@ -57,24 +58,45 @@ if [ "${1:-}" = "inside" ]; then
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/decision/test_http_decision.py
     if uv run alembic downgrade 0014 >"$downgrade_output" 2>&1; then
-        echo "expected plan execution identity downgrade refusal" >&2
+        echo "expected terminal task recovery history downgrade refusal" >&2
         exit 1
     fi
-    grep -q '0015 plan execution demo identity exists' "$downgrade_output"
-    uv run alembic current | grep '0015'
+    grep -q 'terminal task recovery history exists' "$downgrade_output"
+    uv run alembic current | grep '0016'
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-terminal-recovery" ]; then
+    downgrade_output=$(mktemp)
+    trap 'rm -f "$downgrade_output"' EXIT INT TERM
+    uv run alembic upgrade head
+    uv run alembic current | grep '0016'
+    uv run --no-editable python scripts/seed_demo.py
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/tasks/test_terminal_recovery.py \
+        tests/integration/tasks/test_retry_http.py \
+        tests/security/test_terminal_recovery_authority.py \
+        tests/integration/tasks/test_retry_skill_activation.py
+    if uv run alembic downgrade 0015 >"$downgrade_output" 2>&1; then
+        echo "expected terminal recovery history downgrade refusal" >&2
+        exit 1
+    fi
+    grep -q 'terminal task recovery history exists' "$downgrade_output"
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
     exit 0
 fi
 
 if [ "${1:-}" = "inside-mixed-downgrade" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py \
         --without-collaboration --without-planning-revision \
         --without-plan-execution
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -m database \
         tests/integration/tasks/test_mixed_downgrade.py
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     exit 0
 fi
 
@@ -206,19 +228,19 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
                 tests/integration/planning/test_revision_query_plan.py
             ;;
     esac
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-planning-revision-journey" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/connected_demo/test_postgres_read_models.py \
         tests/integration/connected_demo/test_http_read_models.py \
         tests/integration/connected_demo/test_planning_revision_flow.py
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     exit 0
 fi
 
@@ -241,26 +263,26 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_downgrade.py
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-timeline-execution-authority" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_authority.py \
         tests/integration/timeline_execution/test_repository.py \
         tests/integration/timeline_execution/test_query_plan.py \
         tests/security/test_timeline_execution_catalog.py
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     exit 0
 fi
 
 if [ "${1:-}" = "inside-timeline-execution-http" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_http.py
@@ -269,7 +291,7 @@ fi
 
 if [ "${1:-}" = "inside-timeline-execution-seed" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_timeline_execution.py
@@ -282,7 +304,7 @@ if [ "${1:-}" = "inside-plan-execution-identity-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0014
     uv run alembic current | grep '0014'
-    uv run alembic upgrade head
+    uv run alembic upgrade 0015
     uv run alembic current | grep '0015'
     NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE=empty \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
@@ -299,7 +321,7 @@ fi
 
 if [ "${1:-}" = "inside-timeline-execution-journey" ]; then
     uv run alembic upgrade head
-    uv run alembic current | grep '0015'
+    uv run alembic current | grep '0016'
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_timeline_execution.py
@@ -329,6 +351,11 @@ run_lane() {
     COMPOSE_PROJECT_NAME=$ACTIVE_PROJECT_NAME docker compose --profile db-test down --volumes --remove-orphans --rmi local
     ACTIVE_PROJECT_NAME=
 }
+
+if [ "${1:-}" = "terminal-recovery" ]; then
+    run_lane "${BASE_PROJECT_NAME}-terminal-recovery" inside-terminal-recovery
+    exit 0
+fi
 
 if [ "${1:-}" = "fact-to-plan" ]; then
     run_lane "${BASE_PROJECT_NAME}-planning-start-migration" inside-planning-start-migration
@@ -432,5 +459,6 @@ run_lane "${BASE_PROJECT_NAME}-timeline-execution-migration" inside-timeline-exe
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-authority" inside-timeline-execution-authority
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed
+run_lane "${BASE_PROJECT_NAME}-terminal-recovery" inside-terminal-recovery
 run_lane "${BASE_PROJECT_NAME}-main" inside
 run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade

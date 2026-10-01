@@ -36,7 +36,7 @@
 
 In progress. Starting local HEAD: `539ca4eb0e8fe53d991581afe9f69846a523baf0`.
 The design's older prepared baseline is historical; this HEAD is the explicitly delegated stack.
-Task 1 is implemented and independently reviewed through `f10ca93983d979848f88692dc659e2efa310e3f2`; required native acceptance remains in Task 4.
+Tasks 1 and 2 are implemented and independently reviewed through `6a46536118085d41c3b39f1c07459617ca1bfbfc`; full native acceptance remains in Task 4. Docker contributor preflight has passed, so Task 3 may run focused native PostgreSQL tests before committing. Task 3 is locally implemented with focused PostgreSQL/TDD evidence; independent owner review and full Task 4 acceptance remain pending.
 
 ---
 
@@ -72,11 +72,11 @@ Task 1 is implemented and independently reviewed through `f10ca93983d979848f8869
 - Produces: `FamilyDecisionDraft` (min/max input strings and acknowledged trade-offs), a validator yielding the existing `FamilyDecisionBody`, hook-controlled draft/setter used by `FamilyDecisionAction`.
 - Task 1 revision callbacks remain intact. Receipt renders existing immutable submitted values.
 
-- [ ] **Step 1: Add failing tests** for edited accepted minimum/maximum, separate unchecked trade-offs, missing acknowledgments, zero/unsafe/inverted/out-of-cost/over-ceiling intervals, and brief identity/version reset. Assert the API receives form values, current route/version, and only selected acknowledgments.
-- [ ] **Step 2: Run focused tests** and record expected failures.
-- [ ] **Step 3: Implement the draft and UI.** Explain suggested values, show independent required trade-off acknowledgments, and validate the actual form at submission. Keep final consent and parent role action explicit. Reset stale input when brief identity/version changes, preserving ambiguous network replay for the exact submitted body.
-- [ ] **Step 4: Run family/revision/hook tests, frontend typecheck and lint.** Passing means the submitted body matches explicit choices and receipt presentation preserves them.
-- [ ] **Step 5: Review diff and commit** exact paths as `feat: collect explicit family decision choices`.
+- [x] **Step 1: Add failing tests** for edited accepted minimum/maximum, separate unchecked trade-offs, missing acknowledgments, zero/unsafe/inverted/out-of-cost/over-ceiling intervals, and brief identity/version reset. Assert the API receives form values, current route/version, and only selected acknowledgments.
+- [x] **Step 2: Run focused tests** and record expected failures.
+- [x] **Step 3: Implement the draft and UI.** Explain suggested values, show independent required trade-off acknowledgments, and validate the actual form at submission. Keep final consent and parent role action explicit. Reset stale input when brief identity/version changes, preserving ambiguous network replay for the exact submitted body.
+- [x] **Step 4: Run family/revision/hook tests, frontend typecheck and lint.** Passing means the submitted body matches explicit choices and receipt presentation preserves them.
+- [x] **Step 5: Review diff and commit** exact paths as `feat: collect explicit family decision choices`.
 
 ### Task 3: Guarded advisor fresh-task recovery
 
@@ -93,12 +93,12 @@ Task 1 is implemented and independently reviewed through `f10ca93983d979848f8869
 - HTTP/BFF body: `{schema_version: 1, expected_row_version: positive integer, expected_case_revision: positive integer}`; `POST /api/v1/tasks/{task_id}/retry`, status `202` with existing projected task shape.
 - V2 terminal ledger provides canonical inputs iff server policy says retry is eligible; v1 shapes remain unchanged. Browser method `retryTerminalTask()` consumes this authority and refreshes the ledger/adopts the fresh task.
 
-- [ ] **Step 1: Add failing pure/application/HTTP/frontend tests** for recognized terminal producers, hard/unknown/cancelled failures, stale row/revision, role denial, guarded payload, v1/v2 semantics, and exact consent-bound idempotency replay.
-- [ ] **Step 2: Run offline tests** to record expected behavior failures before implementation. Add native DB tests now; record them pending while Docker is unavailable.
-- [ ] **Step 3: Implement atomic recovery.** Use a separate recovery idempotency namespace bound to source identity and expected versions. Under Case serialization, re-read current assigned case/revision and exact latest terminal source, reject accepted result/active successor, resolve canonical source/policy/current Skill, and reuse durable creation. Preserve the source task and all diagnostics. Define minimal grants/forced RLS-compatible function authority and safe forward migration/downgrade behavior; do not grant direct task writes.
-- [ ] **Step 4: Implement truthful server ledger policy and guarded UI/BFF action.** Strengthen phase/identity validation, preserve accepted bilingual failure explanations, add a fresh explicit advisor consent key, and reuse that exact key/body on ambiguous response. Adoption opens the existing task stream and returns to fresh advisor review.
-- [ ] **Step 5: Run offline coverage and static checks.** Native tests must cover same-key concurrent replay, different-key clicks, retry vs ordinary creation, retry vs revision/currentness changes, rollback, foreign/unassigned/parent actors, rejected failure codes, task-create key collision, current Skill pins, immutable old task, and fresh task -> worker -> advisor review.
-- [ ] **Step 6: Review diff and commit** exact paths as `feat: add guarded terminal task recovery`; keep native gates explicitly pending until Task 4.
+- [x] **Step 1: Add failing pure/application/HTTP/frontend tests** for recognized terminal producers, hard/unknown/cancelled failures, stale row/revision, role denial, guarded payload, v1/v2 semantics, and exact consent-bound idempotency replay.
+- [x] **Step 2: Run offline tests** to record expected behavior failures before implementation. Add native DB tests and run them against a task-owned PostgreSQL database when available; retain full Compose and existing broader authority gates for Task 4.
+- [x] **Step 3: Implement atomic recovery.** Use a separate recovery idempotency namespace bound to source identity and expected versions. Under Case serialization, re-read current assigned case/revision and exact latest terminal source, reject accepted result/active successor, resolve canonical source/policy/current Skill, and reuse durable creation. Preserve the source task and all diagnostics. Define minimal grants/forced RLS-compatible function authority and safe forward migration/downgrade behavior; do not grant direct task writes.
+- [x] **Step 4: Implement truthful server ledger policy and guarded UI/BFF action.** Strengthen phase/identity validation, preserve accepted bilingual failure explanations, add a fresh explicit advisor consent key, and reuse that exact key/body on ambiguous response. Adoption opens the existing task stream and returns to fresh advisor review.
+- [x] **Step 5: Run offline coverage and static checks.** Native tests must cover same-key concurrent replay, different-key clicks, retry vs ordinary creation, retry vs revision/currentness changes, rollback, foreign/unassigned/parent actors, rejected failure codes, task-create key collision, current Skill pins, immutable old task, and fresh task -> worker -> advisor review.
+- [x] **Step 6: Review diff and commit** exact paths as `feat: add guarded terminal task recovery`; keep full Compose and broader journey gates explicitly pending until Task 4.
 
 ### Task 4: Native acceptance, UI evidence, documentation and final candidate
 

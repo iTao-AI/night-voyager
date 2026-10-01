@@ -8,6 +8,7 @@ import {
   type AdvisorLedger,
   type AdvisorReviewBody,
   type CancelTaskBody,
+  type RetryTaskBody,
   type CreateTaskBody,
   type CurrentDecisionBrief,
   type ConnectedJourneyStatus,
@@ -25,6 +26,7 @@ export interface ConnectedDemoApi {
   advisorLedger(caseId: string): Promise<AdvisorLedger>;
   journeyStatus(caseId: string): Promise<ConnectedJourneyStatus>;
   createTask(caseId: string, body: CreateTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
+  retryTask(taskId: string, body: RetryTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
   task(taskId: string): Promise<StandaloneTaskProjection>;
   cancelTask(taskId: string, body: CancelTaskBody, csrf: string, key: string): Promise<StandaloneTaskProjection>;
   review(caseId: string, body: AdvisorReviewBody, csrf: string, key: string): Promise<ReviewResult>;
@@ -85,6 +87,11 @@ export function createConnectedDemoApi(): ConnectedDemoApi {
     },
     async createTask(caseId, body, csrf, key) {
       return parseTask(await json(`/api/demo/cases/${caseId}/agent-tasks`, {
+        method: "POST", headers: mutation(csrf, key), body: JSON.stringify(body),
+      }));
+    },
+    async retryTask(taskId, body, csrf, key) {
+      return parseTask(await json(`/api/demo/tasks/${taskId}/retry`, {
         method: "POST", headers: mutation(csrf, key), body: JSON.stringify(body),
       }));
     },

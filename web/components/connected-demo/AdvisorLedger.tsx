@@ -72,6 +72,16 @@ function RevisionConfirmation({ candidate, busy, onConfirm }: { candidate: Memor
   </div>;
 }
 
+function TerminalRetryConsent({ busy, onSubmit }: { busy: boolean; onSubmit: () => void }) {
+  const { copy } = usePresentation();
+  const [consented, setConsented] = useState(false);
+  return <div className="terminal-retry-consent">
+    <label><input type="checkbox" checked={consented} disabled={busy} onChange={(event) => setConsented(event.target.checked)} /> {copy("terminalRetryConsent")}</label>
+    <p>{copy("terminalRetryBoundary")}</p>
+    <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" disabled={busy || !consented} onClick={onSubmit}>{copy("terminalRetryAction")}</button>
+  </div>;
+}
+
 function ActionControls({
   ledger,
   primaryAction,
@@ -93,6 +103,9 @@ function ActionControls({
   if (ledger.phase === "revision_fact_pending") {
     const candidate = pendingRevisionCandidate(revisionCandidates, ledger.case_revision);
     return <RevisionConfirmation key={`${ledger.case_revision}:${candidate?.candidate_id}:${JSON.stringify(candidate?.value)}`} candidate={candidate} busy={busy} onConfirm={onConfirmRevision} />;
+  }
+  if (ledger.phase === "terminal_task_failure" && ledger.recovery?.retry_allowed && ledger.canonical_task_inputs && ledger.task) {
+    return <TerminalRetryConsent key={`${ledger.task.task_id}:${ledger.task.row_version}:${ledger.case_revision}`} busy={busy} onSubmit={onPrimaryAction} />;
   }
   if (primaryAction) {
     return (

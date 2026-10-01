@@ -812,7 +812,7 @@ def test_versioned_planning_revision_authority_is_documented() -> None:
     )
 
     verifier = (ROOT / "scripts/verify_release.py").read_text(encoding="utf-8")
-    assert 'heads != {"0015"}' in verifier
+    assert 'heads != {"0016"}' in verifier
     assert '"read_connected_journey_fact_pending"' in verifier
 
 
