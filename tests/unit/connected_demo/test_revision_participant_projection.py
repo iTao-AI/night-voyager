@@ -16,7 +16,9 @@ from night_voyager.identity.models import ActorContext, ActorRole
     ("role", "expected"),
     ((ActorRole.PARENT, "parent"), (ActorRole.STUDENT, "student"), (ActorRole.ADVISOR, "student")),
 )
-async def test_requested_revision_projects_verified_participant_role(role, expected):
+async def test_requested_revision_projects_verified_participant_role(
+    role: ActorRole, expected: str
+) -> None:
     context = ActorContext(
         organization_id=UUID("10000000-0000-0000-0000-000000000001"),
         actor_id=UUID("20000000-0000-0000-0000-000000000003"),
@@ -53,14 +55,19 @@ async def test_requested_revision_projects_verified_participant_role(role, expec
 @pytest.mark.parametrize(
     "phase", tuple(phase for phase in DemoPhaseV2 if phase is not DemoPhaseV2.REVISION_REQUESTED)
 )
-def test_parent_projection_does_not_change_other_phase_authority(phase):
+def test_parent_projection_does_not_change_other_phase_authority(phase: DemoPhaseV2) -> None:
+    class JourneyRoleProbe(PostgresConnectedDemoRepository):
+        @classmethod
+        def project(cls, phase: DemoPhaseV2) -> str:
+            return cls._journey_active_role(phase, "parent")
+
     expected = (
         "parent" if phase in {DemoPhaseV2.FAMILY_REVIEW, DemoPhaseV2.PLAN_READY} else "advisor"
     )
-    assert PostgresConnectedDemoRepository._journey_active_role(phase, "parent") == expected
+    assert JourneyRoleProbe.project(phase) == expected
 
 
-def test_budget_and_country_proposal_permissions_remain_separate():
+def test_budget_and_country_proposal_permissions_remain_separate() -> None:
     assert role_allows_fact(ActorRole.PARENT, "family.budget")
     assert not role_allows_fact(ActorRole.STUDENT, "family.budget")
     assert role_allows_fact(ActorRole.STUDENT, "student.preferred_countries")
