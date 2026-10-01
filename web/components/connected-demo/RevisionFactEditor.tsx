@@ -27,8 +27,9 @@ function RevisionForm({ currentFacts, expectedCaseRevision, activeRole = "studen
   const { locale, copy } = usePresentation();
   const currentCountries = currentFacts ? revisionFact(currentFacts.facts, "student.preferred_countries")?.value : null;
   const currentBudget = currentFacts ? revisionFact(currentFacts.facts, "family.budget")?.value : null;
-  const restored = submittedIntent?.expectedCaseRevision === expectedCaseRevision ? submittedIntent : null;
-  const [factKey, setFactKey] = useState<RevisionFactKey>(restored?.factKey ?? (activeRole === "parent" ? "family.budget" : "student.preferred_countries"));
+  const roleFact = activeRole === "parent" ? "family.budget" : "student.preferred_countries";
+  const restored = submittedIntent?.expectedCaseRevision === expectedCaseRevision && submittedIntent.factKey === roleFact ? submittedIntent : null;
+  const [factKey, setFactKey] = useState<RevisionFactKey>(restored?.factKey ?? roleFact);
   const [selectedCountries, setSelectedCountries] = useState<readonly Country[]>(restored?.factKey === "student.preferred_countries" ? restored.value : isRevisionCountries(currentCountries) ? currentCountries : []);
   const initialBudget = restored?.factKey === "family.budget" ? restored.value : isBudgetValue(currentBudget) ? currentBudget : null;
   const [draft, setDraft] = useState<BudgetDraft>({ preferredYuan: initialBudget?.preferred_minor ? String(initialBudget.preferred_minor / 100) : "", hardCeilingYuan: initialBudget?.hard_ceiling_minor ? String(initialBudget.hard_ceiling_minor / 100) : "" });

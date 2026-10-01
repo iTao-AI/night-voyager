@@ -283,6 +283,11 @@ export function useConnectedDemo() {
         if (current.caseId !== metadata.caseId) {
           throw new Error("role transition identity mismatch");
         }
+        if (current.role === target && !current.pendingRole) {
+          if (!await loadAuthoritative(current.caseId, target, current.csrf)) throw new Error("role transition authority mismatch");
+          retryAction.current = null;
+          return;
+        }
         if (current.pendingRole !== target) {
           const status = await api.journeyStatus(current.caseId);
           if (status.case_id === current.caseId && status.phase === "revision_requested"
@@ -308,6 +313,15 @@ export function useConnectedDemo() {
         }
         const bootstrap = await api.bootstrap();
         const session = await api.mint(target, bootstrap.csrf_token);
+        if (session.role !== target) throw new Error("role transition identity mismatch");
+        // The live cookie has changed. Retain its credentials before projection reads can fail.
+        current = { ...current, role: target, csrf: session.csrf_token };
+        delete current.pendingRole;
+        if (target !== "advisor") {
+          current.currentTaskId = null;
+          current.cursor = 0;
+        }
+        saveRecoveryMetadata(current);
         const loaded = await loadAuthoritative(current.caseId, target, session.csrf_token, current);
         if (!loaded) throw new Error("role transition authority mismatch");
         retryAction.current = null;
