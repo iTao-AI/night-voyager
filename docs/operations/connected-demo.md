@@ -91,6 +91,12 @@ authority. The default UI mints an advisor first. Its normal role transition is
 advisor revoke, cookie expiry, bootstrap, then parent mint; it stops if revoke
 fails and never performs a client-only role flip.
 
+The existing task-trail details explain known adapter, payload-validation, and
+runtime-pin failures in Chinese and English, with the advisor's next diagnostic
+step. Unknown codes retain the localized unavailable fallback. These explanations
+do not add retry actions or change backend permissions, task state, or evidence
+authority.
+
 ## Authority and transport boundaries
 
 FastAPI exposes four connected read endpoints:

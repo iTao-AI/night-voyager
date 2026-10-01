@@ -21,7 +21,7 @@ export const PRESENTATION_CODE_VALUES = {
   knownGap: ["japan_gap", "malaysia_gap", "applicant_eligibility", "intake_availability"],
   milestone: ["documents", "application", "visa", "arrival"],
   factKey: ["family.budget", "student.intended_field", "student.preferred_countries", "student.intake", "family.risk_tolerance", "family.japan_risk_accepted"],
-  publicCode: ["cancelled", "lease_expired", "required_evidence_gap", "deadline_exceeded", "transport_interrupted", "transient_unavailable"],
+  publicCode: ["cancelled", "lease_expired", "required_evidence_gap", "deadline_exceeded", "transport_interrupted", "transient_unavailable", "invalid_schema", "pin_mismatch", "fallback_authority", "oversize", "policy_rejected", "evidence_limit", "narrative_oversize", "country_scope_invalid", "baseline_drift", "skill_pin_invalid"],
 } as const;
 
 export type PresentationCodeKind = keyof typeof PRESENTATION_CODE_VALUES;
@@ -156,6 +156,16 @@ const CODE_COPY_KEYS = {
     deadline_exceeded: "publicDeadlineExceeded",
     transport_interrupted: "publicTransportInterrupted",
     transient_unavailable: "publicTransientUnavailable",
+    invalid_schema: "publicInvalidSchema",
+    pin_mismatch: "publicPinMismatch",
+    fallback_authority: "publicFallbackAuthority",
+    oversize: "publicOversize",
+    policy_rejected: "publicPolicyRejected",
+    evidence_limit: "publicEvidenceLimit",
+    narrative_oversize: "publicNarrativeOversize",
+    country_scope_invalid: "publicCountryScopeInvalid",
+    baseline_drift: "publicBaselineDrift",
+    skill_pin_invalid: "publicSkillPinInvalid",
   },
 } satisfies CodeCopyKeys;
 
