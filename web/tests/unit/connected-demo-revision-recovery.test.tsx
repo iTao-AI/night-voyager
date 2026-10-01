@@ -15,7 +15,7 @@ const facts = [
   { schema_version: 1, fact_key: "student.preferred_countries", value: ["japan", "malaysia"], fact_version: 1, confirmed_at: AT, subject_role: "student", confirming_advisor_role: "advisor" },
   { schema_version: 1, fact_key: "family.budget", value: budget, fact_version: 1, confirmed_at: AT, subject_role: "parent", confirming_advisor_role: "advisor" },
 ];
-function setup(candidateStatus = 201, bootstrapFailures = 0, parentFactFailures = 0, revisionAfterParentMint = 1) {
+function setup(candidateStatus = 201, bootstrapFailures = 0, parentFactFailures = 0, revisionAfterParentMint = 1, sharedParticipantFacts = false) {
   saveRecoveryMetadata({ schema_version: 3, journey: "advisor-family", role: "student", csrf: "csrf", caseId: CASE_ID, currentRevision: 1, currentTaskId: null, predecessorRunId: null, currentRunId: null, cursor: 0, phase: "revision_requested", mutations: {} });
   const writes: Array<{ path: string; body: Record<string, unknown>; key: string }> = [];
   const sessionEvents: string[] = [];
@@ -77,7 +77,7 @@ function setup(candidateStatus = 201, bootstrapFailures = 0, parentFactFailures 
     if (path.endsWith("/confirmed-facts")) {
       if (role === "parent" && parentFactFailures-- > 0) return Response.json({ code: "unavailable" }, { status: 503 });
       if (role === "student" && studentFactFailures-- > 0) return Response.json({ code: "unavailable" }, { status: 503 });
-      return Response.json({ schema_version: 1, current: facts.filter((fact) => fact.subject_role === role) });
+      return Response.json({ schema_version: 1, current: sharedParticipantFacts ? facts : facts.filter((fact) => fact.subject_role === role) });
     }
     if (path.endsWith("/memory-candidates")) return Response.json([]);
     if (path.includes("/messages?")) return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
@@ -182,8 +182,8 @@ it("recovers budget editor preparation after bootstrap loss without inventing a 
   expect(sessionEvents).toContain("mint:parent");
 });
 
-it("loads the real parent-only budget before the actual editor can propose its changed value", async () => {
-  const { writes, mutationRoles, sessionEvents } = setup();
+it.each([false, true])("requires explicit parent authority before the actual editor can propose budget, shared participant facts=%s", async (sharedParticipantFacts) => {
+  const { writes, mutationRoles, sessionEvents } = setup(201, 0, 0, 1, sharedParticipantFacts);
   render(<ConnectedDemo />, { wrapper: PresentationProvider });
   await screen.findByRole("combobox", { name: "要修改的事实" });
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });

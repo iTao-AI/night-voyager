@@ -189,7 +189,10 @@ PLANNING_REVISION_PENDING_IDENTITY = (
     "read_connected_journey_fact_pending",
     "uuid, uuid, text, uuid",
 )
-PLANNING_REVISION_SEED_IDENTITY = (
+PLANNING_REVISION_BUDGET_SEED_IDENTITY: tuple[str, str] = (
+    "seed_demo_planning_revision_budget", "uuid, uuid",
+)
+PLANNING_REVISION_SEED_IDENTITY: tuple[str, str] = (
     "seed_demo_planning_revision_fact",
     "uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, jsonb, "
     "text, text, text, text",
@@ -1658,7 +1661,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'read_memory_candidates','read_confirmed_facts',
                            'read_connected_journey_fact_pending',
                            'seed_demo_collaboration',
-                           'seed_demo_planning_revision_fact')
+                           'seed_demo_planning_revision_fact',
+                           'seed_demo_planning_revision_budget')
                            OR p.proname IN
                           ('create_skill_change_candidate','record_skill_candidate_evaluation',
                            'promote_skill_change_candidate','rollback_skill_activation',
@@ -1704,7 +1708,10 @@ async def verify_database_catalog(database_url: str) -> None:
                 | SKILL_WORKER_FUNCTIONS
             )
             if alembic_revision == "0016":
-                expected_app_functions |= {"retry_agent_task", "project_agent_task_retry_eligible"}
+                expected_app_functions |= {
+                    "retry_agent_task", "project_agent_task_retry_eligible",
+                    PLANNING_REVISION_BUDGET_SEED_IDENTITY[0],
+                }
             app_function_identities = {
                 (row["proname"], row["identity_arguments"]) for row in app_functions
             }
@@ -1920,13 +1927,20 @@ async def verify_database_catalog(database_url: str) -> None:
                     row["worker_execute"],
                 )
                 for row in app_functions
-                if row["proname"] == PLANNING_REVISION_SEED_IDENTITY[0]
+                if row["proname"] in {
+                    PLANNING_REVISION_SEED_IDENTITY[0],
+                    PLANNING_REVISION_BUDGET_SEED_IDENTITY[0],
+                }
             }
             expected_planning_revision_seed_function = (
                 {PLANNING_REVISION_SEED_IDENTITY: (False, False)}
                 if alembic_revision in PLANNING_REVISION_SEED_REVISIONS
                 else {}
             )
+            if alembic_revision == "0016":
+                expected_planning_revision_seed_function[
+                    PLANNING_REVISION_BUDGET_SEED_IDENTITY
+                ] = (False, False)
             if (
                 planning_revision_seed_function
                 != expected_planning_revision_seed_function
