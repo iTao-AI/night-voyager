@@ -17,6 +17,14 @@ The current visual authority is the [reference-driven presentation spec](docs/su
 - **Page boundary:** root presentation has zero product-side network/session/task effects; demo routes use local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
 
+The local customer-revision/recovery branch adds actual supported country or
+parent budget edits, advisor confirmation of the displayed candidate, explicit
+family budget/trade-off choices and final consent. Qualified terminal tasks
+require separate advisor consent for a fresh task and renewed review; hard or
+unknown failures have no retry action. This implementation does not change the
+published v0.1.6 boundary. See the [walkthrough](docs/operations/customer-revision-recovery.md)
+and [acceptance evidence](docs/evidence/customer-revision-recovery.md).
+
 ## Aesthetic direction
 
 The previous visual layers are historical presentation context:

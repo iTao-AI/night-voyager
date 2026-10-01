@@ -532,6 +532,7 @@ def test_release_verifier_rejects_alembic_head_mutation(
         "inside-timeline-execution-authority",
         'run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-execution-http',
         'run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed',
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=authority-0016",
     ),
 )
 def test_release_verifier_rejects_missing_planning_start_gate_node(

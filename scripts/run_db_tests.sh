@@ -38,12 +38,16 @@ if [ "${1:-}" = "inside" ]; then
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/seed_demo.py
     uv run --no-editable python scripts/verify_release.py --check-db-roles
-    NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run --no-editable pytest \
+    # Recovery security fixtures isolate dispatch and random Cases in their dedicated lane.
+    # Keep the older fixed-baseline suite independent; do not omit that dedicated gate.
+    uv run --no-editable python -c "from pathlib import Path; import night_voyager; path=Path(night_voyager.__file__).resolve(); assert 'site-packages' in path.parts; print('native installed-wheel import:', path)"
+    NIGHT_VOYAGER_DEMO_SEED_READY=1 PYTEST_ADDOPTS= uv run --no-editable python -m pytest \
         -q -m database \
         tests/security tests/integration/identity tests/integration/planning \
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
         tests/integration/connected_demo tests/integration/dra \
         tests/integration/collaboration \
+        --ignore=tests/security/test_terminal_recovery_authority.py \
         --ignore=tests/integration/tasks/test_retry_skill_activation.py \
         --ignore=tests/integration/tasks/test_planning_start_migration.py \
         --ignore=tests/integration/dra/test_dra_live_migration.py \
@@ -186,6 +190,35 @@ if [ "${1:-}" = "inside-planning-revision-seed-migration" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-planning-revision-budget-seed-migration" ]; then
+    # Historical country authority leaves canonical Cases. Use a separate fresh
+    # lane to prove the initial-budget helper before full current-head seeding.
+    uv run alembic downgrade base
+    uv run alembic upgrade 0015
+    uv run --no-editable python scripts/seed_demo.py \
+        --without-planning-revision --without-plan-execution
+    NIGHT_VOYAGER_BUDGET_SEED_PHASE=absent-0015 \
+        PYTEST_ADDOPTS= uv run --no-editable python -m pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_budget_seed.py -k catalog
+    uv run alembic upgrade head
+    uv run alembic current | grep '0016'
+    uv run --no-editable python -c "from pathlib import Path; import night_voyager; path=Path(night_voyager.__file__).resolve(); assert 'site-packages' in path.parts; print('budget phase installed-wheel import:', path)"
+    NIGHT_VOYAGER_BUDGET_SEED_PHASE=authority-0016 \
+        PYTEST_ADDOPTS= uv run --no-editable python -m pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_budget_seed.py -k helper
+    uv run alembic downgrade 0015
+    uv run alembic current | grep '0015'
+    NIGHT_VOYAGER_BUDGET_SEED_PHASE=absent-0015 \
+        PYTEST_ADDOPTS= uv run --no-editable python -m pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_budget_seed.py -k catalog
+    uv run alembic upgrade head
+    uv run alembic current | grep '0016'
+    NIGHT_VOYAGER_BUDGET_SEED_PHASE=restored-0016 \
+        PYTEST_ADDOPTS= uv run --no-editable python -m pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_revision_budget_seed.py -k catalog
+    exit 0
+fi
+
 if [ "${1:-}" = "inside-planning-revision" ]; then
     suite=${2:-}
     case "$suite" in
@@ -202,6 +235,7 @@ if [ "${1:-}" = "inside-planning-revision" ]; then
         authority)
             PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
                 tests/integration/planning/test_revision_migration.py \
+                tests/integration/planning/test_revision_budget_seed.py \
                 tests/integration/planning/test_revision_authority.py \
                 tests/integration/collaboration/test_postgres_collaboration.py \
                 tests/integration/collaboration/test_collaboration_concurrency.py \
@@ -248,7 +282,7 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
     uv run alembic downgrade base
     uv run alembic upgrade 0013
     uv run alembic current | grep '0013'
-    uv run --no-editable python scripts/seed_demo.py --without-plan-execution
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     uv run alembic upgrade 0014
     uv run alembic current | grep '0014'
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
@@ -258,7 +292,7 @@ if [ "${1:-}" = "inside-timeline-execution-migration" ]; then
     NIGHT_VOYAGER_TIMELINE_MIGRATION_PHASE=empty \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_downgrade.py
-    uv run --no-editable python scripts/seed_demo.py --without-plan-execution
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision --without-plan-execution
     NIGHT_VOYAGER_TIMELINE_MIGRATION_PHASE=history \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/timeline_execution/test_downgrade.py
@@ -309,8 +343,8 @@ if [ "${1:-}" = "inside-plan-execution-identity-migration" ]; then
     NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE=empty \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/identity/test_plan_execution_migration.py
-    uv run --no-editable python scripts/seed_demo.py
-    uv run --no-editable python scripts/seed_demo.py
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
+    uv run --no-editable python scripts/seed_demo.py --without-planning-revision
     NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE=seeded \
         PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/identity/test_plan_execution_migration.py \
@@ -375,6 +409,8 @@ fi
 if [ "${1:-}" = "planning-revision-seed-migration" ]; then
     run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" \
         inside-planning-revision-seed-migration
+    run_lane "${BASE_PROJECT_NAME}-planning-revision-budget-seed-migration" \
+        inside-planning-revision-budget-seed-migration
     exit 0
 fi
 
@@ -452,6 +488,8 @@ run_lane "${BASE_PROJECT_NAME}-dra-live-migration" inside-dra-live-migration
 run_lane "${BASE_PROJECT_NAME}-dra-strict-migration" inside-dra-strict-migration
 run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration" \
     inside-planning-revision-seed-migration
+run_lane "${BASE_PROJECT_NAME}-planning-revision-budget-seed-migration" \
+    inside-planning-revision-budget-seed-migration
 run_lane "${BASE_PROJECT_NAME}-skill-seed-replay" inside-skill-seed-replay
 run_lane "${BASE_PROJECT_NAME}-skill-migration-parity" inside-skill-migration-parity
 run_lane "${BASE_PROJECT_NAME}-plan-execution-identity-migration" inside-plan-execution-identity-migration

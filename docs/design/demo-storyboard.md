@@ -162,3 +162,15 @@ Representative synthetic review evidence:
 
 Semantic assertions, not image comparison, are the acceptance authority;
 screenshots are review evidence only.
+
+## Editable client revision and explicit recovery
+
+The local customer-revision branch extends the existing story with actual
+student country selections or parent budget values, advisor confirmation of the
+actual candidate, and explicit accepted family budget/trade-offs/final consent.
+An eligible terminal task shows server-qualified advisor consent for a fresh
+task; the old diagnostics remain and the new result requires renewed review.
+Hard and unknown failures show remediation without a retry action. See the
+[walkthrough](../operations/customer-revision-recovery.md) and
+[acceptance record](../evidence/customer-revision-recovery.md). This is local
+synthetic implementation, not a new published release or real-client outcome.

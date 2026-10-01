@@ -28,9 +28,12 @@ async def test_0015_catalog_is_closed_and_runtime_roles_keep_function_only_autho
     engine = create_async_engine(os.environ["NIGHT_VOYAGER_MIGRATION_DATABASE_URL"])
     try:
         async with engine.connect() as connection:
+            expected_revision = (
+                "0015" if os.environ.get("NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE") else "0016"
+            )
             assert await connection.scalar(
                 text("SELECT version_num FROM alembic_version")
-            ) == "0015"
+            ) == expected_revision
             constraint_rows = (
                 await connection.execute(
                     text(
@@ -104,7 +107,7 @@ async def test_empty_0015_downgrade_and_reupgrade_restore_exact_catalog() -> Non
     result = _alembic("downgrade", "0014")
     assert result.returncode == 0, result.stderr
     assert _alembic("current").stdout.strip().startswith("0014")
-    result = _alembic("upgrade", "head")
+    result = _alembic("upgrade", "0015")
     assert result.returncode == 0, result.stderr
     assert _alembic("current").stdout.strip().startswith("0015")
 

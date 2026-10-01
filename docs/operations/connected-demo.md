@@ -106,8 +106,8 @@ FastAPI exposes four connected read endpoints:
 - `GET /api/v1/cases/{case_id}/journey-status`
 - `GET /api/v1/cases/{case_id}/plan-execution-context`
 
-The Next.js BFF exposes thirteen explicit handlers: bootstrap, session create,
-session delete, Ledger read, task create/read/cancel/events, advisor review,
+The Next.js BFF exposes explicit handlers: bootstrap, session create,
+session delete, Ledger read, task create/read/cancel/retry/events, advisor review,
 current Brief read, journey-status read, case-scoped plan-execution-context read,
 and family decision. There is no catch-all proxy. All
 identity upstream calls use the server-configured fixed public Origin. Browser
@@ -166,8 +166,8 @@ make compose-proof
 make down
 ```
 
-For the v0.1.4 planning-revision lane, set
-`NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. The lane proves request
+For the planning-revision lane, run
+`sh scripts/verify_compose.sh planning-revision`. The lane proves request
 revision, the controlled student preferred-country change, retained predecessor,
 successor PlanningRun, lost-ack recovery, deterministic comparison, renewed review,
 only the current family decision, and the blocked budget counterfactual. The
@@ -222,5 +222,8 @@ synthetic-only; governed mixed recovery uses the Task API.
 
 The dedicated PostgreSQL lane is `sh scripts/run_db_tests.sh terminal-recovery`.
 It checks current migration, runtime-role guards/concurrency, native worker
-producers, fresh review and downgrade-history refusal. Full Compose and bilingual
-browser acceptance for this feature remain Task 4 gates.
+producers, fresh review and downgrade-history refusal. The bounded browser supplement is
+`sh scripts/verify_customer_revision_recovery.sh`; see the
+[customer revision/recovery walkthrough](customer-revision-recovery.md) and
+[acceptance record](../evidence/customer-revision-recovery.md) for exact gates
+and local verification status.

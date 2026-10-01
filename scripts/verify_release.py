@@ -1309,10 +1309,16 @@ def verify_alembic_contract() -> None:
         "inside-dra-strict-migration": 3,
         "tests/integration/dra/test_dra_strict_migration.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 2,
-        "inside-planning-revision": 11,
+        "inside-planning-revision": 14,
         "inside-planning-revision-seed-migration": 3,
         "tests/integration/planning/test_revision_seed_migration.py": 4,
         'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
+        "inside-planning-revision-budget-seed-migration": 3,
+        'run_lane "${BASE_PROJECT_NAME}-planning-revision-budget-seed-migration"': 2,
+        "tests/integration/planning/test_revision_budget_seed.py": 5,
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=absent-0015": 2,
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=authority-0016": 1,
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=restored-0016": 1,
         "inside-timeline-execution-migration": 3,
         "inside-timeline-execution-authority": 3,
         "inside-timeline-execution-http": 3,
@@ -1344,7 +1350,8 @@ def verify_alembic_contract() -> None:
     print(
         "proof migrations: exact Alembic head 0016 with planning-start, "
         "DRA live, strict parity, planning-revision, migrator-only "
-        "revision-seed, governed timeline-execution, and closed demo-identity "
+        "revision-seed and initial-budget seed, governed timeline-execution, "
+        "and closed demo-identity "
         "lanes confirmed"
     )
 

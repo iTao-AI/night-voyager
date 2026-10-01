@@ -268,7 +268,7 @@ async function lostAck(
   return { response: captured!, idempotencyKey };
 }
 
-async function capture(page: Page, state: "happy" | "blocked") {
+async function capture(page: Page, state: string) {
   for (const viewport of [
     { width: 1440, height: 1000 },
     { width: 768, height: 900 },
@@ -306,6 +306,8 @@ async function capture(page: Page, state: "happy" | "blocked") {
       path: `${reviewRoot}/${filename}`,
       fullPage: true,
     });
+    const panel = page.locator(state === "country-editor" ? ".revision-fact-editor" : state === "candidate-confirmation" ? ".revision-confirmation" : state === "family-consent" ? ".family-decision-action" : state === "receipt" ? ".decided-frame" : ".revision-comparison").first();
+    if (await panel.count()) await panel.screenshot({ path: `${reviewRoot}/planning-revision-${locale}-${viewport.width}-${state}-panel.png` });
     if (
       state === "happy" &&
       locale === "zh-CN" &&
@@ -544,6 +546,7 @@ test(
       }),
     );
     await page.getByRole("checkbox", { name: locale === "en" ? "Malaysia" : "马来西亚", exact: true }).uncheck();
+    await capture(page, "country-editor");
     await page.getByRole("button", { name: copy.submitProposal }).click();
     await page.getByRole("button", { name: copy.continueAdvisor }).click();
     csrf = String(
@@ -556,6 +559,7 @@ test(
     );
 
     await page.getByLabel(locale === "en" ? "Confirmation reason" : "确认理由", { exact: true }).fill("Confirmed the student country scope after reviewing the synthetic route comparison.");
+    await capture(page, "candidate-confirmation");
     await lostAck(
       page,
       `/api/demo/memory-candidates/.*/verification-decisions`,
@@ -564,6 +568,14 @@ test(
         await page.getByRole("button", { name: copy.confirmFact }).click();
       },
     );
+    await page.screenshot({ path: `${reviewRoot}/planning-revision-${locale}-confirmation-replayed.png`, fullPage: true });
+    const replayObservation = await page.evaluate(() => {
+      const value = JSON.parse(sessionStorage.getItem("night-voyager:m5") ?? "{}");
+      return { phase: value.phase, currentRevision: value.currentRevision, role: value.role,
+        pendingRole: value.pendingRole ?? null, buttons: Array.from(document.querySelectorAll("button")).map((node) => node.textContent) };
+    });
+    await writeFile(`${reviewRoot}/planning-revision-${locale}-confirmation-replayed.json`, JSON.stringify(replayObservation));
+    await expect(page.getByRole("button", { name: copy.createTask })).toBeVisible();
     const eventRequest = page.waitForRequest(
       (request) => request.url().includes("events?after=0"),
     );
@@ -674,6 +686,7 @@ test(
     await page.getByLabel(/接受预算上限（元）|Accepted budget maximum \(yuan\)/).fill("350000");
     await page.getByRole("checkbox", { name: /我接受：预算弹性|I accept: Budget flexibility/ }).check();
     await page.getByRole("checkbox", { name: /我以家长身份确认|As parent, I confirm/ }).check();
+    await capture(page, "family-consent");
     await page.getByRole("button", { name: copy.continueDecision }).click();
     const decisionResponse = await decisionResponsePromise;
     expect(decisionResponse.request().postDataJSON()).toEqual({
@@ -725,6 +738,7 @@ test(
         { cause: error },
       );
     }
+    await capture(page, "receipt");
     const acceptedBrief = await read(page, `/api/demo/cases/${HAPPY_CASE}/current-decision-brief`);
     expect(acceptedBrief.receipt).toMatchObject({
       accepted_budget_min_minor: 30_000_000,

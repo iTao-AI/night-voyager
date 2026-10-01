@@ -231,3 +231,9 @@ Connected V1 terminal canonical inputs remain null; V2 includes them iff server
 eligibility is true. The synthetic-only connected demo shapes are unchanged;
 the Task API also preserves an eligible governed mixed operation/promoted pack.
 See [ADR 0015](../decisions/0015-guarded-terminal-task-recovery.md).
+
+The bounded [customer recovery acceptance](../operations/customer-revision-recovery.md)
+links a native classified terminal producer to explicit browser consent, real
+retry POST/new task/SSE and fresh review. Its separately labelled unknown-code
+negative is not a success producer. See the [verification record](../evidence/customer-revision-recovery.md)
+for exact execution status and local delivery boundaries.

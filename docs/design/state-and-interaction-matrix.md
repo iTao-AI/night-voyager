@@ -46,7 +46,7 @@ resume/prior state remains fail-closed.
 | `revision_blocked` | successor is blocked and comparison remains visible to advisor | remediate Evidence/facts | fabricate review inputs or success |
 | `family_review` | current family-safe Brief identity, editable suggested budget and unchecked trade-off acknowledgment | real parent submits valid budget choices, separate required acknowledgments and final consent | decide as advisor, auto-accept trade-offs or submit defaults as consent |
 | `plan_ready` | completion status or parent receipt/timeline | continue the exact Case into execution or read result | create a task implicitly |
-| `terminal_task_failure` | public failure and recovery guidance | explicit retry/remediation | synthesize success |
+| `terminal_task_failure` | public failure and server-qualified recovery guidance | assigned advisor checks explicit consent before fresh-task retry; otherwise remediation | guess retry eligibility, rewrite old diagnostics, reuse approval or synthesize success |
 
 The task-free collaboration route has its own closed lifecycle:
 
@@ -79,8 +79,12 @@ accepted only for an observed exact default-budget message and mutation fingerpr
 new values never fall back to old records. Advisor-family recovery continues to use
 closed `schema_version=3` fields for current revision, task, predecessor, run, phase,
 cursor, pending mutations, and optional revision-bound `revisionIntent`. During
-`revision_requested`, verified parent and student sessions read their own participant
-projection; budget and country mutations still require their respective source roles.
+`revision_requested`, verified participants share supported safe current facts;
+budget and country mutations still require their respective parent/student source roles.
+Choosing `family.budget` first offers an explicit **Edit budget as parent**
+handoff. Budget inputs and validation require the real parent session and its
+authoritative budget projection. Shared student reads do not authorize budget
+mutation. This preparation uses recoverable role metadata, not an invented submitted proposal.
 One tab never runs both journeys concurrently. The
 inspector is read-only and server-owned: `/demo` progresses `not_created -> matched`,
 while `/demo/collaboration` stays `not_created` because it creates no planning task.

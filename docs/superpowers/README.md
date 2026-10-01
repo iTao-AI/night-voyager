@@ -26,7 +26,7 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 | Governed Collaboration Core v1 | Implemented and released in v0.1.2 | [Spec](specs/2026-07-16-governed-collaboration-core-design.md) · [PR A plan](plans/2026-07-16-governed-conversation-memory-authority.md) · [PR B plan](plans/2026-07-16-versioned-skill-runtime-pinning.md) · [PR C plan](plans/2026-07-16-collaboration-walkthrough-and-inspector.md) |
 | Governed Fact-to-Plan Closure and bilingual presentation | Implemented and released in v0.1.3 | [Spec](specs/2026-07-22-governed-fact-to-plan-closure-design.md) · [PR 1 plan](plans/2026-07-22-explicit-planning-start-authority.md) · [PR 2 plan](plans/2026-07-22-governed-fact-to-plan-walkthrough.md) · [PR 3 plan](plans/2026-07-22-chinese-first-portfolio-presentation.md) |
 | High-End Portfolio Entry v1 | Implemented and released in v0.1.3 | [Plan](plans/2026-07-23-high-end-portfolio-entry.md) |
-| Governed plan execution and reassessment | PR A/B/C are implemented, reviewed, merged, and included in released v0.1.5; migration `0015` is current; publication is complete | [Spec](specs/2026-07-29-governed-plan-execution-and-reassessment-design.md) · [PR A plan](plans/2026-07-29-governed-plan-execution-pr-a-implementation-plan.md) · [PR B plan](plans/2026-07-29-governed-plan-execution-pr-b-implementation-plan.md) · [PR C plan](plans/2026-07-29-governed-plan-execution-pr-c-implementation-plan.md) · [ADR 0013](../decisions/0013-governed-timeline-execution-authority.md) |
+| Governed plan execution and reassessment | PR A/B/C are implemented, reviewed, merged, and included in released v0.1.5; historical release migration `0015`; publication is complete | [Spec](specs/2026-07-29-governed-plan-execution-and-reassessment-design.md) · [PR A plan](plans/2026-07-29-governed-plan-execution-pr-a-implementation-plan.md) · [PR B plan](plans/2026-07-29-governed-plan-execution-pr-b-implementation-plan.md) · [PR C plan](plans/2026-07-29-governed-plan-execution-pr-c-implementation-plan.md) · [ADR 0013](../decisions/0013-governed-timeline-execution-authority.md) |
 | Governed demo presentation surface | Merged in PR #94 on the current default branch; presentation-only; included in v0.1.6 local synthetic portfolio release; not deployed | [Spec](specs/2026-08-09-governed-demo-presentation-design.md) · [Plan](plans/2026-08-09-governed-demo-presentation.md) |
 | Advisor-centered product experience | Merged in PR #95 on the current default branch; presentation-only; included in v0.1.6 local synthetic portfolio release; not deployed | [Spec](specs/2026-08-09-advisor-centered-product-experience.md) · [Plan](plans/2026-08-09-advisor-centered-product-experience.md) |
 | Reference-driven presentation | Merged in PR #97 on the current default branch; presentation-only; included in v0.1.6 local synthetic portfolio release; not deployed | [Spec](specs/2026-08-14-reference-driven-presentation.md) · [Plan](plans/2026-08-14-reference-driven-presentation.md) |
@@ -41,5 +41,8 @@ The [approved design](specs/2026-10-01-customer-revision-recovery.md) and
 [active implementation plan](plans/2026-10-01-customer-revision-recovery.md) cover
 supported household revisions, explicit family choices, and advisor-authorized
 fresh-task recovery. The revision and family input slices are implemented locally.
-Recovery implementation is under local verification and review; complete Compose
-and bilingual browser acceptance remain pending. This work is not released.
+Recovery implementation is independently reviewed locally. Migration `0016` is
+current in this branch; complete native/Compose and bilingual browser acceptance
+is locally verified. See the [walkthrough](../operations/customer-revision-recovery.md)
+and [acceptance record](../evidence/customer-revision-recovery.md). Final branch
+review and owner acceptance remain pending. This work is not released.

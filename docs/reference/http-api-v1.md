@@ -412,3 +412,8 @@ The UI cannot submit role, current action, due date, risk, or an authority date.
 Lost acknowledgements may replay only the exact persisted request body and
 idempotency key. Presentation locale, viewport, focus, and reduced-motion
 preference never enter these requests.
+
+For the local editable-revision and explicit family/retry UI walkthrough, see
+[customer revision and recovery](../operations/customer-revision-recovery.md)
+and its [acceptance record](../evidence/customer-revision-recovery.md).
+These current branch contracts do not alter immutable tagged-release guidance.
