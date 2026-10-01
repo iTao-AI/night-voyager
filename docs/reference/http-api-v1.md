@@ -157,8 +157,13 @@ current Case revision, current successor, current Brief, and exact approving
 advisor review form one durable chain.
 
 The journey-status is participant-safe recovery authority, not browser storage.
-Assigned advisor, student, and parent see the same durable phase and only their
-own verified `active_role`. The exact response keys are `schema`, `case_id`,
+Assigned advisor, student, and parent see the same durable phase. During
+`revision_requested`, a verified parent receives `active_role=parent` for a
+budget proposal; verified students and the advisor entry receive `student` for
+country preferences. Other phases retain their existing advisor/parent mapping.
+This projection does not grant mutation authority: the source-role fact matrix
+still permits `family.budget` only for parents and country preferences only for
+students. The exact response keys are `schema`, `case_id`,
 `current_revision`, `phase`, and `active_role`. It exposes no task, run, review,
 route, Evidence, comparison, candidate, hash, value, or authority identity.
 Unassigned and cross-tenant callers keep the existing role-safe unavailable

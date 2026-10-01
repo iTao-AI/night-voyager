@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useState } from "react";
 
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
-import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
+import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor } from "../../lib/collaboration-demo/contracts";
+import { isBudgetValue } from "../../lib/collaboration-demo/budget";
+import { pendingRevisionCandidate, validRevisionReason } from "../../lib/connected-demo/revision";
+import { formatCnyRange } from "../../lib/presentation/format";
 import { usePresentation } from "../../lib/presentation/context";
 import { presentCode, presentRouteOutcome, presentRouteReason } from "../../lib/presentation/codes";
 import type { PresentationCopyKey } from "../../lib/presentation/catalog";
@@ -55,20 +58,42 @@ function stageDescription(ledger: Ledger, primaryAction: string | null, copy: (k
       : copy("noBusinessAction");
 }
 
+function RevisionConfirmation({ candidate, busy, onConfirm }: { candidate: MemoryCandidateAdvisor | null; busy: boolean; onConfirm?: (reason: string) => void }) {
+  const { locale, copy } = usePresentation();
+  const [reason, setReason] = useState("");
+  const value = candidate && (Array.isArray(candidate.value)
+    ? candidate.value.map((country) => presentCode(locale, "country", country)).join(locale === "zh-CN" ? "、" : ", ")
+    : isBudgetValue(candidate.value) ? formatCnyRange(locale, candidate.value.preferred_minor, candidate.value.hard_ceiling_minor, "CNY") : null);
+  return <div className="revision-confirmation">
+    {candidate ? <dl><div><dt>{copy(candidate.fact_key === "family.budget" ? "revisionBudgetOption" : "revisionCountriesOption")}</dt><dd>{value}</dd></div></dl> : <p className="disabled-reason">{copy("revisionCandidateUnavailable")}</p>}
+    <label className="revision-field" htmlFor="revision-confirmation-reason"><span>{copy("revisionConfirmationReason")}</span><textarea id="revision-confirmation-reason" value={reason} disabled={busy || !candidate} onChange={(event) => setReason(event.target.value)} aria-describedby="revision-reason-help" /></label>
+    <p id="revision-reason-help">{copy("revisionReasonHelp")}</p>
+    <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" disabled={busy || !candidate || !onConfirm || !validRevisionReason(reason)} onClick={() => onConfirm?.(reason.trim())}>{copy("confirmRevisionFactAction")}</button>
+  </div>;
+}
+
 function ActionControls({
   ledger,
   primaryAction,
   busy,
   onPrimaryAction,
   onSecondaryAction,
+  revisionCandidates = [],
+  onConfirmRevision,
 }: {
   ledger: Ledger;
   primaryAction: string | null;
   busy: boolean;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
+  revisionCandidates?: readonly MemoryCandidateAdvisor[];
+  onConfirmRevision?: (reason: string) => void;
 }) {
   const { copy } = usePresentation();
+  if (ledger.phase === "revision_fact_pending") {
+    const candidate = pendingRevisionCandidate(revisionCandidates, ledger.case_revision);
+    return <RevisionConfirmation key={`${ledger.case_revision}:${candidate?.candidate_id}:${JSON.stringify(candidate?.value)}`} candidate={candidate} busy={busy} onConfirm={onConfirmRevision} />;
+  }
   if (primaryAction) {
     return (
       <div className="action-row">
@@ -92,11 +117,15 @@ export function AdvisorLedgerAction({
   onPrimaryAction,
   onSecondaryAction,
   busy = false,
+  revisionCandidates,
+  onConfirmRevision,
 }: {
   ledger: Ledger;
   onPrimaryAction: () => void;
   onSecondaryAction?: () => void;
   busy?: boolean;
+  revisionCandidates?: readonly MemoryCandidateAdvisor[];
+  onConfirmRevision?: (reason: string) => void;
 }) {
   const { locale, copy } = usePresentation();
   const primaryActionKey = actionKey(ledger.phase);
@@ -116,6 +145,8 @@ export function AdvisorLedgerAction({
           busy={busy}
           onPrimaryAction={onPrimaryAction}
           onSecondaryAction={onSecondaryAction}
+          revisionCandidates={revisionCandidates}
+          onConfirmRevision={onConfirmRevision}
         />
       </div>
       {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
@@ -130,6 +161,8 @@ export function AdvisorLedger({
   onSecondaryAction,
   busy = false,
   renderAction = true,
+  revisionCandidates,
+  onConfirmRevision,
 }: {
   ledger: Ledger;
   confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
@@ -137,6 +170,8 @@ export function AdvisorLedger({
   onSecondaryAction?: () => void;
   busy?: boolean;
   renderAction?: boolean;
+  revisionCandidates?: readonly MemoryCandidateAdvisor[];
+  onConfirmRevision?: (reason: string) => void;
 }) {
   const { locale, copy } = usePresentation();
   const routes = ledger.routes;
@@ -169,7 +204,7 @@ export function AdvisorLedger({
           <h2>{stageTitle(ledger, primaryAction, copy, locale)}</h2>
           <p>{stageDescription(ledger, primaryAction, copy)}</p>
         </div>
-        {renderAction ? <ActionControls ledger={ledger} primaryAction={primaryAction} busy={busy} onPrimaryAction={onPrimaryAction} onSecondaryAction={onSecondaryAction} /> : null}
+        {renderAction ? <ActionControls ledger={ledger} primaryAction={primaryAction} busy={busy} onPrimaryAction={onPrimaryAction} onSecondaryAction={onSecondaryAction} revisionCandidates={revisionCandidates} onConfirmRevision={onConfirmRevision} /> : null}
       </div>
       {renderAction && busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
 

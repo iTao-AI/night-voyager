@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 
-import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
+import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor } from "../../lib/collaboration-demo/contracts";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import type { DemoDisplayState } from "../../lib/connected-demo/reducer";
@@ -93,7 +93,6 @@ export function ConnectedDemo() {
     switch (current.phase) {
       case "task_ready": return () => demo.createTask();
       case "review_required": return () => demo.approve();
-      case "revision_fact_pending": return () => demo.confirmPreferredCountries();
       case "replan_required": return () => demo.createRevisionTask();
       case "revision_review_required": return () => demo.approveRevision();
       default: return () => undefined;
@@ -132,7 +131,9 @@ export function ConnectedDemo() {
     <RevisionFactEditor
       currentFacts={demo.currentFacts}
       expectedCaseRevision={state.status.current_revision}
-      onSubmit={() => runUserAction(() => demo.submitPreferredCountries())}
+      onSubmit={(intent) => runUserAction(() => demo.submitRevision(intent))}
+      submittedIntent={demo.revisionIntent}
+      busy={demo.revisionSubmitting}
     />
   ) : rotateAction ? (
     <section className="collaboration-action" aria-live="polite">
@@ -148,6 +149,8 @@ export function ConnectedDemo() {
     <AdvisorLedgerAction
       ledger={ledger}
       busy={busy}
+      revisionCandidates={demo.revision?.candidates.filter((candidate): candidate is MemoryCandidateAdvisor => "candidate_id" in candidate)}
+      onConfirmRevision={(reason) => runUserAction(() => demo.confirmRevision(reason))}
       onPrimaryAction={() => runUserAction(primaryFor(ledger))}
       onSecondaryAction={ledger.phase === "review_required" ? () => runUserAction(() => demo.requestRevision()) : undefined}
     />

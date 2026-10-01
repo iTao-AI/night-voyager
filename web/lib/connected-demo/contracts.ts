@@ -252,7 +252,7 @@ export function parseSession(value: unknown): SessionProjection { if (!object(va
 export function parseJourneyStatus(value: unknown): ConnectedJourneyStatus {
   if (!object(value) || !exact(value, ["schema", "case_id", "current_revision", "phase", "active_role"]) || value.schema !== "night-voyager.connected-journey-status.v1" || !uuid(value.case_id) || !positive(value.current_revision) || !PHASES.includes(value.phase as DemoPhaseV2) || !["advisor", "student", "parent"].includes(String(value.active_role))) throw new Error("invalid response");
   const expectedRole = value.phase === "revision_requested" ? "student" : value.phase === "family_review" || value.phase === "plan_ready" ? "parent" : "advisor";
-  if (value.active_role !== expectedRole) throw new Error("invalid response");
+  if (value.active_role !== expectedRole && !(value.phase === "revision_requested" && value.active_role === "parent")) throw new Error("invalid response");
   return value as unknown as ConnectedJourneyStatus;
 }
 export function parseLedger(value: unknown): AdvisorLedger {

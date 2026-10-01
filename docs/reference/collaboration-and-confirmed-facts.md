@@ -240,8 +240,18 @@ envelope is V3 and binds the exact current revision, optional current task,
 predecessor/current run, snake_case phase, durable cursor, and pending mutation
 fingerprints. A legacy V1 envelope, hyphen phase, or V2 advisor-family envelope is
 not accepted. The later request revision path uses the same collaboration authority
-for a controlled student preferred-country change before publishing the successor
-Case revision.
+for one explicit changed fact before publishing the successor Case revision:
+student country preferences or a parent budget. The editor initializes from the
+current confirmed facts, accepts a non-empty supported country subset or positive
+whole-yuan CNY budget amounts, and preserves budget period, currency, elasticity,
+and refusal fields. A budget action explicitly revokes the student session and
+mints a real parent session; source-role permissions remain unchanged.
+
+The advisor sees the actual unique current pending candidate and enters a reason;
+ambiguous candidates disable confirmation. One revision intention and its request
+fingerprints/keys persist across same-tab reload and participant rotation in the
+optional V3 `revisionIntent` field. Editing the proposed values creates new keys.
+A stale revision reloads server authority and discards the stale intention.
 
 ### Role-safe projections
 

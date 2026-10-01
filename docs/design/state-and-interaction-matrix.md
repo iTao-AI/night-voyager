@@ -78,7 +78,10 @@ immutable case-revision-bound budget intent. A legacy collaboration V2 envelope 
 accepted only for an observed exact default-budget message and mutation fingerprint;
 new values never fall back to old records. Advisor-family recovery continues to use
 closed `schema_version=3` fields for current revision, task, predecessor, run, phase,
-cursor, and pending mutations. One tab never runs both journeys concurrently. The
+cursor, pending mutations, and optional revision-bound `revisionIntent`. During
+`revision_requested`, verified parent and student sessions read their own participant
+projection; budget and country mutations still require their respective source roles.
+One tab never runs both journeys concurrently. The
 inspector is read-only and server-owned: `/demo` progresses `not_created -> matched`,
 while `/demo/collaboration` stays `not_created` because it creates no planning task.
 After a successful handoff, `/demo` re-reads the continued Case and adopts task
@@ -90,7 +93,8 @@ advisor/student/parent reload `/journey-status` and receive the same durable
 phase with only `active_role` differing. The journey-status is participant-safe
 recovery authority, not browser storage. PR 3 browser journey is implemented
 provider-free: the reducer adopts only closed V2/V3 projections, presents the
-controlled student preferred-country editor and deterministic old/new comparison,
+single-fact editor for student country preferences or a real parent budget
+proposal and deterministic old/new comparison,
 requires fresh advisor authorization, and keeps `revision_blocked` free of approval
 and family-decision actions.
 

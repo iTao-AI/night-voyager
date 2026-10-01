@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import { createCollaborationDemoApi } from "../collaboration-demo/api";
+import { CollaborationDemoApiError, createCollaborationDemoApi } from "../collaboration-demo/api";
 import type {
   CollaborationMessage,
   CollaborationThread,
@@ -21,9 +21,12 @@ import type {
 import { idempotencyFor } from "./idempotency";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
-  pendingPreferredCountriesCandidate,
-  REVISED_PREFERRED_COUNTRIES,
-  REVISION_PROPOSAL_MESSAGE,
+  pendingRevisionCandidate,
+  revisionMessageBody,
+  revisionProposalBody,
+  validateRevisionIntent,
+  validRevisionReason,
+  type RevisionIntent,
 } from "./revision";
 import {
   clearRecoveryMetadata,
@@ -56,9 +59,9 @@ export interface RevisionCollaborationProjection {
 }
 
 function failure(error: unknown): RecoveryCode {
-  if (error instanceof ConnectedDemoApiError && error.status === 401) return "session_expired";
-  if (error instanceof ConnectedDemoApiError && error.code === "bff_session_recovery_required") return "session_recovery_required";
-  if (error instanceof ConnectedDemoApiError && error.status === 409) return "stale_conflict";
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.status === 401) return "session_expired";
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.code === "bff_session_recovery_required") return "session_recovery_required";
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.status === 409) return "stale_conflict";
   return "transport_failure";
 }
 
@@ -101,6 +104,7 @@ function metadataFor(
     cursor: sameTask ? current.cursor : 0,
     phase: status.phase,
     mutations: current?.mutations ?? {},
+    ...(current?.revisionIntent?.expectedCaseRevision === status.current_revision ? { revisionIntent: current.revisionIntent } : {}),
   };
 }
 
@@ -109,6 +113,7 @@ function pendingRoleMetadata(
   status: ConnectedJourneyStatus,
   role: RecoveryMetadata["role"],
   csrf: string,
+  targetRole = status.active_role,
 ): RecoveryMetadata {
   const retained = current?.caseId === status.case_id && current.role === role
     ? current
@@ -126,7 +131,8 @@ function pendingRoleMetadata(
     cursor: retained?.cursor ?? 0,
     phase: status.phase,
     mutations: retained?.mutations ?? {},
-    pendingRole: status.active_role,
+    ...(retained?.revisionIntent?.expectedCaseRevision === status.current_revision ? { revisionIntent: retained.revisionIntent } : {}),
+    pendingRole: targetRole,
   };
 }
 
@@ -140,6 +146,9 @@ export function useConnectedDemo() {
     if (typeof window === "undefined") return null;
     return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
   });
+  const [revisionIntent, setRevisionIntent] = useState<RevisionIntent | null>(() => typeof window === "undefined" ? null : loadRecoveryMetadata()?.revisionIntent ?? null);
+  const [revisionSubmitting, setRevisionSubmitting] = useState(false);
+  const revisionMutationBusy = useRef(false);
   const recoveryStarted = useRef(false);
   const retryAction = useRef<null | (() => Promise<void>)>(null);
   const inspectorGeneration = useRef(0);
@@ -158,7 +167,7 @@ export function useConnectedDemo() {
 
   const loadRevisionProjection = useCallback(async (
     status: ConnectedJourneyStatus,
-    role: "advisor" | "student",
+    role: "advisor" | "student" | "parent",
   ): Promise<RevisionCollaborationProjection> => {
     const detailReads = role === "advisor"
       ? Promise.all([
@@ -166,8 +175,8 @@ export function useConnectedDemo() {
           collaboration.candidates(status.case_id, "advisor"),
         ])
       : Promise.all([
-          collaboration.confirmedFacts(status.case_id, "student"),
-          collaboration.candidates(status.case_id, "student"),
+          collaboration.confirmedFacts(status.case_id, role),
+          collaboration.candidates(status.case_id, role),
         ]);
     const [thread, [facts, candidates]] = await Promise.all([
       collaboration.thread(status.case_id),
@@ -195,6 +204,7 @@ export function useConnectedDemo() {
     const status = await api.journeyStatus(caseId);
     if (status.case_id !== caseId) throw new Error("projection identity mismatch");
     const current = recoveryHint ?? loadRecoveryMetadata();
+    setRevisionIntent(current?.revisionIntent?.expectedCaseRevision === status.current_revision ? current.revisionIntent : null);
     if (status.active_role !== role) {
       saveRecoveryMetadata(pendingRoleMetadata(current, status, role, csrf));
       dispatch({ type: "ROLE_SWITCH", caseId, targetRole: status.active_role });
@@ -217,9 +227,9 @@ export function useConnectedDemo() {
       return true;
     }
     setInspector(null);
-    if (role === "student") {
+    if (role === "student" || (role === "parent" && status.phase === "revision_requested")) {
       if (status.phase !== "revision_requested") throw new Error("role projection mismatch");
-      const projection = await loadRevisionProjection(status, "student");
+      const projection = await loadRevisionProjection(status, role);
       setRevision(projection);
       setCurrentFacts({ caseId, caseRevision: status.current_revision, facts: projection.facts });
       saveRecoveryMetadata(metadataFor(current, status, role, csrf));
@@ -247,10 +257,14 @@ export function useConnectedDemo() {
         }
         if (current.pendingRole !== target) {
           const status = await api.journeyStatus(current.caseId);
-          if (status.case_id !== current.caseId || status.active_role !== target) {
+          const proposalRotation = status.phase === "revision_requested"
+            && current.revisionIntent?.expectedCaseRevision === status.current_revision
+            && target === (current.revisionIntent.factKey === "family.budget" ? "parent" : "student")
+            && ["student", "parent"].includes(current.role);
+          if (status.case_id !== current.caseId || (status.active_role !== target && !proposalRotation)) {
             throw new Error("role transition authority mismatch");
           }
-          current = pendingRoleMetadata(current, status, current.role, current.csrf);
+          current = pendingRoleMetadata(current, status, current.role, current.csrf, target);
           saveRecoveryMetadata(current);
         }
         try {
@@ -442,7 +456,7 @@ export function useConnectedDemo() {
     if (!metadata || metadata.role !== "advisor") return;
     const input = state.ledger.review_inputs;
     const body = action === "request_revision"
-      ? { schema_version: 1 as const, planning_run_id: input.planning_run_id, expected_case_revision: input.expected_case_revision, action, eligible_route_ids: [] as [], risk_acceptances: [] as [], reviewer_notes: "Please revise the preferred-country scope for this synthetic journey." }
+      ? { schema_version: 1 as const, planning_run_id: input.planning_run_id, expected_case_revision: input.expected_case_revision, action, eligible_route_ids: [] as [], risk_acceptances: [] as [], reviewer_notes: "Please revise one supported planning fact for this synthetic journey." }
       : { schema_version: 1 as const, planning_run_id: input.planning_run_id, expected_case_revision: input.expected_case_revision, action, eligible_route_ids: input.eligible_route_ids, risk_acceptances: input.risk_acceptance_options };
     const operation: MutationOperation = action === "request_revision" ? "request-revision" : "new-review";
     const attempt = async () => {
@@ -472,15 +486,51 @@ export function useConnectedDemo() {
     await transitionRole(metadata, target);
   }, [transitionRole]);
 
-  const submitPreferredCountries = useCallback(async () => {
-    if (state.value !== "revision_requested" || !revision) return;
+  const submitRevision = useCallback(async (requested: RevisionIntent) => {
+    if (state.value !== "revision_requested" || !revision || revisionMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
-    if (!metadata || metadata.role !== "student") return;
-    const messageBody = { schema_version: 1 as const, body: REVISION_PROPOSAL_MESSAGE };
-    const proposalBody = { schema_version: 1 as const, case_revision: state.status.current_revision, proposal: { schema_version: 1 as const, fact_key: "student.preferred_countries", value: REVISED_PREFERRED_COUNTRIES } };
+    if (!metadata || !["student", "parent"].includes(metadata.role) || metadata.caseId !== revision.caseId) return;
+    const validated = validateRevisionIntent(requested, currentFacts);
+    if (!validated.ok || requested.expectedCaseRevision !== state.status.current_revision) {
+      if ((!validated.ok && validated.code === "stale") || requested.expectedCaseRevision !== state.status.current_revision) await recover();
+      return;
+    }
+    const intent = validated.intent;
+    const messageBody = revisionMessageBody(intent);
+    const proposalBody = revisionProposalBody(intent);
     const attempt = async () => {
+      if (revisionMutationBusy.current) return;
+      revisionMutationBusy.current = true;
+      setRevisionSubmitting(true);
       try {
         let current = loadRecoveryMetadata() ?? metadata;
+        if (current.caseId !== revision.caseId || current.currentRevision !== intent.expectedCaseRevision) { await recover(); return; }
+        const participantRole = intent.factKey === "family.budget" ? "parent" : "student";
+        current = { ...current, revisionIntent: intent };
+        saveRecoveryMetadata(current);
+        setRevisionIntent(intent);
+        // Bind both keys to the intention before any session rotation can fail.
+        const preparedMessage = await mutationRecord(current, "fact-proposal-message", messageBody);
+        const preparedProposal = await mutationRecord(preparedMessage.updated, "fact-proposal-candidate", proposalBody);
+        current = preparedProposal.updated;
+        if (current.role !== participantRole || current.pendingRole) {
+          await transitionRole(current, participantRole);
+          retryAction.current = attempt;
+          const rotated = loadRecoveryMetadata();
+          if (!rotated || rotated.role !== participantRole || rotated.pendingRole) return;
+          current = rotated;
+        }
+        const authority = await api.journeyStatus(current.caseId);
+        if (authority.current_revision !== intent.expectedCaseRevision) {
+          throw new CollaborationDemoApiError(409, "stale_revision");
+        }
+        const facts = await collaboration.confirmedFacts(current.caseId, participantRole);
+        const checked = validateRevisionIntent(intent, { caseId: current.caseId, caseRevision: authority.current_revision, facts: facts.current });
+        if (!checked.ok || !["revision_requested", "revision_fact_pending"].includes(authority.phase)) {
+          retryAction.current = null;
+          await loadAuthoritative(current.caseId, participantRole, current.csrf);
+          return;
+        }
         const messageMutation = await mutationRecord(current, "fact-proposal-message", messageBody);
         const message = await collaboration.appendMessage(revision.thread.thread_id, messageBody, current.csrf, messageMutation.record.idempotencyKey);
         current = loadRecoveryMetadata() ?? messageMutation.updated;
@@ -491,40 +541,61 @@ export function useConnectedDemo() {
         retryAction.current = null;
         dispatch({ type: "ROLE_SWITCH", caseId: current.caseId, targetRole: "advisor" });
       } catch (error) {
-        await handleMutationFailure(error, "fact-proposal-candidate", true);
+        if (failure(error) === "stale_conflict") {
+          const current = loadRecoveryMetadata();
+          if (current) {
+            const updated = withMutation(withMutation(current, "fact-proposal-message", undefined), "fact-proposal-candidate", undefined);
+            delete updated.revisionIntent;
+            saveRecoveryMetadata(updated);
+          }
+          setRevisionIntent(null);
+        }
+        await handleMutationFailure(error, "fact-proposal-candidate");
+      } finally {
+        revisionMutationBusy.current = false;
+        setRevisionSubmitting(false);
       }
     };
     retryAction.current = attempt;
     await attempt();
-  }, [handleMutationFailure, mutationRecord, revision, state]);
+  }, [currentFacts, handleMutationFailure, loadAuthoritative, mutationRecord, recover, revision, state, transitionRole]);
 
-  const confirmPreferredCountries = useCallback(async () => {
-    if (state.value !== "revision_fact_pending") return;
+  const confirmRevision = useCallback(async (reason: string) => {
+    if (state.value !== "revision_fact_pending" || !revision || !validRevisionReason(reason) || revisionMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
-    if (!metadata || metadata.role !== "advisor") return;
-    const candidates = await collaboration.candidates(metadata.caseId, "advisor").catch(() => null);
-    const candidate = candidates ? pendingPreferredCountriesCandidate(candidates) : null;
-    if (!candidate || !("candidate_id" in candidate) || typeof candidate.candidate_id !== "string") {
-      dispatch({ type: "RECOVERABLE_FAILURE", code: "transport_failure" });
-      return;
-    }
-    const candidateId = candidate.candidate_id;
-    const body = { schema_version: 1 as const, expected_case_revision: state.status.current_revision, decision: "confirm" as const, reason: "Confirmed the bounded synthetic preferred-country revision." };
+    if (!metadata || metadata.role !== "advisor" || metadata.caseId !== revision.caseId) return;
+    const displayed = pendingRevisionCandidate(revision.candidates.filter((candidate): candidate is MemoryCandidateAdvisor => "candidate_id" in candidate), state.status.current_revision);
+    if (!displayed) return;
+    const body = { schema_version: 1 as const, expected_case_revision: state.status.current_revision, decision: "confirm" as const, reason: reason.trim() };
+    let submitted = false;
     const attempt = async () => {
+      if (revisionMutationBusy.current) return;
+      revisionMutationBusy.current = true;
       try {
         const current = loadRecoveryMetadata() ?? metadata;
-        const { record } = await mutationRecord(current, "fact-confirmation", body);
-        await collaboration.verifyCandidate(candidateId, body, current.csrf, record.idempotencyKey);
+        const candidates = await collaboration.candidates(current.caseId, "advisor");
+        const replay = submitted ? candidates.find((candidate) => candidate.candidate_id === displayed.candidate_id && candidate.state === "confirmed" && candidate.case_revision === body.expected_case_revision) : null;
+        const candidate = replay ?? pendingRevisionCandidate(candidates, body.expected_case_revision);
+        if (!candidate || candidate.candidate_id !== displayed.candidate_id || JSON.stringify(candidate.value) !== JSON.stringify(displayed.value)) {
+          retryAction.current = null;
+          await loadAuthoritative(current.caseId, "advisor", current.csrf);
+          return;
+        }
+        const { record } = await mutationRecord(current, "fact-confirmation", { candidateId: displayed.candidate_id, body });
+        submitted = true;
+        await collaboration.verifyCandidate(displayed.candidate_id, body, current.csrf, record.idempotencyKey);
         await loadAuthoritative(current.caseId, "advisor", current.csrf);
         retryAction.current = null;
       } catch (error) {
         await handleMutationFailure(error, "fact-confirmation");
+      } finally {
+        revisionMutationBusy.current = false;
       }
     };
     retryAction.current = attempt;
     dispatch({ type: "REVIEW_SUBMIT" });
     await attempt();
-  }, [handleMutationFailure, loadAuthoritative, mutationRecord, state]);
+  }, [handleMutationFailure, loadAuthoritative, mutationRecord, revision, state]);
 
   const decide = useCallback(async () => {
     if (state.value !== "family_review" || !confirmed) return;
@@ -590,9 +661,11 @@ export function useConnectedDemo() {
     approve: () => review("approve_for_consultation"),
     requestRevision: () => review("request_revision"),
     rotateToStudent: (caseId: string) => rotate(caseId, "student"),
-    submitPreferredCountries,
+    submitRevision,
+    revisionIntent,
+    revisionSubmitting,
     rotateToAdvisor: (caseId: string) => rotate(caseId, "advisor"),
-    confirmPreferredCountries,
+    confirmRevision,
     approveRevision: () => review("approve_for_consultation"),
     rotateToParent: (caseId: string) => rotate(caseId, "parent"),
     decide,

@@ -106,3 +106,8 @@ describe("connected demo reducer", () => {
     });
   });
 });
+
+it("accepts parent revision-requested projection while retaining all other role guards", () => {
+  expect(demoReducer({ value: "bootstrapping" }, { type: "STATUS_RELOADED", status: { ...status("revision_requested"), active_role: "parent" } }).value).toBe("revision_requested");
+  expect(demoReducer({ value: "bootstrapping" }, { type: "STATUS_RELOADED", status: { ...status("revision_requested"), active_role: "advisor" } }).value).toBe("recoverable_error");
+});

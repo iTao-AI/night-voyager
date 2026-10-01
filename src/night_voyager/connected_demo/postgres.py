@@ -587,7 +587,7 @@ class PostgresConnectedDemoRepository:
             case_id=case_id,
             current_revision=row["current_revision"],
             phase=phase,
-            active_role=self._journey_active_role(phase),
+            active_role=self._journey_active_role(phase, row["role"]),
         )
 
     async def current_decision_brief(
@@ -943,9 +943,10 @@ class PostgresConnectedDemoRepository:
     @staticmethod
     def _journey_active_role(
         phase: DemoPhaseV2,
+        participant_role: str | None = None,
     ) -> Literal["advisor", "student", "parent"]:
         if phase is DemoPhaseV2.REVISION_REQUESTED:
-            return "student"
+            return "parent" if participant_role == "parent" else "student"
         if phase in {DemoPhaseV2.FAMILY_REVIEW, DemoPhaseV2.PLAN_READY}:
             return "parent"
         return "advisor"

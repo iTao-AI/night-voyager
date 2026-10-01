@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
-import { AdvisorLedger } from "../../components/connected-demo/AdvisorLedger";
+import { AdvisorLedger, AdvisorLedgerAction } from "../../components/connected-demo/AdvisorLedger";
 import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
 import { EvidenceDisclosure } from "../../components/connected-demo/EvidenceDisclosure";
 import { FamilyDecisionBrief } from "../../components/connected-demo/FamilyDecisionBrief";
@@ -71,9 +71,9 @@ function setConnectedDemo(state: unknown, journeyConflict: "collaboration" | nul
     approve: vi.fn(),
     requestRevision: vi.fn(),
     rotateToStudent: vi.fn(),
-    submitPreferredCountries: vi.fn(),
+    submitRevision: vi.fn(),
     rotateToAdvisor: vi.fn(),
-    confirmPreferredCountries: vi.fn(),
+    confirmRevision: vi.fn(),
     approveRevision: vi.fn(),
     rotateToParent: vi.fn(),
     decide: vi.fn(),
@@ -397,32 +397,29 @@ it("renders a bilingual server-owned revision comparison without identifiers", a
   expect(document.body).not.toHaveTextContent(/规划|修订|上一版|当前/);
 });
 
-it("submits only the approved preferred-country revision and fails closed otherwise", () => {
+it("edits a real country subset from current facts and disables unchanged or stale proposals", () => {
   const submit = vi.fn();
-  const preferred = confirmedFact(
-    "student.preferred_countries",
-    ["australia", "japan", "malaysia"],
-    1,
-  );
+  const preferred = confirmedFact("student.preferred_countries", ["japan", "malaysia"], 1);
   const projection = { caseId: "40000000-0000-0000-0000-000000000002", caseRevision: 1, facts: [preferred] };
-  const { rerender } = renderPresentation(
-    <RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />,
-  );
-  expect(screen.getByRole("group", { name: "修改意向国家" })).toBeInTheDocument();
-  expect(screen.getByText("澳大利亚、日本、马来西亚")).toBeVisible();
-  expect(screen.getByText("澳大利亚、日本")).toBeVisible();
-  fireEvent.click(screen.getByRole("button", { name: "提交变更提案" }));
-  expect(submit).toHaveBeenCalledOnce();
-
-  rerender(
-    <RevisionFactEditor
-      currentFacts={{ ...projection, facts: [{ ...preferred, value: ["japan", "australia", "malaysia"] }] }}
-      expectedCaseRevision={1}
-      onSubmit={submit}
-    />,
-  );
+  const { rerender } = renderPresentation(<RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />);
   expect(screen.getByRole("button", { name: "提交变更提案" })).toBeDisabled();
-  expect(screen.getByText("当前服务器事实不符合此合成修订的安全基线。")).toBeVisible();
+  expect(screen.getAllByText("日本、马来西亚").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByRole("checkbox", { name: "日本" }));
+  fireEvent.click(screen.getByRole("button", { name: "提交变更提案" }));
+  expect(submit).toHaveBeenCalledWith({ expectedCaseRevision: 1, factKey: "student.preferred_countries", value: ["malaysia"] });
+  rerender(<RevisionFactEditor currentFacts={{ ...projection, caseRevision: 2 }} expectedCaseRevision={1} onSubmit={submit} />);
+  expect(screen.getByRole("button", { name: "提交变更提案" })).toBeDisabled();
+});
+
+it("collects budget revisions and initializes inputs from authoritative amounts", () => {
+  const submit = vi.fn();
+  const projection = { caseId: "40000000-0000-0000-0000-000000000002", caseRevision: 1, facts: [confirmedFact("family.budget", CONFIRMED_FACT.value, 1)] };
+  renderPresentation(<RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />);
+  fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });
+  expect(screen.getByLabelText("常规预算")).toHaveValue("300000");
+  fireEvent.change(screen.getByLabelText("常规预算"), { target: { value: "320000" } });
+  fireEvent.click(screen.getByRole("button", { name: "以家长提交预算提案" }));
+  expect(submit).toHaveBeenCalledWith({ expectedCaseRevision: 1, factKey: "family.budget", value: { ...CONFIRMED_FACT.value as object, preferred_minor: 32000000 } });
 });
 
 it("shows renewed server authorization in the family-safe revised brief", () => {
@@ -494,7 +491,7 @@ it("renders an initial budget block as a plain-language stop with persisted rout
 it.each([
   ["task_ready", "创建规划任务"],
   ["active_task", null],
-  ["revision_fact_pending", "确认意向国家变更"],
+  ["revision_fact_pending", "确认事实变更"],
   ["replan_required", "创建修订规划任务"],
   ["revision_task_active", null],
   ["revision_review_required", "批准修订计划"],
@@ -509,7 +506,7 @@ it.each([
     />,
   );
   const business = screen.queryAllByRole("button").filter((button) =>
-    /创建|确认意向|批准|请求修订/.test(button.textContent ?? ""),
+    /创建|确认事实|批准|请求修订/.test(button.textContent ?? ""),
   );
   if (action) {
     expect(business).toHaveLength(1);
@@ -585,4 +582,17 @@ it("presents the receipt then chronological timeline without internal identifier
   expect(screen.getByText("文件准备")).toBeVisible();
   expect(screen.getByText("2026年9月1日")).toBeVisible();
   expect(container).not.toHaveTextContent(/decision_id|receipt_id|selected_route_id|budget_elasticity|30,550,000|40,000,000|family_consultation|documents/);
+});
+
+it("shows the actual advisor candidate and requires an entered confirmation reason", () => {
+  const confirm = vi.fn();
+  const candidate = { schema_version: 1, fact_key: "student.preferred_countries", value: ["malaysia"], state: "pending", candidate_id: "44000000-0000-0000-0000-000000000001", case_revision: 1, message_event_id: "43000000-0000-0000-0000-000000000001", source_message_sequence_no: 1, subject_actor_id: "40000000-0000-0000-0000-000000000002", subject_role: "student", created_at: "2026-10-01T00:00:00Z", expires_at: "2026-10-08T00:00:00Z", verification_id: null, decision: null, reason: null, request_sha256: "a".repeat(64), value_sha256: "a".repeat(64) } as import("../../lib/collaboration-demo/contracts").MemoryCandidateAdvisor;
+  const { rerender } = renderPresentation(<AdvisorLedgerAction ledger={ledgerFixture("revision_fact_pending")} revisionCandidates={[candidate]} onPrimaryAction={() => undefined} onConfirmRevision={confirm} />);
+  expect(screen.getByText("马来西亚")).toBeVisible();
+  expect(screen.getByRole("button", { name: "确认事实变更" })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("确认理由"), { target: { value: "已与学生核对意向范围。" } });
+  fireEvent.click(screen.getByRole("button", { name: "确认事实变更" }));
+  expect(confirm).toHaveBeenCalledWith("已与学生核对意向范围。");
+  rerender(<AdvisorLedgerAction ledger={ledgerFixture("revision_fact_pending")} revisionCandidates={[candidate, { ...candidate, candidate_id: "44000000-0000-0000-0000-000000000002" }]} onPrimaryAction={() => undefined} onConfirmRevision={confirm} />);
+  expect(screen.getByRole("button", { name: "确认事实变更" })).toBeDisabled();
 });
