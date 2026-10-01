@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import type { ReactElement } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { suggestFamilyDecisionDraft } from "../../lib/connected-demo/family-decision";
 import { ConnectedDemo } from "../../components/connected-demo/ConnectedDemo";
 import { AdvisorLedger, AdvisorLedgerAction } from "../../components/connected-demo/AdvisorLedger";
 import { DecisionReceiptTimeline } from "../../components/connected-demo/DecisionReceiptTimeline";
@@ -56,6 +57,8 @@ afterEach(() => {
 function setConnectedDemo(state: unknown, journeyConflict: "collaboration" | null = null) {
   connectedHook.current = {
     state,
+    familyDraft: suggestFamilyDecisionDraft(briefFixture()),
+    setFamilyDraft: vi.fn(),
     confirmed: false,
     setConfirmed: vi.fn(),
     inspector: null,
@@ -431,7 +434,7 @@ it("shows renewed server authorization in the family-safe revised brief", () => 
     advisor_authorization: "renewed_for_current_revision",
   };
   renderPresentation(
-    <FamilyDecisionBrief brief={revised} confirmed onConfirm={() => undefined} onSubmit={() => undefined} />,
+    <FamilyDecisionBrief brief={revised} draft={{ ...suggestFamilyDecisionDraft(revised), acknowledgedTradeOffs: ["budget_elasticity"] }} onDraftChange={() => undefined} confirmed onConfirm={() => undefined} onSubmit={() => undefined} />,
   );
   expect(screen.getByText("当前档案版本 2")).toBeVisible();
   expect(screen.getByText("顾问已为当前修订重新授权")).toBeVisible();
@@ -539,7 +542,7 @@ it.each([
 
 it("renders only server-derived family constraints before provenance", () => {
   const { container } = renderPresentation(
-    <FamilyDecisionBrief brief={briefFixture("family-review")} confirmed={false} onConfirm={() => undefined} onSubmit={() => undefined} />,
+    <FamilyDecisionBrief brief={briefFixture("family-review")} draft={suggestFamilyDecisionDraft(briefFixture())} onDraftChange={() => undefined} confirmed={false} onConfirm={() => undefined} onSubmit={() => undefined} />,
   );
   expect(screen.getByText("¥305,500")).toBeVisible();
   expect(screen.getByText("¥400,000")).toBeVisible();

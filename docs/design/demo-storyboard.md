@@ -77,8 +77,11 @@ M5 turns the six-beat M1 visual intent into a real local synthetic walkthrough:
    Evidence, keep Malaysia disabled, then submit the real advisor review.
 4. **Family review** — revoke the advisor, accept cookie expiry, bootstrap, and
    mint the parent before presenting the family-safe Brief.
-5. **Plan ready** — confirm server-derived CNY cost/ceiling and
-   `budget_elasticity`, then show the persisted receipt and timeline.
+5. **Family decision and plan ready** — edit the suggested accepted minimum
+   and maximum in whole CNY yuan, separately acknowledge `budget_elasticity`,
+   and give final parent consent. The interval must contain current pinned cost
+   and stay within the ceiling. Submit those actual choices, then show the
+   persisted immutable receipt and timeline.
 6. **Negative/recovery paths** — wrong-role reads remain non-enumerating,
    duplicate/stale decisions fail safely, and missing same-tab recovery metadata
    never enables mutation or parent presentation.

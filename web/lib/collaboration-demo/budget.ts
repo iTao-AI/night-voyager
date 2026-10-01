@@ -63,7 +63,7 @@ function positiveSafeInteger(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) > 0;
 }
 
-function parseWholeYuan(raw: string, field: Exclude<BudgetDraftField, "form">): { ok: true; minor: number } | { ok: false; error: BudgetValidationIssue } {
+export function parseWholeYuan(raw: string, field: Exclude<BudgetDraftField, "form">): { ok: true; minor: number } | { ok: false; error: BudgetValidationIssue } {
   const normalized = raw.trim();
   if (!normalized) return { ok: false, error: { field, code: "required" } };
   if (!/^\d+$/.test(normalized)) return { ok: false, error: { field, code: "whole_yuan_positive" } };

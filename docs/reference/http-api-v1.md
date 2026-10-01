@@ -363,6 +363,23 @@ identity, `currency=CNY`, pinned cost, hard ceiling, and exact one-element
 `required_trade_offs=["budget_elasticity"]`. These values come from current
 PostgreSQL rows and deterministic policy, not fixture labels or client constants.
 
+The parent form suggests a cost-to-ceiling range but sends its actual edited
+whole-yuan CNY inputs as safe integer minor units. It requires a positive interval
+containing the pinned cost, within the ceiling, a separate acknowledgment for
+`budget_elasticity`, and final parent consent. The route and expected Brief version
+come from that current Brief. The body schema and backend eligibility policy are
+unchanged. The returned immutable receipt preserves submitted choices.
+
+The closed V3 advisor-family recovery envelope may contain optional `familyIntent`
+with exact `schema_version=1`, `briefId` and the existing `FamilyDecisionBody` as
+`body`, paired with a persisted `family-decision` fingerprint/key. Only a current
+matching Brief ID/version and requirements may restore these explicitly submitted
+choices; final consent is unchecked on reload. Key-only envelopes do not rebuild
+submitted choices or acknowledge trade-offs. Edited submitted values receive a new
+intention/key; ambiguous retries retain the exact original body/key. Brief identity
+or version changes discard old acceptance and replay; a stale decision rejection
+reloads authoritative current state.
+
 Planning-revision clients opt the Ledger and current Brief into exact
 `contract_version=2`, recover from `/journey-status`, and persist a closed V3
 advisor-family envelope. The UI may submit the bounded request-revision review and

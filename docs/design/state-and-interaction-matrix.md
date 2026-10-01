@@ -44,7 +44,7 @@ resume/prior state remains fail-closed.
 | `revision_task_active` | current-revision task owns the frozen predecessor | follow durable task progress | submit predecessor or comparison |
 | `revision_review_required` | exact successor and deterministic old/new comparison | perform renewed advisor review | reuse the predecessor review |
 | `revision_blocked` | successor is blocked and comparison remains visible to advisor | remediate Evidence/facts | fabricate review inputs or success |
-| `family_review` | current family-safe Brief identity | real advisor-to-parent rotation | decide as advisor |
+| `family_review` | current family-safe Brief identity, editable suggested budget and unchecked trade-off acknowledgment | real parent submits valid budget choices, separate required acknowledgments and final consent | decide as advisor, auto-accept trade-offs or submit defaults as consent |
 | `plan_ready` | completion status or parent receipt/timeline | continue the exact Case into execution or read result | create a task implicitly |
 | `terminal_task_failure` | public failure and recovery guidance | explicit retry/remediation | synthesize success |
 
@@ -131,3 +131,21 @@ the local real-Chromium presentation audit. The browser audit passed `103/103`
 across both locales, `1440`, `1280`, `1024`, `768`, `390`, and `320` CSS pixels,
 reduced motion, 200% zoom, material fallback, keyboard normal/blocked paths, and
 the same-Case versus separately seeded execution boundary.
+
+## Explicit family acceptance recovery
+
+The current Brief supplies the eligible route, CNY currency, pinned cost, hard
+ceiling and required trade-off. Accepted minimum and maximum are editable
+positive whole-yuan amounts, converted safely to minor units. Submission requires
+`minimum <= pinned cost <= maximum <= hard ceiling`, every required trade-off
+acknowledged separately, and final parent consent. Editing any choice clears
+final consent. The existing one-element `budget_elasticity` contract is preserved.
+
+A submitted body and its key survive an ambiguous transport result in the
+closed optional `familyIntent` metadata. Same-tab reload may restore only an
+explicitly submitted choice matching the current Brief ID/version and current
+requirements; final consent remains unchecked. Unsubmitted edits are not durable.
+Key-only legacy metadata never auto-accepts requirements or rebuilds a submitted
+body from suggestions. A changed Brief ID/version resets choices, acknowledgments,
+consent and the old replay action; an old-version conflict reloads server authority.
+The immutable receipt renders the values returned by the server.

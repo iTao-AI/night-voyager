@@ -670,9 +670,21 @@ test(
         new URL(response.url()).pathname === decisionPath
       );
     });
-    await page.getByRole("checkbox").check();
+    await page.getByLabel(/接受预算下限（元）|Accepted budget minimum \(yuan\)/).fill("300000");
+    await page.getByLabel(/接受预算上限（元）|Accepted budget maximum \(yuan\)/).fill("350000");
+    await page.getByRole("checkbox", { name: /我接受：预算弹性|I accept: Budget flexibility/ }).check();
+    await page.getByRole("checkbox", { name: /我以家长身份确认|As parent, I confirm/ }).check();
     await page.getByRole("button", { name: copy.continueDecision }).click();
     const decisionResponse = await decisionResponsePromise;
+    expect(decisionResponse.request().postDataJSON()).toEqual({
+      schema_version: 1,
+      expected_brief_version: brief.brief_version,
+      selected_route_id: (brief.decision_requirements as Json).eligible_route_id,
+      accepted_budget_min_minor: 30_000_000,
+      accepted_budget_max_minor: 35_000_000,
+      currency: "CNY",
+      accepted_trade_offs: ["budget_elasticity"],
+    });
     const decisionStatus = decisionResponse.status();
     const decisionBody = (await decisionResponse.text())
       .replace(/\s+/g, " ")
@@ -713,6 +725,13 @@ test(
         { cause: error },
       );
     }
+    const acceptedBrief = await read(page, `/api/demo/cases/${HAPPY_CASE}/current-decision-brief`);
+    expect(acceptedBrief.receipt).toMatchObject({
+      accepted_budget_min_minor: 30_000_000,
+      accepted_budget_max_minor: 35_000_000,
+      accepted_trade_offs: ["budget_elasticity"],
+      decision_made_by_actor_id: "20000000-0000-0000-0000-000000000003",
+    });
     console.log(
       `family-decision authority status=${decisionStatus} ` +
       `durable_phase=${durablePhase} receipt=visible timeline=visible`,

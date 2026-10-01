@@ -16,8 +16,8 @@ import { ConnectedDemoApiError, createConnectedDemoApi } from "./api";
 import type {
   AdvisorLedger,
   ConnectedJourneyStatus,
-  FamilyDecisionBody,
 } from "./contracts";
+import { familyDraftFromIntent, familyIntentMatchesBrief, suggestFamilyDecisionDraft, validateFamilyDecisionDraft, type FamilyDecisionDraft, type SubmittedFamilyIntent } from "./family-decision";
 import { idempotencyFor } from "./idempotency";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
@@ -103,7 +103,8 @@ function metadataFor(
     ...identity,
     cursor: sameTask ? current.cursor : 0,
     phase: status.phase,
-    mutations: current?.mutations ?? {},
+    mutations: { ...current?.mutations },
+    ...(current?.caseId === status.case_id && current.currentRevision === status.current_revision && current.familyIntent ? { familyIntent: current.familyIntent } : {}),
     ...(current?.revisionIntent?.expectedCaseRevision === status.current_revision ? { revisionIntent: current.revisionIntent } : {}),
   };
 }
@@ -139,6 +140,15 @@ function pendingRoleMetadata(
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
+  const [familyDraft, setFamilyDraftValue] = useState<FamilyDecisionDraft>({ minimumYuan: "", maximumYuan: "", acknowledgedTradeOffs: [] });
+  const familyBriefIdentity = useRef<string | null>(null);
+  const familyMutationBusy = useRef(false);
+  const retryAction = useRef<null | (() => Promise<void>)>(null);
+  const setFamilyDraft = useCallback((draft: FamilyDecisionDraft) => {
+    setFamilyDraftValue(draft);
+    setConfirmed(false);
+    retryAction.current = null;
+  }, []);
   const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
   const [currentFacts, setCurrentFacts] = useState<CurrentFactsProjection | null>(null);
   const [revision, setRevision] = useState<RevisionCollaborationProjection | null>(null);
@@ -150,7 +160,6 @@ export function useConnectedDemo() {
   const [revisionSubmitting, setRevisionSubmitting] = useState(false);
   const revisionMutationBusy = useRef(false);
   const recoveryStarted = useRef(false);
-  const retryAction = useRef<null | (() => Promise<void>)>(null);
   const inspectorGeneration = useRef(0);
 
   const refreshInspector = useCallback(async (caseId: string) => {
@@ -240,7 +249,22 @@ export function useConnectedDemo() {
     setCurrentFacts(null);
     const brief = await api.currentBrief(caseId);
     if (brief.case_id !== caseId || brief.phase !== status.phase || brief.revision_context.current_case_revision !== status.current_revision) throw new Error("projection identity mismatch");
-    saveRecoveryMetadata(metadataFor(current, status, role, csrf));
+    const metadata = metadataFor(current, status, role, csrf);
+    const identity = `${brief.brief_id}:${brief.brief_version}`;
+    const intent = metadata.familyIntent;
+    const matching = intent && familyIntentMatchesBrief(intent, brief);
+    if (intent && !matching) {
+      delete metadata.familyIntent;
+      delete metadata.mutations["family-decision"];
+    }
+    if (familyBriefIdentity.current !== identity) {
+      retryAction.current = null;
+      if (familyBriefIdentity.current !== null) delete metadata.mutations["family-decision"];
+      setFamilyDraftValue(matching ? familyDraftFromIntent(intent) : suggestFamilyDecisionDraft(brief));
+      setConfirmed(false);
+      familyBriefIdentity.current = identity;
+    }
+    saveRecoveryMetadata(metadata);
     dispatch({ type: "STATUS_RELOADED", status, brief });
     return true;
   }, [loadRevisionProjection, refreshInspector]);
@@ -598,27 +622,42 @@ export function useConnectedDemo() {
   }, [handleMutationFailure, loadAuthoritative, mutationRecord, revision, state]);
 
   const decide = useCallback(async () => {
-    if (state.value !== "family_review" || !confirmed) return;
+    if (state.value !== "family_review" || !confirmed || familyMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
-    if (!metadata || metadata.role !== "parent") return;
-    const requirements = state.brief.decision_requirements;
-    const body: FamilyDecisionBody = { schema_version: 1, expected_brief_version: state.brief.brief_version, selected_route_id: requirements.eligible_route_id, accepted_budget_min_minor: requirements.pinned_cost_minor, accepted_budget_max_minor: requirements.hard_ceiling_minor, currency: requirements.currency, accepted_trade_offs: requirements.required_trade_offs };
+    if (!metadata || metadata.role !== "parent" || metadata.pendingRole || metadata.caseId !== state.brief.case_id) return;
+    const validated = validateFamilyDecisionDraft(familyDraft, state.brief);
+    if (!validated.ok) return;
+    const intent: SubmittedFamilyIntent = { schema_version: 1, briefId: state.brief.brief_id, body: validated.body };
     const attempt = async () => {
+      if (familyMutationBusy.current) return;
+      familyMutationBusy.current = true;
       try {
-        const current = loadRecoveryMetadata() ?? metadata;
-        const { record } = await mutationRecord(current, "family-decision", body);
-        await api.decide(state.brief.brief_id, body, current.csrf, record.idempotencyKey);
+        const current = loadRecoveryMetadata();
+        if (!current || current.role !== "parent" || current.pendingRole || current.caseId !== metadata.caseId || current.currentRevision !== metadata.currentRevision) return;
+        const record = await idempotencyFor(intent.body, current.mutations["family-decision"]);
+        saveRecoveryMetadata({ ...withMutation(current, "family-decision", record), familyIntent: intent });
+        await api.decide(intent.briefId, intent.body, current.csrf, record.idempotencyKey);
         await loadAuthoritative(current.caseId, "parent", current.csrf);
         retryAction.current = null;
       } catch (error) {
         setConfirmed(false);
+        if (failure(error) === "stale_conflict") {
+          const current = loadRecoveryMetadata();
+          if (current) {
+            delete current.familyIntent;
+            saveRecoveryMetadata(withMutation(current, "family-decision", undefined));
+          }
+          familyBriefIdentity.current = null;
+        }
         await handleMutationFailure(error, "family-decision");
+      } finally {
+        familyMutationBusy.current = false;
       }
     };
     retryAction.current = attempt;
     dispatch({ type: "DECISION_SUBMIT" });
     await attempt();
-  }, [confirmed, handleMutationFailure, loadAuthoritative, mutationRecord, state]);
+  }, [confirmed, familyDraft, handleMutationFailure, loadAuthoritative, state]);
 
   const retry = useCallback(async () => {
     if (retryAction.current) await retryAction.current();
@@ -648,6 +687,8 @@ export function useConnectedDemo() {
     state,
     confirmed,
     setConfirmed,
+    familyDraft,
+    setFamilyDraft,
     inspector,
     currentFacts,
     revision,

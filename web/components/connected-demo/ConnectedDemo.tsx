@@ -142,7 +142,7 @@ export function ConnectedDemo() {
       <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => runUserAction(rotateAction.run)}>{copy(rotateAction.action)}</button>
     </section>
   ) : state.value === "family_review" ? (
-    <FamilyDecisionAction brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} />
+    <FamilyDecisionAction brief={state.brief} draft={demo.familyDraft} onDraftChange={demo.setFamilyDraft} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} />
   ) : state.value === "recoverable_error" ? (
     <RecoveryAction onReconnect={() => runUserAction(() => demo.retry())} />
   ) : ledgerOwnsAction && ledger ? (
@@ -211,7 +211,7 @@ export function ConnectedDemo() {
         <section className="ledger-hero" aria-live="polite"><h3>{copy(rotateAction.title)}</h3><p>{copy(rotateAction.body)}</p></section>
       ) : null}
 
-      {!demo.journeyConflict && state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} renderAction={false} /> : null}
+      {!demo.journeyConflict && state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} draft={demo.familyDraft} onDraftChange={demo.setFamilyDraft} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} renderAction={false} /> : null}
       {!demo.journeyConflict && state.value === "decision_submitting" ? <section className="ledger-hero" aria-live="polite"><h3>{copy("demoRecordingDecision")}</h3></section> : null}
       {!demo.journeyConflict && state.value === "plan_ready" ? (
         <>

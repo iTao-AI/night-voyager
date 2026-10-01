@@ -1,3 +1,4 @@
+import { isSubmittedFamilyIntent, type SubmittedFamilyIntent } from "./family-decision";
 import { isRevisionIntent, type RevisionIntent } from "./revision";
 import type { IdempotencyRecord } from "./idempotency";
 import type { DemoPhaseV2 } from "./contracts";
@@ -33,6 +34,7 @@ export interface AdvisorFamilyJourneyEnvelopeV3 {
   mutations: Partial<Record<AdvisorFamilyMutationKind, IdempotencyRecord>>;
   pendingRole?: "advisor" | "student" | "parent";
   revisionIntent?: RevisionIntent;
+  familyIntent?: SubmittedFamilyIntent;
 }
 
 export interface CollaborationJourneyEnvelopeV2 {
@@ -84,9 +86,11 @@ function validMutations(value: unknown, operations: readonly string[]): boolean 
 function advisorFamily(value: Record<string, unknown>): value is Record<string, unknown> & AdvisorFamilyJourneyEnvelopeV3 {
   const pendingRole = Object.hasOwn(value, "pendingRole");
   const revisionIntent = Object.hasOwn(value, "revisionIntent");
-  const keys = ["schema_version", "journey", "role", "csrf", "caseId", "currentRevision", "currentTaskId", "predecessorRunId", "currentRunId", "cursor", "phase", "mutations", ...(pendingRole ? ["pendingRole"] : []), ...(revisionIntent ? ["revisionIntent"] : [])];
+  const familyIntent = Object.hasOwn(value, "familyIntent");
+  const keys = ["schema_version", "journey", "role", "csrf", "caseId", "currentRevision", "currentTaskId", "predecessorRunId", "currentRunId", "cursor", "phase", "mutations", ...(pendingRole ? ["pendingRole"] : []), ...(revisionIntent ? ["revisionIntent"] : []), ...(familyIntent ? ["familyIntent"] : [])];
   if (!exact(value, keys) || value.schema_version !== 3 || value.journey !== "advisor-family" || !["advisor", "student", "parent"].includes(String(value.role)) || typeof value.csrf !== "string" || !value.csrf || !uuid(value.caseId) || !Number.isSafeInteger(value.currentRevision) || Number(value.currentRevision) <= 0 || !nullableUuid(value.currentTaskId) || !nullableUuid(value.predecessorRunId) || !nullableUuid(value.currentRunId) || !Number.isSafeInteger(value.cursor) || Number(value.cursor) < 0 || !PHASES.includes(value.phase as DemoPhaseV2) || !validMutations(value.mutations, ADVISOR_OPERATIONS)) return false;
   if (revisionIntent && (!isRevisionIntent(value.revisionIntent) || value.revisionIntent.expectedCaseRevision !== value.currentRevision)) return false;
+  if (familyIntent && (!isSubmittedFamilyIntent(value.familyIntent) || value.role !== "parent" || !["family_review", "plan_ready"].includes(String(value.phase)) || !object(value.mutations) || !value.mutations["family-decision"])) return false;
   const expectedRole = value.phase === "revision_requested" ? (value.role === "parent" ? "parent" : "student") : ["family_review", "plan_ready"].includes(String(value.phase)) ? "parent" : "advisor";
   if (pendingRole) {
     const proposalRotation = value.phase === "revision_requested" && isRevisionIntent(value.revisionIntent)
