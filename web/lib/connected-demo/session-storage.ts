@@ -96,8 +96,8 @@ function advisorFamily(value: Record<string, unknown>): value is Record<string, 
   if (retryIntent && (!object(value.retryIntent) || !exact(value.retryIntent, ["taskId", "expectedRowVersion", "expectedCaseRevision"]) || !uuid(value.retryIntent.taskId) || !Number.isSafeInteger(value.retryIntent.expectedRowVersion) || Number(value.retryIntent.expectedRowVersion) <= 0 || value.retryIntent.expectedCaseRevision !== value.currentRevision || value.role !== "advisor" || !object(value.mutations) || !value.mutations["retry-task"])) return false;
   const expectedRole = value.phase === "revision_requested" ? (value.role === "parent" ? "parent" : "student") : ["family_review", "plan_ready"].includes(String(value.phase)) ? "parent" : "advisor";
   if (pendingRole) {
-    const proposalRotation = value.phase === "revision_requested" && isRevisionIntent(value.revisionIntent)
-      && value.pendingRole === (value.revisionIntent.factKey === "family.budget" ? "parent" : "student")
+    const proposalRotation = value.phase === "revision_requested"
+      && ["student", "parent"].includes(String(value.pendingRole))
       && ["student", "parent"].includes(String(value.role));
     if (!["advisor", "student", "parent"].includes(String(value.pendingRole)) || (!proposalRotation && value.pendingRole !== expectedRole) || value.pendingRole === value.role) return false;
   } else if (value.role !== expectedRole) return false;

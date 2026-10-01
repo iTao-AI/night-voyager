@@ -417,7 +417,7 @@ it("edits a real country subset from current facts and disables unchanged or sta
 it("collects budget revisions and initializes inputs from authoritative amounts", () => {
   const submit = vi.fn();
   const projection = { caseId: "40000000-0000-0000-0000-000000000002", caseRevision: 1, facts: [confirmedFact("family.budget", CONFIRMED_FACT.value, 1)] };
-  renderPresentation(<RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />);
+  renderPresentation(<RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} activeRole="parent" onSubmit={submit} />);
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });
   expect(screen.getByLabelText("常规预算")).toHaveValue("300000");
   fireEvent.change(screen.getByLabelText("常规预算"), { target: { value: "320000" } });

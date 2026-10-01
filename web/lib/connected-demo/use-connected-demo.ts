@@ -27,6 +27,7 @@ import {
   validateRevisionIntent,
   validRevisionReason,
   type RevisionIntent,
+  type RevisionFactKey,
 } from "./revision";
 import {
   clearRecoveryMetadata,
@@ -284,9 +285,15 @@ export function useConnectedDemo() {
         }
         if (current.pendingRole !== target) {
           const status = await api.journeyStatus(current.caseId);
+          if (status.case_id === current.caseId && status.phase === "revision_requested"
+            && current.currentRevision !== status.current_revision) {
+            retryAction.current = null;
+            await loadAuthoritative(current.caseId, current.role, current.csrf);
+            return;
+          }
           const proposalRotation = status.phase === "revision_requested"
-            && current.revisionIntent?.expectedCaseRevision === status.current_revision
-            && target === (current.revisionIntent.factKey === "family.budget" ? "parent" : "student")
+            && current.currentRevision === status.current_revision
+            && ["student", "parent"].includes(target)
             && ["student", "parent"].includes(current.role);
           if (status.case_id !== current.caseId || (status.active_role !== target && !proposalRotation)) {
             throw new Error("role transition authority mismatch");
@@ -564,6 +571,34 @@ export function useConnectedDemo() {
     await transitionRole(metadata, target);
   }, [transitionRole]);
 
+  const prepareRevisionFact = useCallback(async (factKey: RevisionFactKey) => {
+    if (state.value !== "revision_requested" || revisionMutationBusy.current
+      || !["student.preferred_countries", "family.budget"].includes(factKey)) return;
+    const metadata = loadRecoveryMetadata();
+    if (!metadata || !["student", "parent"].includes(metadata.role)
+      || metadata.caseId !== state.status.case_id) return;
+    if (metadata.currentRevision !== state.status.current_revision) { await recover(); return; }
+    const targetRole = factKey === "family.budget" ? "parent" : "student";
+    revisionMutationBusy.current = true;
+    setRevisionSubmitting(true);
+    try {
+      // Preparation is explicit role consent, not a submitted fact or mutation key.
+      if (metadata.role !== targetRole || metadata.pendingRole) {
+        await transitionRole(metadata, targetRole);
+      } else {
+        const attempt = async () => {
+          try { await loadAuthoritative(metadata.caseId, targetRole, metadata.csrf); }
+          catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
+        };
+        retryAction.current = attempt;
+        await attempt();
+      }
+    } finally {
+      revisionMutationBusy.current = false;
+      setRevisionSubmitting(false);
+    }
+  }, [loadAuthoritative, recover, state, transitionRole]);
+
   const submitRevision = useCallback(async (requested: RevisionIntent) => {
     if (state.value !== "revision_requested" || !revision || revisionMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
@@ -759,6 +794,7 @@ export function useConnectedDemo() {
     requestRevision: () => review("request_revision"),
     rotateToStudent: (caseId: string) => rotate(caseId, "student"),
     submitRevision,
+    prepareRevisionFact,
     revisionIntent,
     revisionSubmitting,
     rotateToAdvisor: (caseId: string) => rotate(caseId, "advisor"),

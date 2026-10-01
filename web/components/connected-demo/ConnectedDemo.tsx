@@ -132,6 +132,8 @@ export function ConnectedDemo() {
     <RevisionFactEditor
       currentFacts={demo.currentFacts}
       expectedCaseRevision={state.status.current_revision}
+      activeRole={state.status.active_role === "parent" ? "parent" : "student"}
+      onPrepareFact={(factKey) => runUserAction(() => demo.prepareRevisionFact(factKey))}
       onSubmit={(intent) => runUserAction(() => demo.submitRevision(intent))}
       submittedIntent={demo.revisionIntent}
       busy={demo.revisionSubmitting}
