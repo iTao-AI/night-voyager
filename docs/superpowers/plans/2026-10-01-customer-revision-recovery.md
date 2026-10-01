@@ -20,8 +20,8 @@
 - Cancellation, outdated results, unknown codes, `invalid_schema`, `pin_mismatch`, `fallback_authority`, and `policy_rejected` do not allow unchanged-input retry.
 - Keep v1 field shapes and legacy reads compatible; eligible terminal v2 ledgers may expose `canonical_task_inputs` without a new schema version.
 - Reassessment successor automation remains deferred.
-- Local implementation, verification, docs, reviews and semantic commits only. No push, PR, merge, release, deploy, installation, or permanent host configuration changes.
-- Existing environment only. Python verification must explicitly import this worktree's `src`; frontend dependencies may be reused without `npm ci`.
+- Local implementation, verification, docs, reviews and semantic commits only. No push, PR, merge, release, deploy, new dependencies, external tool installation, or permanent host configuration changes.
+- The user additionally authorized existing-lock dependency synchronization in this worktree's isolated environment and task-owned Docker builds. Keep host caches task-local and do not modify the main checkout or shared configuration. Python verification must explicitly import this worktree's `src` and use its own interpreter.
 - Required DB/Compose/concurrency gates are actual runtime gates; offline fixtures cannot replace them. Heavy builds and GUI work run sequentially.
 
 ## Review Focus
@@ -36,6 +36,7 @@
 
 In progress. Starting local HEAD: `539ca4eb0e8fe53d991581afe9f69846a523baf0`.
 The design's older prepared baseline is historical; this HEAD is the explicitly delegated stack.
+Task 1 is implemented and independently reviewed through `f10ca93983d979848f88692dc659e2efa310e3f2`; required native acceptance remains in Task 4.
 
 ---
 
@@ -44,7 +45,7 @@ The design's older prepared baseline is historical; this HEAD is the explicitly 
 **Files:**
 - Modify: `web/components/connected-demo/RevisionFactEditor.tsx`, `AdvisorLedger.tsx`, `ConnectedDemo.tsx`.
 - Modify: `web/lib/connected-demo/revision.ts`, `use-connected-demo.ts`, `session-storage.ts` as required.
-- Modify: `web/lib/presentation/catalog.ts`, `web/app/globals.css` as required for accessible bilingual inputs.
+- Modify: `web/lib/presentation/catalog.ts`, existing `web/app/styles.css` as required for accessible bilingual inputs.
 - Test: focused revision validation, hook/component recovery tests under `web/tests/unit/`; adapt existing scripted assertions and `web/e2e/planning-revision.spec.ts`.
 
 **Interfaces:**
@@ -52,11 +53,11 @@ The design's older prepared baseline is historical; this HEAD is the explicitly 
 - Produces: `RevisionIntent` in `revision.ts`, containing `expectedCaseRevision`, `factKey`, and validated proposed `value`; `submitRevision(intent: RevisionIntent): Promise<void>` and `confirmRevision(reason: string): Promise<void>` from the hook.
 - The advisor confirms the actual single supported pending candidate and sees its value; ambiguity disables confirmation.
 
-- [ ] **Step 1: Add failing tests** for a non-default current country list, one chosen supported subset, budget revision values, duplicate/empty/unknown countries, unchanged values, stale revision, budget bounds, and edited-body idempotency. Assert proposal bodies contain the submitted fact/value and confirmation contains the entered reason.
-- [ ] **Step 2: Run focused Vitest tests** and record the expected behavior failures before implementation.
-- [ ] **Step 3: Implement the typed intent, form, and hook methods.** Initialize from authoritative facts; display current/proposed values. Reuse budget parsing, preserve authoritative budget fields, and validate material change. Persist one submitted body/key; edited values are a new intention. A stale server conflict reloads authority. Remove fixed target-country matching and update in-scope historical tests to express actual inputs.
-- [ ] **Step 4: Run focused tests, frontend typecheck and lint.** Passing means valid country/budget forms issue actual participant mutations, advisor confirmation consumes the actual candidate, invalid/stale forms fail closed, and unchanged journey tests remain green.
-- [ ] **Step 5: Review diff and commit** exact affected paths as `feat: support explicit client fact revisions`.
+- [x] **Step 1: Add failing tests** for a non-default current country list, one chosen supported subset, budget revision values, duplicate/empty/unknown countries, unchanged values, stale revision, budget bounds, and edited-body idempotency. Assert proposal bodies contain the submitted fact/value and confirmation contains the entered reason.
+- [x] **Step 2: Run focused Vitest tests** and record the expected behavior failures before implementation.
+- [x] **Step 3: Implement the typed intent, form, and hook methods.** Initialize from authoritative facts; display current/proposed values. Reuse budget parsing, preserve authoritative budget fields, and validate material change. Persist one submitted body/key; edited values are a new intention. A stale server conflict reloads authority. Remove fixed target-country matching and update in-scope historical tests to express actual inputs.
+- [x] **Step 4: Run focused tests, frontend typecheck and lint.** Passing means valid country/budget forms issue actual participant mutations, advisor confirmation consumes the actual candidate, invalid/stale forms fail closed, and unchanged journey tests remain green.
+- [x] **Step 5: Review diff and commit** exact affected paths as `feat: support explicit client fact revisions`.
 
 ### Task 2: Explicit parent budget and trade-off acceptance
 
