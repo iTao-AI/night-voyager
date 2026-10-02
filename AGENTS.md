@@ -164,6 +164,10 @@ Do not make `autoplan`, a second-model review, subagents, repeated full-reposito
 - Accept a public-neutral brief or approved repository spec with scope, constraints, observable
   acceptance, delivery owner, Git starting point, and authorization. Use the persistence rules
   below; small work needs only a brief. Directory placement alone is not approval.
+- For a task with a user-designated delegated approval owner, route new approval requests
+  to that owner with the action, scope, impact, and supporting evidence. Existing authorization
+  remains valid within its scope. Require the user's own confirmation when delegation or
+  host rules do not permit delegated approval.
 - Reuse approved design, verify current rules and Git state, and use
   `superpowers:writing-plans` only for implementation gaps. The delivery owner decides in-scope
   details; changes to goals, key design, acceptance, or authorization return to the design owner.
