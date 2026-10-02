@@ -186,6 +186,13 @@ it.each([false, true])("requires explicit parent authority before the actual edi
   const { writes, mutationRoles, sessionEvents } = setup(201, 0, 0, 1, sharedParticipantFacts);
   render(<ConnectedDemo />, { wrapper: PresentationProvider });
   await screen.findByRole("combobox", { name: "要修改的事实" });
+  if (!sharedParticipantFacts) {
+    expect(screen.queryByRole("option", { name: "家庭预算" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "以家长编辑预算" })).toBeNull();
+    expect(writes).toEqual([]);
+    expect(sessionEvents).toEqual([]);
+    return;
+  }
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });
   expect(screen.queryByLabelText("常规预算")).not.toBeInTheDocument();
   expect(writes).toHaveLength(0);
@@ -205,7 +212,7 @@ it.each([false, true])("requires explicit parent authority before the actual edi
 });
 
 it.each(["retry", "reload"] as const)("persists minted parent authority before a fact-load failure and recovers on %s", async (recovery) => {
-  const { writes, identityFailures, sessionEvents } = setup(201, 0, 1);
+  const { writes, identityFailures, sessionEvents } = setup(201, 0, 1, 1, true);
   const mounted = render(<ConnectedDemo />, { wrapper: PresentationProvider });
   await screen.findByRole("combobox", { name: "要修改的事实" });
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });
@@ -229,7 +236,7 @@ it.each(["retry", "reload"] as const)("persists minted parent authority before a
 });
 
 it.each(["retry", "reload"] as const)("persists minted student authority before a fact-load failure and recovers on %s", async (recovery) => {
-  const { writes, identityFailures, sessionEvents, failNextStudentFactRead } = setup();
+  const { writes, identityFailures, sessionEvents, failNextStudentFactRead } = setup(201, 0, 0, 1, true);
   const mounted = render(<ConnectedDemo />, { wrapper: PresentationProvider });
   await screen.findByRole("combobox", { name: "要修改的事实" });
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });
@@ -255,7 +262,7 @@ it.each(["retry", "reload"] as const)("persists minted student authority before 
 });
 
 it.each(["student.preferred_countries", "family.budget"] as const)("opens the opposite fact after an ambiguous submitted %s without discarding its replay data", async (submittedFact) => {
-  const { writes, mutationRoles, failNextStudentFactRead, identityFailures } = setup(503, 0, submittedFact === "student.preferred_countries" ? 1 : 0);
+  const { writes, mutationRoles, failNextStudentFactRead, identityFailures } = setup(503, 0, submittedFact === "student.preferred_countries" ? 1 : 0, 1, true);
   const mounted = render(<ConnectedDemo />, { wrapper: PresentationProvider });
   await screen.findByRole("combobox", { name: "要修改的事实" });
   if (submittedFact === "family.budget") {
@@ -332,7 +339,7 @@ it("reloads a revision that changed before handoff without minting a parent or s
 });
 
 it("hands back to student authority before editing countries from the parent budget editor", async () => {
-  const { writes, mutationRoles, sessionEvents } = setup();
+  const { writes, mutationRoles, sessionEvents } = setup(201, 0, 0, 1, true);
   render(<ConnectedDemo />, { wrapper: PresentationProvider });
   await screen.findByRole("combobox", { name: "要修改的事实" });
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });

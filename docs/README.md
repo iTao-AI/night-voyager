@@ -23,6 +23,8 @@ PR #87 is merged; hosted CI and publication cleanup are complete; this status is
 
 The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. It is not deployed; publication remains separately gated. The release contains the reference-driven AI collaboration platform for study-abroad advisors, the connected same-Case execution continuation merged on the current default branch in PR #103, and presentation evidence. The continuation remains local synthetic and provider-free; it is included in v0.1.6 and is not deployed.
 
+The [revision UI availability repair](superpowers/specs/2026-10-03-revision-ui-availability.md) is implemented and locally verified. It improves confirmed-fact option selection, explicit role-handoff guidance and receipt readability without changing server contracts or the published release boundary. Hosted delivery is separately gated.
+
 The current presentation authority is the [reference-driven presentation spec](superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](superpowers/plans/2026-08-14-reference-driven-presentation.md).
 
 - Connected same-Case plan execution continuation v1: [Approved design](superpowers/specs/2026-08-28-connected-same-case-plan-execution-continuation-design.md) and [implementation plan](superpowers/plans/2026-08-28-connected-same-case-plan-execution-continuation.md); merged on the current default branch in PR #103; local synthetic and provider-free; included in v0.1.6; not deployed. The existing bare `/demo/plan` Happy and `?scenario=blocked` scenarios remain independent.

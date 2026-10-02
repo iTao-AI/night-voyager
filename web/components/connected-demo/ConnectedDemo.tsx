@@ -131,6 +131,7 @@ export function ConnectedDemo() {
   ) : state.value === "revision_requested" ? (
     <RevisionFactEditor
       currentFacts={demo.currentFacts}
+      expectedCaseId={state.status.case_id}
       expectedCaseRevision={state.status.current_revision}
       activeRole={state.status.active_role === "parent" ? "parent" : "student"}
       onPrepareFact={(factKey) => runUserAction(() => demo.prepareRevisionFact(factKey))}
@@ -203,9 +204,8 @@ export function ConnectedDemo() {
 
       {!demo.journeyConflict && state.value === "revision_requested" ? (
         <section className="ledger-hero" aria-labelledby="revision-proposal-title">
-          <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", "student")}</p>
+          <p className="role-status">{copy("activeRoleLabel")}: {presentCode(locale, "role", state.status.active_role)}</p>
           <h3 id="revision-proposal-title">{copy("revisionProposalTitle")}</h3>
-          <p>{copy("studentRoleAuthority")}</p>
           <p>{copy("revisionProposalBody")}</p>
         </section>
       ) : null}

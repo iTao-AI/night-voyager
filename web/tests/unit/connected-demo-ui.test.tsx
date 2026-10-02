@@ -404,20 +404,21 @@ it("edits a real country subset from current facts and disables unchanged or sta
   const submit = vi.fn();
   const preferred = confirmedFact("student.preferred_countries", ["japan", "malaysia"], 1);
   const projection = { caseId: "40000000-0000-0000-0000-000000000002", caseRevision: 1, facts: [preferred] };
-  const { rerender } = renderPresentation(<RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />);
+  const { rerender } = renderPresentation(<RevisionFactEditor expectedCaseId={projection.caseId} currentFacts={projection} expectedCaseRevision={1} onSubmit={submit} />);
   expect(screen.getByRole("button", { name: "提交变更提案" })).toBeDisabled();
   expect(screen.getAllByText("日本、马来西亚").length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("checkbox", { name: "日本" }));
   fireEvent.click(screen.getByRole("button", { name: "提交变更提案" }));
   expect(submit).toHaveBeenCalledWith({ expectedCaseRevision: 1, factKey: "student.preferred_countries", value: ["malaysia"] });
-  rerender(<RevisionFactEditor currentFacts={{ ...projection, caseRevision: 2 }} expectedCaseRevision={1} onSubmit={submit} />);
-  expect(screen.getByRole("button", { name: "提交变更提案" })).toBeDisabled();
+  rerender(<RevisionFactEditor expectedCaseId={projection.caseId} currentFacts={{ ...projection, caseRevision: 2 }} expectedCaseRevision={1} onSubmit={submit} />);
+  expect(screen.queryByRole("button", { name: "提交变更提案" })).toBeNull();
+  expect(screen.getByText(/事实投影与当前档案不一致/)).toBeVisible();
 });
 
 it("collects budget revisions and initializes inputs from authoritative amounts", () => {
   const submit = vi.fn();
   const projection = { caseId: "40000000-0000-0000-0000-000000000002", caseRevision: 1, facts: [confirmedFact("family.budget", CONFIRMED_FACT.value, 1)] };
-  renderPresentation(<RevisionFactEditor currentFacts={projection} expectedCaseRevision={1} activeRole="parent" onSubmit={submit} />);
+  renderPresentation(<RevisionFactEditor expectedCaseId={projection.caseId} currentFacts={projection} expectedCaseRevision={1} activeRole="parent" onSubmit={submit} />);
   fireEvent.change(screen.getByRole("combobox", { name: "要修改的事实" }), { target: { value: "family.budget" } });
   expect(screen.getByLabelText("常规预算")).toHaveValue("300000");
   fireEvent.change(screen.getByLabelText("常规预算"), { target: { value: "320000" } });
@@ -598,4 +599,25 @@ it("shows the actual advisor candidate and requires an entered confirmation reas
   expect(confirm).toHaveBeenCalledWith("已与学生核对意向范围。");
   rerender(<AdvisorLedgerAction ledger={ledgerFixture("revision_fact_pending")} revisionCandidates={[candidate, { ...candidate, candidate_id: "44000000-0000-0000-0000-000000000002" }]} onPrimaryAction={() => undefined} onConfirmRevision={confirm} />);
   expect(screen.getByRole("button", { name: "确认事实变更" })).toBeDisabled();
+});
+
+it.each(["zh-CN", "en"])("describes an explicit pending role action without claiming premature revoke in %s", async (locale) => {
+  if (locale === "en") localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  setConnectedDemo({ value: "role_switching", caseId: ledgerFixture("review-required").case_id, targetRole: "student", prior: { value: "advisor_review", status: { ...statusFor("review_required"), active_role: "advisor" }, ledger: ledgerFixture("review-required") } });
+  const { container } = renderPresentation(<ConnectedDemo />);
+  const action = await screen.findByRole("button", { name: locale === "en" ? "Continue as student" : "以学生身份继续" });
+  expect(container).not.toHaveTextContent(/was revoked|已撤销|establishing|正在建立/);
+  expect(screen.getAllByText(locale === "en" ? /Click.*before.*revoked/ : /点击.*才会撤销/).length).toBeGreaterThan(0);
+  expect((connectedHook.current as { rotateToStudent: ReturnType<typeof vi.fn> }).rotateToStudent).not.toHaveBeenCalled();
+  fireEvent.click(action);
+  expect((connectedHook.current as { rotateToStudent: ReturnType<typeof vi.fn> }).rotateToStudent).toHaveBeenCalledWith(ledgerFixture("review-required").case_id);
+});
+
+it("identifies the actual parent in the budget revision workspace", () => {
+  setConnectedDemo({ value: "revision_requested", status: { ...statusFor("revision_requested"), active_role: "parent" } });
+  const { container } = renderPresentation(<ConnectedDemo />);
+  const work = container.querySelector(".workspace-current-work");
+  expect(work).toHaveTextContent("当前角色: 家长");
+  expect(work).not.toHaveTextContent("学生只能");
+  expect(work).toHaveTextContent("不直接确认档案事实");
 });
