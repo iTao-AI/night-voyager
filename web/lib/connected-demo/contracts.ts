@@ -118,6 +118,7 @@ export interface ConnectedJourneyStatus {
 }
 export interface SessionProjection { role: "advisor" | "student" | "parent"; proof_mode: "synthetic-demo"; csrf_token: string }
 export type CreateTaskBody = Omit<CanonicalTaskInputs, "case_id">;
+export interface RetryTaskBody { schema_version: 1; expected_row_version: number; expected_case_revision: number }
 export interface CancelTaskBody { schema_version: 1; expected_row_version: number }
 type ReviewRisk = { evidence_id: string; kind: "optional" | "stale" | "unverified"; reason: string };
 export type AdvisorReviewBody =
@@ -207,6 +208,13 @@ function comparison(value: unknown): value is PlanningRevisionComparison {
   return countries.join() === [...new Set(countries)].sort().join();
 }
 function phaseValid(value: Record<string, unknown>): boolean {
+  const inputs = value.canonical_task_inputs as CanonicalTaskInputs | null;
+  if (inputs && (inputs.case_id !== value.case_id || inputs.expected_case_revision !== value.case_revision)) return false;
+  const review = value.review_inputs as AdvisorLedger["review_inputs"];
+  const run = value.planning_run as PlanningRunProjection | null;
+  const item = value.task as TaskProjection | null;
+  if (review && (!run || review.planning_run_id !== run.planning_run_id || review.expected_case_revision !== value.case_revision)) return false;
+  if (run && item && item.planning_run_id !== run.planning_run_id) return false;
   const hasTask = value.task !== null; const hasRun = value.planning_run !== null; const hasRoutes = Array.isArray(value.routes) && value.routes.length > 0; const hasEvidence = Array.isArray(value.evidence) && value.evidence.length > 0;
   switch (value.phase) {
     case "task_ready": return value.canonical_task_inputs !== null && !hasTask && !hasRun && !hasRoutes && !hasEvidence && value.comparison === null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
@@ -214,12 +222,16 @@ function phaseValid(value: Record<string, unknown>): boolean {
     case "review_required": return hasTask && (value.task as TaskProjection).status === "needs_advisor_review" && hasRun && (value.planning_run as PlanningRunProjection).state === "review_required" && hasRoutes && hasEvidence && value.comparison === null && value.review_inputs !== null && value.current_brief_id === null && value.recovery === null;
     case "revision_requested":
     case "revision_fact_pending": return hasTask && hasRun && value.comparison === null && value.current_brief_id === null && value.recovery === null;
-    case "replan_required": return value.case_revision !== 1 && !hasTask && !hasRun && value.comparison === null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
-    case "revision_task_active": return value.case_revision !== 1 && hasTask && (value.task as TaskProjection).status === "preparing" && !hasRun && value.comparison === null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
+    case "replan_required": return value.canonical_task_inputs !== null && value.case_revision !== 1 && !hasTask && !hasRun && value.comparison === null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
+    case "revision_task_active": return value.canonical_task_inputs !== null && value.case_revision !== 1 && hasTask && (value.task as TaskProjection).status === "preparing" && !hasRun && value.comparison === null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
     case "revision_review_required": return value.case_revision !== 1 && hasTask && (value.task as TaskProjection).status === "needs_advisor_review" && hasRun && (value.planning_run as PlanningRunProjection).state === "review_required" && value.comparison !== null && value.review_inputs !== null && value.current_brief_id === null && value.recovery === null;
     case "revision_blocked": return value.case_revision !== 1 && hasTask && (value.task as TaskProjection).status === "needs_evidence" && hasRun && (value.planning_run as PlanningRunProjection).state === "blocked" && value.comparison !== null && value.review_inputs === null && value.current_brief_id === null && value.recovery === null;
     case "family_review": case "plan_ready": return value.canonical_task_inputs === null && !hasRun && !hasRoutes && !hasEvidence && value.comparison === null && value.current_brief_id !== null && value.review_inputs === null && value.recovery === null;
     case "terminal_task_failure": {
+      const recovery = value.recovery as AdvisorLedger["recovery"];
+      const allowed = recovery?.retry_allowed === true;
+      if ((inputs !== null) !== allowed) return false;
+      if (allowed && (!item || value.case_state !== "planning" || item.planning_run_id !== null || recovery?.code !== item.public_code || !((item.status === "failed" && ["transient_unavailable", "transport_interrupted", "lease_expired"].includes(String(item.public_code))) || (item.status === "timed_out" && item.public_code === "deadline_exceeded")))) return false;
       const ordinaryFailure = hasTask
         && ["needs_evidence", "timed_out", "failed", "cancelled", "outdated"].includes((value.task as TaskProjection).status)
         && !hasRun
@@ -252,7 +264,7 @@ export function parseSession(value: unknown): SessionProjection { if (!object(va
 export function parseJourneyStatus(value: unknown): ConnectedJourneyStatus {
   if (!object(value) || !exact(value, ["schema", "case_id", "current_revision", "phase", "active_role"]) || value.schema !== "night-voyager.connected-journey-status.v1" || !uuid(value.case_id) || !positive(value.current_revision) || !PHASES.includes(value.phase as DemoPhaseV2) || !["advisor", "student", "parent"].includes(String(value.active_role))) throw new Error("invalid response");
   const expectedRole = value.phase === "revision_requested" ? "student" : value.phase === "family_review" || value.phase === "plan_ready" ? "parent" : "advisor";
-  if (value.active_role !== expectedRole) throw new Error("invalid response");
+  if (value.active_role !== expectedRole && !(value.phase === "revision_requested" && value.active_role === "parent")) throw new Error("invalid response");
   return value as unknown as ConnectedJourneyStatus;
 }
 export function parseLedger(value: unknown): AdvisorLedger {

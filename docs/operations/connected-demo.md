@@ -84,12 +84,18 @@ The revision-aware backend phases expose one primary action:
 | `revision_blocked` | comparison plus deterministic block reason | evidence/fact remediation only |
 | `family_review` | current family-safe Brief plus renewed authorization | revoke advisor and mint parent |
 | `plan_ready` | completed status plus persisted receipt/timeline | continue this Case into execution or read result |
-| `terminal_task_failure` | public failure and explicit recovery guidance | allowed retry/remediation only |
+| `terminal_task_failure` | public failure and server-qualified recovery guidance | explicit advisor consent and fresh task when eligible |
 
 Absent task, run, route, or review data is rendered as absent, never as placeholder
 authority. The default UI mints an advisor first. Its normal role transition is
 advisor revoke, cookie expiry, bootstrap, then parent mint; it stops if revoke
 fails and never performs a client-only role flip.
+
+The existing task-trail details explain known adapter, payload-validation, and
+runtime-pin failures in Chinese and English, with the advisor's next diagnostic
+step. Unknown codes retain the localized unavailable fallback. These explanations
+remain diagnostic copy. Recovery actions use the separately
+guarded server eligibility and explicit consent described below.
 
 ## Authority and transport boundaries
 
@@ -100,8 +106,8 @@ FastAPI exposes four connected read endpoints:
 - `GET /api/v1/cases/{case_id}/journey-status`
 - `GET /api/v1/cases/{case_id}/plan-execution-context`
 
-The Next.js BFF exposes thirteen explicit handlers: bootstrap, session create,
-session delete, Ledger read, task create/read/cancel/events, advisor review,
+The Next.js BFF exposes explicit handlers: bootstrap, session create,
+session delete, Ledger read, task create/read/cancel/retry/events, advisor review,
 current Brief read, journey-status read, case-scoped plan-execution-context read,
 and family decision. There is no catch-all proxy. All
 identity upstream calls use the server-configured fixed public Origin. Browser
@@ -160,8 +166,8 @@ make compose-proof
 make down
 ```
 
-For the v0.1.4 planning-revision lane, set
-`NIGHT_VOYAGER_COMPOSE_PROOF_MODE=planning-revision`. The lane proves request
+For the planning-revision lane, run
+`sh scripts/verify_compose.sh planning-revision`. The lane proves request
 revision, the controlled student preferred-country change, retained predecessor,
 successor PlanningRun, lost-ack recovery, deterministic comparison, renewed review,
 only the current family decision, and the blocked budget counterfactual. The
@@ -194,3 +200,30 @@ RESET_DEMO=1 make reset-demo
 The demo uses synthetic data and local deterministic execution. DRA, OCR,
 OpenClaw, remote providers, real student data, production deployment, and the
 optional MKE consumer are outside this product path.
+
+## Recover a qualified terminal task
+
+On the revision-aware advisor ledger, `transport_interrupted`,
+`transient_unavailable`, exhausted `lease_expired` or `deadline_exceeded` may show
+fresh-task recovery only when the server qualifies the current terminal source.
+Select the explicit consent checkbox before submitting. The action preserves
+failed-task history, creates a new Task with current server pins, follows its SSE
+stream, and returns to fresh advisor review. It does not approve the new result.
+Hard, unknown, cancelled, outdated or result-bearing tasks show remediation
+without a retry action.
+
+If the response is lost, retry or reload the same tab: submitted consent retains
+the exact source identity, versions and key. The browser replays that intent and
+refreshes the authoritative ledger before adopting the successor. A stale source
+or revoked assignment is rejected by the endpoint and requires a refreshed view.
+A later failed successor requires a new consent key. Browser storage does not
+supply operation, source-pack, policy or Skill authority. This walkthrough remains
+synthetic-only; governed mixed recovery uses the Task API.
+
+The dedicated PostgreSQL lane is `sh scripts/run_db_tests.sh terminal-recovery`.
+It checks current migration, runtime-role guards/concurrency, native worker
+producers, fresh review and downgrade-history refusal. The bounded browser supplement is
+`sh scripts/verify_customer_revision_recovery.sh`; see the
+[customer revision/recovery walkthrough](customer-revision-recovery.md) and
+[acceptance record](../evidence/customer-revision-recovery.md) for exact gates
+and local verification status.

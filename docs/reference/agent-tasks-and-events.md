@@ -81,7 +81,9 @@ skill_activation_sequence
 runtime_binding_sha256
 ```
 
-The complete five-field pin participates in effective-task identity. Task creation
+The complete five-field pin participates in effective-task identity. At migration
+`0016`, a current revision may have only one live task even across different Skill
+activation pins or operations. Task creation
 resolves it in the same transaction as idempotency replay, effective uniqueness, task
 insert, and dispatch insert. Replay returns the original task and pin even if a newer
 version becomes active. Activation or rollback affects only later task creation.
@@ -204,3 +206,34 @@ budget counterfactual.
 
 These are local safety bounds, not production throughput or availability
 claims.
+
+## Advisor fresh-task recovery
+
+Migration `0016` adds `retried_from_task_id` and a same-organization/Case composite
+foreign key plus a partial unique successor index. `POST /api/v1/tasks/{task_id}/retry`
+uses only expected source row/revision versions. It preserves source operation,
+pack and policy, validates the active packaged Skill and reuses durable creation.
+Only the current assigned advisor can recover the latest terminal task of a
+planning Case with no accepted result or successor. The exact state/code pairs
+are `failed` + `transient_unavailable|transport_interrupted|lease_expired`, or
+`timed_out` + `deadline_exceeded`; unknown and hard failures never qualify.
+
+The outer `agent_task_retry` namespace binds source and versions separately from
+ordinary create. Exact replay returns the original successor after creation with
+current assignment/revision guards. Lock order is outer retry advisory, derived
+create advisory, Skill SHARE, Case UPDATE, then assigned participant SHARE and
+post-lock authority recheck. Source task/events/executions are never rewritten.
+The successor starts a fresh bounded attempt budget and returns through fresh
+advisor review. API has function execution only, no direct task writes; forced
+RLS remains enabled. A downgrade to `0015` refuses persisted recovery history.
+
+Connected V1 terminal canonical inputs remain null; V2 includes them iff server
+eligibility is true. The synthetic-only connected demo shapes are unchanged;
+the Task API also preserves an eligible governed mixed operation/promoted pack.
+See [ADR 0015](../decisions/0015-guarded-terminal-task-recovery.md).
+
+The bounded [customer recovery acceptance](../operations/customer-revision-recovery.md)
+links a native classified terminal producer to explicit browser consent, real
+retry POST/new task/SSE and fresh review. Its separately labelled unknown-code
+negative is not a success producer. See the [verification record](../evidence/customer-revision-recovery.md)
+for exact execution status and local delivery boundaries.

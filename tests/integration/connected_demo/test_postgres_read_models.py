@@ -1050,6 +1050,18 @@ async def test_revision_two_ledger_projects_exact_predecessor_comparison(
             assert requested_ledger.phase is DemoPhaseV2.REVISION_REQUESTED
             assert requested_status is not None
             assert requested_status.phase is DemoPhaseV2.REVISION_REQUESTED
+            assert requested_status.active_role == "student"
+            parent_requested_status = await journey_status_for_role(
+                connection, case_id, ActorRole.PARENT
+            )
+            advisor_requested_status = await journey_status_for_role(
+                connection, case_id, ActorRole.ADVISOR
+            )
+            assert parent_requested_status is not None
+            assert parent_requested_status.phase is DemoPhaseV2.REVISION_REQUESTED
+            assert parent_requested_status.active_role == "parent"
+            assert advisor_requested_status is not None
+            assert advisor_requested_status.active_role == "student"
             await set_connection_role(connection, ActorRole.ADVISOR)
             await connection.execute(
                 text(

@@ -82,6 +82,7 @@ def test_m5_does_not_own_the_later_dra_migration() -> None:
         "0013_planning_revision_demo_seed.py",
         "0014_timeline_execution_authority.py",
         "0015_plan_execution_demo_identity.py",
+        "0016_guarded_terminal_task_recovery.py",
     ]
     for relative in (
         "0005_dra_candidate_promotion.py",
@@ -142,6 +143,7 @@ def test_demo_bff_has_only_explicit_route_handlers() -> None:
         "session/route.ts",
         "sessions/route.ts",
         "tasks/[taskId]/cancel/route.ts",
+        "tasks/[taskId]/retry/route.ts",
         "tasks/[taskId]/events/route.ts",
         "tasks/[taskId]/route.ts",
     }

@@ -41,7 +41,7 @@ packages = ["src/night_voyager"]
 "fixtures/skills/eval-manifest-v1.json" = "night_voyager/skills/data/eval-manifest-v1.json"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/tmp"]
+exclude = ["/tmp", "/.superpowers"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

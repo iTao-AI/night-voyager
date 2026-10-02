@@ -165,7 +165,10 @@ async function captureConnectedReceipt(browser: Browser, records: CaptureRecord[
     await expect(parentSwitch).toBeVisible({ timeout: 30_000 });
     await parentSwitch.click();
     await expect(page.getByRole("heading", { name: "家庭决定简报", exact: true })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("checkbox").check();
+    await page.getByLabel(/接受预算下限（元）|Accepted budget minimum \(yuan\)/).fill("300000");
+    await page.getByLabel(/接受预算上限（元）|Accepted budget maximum \(yuan\)/).fill("350000");
+    await page.getByRole("checkbox", { name: /我接受：预算弹性|I accept: Budget flexibility/ }).check();
+    await page.getByRole("checkbox", { name: /我以家长身份确认|As parent, I confirm/ }).check();
     await page.getByRole("button", { name: "继续家庭决定", exact: true }).click();
     await expect(page.getByRole("heading", { name: "家庭决定回执", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "行动时间线", exact: true })).toBeVisible();

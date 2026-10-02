@@ -44,9 +44,9 @@ resume/prior state remains fail-closed.
 | `revision_task_active` | current-revision task owns the frozen predecessor | follow durable task progress | submit predecessor or comparison |
 | `revision_review_required` | exact successor and deterministic old/new comparison | perform renewed advisor review | reuse the predecessor review |
 | `revision_blocked` | successor is blocked and comparison remains visible to advisor | remediate Evidence/facts | fabricate review inputs or success |
-| `family_review` | current family-safe Brief identity | real advisor-to-parent rotation | decide as advisor |
+| `family_review` | current family-safe Brief identity, editable suggested budget and unchecked trade-off acknowledgment | real parent submits valid budget choices, separate required acknowledgments and final consent | decide as advisor, auto-accept trade-offs or submit defaults as consent |
 | `plan_ready` | completion status or parent receipt/timeline | continue the exact Case into execution or read result | create a task implicitly |
-| `terminal_task_failure` | public failure and recovery guidance | explicit retry/remediation | synthesize success |
+| `terminal_task_failure` | public failure and server-qualified recovery guidance | assigned advisor checks explicit consent before fresh-task retry; otherwise remediation | guess retry eligibility, rewrite old diagnostics, reuse approval or synthesize success |
 
 The task-free collaboration route has its own closed lifecycle:
 
@@ -78,7 +78,14 @@ immutable case-revision-bound budget intent. A legacy collaboration V2 envelope 
 accepted only for an observed exact default-budget message and mutation fingerprint;
 new values never fall back to old records. Advisor-family recovery continues to use
 closed `schema_version=3` fields for current revision, task, predecessor, run, phase,
-cursor, and pending mutations. One tab never runs both journeys concurrently. The
+cursor, pending mutations, and optional revision-bound `revisionIntent`. During
+`revision_requested`, verified participants share supported safe current facts;
+budget and country mutations still require their respective parent/student source roles.
+Choosing `family.budget` first offers an explicit **Edit budget as parent**
+handoff. Budget inputs and validation require the real parent session and its
+authoritative budget projection. Shared student reads do not authorize budget
+mutation. This preparation uses recoverable role metadata, not an invented submitted proposal.
+One tab never runs both journeys concurrently. The
 inspector is read-only and server-owned: `/demo` progresses `not_created -> matched`,
 while `/demo/collaboration` stays `not_created` because it creates no planning task.
 After a successful handoff, `/demo` re-reads the continued Case and adopts task
@@ -90,7 +97,8 @@ advisor/student/parent reload `/journey-status` and receive the same durable
 phase with only `active_role` differing. The journey-status is participant-safe
 recovery authority, not browser storage. PR 3 browser journey is implemented
 provider-free: the reducer adopts only closed V2/V3 projections, presents the
-controlled student preferred-country editor and deterministic old/new comparison,
+single-fact editor for student country preferences or a real parent budget
+proposal and deterministic old/new comparison,
 requires fresh advisor authorization, and keeps `revision_blocked` free of approval
 and family-decision actions.
 
@@ -127,3 +135,21 @@ the local real-Chromium presentation audit. The browser audit passed `103/103`
 across both locales, `1440`, `1280`, `1024`, `768`, `390`, and `320` CSS pixels,
 reduced motion, 200% zoom, material fallback, keyboard normal/blocked paths, and
 the same-Case versus separately seeded execution boundary.
+
+## Explicit family acceptance recovery
+
+The current Brief supplies the eligible route, CNY currency, pinned cost, hard
+ceiling and required trade-off. Accepted minimum and maximum are editable
+positive whole-yuan amounts, converted safely to minor units. Submission requires
+`minimum <= pinned cost <= maximum <= hard ceiling`, every required trade-off
+acknowledged separately, and final parent consent. Editing any choice clears
+final consent. The existing one-element `budget_elasticity` contract is preserved.
+
+A submitted body and its key survive an ambiguous transport result in the
+closed optional `familyIntent` metadata. Same-tab reload may restore only an
+explicitly submitted choice matching the current Brief ID/version and current
+requirements; final consent remains unchecked. Unsubmitted edits are not durable.
+Key-only legacy metadata never auto-accepts requirements or rebuilds a submitted
+body from suggestions. A changed Brief ID/version resets choices, acknowledgments,
+consent and the old replay action; an old-version conflict reloads server authority.
+The immutable receipt renders the values returned by the server.

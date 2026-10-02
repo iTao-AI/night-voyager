@@ -9,6 +9,7 @@ import { GET as ledger } from "../../app/api/demo/cases/[caseId]/advisor-ledger/
 import { GET as journeyStatus } from "../../app/api/demo/cases/[caseId]/journey-status/route";
 import { POST as tasks } from "../../app/api/demo/cases/[caseId]/agent-tasks/route";
 import { GET as task } from "../../app/api/demo/tasks/[taskId]/route";
+import { POST as retry } from "../../app/api/demo/tasks/[taskId]/retry/route";
 import { POST as cancel } from "../../app/api/demo/tasks/[taskId]/cancel/route";
 import { GET as events } from "../../app/api/demo/tasks/[taskId]/events/route";
 import { POST as review } from "../../app/api/demo/cases/[caseId]/advisor-reviews/route";
@@ -37,6 +38,7 @@ const cases = [
   ["journey-status", "GET", journeyStatus, `/api/v1/cases/${ID}/journey-status`, { caseId: ID }],
   ["tasks", "POST", tasks, `/api/v1/cases/${ID}/agent-tasks`, { caseId: ID }],
   ["task", "GET", task, `/api/v1/tasks/${ID}`, { taskId: ID }],
+  ["retry", "POST", retry, `/api/v1/tasks/${ID}/retry`, { taskId: ID }],
   ["cancel", "POST", cancel, `/api/v1/tasks/${ID}/cancel`, { taskId: ID }],
   ["events", "GET", events, `/api/v1/tasks/${ID}/events`, { taskId: ID }],
   ["review", "POST", review, `/api/v1/cases/${ID}/advisor-reviews`, { caseId: ID }],

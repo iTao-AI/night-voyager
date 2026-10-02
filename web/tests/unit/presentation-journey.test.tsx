@@ -19,6 +19,7 @@ import {
 } from "../../lib/presentation/journey";
 import { en, zhCN } from "../../lib/presentation/catalog";
 import type { CollaborationMessage, MemoryCandidateProjection } from "../../lib/collaboration-demo/contracts";
+import { suggestFamilyDecisionDraft } from "../../lib/connected-demo/family-decision";
 import { defaultBudgetIntent } from "../../lib/collaboration-demo/budget";
 import { brief, ledger as ledgerFixture, status } from "./connected-demo-test-data";
 
@@ -128,6 +129,8 @@ function connectedState(value: string) {
       : { value, status: status("review_required"), ledger: ledgerFixture("review-required") },
     inspector: null,
     journeyConflict: null,
+    familyDraft: suggestFamilyDecisionDraft(brief()),
+    setFamilyDraft: vi.fn(),
     confirmed: false,
     setConfirmed: vi.fn(),
     endConflictingJourney: vi.fn(),

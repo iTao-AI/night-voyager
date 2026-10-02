@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Cookie, Header, HTTPException, Request, Response, status
-from pydantic import BaseModel, ConfigDict, PositiveInt
+from pydantic import BaseModel, ConfigDict, PositiveInt, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.responses import JSONResponse, StreamingResponse
 
@@ -23,6 +23,7 @@ from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.application import (
     CancelTaskCommand,
     CreateTaskCommand,
+    RetryTaskCommand,
     TaskService,
 )
 from night_voyager.tasks.errors import TaskAuthorizationError, TaskConflictError
@@ -54,6 +55,21 @@ class CreateAgentTaskRequest(StrictModel):
 class CancelAgentTaskRequest(StrictModel):
     schema_version: Literal[1]
     expected_row_version: PositiveInt
+
+
+class RetryAgentTaskRequest(StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    schema_version: Literal[1]
+    expected_row_version: PositiveInt
+    expected_case_revision: PositiveInt
+
+    @field_validator("schema_version", mode="before")
+    @classmethod
+    def exact_schema_version(cls, value: object) -> object:
+        if type(value) is not int or value != 1:
+            raise ValueError("schema version must be integer 1")
+        return value
 
 
 def create_task_router(
@@ -174,6 +190,43 @@ def create_task_router(
                     CancelTaskCommand(
                         task_id=task_id,
                         expected_row_version=payload.expected_row_version,
+                    ),
+                    idempotency_key,
+                )
+            except TaskAuthorizationError:
+                return problem(404, "resource_unavailable", "resource unavailable")
+            except TaskConflictError as error:
+                return problem(409, error.code.lower(), "request conflicts with current state")
+        response.headers["Cache-Control"] = "no-store"
+        return {"schema_version": 1, **result}
+
+    @router.post(
+        "/tasks/{task_id}/retry", status_code=status.HTTP_202_ACCEPTED, response_model=None
+    )
+    async def retry_agent_task(  # pyright: ignore[reportUnusedFunction]
+        task_id: UUID,
+        payload: RetryAgentTaskRequest,
+        request: Request,
+        response: Response,
+        raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+        csrf: str | None = Header(default=None, alias="X-CSRF-Token"),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ) -> dict[str, object] | JSONResponse:
+        enforce_origin(request)
+        if not valid_idempotency_key(idempotency_key):
+            return problem(400, "invalid_idempotency_key", "Idempotency-Key is required")
+        assert idempotency_key is not None
+        async with session_factory() as session, session.begin():
+            context = await mutation_context(session, raw_session, csrf)
+            try:
+                result = await TaskService(
+                    PostgresTaskRepository(session), registry=task_registry()
+                ).retry(
+                    context,
+                    RetryTaskCommand(
+                        task_id=task_id,
+                        expected_row_version=payload.expected_row_version,
+                        expected_case_revision=payload.expected_case_revision,
                     ),
                     idempotency_key,
                 )

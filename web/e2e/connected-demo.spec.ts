@@ -192,7 +192,10 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
   );
   expect(advisorDenied.status()).toBe(404);
 
-  await page.getByRole("checkbox").check();
+  await page.getByLabel(/接受预算下限（元）|Accepted budget minimum \(yuan\)/).fill("300000");
+  await page.getByLabel(/接受预算上限（元）|Accepted budget maximum \(yuan\)/).fill("350000");
+  await page.getByRole("checkbox", { name: /我接受：预算弹性|I accept: Budget flexibility/ }).check();
+  await page.getByRole("checkbox", { name: /我以家长身份确认|As parent, I confirm/ }).check();
   let staleObserved = false;
   await page.route("**/api/demo/decision-briefs/*/family-decisions", async (route) => {
     const request = route.request();
@@ -233,7 +236,7 @@ test("connected-demo.spec.ts connected golden flow proves the advisor-to-family 
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
-    await expect(page.getByText("¥305,500–400,000")).toBeVisible();
+    await expect(page.getByText("¥300,000–350,000")).toBeVisible();
     await expect(page.getByText(/预算弹性|Budget flexibility/)).toBeVisible();
     await expectNoRawPresentation(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

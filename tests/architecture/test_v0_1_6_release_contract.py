@@ -465,7 +465,7 @@ def test_v0_1_6_archive_validator_accepts_one_safe_release_root(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
 
 
-def test_migration_head_and_provider_boundaries_remain_unchanged() -> None:
+def test_current_recovery_head_preserves_released_provider_boundaries() -> None:
     revisions: set[str] = set()
     parents: set[str] = set()
     for path in sorted((ROOT / "migrations/versions").glob("[0-9][0-9][0-9][0-9]_*.py")):
@@ -491,8 +491,9 @@ def test_migration_head_and_provider_boundaries_remain_unchanged() -> None:
         revisions.add(revision)
         if isinstance(parent, str):
             parents.add(parent)
-    assert revisions - parents == {"0015"}
-    assert not list((ROOT / "migrations/versions").glob("0016_*.py"))
+    assert revisions - parents == {"0016"}
+    assert len(list((ROOT / "migrations/versions").glob("0016_*.py"))) == 1
+    assert not list((ROOT / "migrations/versions").glob("0017_*.py"))
 
     provider_locks = _read("src/night_voyager/evidence_loop/provider_locks.py")
     assert 'Literal["v0.1.5"]' in provider_locks

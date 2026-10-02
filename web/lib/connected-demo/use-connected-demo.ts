@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 
-import { createCollaborationDemoApi } from "../collaboration-demo/api";
+import { CollaborationDemoApiError, createCollaborationDemoApi } from "../collaboration-demo/api";
 import type {
   CollaborationMessage,
   CollaborationThread,
@@ -16,14 +16,18 @@ import { ConnectedDemoApiError, createConnectedDemoApi } from "./api";
 import type {
   AdvisorLedger,
   ConnectedJourneyStatus,
-  FamilyDecisionBody,
 } from "./contracts";
+import { familyDraftFromIntent, familyIntentMatchesBrief, suggestFamilyDecisionDraft, validateFamilyDecisionDraft, type FamilyDecisionDraft, type SubmittedFamilyIntent } from "./family-decision";
 import { idempotencyFor } from "./idempotency";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
-  pendingPreferredCountriesCandidate,
-  REVISED_PREFERRED_COUNTRIES,
-  REVISION_PROPOSAL_MESSAGE,
+  pendingRevisionCandidate,
+  revisionMessageBody,
+  revisionProposalBody,
+  validateRevisionIntent,
+  validRevisionReason,
+  type RevisionIntent,
+  type RevisionFactKey,
 } from "./revision";
 import {
   clearRecoveryMetadata,
@@ -56,9 +60,9 @@ export interface RevisionCollaborationProjection {
 }
 
 function failure(error: unknown): RecoveryCode {
-  if (error instanceof ConnectedDemoApiError && error.status === 401) return "session_expired";
-  if (error instanceof ConnectedDemoApiError && error.code === "bff_session_recovery_required") return "session_recovery_required";
-  if (error instanceof ConnectedDemoApiError && error.status === 409) return "stale_conflict";
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.status === 401) return "session_expired";
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.code === "bff_session_recovery_required") return "session_recovery_required";
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.status === 409) return "stale_conflict";
   return "transport_failure";
 }
 
@@ -100,7 +104,10 @@ function metadataFor(
     ...identity,
     cursor: sameTask ? current.cursor : 0,
     phase: status.phase,
-    mutations: current?.mutations ?? {},
+    mutations: { ...current?.mutations },
+    ...(current?.caseId === status.case_id && current.currentRevision === status.current_revision && current.retryIntent ? { retryIntent: current.retryIntent } : {}),
+    ...(current?.caseId === status.case_id && current.currentRevision === status.current_revision && current.familyIntent ? { familyIntent: current.familyIntent } : {}),
+    ...(current?.revisionIntent?.expectedCaseRevision === status.current_revision ? { revisionIntent: current.revisionIntent } : {}),
   };
 }
 
@@ -109,6 +116,7 @@ function pendingRoleMetadata(
   status: ConnectedJourneyStatus,
   role: RecoveryMetadata["role"],
   csrf: string,
+  targetRole = status.active_role,
 ): RecoveryMetadata {
   const retained = current?.caseId === status.case_id && current.role === role
     ? current
@@ -126,13 +134,23 @@ function pendingRoleMetadata(
     cursor: retained?.cursor ?? 0,
     phase: status.phase,
     mutations: retained?.mutations ?? {},
-    pendingRole: status.active_role,
+    ...(retained?.revisionIntent?.expectedCaseRevision === status.current_revision ? { revisionIntent: retained.revisionIntent } : {}),
+    pendingRole: targetRole,
   };
 }
 
 export function useConnectedDemo() {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
+  const [familyDraft, setFamilyDraftValue] = useState<FamilyDecisionDraft>({ minimumYuan: "", maximumYuan: "", acknowledgedTradeOffs: [] });
+  const familyBriefIdentity = useRef<string | null>(null);
+  const familyMutationBusy = useRef(false);
+  const retryAction = useRef<null | (() => Promise<void>)>(null);
+  const setFamilyDraft = useCallback((draft: FamilyDecisionDraft) => {
+    setFamilyDraftValue(draft);
+    setConfirmed(false);
+    retryAction.current = null;
+  }, []);
   const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
   const [currentFacts, setCurrentFacts] = useState<CurrentFactsProjection | null>(null);
   const [revision, setRevision] = useState<RevisionCollaborationProjection | null>(null);
@@ -140,8 +158,12 @@ export function useConnectedDemo() {
     if (typeof window === "undefined") return null;
     return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
   });
+  const [revisionIntent, setRevisionIntent] = useState<RevisionIntent | null>(() => typeof window === "undefined" ? null : loadRecoveryMetadata()?.revisionIntent ?? null);
+  const [revisionSubmitting, setRevisionSubmitting] = useState(false);
+  const revisionMutationBusy = useRef(false);
   const recoveryStarted = useRef(false);
-  const retryAction = useRef<null | (() => Promise<void>)>(null);
+  const terminalRetryBusy = useRef(false);
+  const [retrySubmitting, setRetrySubmitting] = useState(false);
   const inspectorGeneration = useRef(0);
 
   const refreshInspector = useCallback(async (caseId: string) => {
@@ -158,7 +180,7 @@ export function useConnectedDemo() {
 
   const loadRevisionProjection = useCallback(async (
     status: ConnectedJourneyStatus,
-    role: "advisor" | "student",
+    role: "advisor" | "student" | "parent",
   ): Promise<RevisionCollaborationProjection> => {
     const detailReads = role === "advisor"
       ? Promise.all([
@@ -166,8 +188,8 @@ export function useConnectedDemo() {
           collaboration.candidates(status.case_id, "advisor"),
         ])
       : Promise.all([
-          collaboration.confirmedFacts(status.case_id, "student"),
-          collaboration.candidates(status.case_id, "student"),
+          collaboration.confirmedFacts(status.case_id, role),
+          collaboration.candidates(status.case_id, role),
         ]);
     const [thread, [facts, candidates]] = await Promise.all([
       collaboration.thread(status.case_id),
@@ -195,6 +217,7 @@ export function useConnectedDemo() {
     const status = await api.journeyStatus(caseId);
     if (status.case_id !== caseId) throw new Error("projection identity mismatch");
     const current = recoveryHint ?? loadRecoveryMetadata();
+    setRevisionIntent(current?.revisionIntent?.expectedCaseRevision === status.current_revision ? current.revisionIntent : null);
     if (status.active_role !== role) {
       saveRecoveryMetadata(pendingRoleMetadata(current, status, role, csrf));
       dispatch({ type: "ROLE_SWITCH", caseId, targetRole: status.active_role });
@@ -217,9 +240,9 @@ export function useConnectedDemo() {
       return true;
     }
     setInspector(null);
-    if (role === "student") {
+    if (role === "student" || (role === "parent" && status.phase === "revision_requested")) {
       if (status.phase !== "revision_requested") throw new Error("role projection mismatch");
-      const projection = await loadRevisionProjection(status, "student");
+      const projection = await loadRevisionProjection(status, role);
       setRevision(projection);
       setCurrentFacts({ caseId, caseRevision: status.current_revision, facts: projection.facts });
       saveRecoveryMetadata(metadataFor(current, status, role, csrf));
@@ -230,7 +253,22 @@ export function useConnectedDemo() {
     setCurrentFacts(null);
     const brief = await api.currentBrief(caseId);
     if (brief.case_id !== caseId || brief.phase !== status.phase || brief.revision_context.current_case_revision !== status.current_revision) throw new Error("projection identity mismatch");
-    saveRecoveryMetadata(metadataFor(current, status, role, csrf));
+    const metadata = metadataFor(current, status, role, csrf);
+    const identity = `${brief.brief_id}:${brief.brief_version}`;
+    const intent = metadata.familyIntent;
+    const matching = intent && familyIntentMatchesBrief(intent, brief);
+    if (intent && !matching) {
+      delete metadata.familyIntent;
+      delete metadata.mutations["family-decision"];
+    }
+    if (familyBriefIdentity.current !== identity) {
+      retryAction.current = null;
+      if (familyBriefIdentity.current !== null) delete metadata.mutations["family-decision"];
+      setFamilyDraftValue(matching ? familyDraftFromIntent(intent) : suggestFamilyDecisionDraft(brief));
+      setConfirmed(false);
+      familyBriefIdentity.current = identity;
+    }
+    saveRecoveryMetadata(metadata);
     dispatch({ type: "STATUS_RELOADED", status, brief });
     return true;
   }, [loadRevisionProjection, refreshInspector]);
@@ -245,12 +283,27 @@ export function useConnectedDemo() {
         if (current.caseId !== metadata.caseId) {
           throw new Error("role transition identity mismatch");
         }
+        if (current.role === target && !current.pendingRole) {
+          if (!await loadAuthoritative(current.caseId, target, current.csrf)) throw new Error("role transition authority mismatch");
+          retryAction.current = null;
+          return;
+        }
         if (current.pendingRole !== target) {
           const status = await api.journeyStatus(current.caseId);
-          if (status.case_id !== current.caseId || status.active_role !== target) {
+          if (status.case_id === current.caseId && status.phase === "revision_requested"
+            && current.currentRevision !== status.current_revision) {
+            retryAction.current = null;
+            await loadAuthoritative(current.caseId, current.role, current.csrf);
+            return;
+          }
+          const proposalRotation = status.phase === "revision_requested"
+            && current.currentRevision === status.current_revision
+            && ["student", "parent"].includes(target)
+            && ["student", "parent"].includes(current.role);
+          if (status.case_id !== current.caseId || (status.active_role !== target && !proposalRotation)) {
             throw new Error("role transition authority mismatch");
           }
-          current = pendingRoleMetadata(current, status, current.role, current.csrf);
+          current = pendingRoleMetadata(current, status, current.role, current.csrf, target);
           saveRecoveryMetadata(current);
         }
         try {
@@ -260,6 +313,15 @@ export function useConnectedDemo() {
         }
         const bootstrap = await api.bootstrap();
         const session = await api.mint(target, bootstrap.csrf_token);
+        if (session.role !== target) throw new Error("role transition identity mismatch");
+        // The live cookie has changed. Retain its credentials before projection reads can fail.
+        current = { ...current, role: target, csrf: session.csrf_token };
+        delete current.pendingRole;
+        if (target !== "advisor") {
+          current.currentTaskId = null;
+          current.cursor = 0;
+        }
+        saveRecoveryMetadata(current);
         const loaded = await loadAuthoritative(current.caseId, target, session.csrf_token, current);
         if (!loaded) throw new Error("role transition authority mismatch");
         retryAction.current = null;
@@ -286,6 +348,23 @@ export function useConnectedDemo() {
     }
   }, [loadAuthoritative]);
 
+  const replayTerminalRetry = useCallback(async (metadata: RecoveryMetadata) => {
+    const intent = metadata.retryIntent;
+    const record = metadata.mutations["retry-task"];
+    if (!intent || !record || metadata.role !== "advisor") throw new Error("retry consent unavailable");
+    const task = await api.retryTask(intent.taskId, {
+      schema_version: 1, expected_row_version: intent.expectedRowVersion,
+      expected_case_revision: intent.expectedCaseRevision,
+    }, metadata.csrf, record.idempotencyKey);
+    if (task.task_id === intent.taskId) throw new Error("retry successor identity mismatch");
+    await loadAuthoritative(metadata.caseId, "advisor", metadata.csrf);
+    const loaded = loadRecoveryMetadata();
+    if (loaded?.currentTaskId !== task.task_id) throw new Error("retry successor authority mismatch");
+    delete loaded.retryIntent;
+    saveRecoveryMetadata(loaded);
+    retryAction.current = null;
+  }, [loadAuthoritative]);
+
   const recover = useCallback(async () => {
     const journey = loadDemoJourneyEnvelope();
     if (journey?.journey === "collaboration") {
@@ -302,13 +381,21 @@ export function useConnectedDemo() {
       return;
     }
     try {
-      await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
+      if (metadata.retryIntent) await replayTerminalRetry(metadata);
+      else await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
     } catch (error) {
       const code = failure(error);
       if (code === "session_expired") clearRecoveryMetadata();
+      if (code === "stale_conflict" && metadata.retryIntent) {
+        delete metadata.retryIntent;
+        delete metadata.mutations["retry-task"];
+        saveRecoveryMetadata(metadata);
+        await loadAuthoritative(metadata.caseId, metadata.role, metadata.csrf);
+        return;
+      }
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [connectAdvisor, loadAuthoritative, transitionRole]);
+  }, [connectAdvisor, loadAuthoritative, replayTerminalRetry, transitionRole]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -435,6 +522,32 @@ export function useConnectedDemo() {
     await attempt();
   }, [handleMutationFailure, mutationRecord, refreshInspector, state]);
 
+  const retryTerminalTask = useCallback(async () => {
+    if (terminalRetryBusy.current || state.value !== "terminal_task_failure" || !state.ledger.recovery?.retry_allowed || !state.ledger.canonical_task_inputs || !state.ledger.task) return;
+    const metadata = loadRecoveryMetadata();
+    if (!metadata || metadata.role !== "advisor" || metadata.caseId !== state.ledger.case_id || metadata.currentRevision !== state.ledger.case_revision) return;
+    terminalRetryBusy.current = true;
+    setRetrySubmitting(true);
+    try {
+      const intent = Object.freeze({ taskId: state.ledger.task.task_id, expectedRowVersion: state.ledger.task.row_version, expectedCaseRevision: state.ledger.case_revision });
+      const record = await idempotencyFor(intent, metadata.retryIntent?.taskId === intent.taskId ? metadata.mutations["retry-task"] : undefined);
+      const submitted = { ...withMutation(metadata, "retry-task", record), retryIntent: intent };
+      saveRecoveryMetadata(submitted);
+      const attempt = async () => {
+        try { await replayTerminalRetry(loadRecoveryMetadata() ?? submitted); }
+        catch (error) {
+          if (failure(error) === "stale_conflict") {
+            const current = loadRecoveryMetadata();
+            if (current) { delete current.retryIntent; delete current.mutations["retry-task"]; saveRecoveryMetadata(current); }
+          }
+          await handleMutationFailure(error, "retry-task");
+        }
+      };
+      retryAction.current = attempt;
+      await attempt();
+    } finally { terminalRetryBusy.current = false; setRetrySubmitting(false); }
+  }, [handleMutationFailure, replayTerminalRetry, state]);
+
   const review = useCallback(async (action: "approve_for_consultation" | "request_revision") => {
     if (state.value !== "advisor_review" || !state.ledger.review_inputs) return;
     if (action === "request_revision" && state.status.phase !== "review_required") return;
@@ -442,7 +555,7 @@ export function useConnectedDemo() {
     if (!metadata || metadata.role !== "advisor") return;
     const input = state.ledger.review_inputs;
     const body = action === "request_revision"
-      ? { schema_version: 1 as const, planning_run_id: input.planning_run_id, expected_case_revision: input.expected_case_revision, action, eligible_route_ids: [] as [], risk_acceptances: [] as [], reviewer_notes: "Please revise the preferred-country scope for this synthetic journey." }
+      ? { schema_version: 1 as const, planning_run_id: input.planning_run_id, expected_case_revision: input.expected_case_revision, action, eligible_route_ids: [] as [], risk_acceptances: [] as [], reviewer_notes: "Please revise one supported planning fact for this synthetic journey." }
       : { schema_version: 1 as const, planning_run_id: input.planning_run_id, expected_case_revision: input.expected_case_revision, action, eligible_route_ids: input.eligible_route_ids, risk_acceptances: input.risk_acceptance_options };
     const operation: MutationOperation = action === "request_revision" ? "request-revision" : "new-review";
     const attempt = async () => {
@@ -472,15 +585,79 @@ export function useConnectedDemo() {
     await transitionRole(metadata, target);
   }, [transitionRole]);
 
-  const submitPreferredCountries = useCallback(async () => {
-    if (state.value !== "revision_requested" || !revision) return;
+  const prepareRevisionFact = useCallback(async (factKey: RevisionFactKey) => {
+    if (state.value !== "revision_requested" || revisionMutationBusy.current
+      || !["student.preferred_countries", "family.budget"].includes(factKey)) return;
     const metadata = loadRecoveryMetadata();
-    if (!metadata || metadata.role !== "student") return;
-    const messageBody = { schema_version: 1 as const, body: REVISION_PROPOSAL_MESSAGE };
-    const proposalBody = { schema_version: 1 as const, case_revision: state.status.current_revision, proposal: { schema_version: 1 as const, fact_key: "student.preferred_countries", value: REVISED_PREFERRED_COUNTRIES } };
+    if (!metadata || !["student", "parent"].includes(metadata.role)
+      || metadata.caseId !== state.status.case_id) return;
+    if (metadata.currentRevision !== state.status.current_revision) { await recover(); return; }
+    const targetRole = factKey === "family.budget" ? "parent" : "student";
+    revisionMutationBusy.current = true;
+    setRevisionSubmitting(true);
+    try {
+      // Preparation is explicit role consent, not a submitted fact or mutation key.
+      if (metadata.role !== targetRole || metadata.pendingRole) {
+        await transitionRole(metadata, targetRole);
+      } else {
+        const attempt = async () => {
+          try { await loadAuthoritative(metadata.caseId, targetRole, metadata.csrf); }
+          catch (error) { dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) }); }
+        };
+        retryAction.current = attempt;
+        await attempt();
+      }
+    } finally {
+      revisionMutationBusy.current = false;
+      setRevisionSubmitting(false);
+    }
+  }, [loadAuthoritative, recover, state, transitionRole]);
+
+  const submitRevision = useCallback(async (requested: RevisionIntent) => {
+    if (state.value !== "revision_requested" || !revision || revisionMutationBusy.current) return;
+    const metadata = loadRecoveryMetadata();
+    if (!metadata || !["student", "parent"].includes(metadata.role) || metadata.caseId !== revision.caseId) return;
+    const validated = validateRevisionIntent(requested, currentFacts);
+    if (!validated.ok || requested.expectedCaseRevision !== state.status.current_revision) {
+      if ((!validated.ok && validated.code === "stale") || requested.expectedCaseRevision !== state.status.current_revision) await recover();
+      return;
+    }
+    const intent = validated.intent;
+    const messageBody = revisionMessageBody(intent);
+    const proposalBody = revisionProposalBody(intent);
     const attempt = async () => {
+      if (revisionMutationBusy.current) return;
+      revisionMutationBusy.current = true;
+      setRevisionSubmitting(true);
       try {
         let current = loadRecoveryMetadata() ?? metadata;
+        if (current.caseId !== revision.caseId || current.currentRevision !== intent.expectedCaseRevision) { await recover(); return; }
+        const participantRole = intent.factKey === "family.budget" ? "parent" : "student";
+        current = { ...current, revisionIntent: intent };
+        saveRecoveryMetadata(current);
+        setRevisionIntent(intent);
+        // Bind both keys to the intention before any session rotation can fail.
+        const preparedMessage = await mutationRecord(current, "fact-proposal-message", messageBody);
+        const preparedProposal = await mutationRecord(preparedMessage.updated, "fact-proposal-candidate", proposalBody);
+        current = preparedProposal.updated;
+        if (current.role !== participantRole || current.pendingRole) {
+          await transitionRole(current, participantRole);
+          retryAction.current = attempt;
+          const rotated = loadRecoveryMetadata();
+          if (!rotated || rotated.role !== participantRole || rotated.pendingRole) return;
+          current = rotated;
+        }
+        const authority = await api.journeyStatus(current.caseId);
+        if (authority.current_revision !== intent.expectedCaseRevision) {
+          throw new CollaborationDemoApiError(409, "stale_revision");
+        }
+        const facts = await collaboration.confirmedFacts(current.caseId, participantRole);
+        const checked = validateRevisionIntent(intent, { caseId: current.caseId, caseRevision: authority.current_revision, facts: facts.current });
+        if (!checked.ok || !["revision_requested", "revision_fact_pending"].includes(authority.phase)) {
+          retryAction.current = null;
+          await loadAuthoritative(current.caseId, participantRole, current.csrf);
+          return;
+        }
         const messageMutation = await mutationRecord(current, "fact-proposal-message", messageBody);
         const message = await collaboration.appendMessage(revision.thread.thread_id, messageBody, current.csrf, messageMutation.record.idempotencyKey);
         current = loadRecoveryMetadata() ?? messageMutation.updated;
@@ -491,63 +668,99 @@ export function useConnectedDemo() {
         retryAction.current = null;
         dispatch({ type: "ROLE_SWITCH", caseId: current.caseId, targetRole: "advisor" });
       } catch (error) {
-        await handleMutationFailure(error, "fact-proposal-candidate", true);
+        if (failure(error) === "stale_conflict") {
+          const current = loadRecoveryMetadata();
+          if (current) {
+            const updated = withMutation(withMutation(current, "fact-proposal-message", undefined), "fact-proposal-candidate", undefined);
+            delete updated.revisionIntent;
+            saveRecoveryMetadata(updated);
+          }
+          setRevisionIntent(null);
+        }
+        await handleMutationFailure(error, "fact-proposal-candidate");
+      } finally {
+        revisionMutationBusy.current = false;
+        setRevisionSubmitting(false);
       }
     };
     retryAction.current = attempt;
     await attempt();
-  }, [handleMutationFailure, mutationRecord, revision, state]);
+  }, [currentFacts, handleMutationFailure, loadAuthoritative, mutationRecord, recover, revision, state, transitionRole]);
 
-  const confirmPreferredCountries = useCallback(async () => {
-    if (state.value !== "revision_fact_pending") return;
+  const confirmRevision = useCallback(async (reason: string) => {
+    if (state.value !== "revision_fact_pending" || !revision || !validRevisionReason(reason) || revisionMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
-    if (!metadata || metadata.role !== "advisor") return;
-    const candidates = await collaboration.candidates(metadata.caseId, "advisor").catch(() => null);
-    const candidate = candidates ? pendingPreferredCountriesCandidate(candidates) : null;
-    if (!candidate || !("candidate_id" in candidate) || typeof candidate.candidate_id !== "string") {
-      dispatch({ type: "RECOVERABLE_FAILURE", code: "transport_failure" });
-      return;
-    }
-    const candidateId = candidate.candidate_id;
-    const body = { schema_version: 1 as const, expected_case_revision: state.status.current_revision, decision: "confirm" as const, reason: "Confirmed the bounded synthetic preferred-country revision." };
+    if (!metadata || metadata.role !== "advisor" || metadata.caseId !== revision.caseId) return;
+    const displayed = pendingRevisionCandidate(revision.candidates.filter((candidate): candidate is MemoryCandidateAdvisor => "candidate_id" in candidate), state.status.current_revision);
+    if (!displayed) return;
+    const body = { schema_version: 1 as const, expected_case_revision: state.status.current_revision, decision: "confirm" as const, reason: reason.trim() };
+    let submitted = false;
     const attempt = async () => {
+      if (revisionMutationBusy.current) return;
+      revisionMutationBusy.current = true;
       try {
         const current = loadRecoveryMetadata() ?? metadata;
-        const { record } = await mutationRecord(current, "fact-confirmation", body);
-        await collaboration.verifyCandidate(candidateId, body, current.csrf, record.idempotencyKey);
+        const candidates = await collaboration.candidates(current.caseId, "advisor");
+        const replay = submitted ? candidates.find((candidate) => candidate.candidate_id === displayed.candidate_id && candidate.state === "confirmed" && candidate.case_revision === body.expected_case_revision) : null;
+        const candidate = replay ?? pendingRevisionCandidate(candidates, body.expected_case_revision);
+        if (!candidate || candidate.candidate_id !== displayed.candidate_id || JSON.stringify(candidate.value) !== JSON.stringify(displayed.value)) {
+          retryAction.current = null;
+          await loadAuthoritative(current.caseId, "advisor", current.csrf);
+          return;
+        }
+        const { record } = await mutationRecord(current, "fact-confirmation", { candidateId: displayed.candidate_id, body });
+        submitted = true;
+        await collaboration.verifyCandidate(displayed.candidate_id, body, current.csrf, record.idempotencyKey);
         await loadAuthoritative(current.caseId, "advisor", current.csrf);
         retryAction.current = null;
       } catch (error) {
         await handleMutationFailure(error, "fact-confirmation");
+      } finally {
+        revisionMutationBusy.current = false;
       }
     };
     retryAction.current = attempt;
     dispatch({ type: "REVIEW_SUBMIT" });
     await attempt();
-  }, [handleMutationFailure, loadAuthoritative, mutationRecord, state]);
+  }, [handleMutationFailure, loadAuthoritative, mutationRecord, revision, state]);
 
   const decide = useCallback(async () => {
-    if (state.value !== "family_review" || !confirmed) return;
+    if (state.value !== "family_review" || !confirmed || familyMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
-    if (!metadata || metadata.role !== "parent") return;
-    const requirements = state.brief.decision_requirements;
-    const body: FamilyDecisionBody = { schema_version: 1, expected_brief_version: state.brief.brief_version, selected_route_id: requirements.eligible_route_id, accepted_budget_min_minor: requirements.pinned_cost_minor, accepted_budget_max_minor: requirements.hard_ceiling_minor, currency: requirements.currency, accepted_trade_offs: requirements.required_trade_offs };
+    if (!metadata || metadata.role !== "parent" || metadata.pendingRole || metadata.caseId !== state.brief.case_id) return;
+    const validated = validateFamilyDecisionDraft(familyDraft, state.brief);
+    if (!validated.ok) return;
+    const intent: SubmittedFamilyIntent = { schema_version: 1, briefId: state.brief.brief_id, body: validated.body };
     const attempt = async () => {
+      if (familyMutationBusy.current) return;
+      familyMutationBusy.current = true;
       try {
-        const current = loadRecoveryMetadata() ?? metadata;
-        const { record } = await mutationRecord(current, "family-decision", body);
-        await api.decide(state.brief.brief_id, body, current.csrf, record.idempotencyKey);
+        const current = loadRecoveryMetadata();
+        if (!current || current.role !== "parent" || current.pendingRole || current.caseId !== metadata.caseId || current.currentRevision !== metadata.currentRevision) return;
+        const record = await idempotencyFor(intent.body, current.mutations["family-decision"]);
+        saveRecoveryMetadata({ ...withMutation(current, "family-decision", record), familyIntent: intent });
+        await api.decide(intent.briefId, intent.body, current.csrf, record.idempotencyKey);
         await loadAuthoritative(current.caseId, "parent", current.csrf);
         retryAction.current = null;
       } catch (error) {
         setConfirmed(false);
+        if (failure(error) === "stale_conflict") {
+          const current = loadRecoveryMetadata();
+          if (current) {
+            delete current.familyIntent;
+            saveRecoveryMetadata(withMutation(current, "family-decision", undefined));
+          }
+          familyBriefIdentity.current = null;
+        }
         await handleMutationFailure(error, "family-decision");
+      } finally {
+        familyMutationBusy.current = false;
       }
     };
     retryAction.current = attempt;
     dispatch({ type: "DECISION_SUBMIT" });
     await attempt();
-  }, [confirmed, handleMutationFailure, loadAuthoritative, mutationRecord, state]);
+  }, [confirmed, familyDraft, handleMutationFailure, loadAuthoritative, state]);
 
   const retry = useCallback(async () => {
     if (retryAction.current) await retryAction.current();
@@ -577,6 +790,8 @@ export function useConnectedDemo() {
     state,
     confirmed,
     setConfirmed,
+    familyDraft,
+    setFamilyDraft,
     inspector,
     currentFacts,
     revision,
@@ -586,13 +801,18 @@ export function useConnectedDemo() {
     recover,
     retry,
     createTask,
+    retryTerminalTask,
+    retrySubmitting,
     createRevisionTask: createTask,
     approve: () => review("approve_for_consultation"),
     requestRevision: () => review("request_revision"),
     rotateToStudent: (caseId: string) => rotate(caseId, "student"),
-    submitPreferredCountries,
+    submitRevision,
+    prepareRevisionFact,
+    revisionIntent,
+    revisionSubmitting,
     rotateToAdvisor: (caseId: string) => rotate(caseId, "advisor"),
-    confirmPreferredCountries,
+    confirmRevision,
     approveRevision: () => review("approve_for_consultation"),
     rotateToParent: (caseId: string) => rotate(caseId, "parent"),
     decide,

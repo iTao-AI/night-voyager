@@ -158,7 +158,7 @@ async def seed_and_create(case_id: UUID, task_id: UUID, key: str) -> None:
                     "task": task_id,
                     "pack": PACK,
                     "skill_manifest": skill_manifest(),
-                    "key_hash": key * 64,
+                    "key_hash": key if len(key) == 64 else key * 64,
                 },
             )
     finally:

@@ -4,7 +4,7 @@
 
 Night Voyager is an evidence-grounded study-abroad decision workflow. The current `/` route is a static, Chinese-first, local synthetic, provider-free portfolio entry. Its primary action begins the complete governed walkthrough at `/demo/collaboration`; that route proves governed parent proposal, advisor confirmation, confirmed fact, and Case revision authority before a read-only same-Case handoff continues into `/demo`. The advisor-centered route-analysis and downstream client-confirmation surface at `/demo` remains independently usable: it creates the durable planning task, follows authorized SSE, records advisor review, rotates to a parent session, and produces a persisted `DecisionReceipt` and `TimelinePlan`. At `plan_ready`, the current v0.1.6 release offers `/demo/plan?case_id=<case_id>` to continue those exact anchors through the existing execution and reassessment flow; bare `/demo/plan` remains independently seeded. Both demo routes render a server-owned planning Skill projection. The M1 Japan fixture remains historical design context only. The previous cosmic root and family-heavy route presentation are historical presentation context; the current reference-driven advisor workspace is presentation-only, while the connected continuation is local synthetic and provider-free. Current release boundary is v0.1.6, a local synthetic and provider-free portfolio release; it is not deployed; publication remains separately gated.
 
-The current visual authority is the [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md). The public root projects `¥300,000–400,000`; the persisted connected outcome remains `¥305,500–400,000`; `/demo/plan?case_id=<case_id>` is the connected continuation and bare/`scenario` routes are independently seeded scenarios.
+The current visual authority is the [reference-driven presentation spec](docs/superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](docs/superpowers/plans/2026-08-14-reference-driven-presentation.md). The public root projects `¥300,000–400,000`; the connected form suggests `¥305,500–400,000`, while the immutable receipt reflects the parent's explicit accepted interval; `/demo/plan?case_id=<case_id>` is the connected continuation and bare/`scenario` routes are independently seeded scenarios.
 
 - **Portfolio entry:** `/` (complete-flow primary action to `/demo/collaboration`, route-evidence secondary action to `#route-atlas`)
 - **Complete governed walkthrough:** `/demo/collaboration` -> read-only same-Case handoff -> explicit task action on `/demo`
@@ -16,6 +16,14 @@ The current visual authority is the [reference-driven presentation spec](docs/su
 - **Audience:** study-abroad organizations and advisor teams first; students and parents are client participants
 - **Page boundary:** root presentation has zero product-side network/session/task effects; demo routes use local synthetic data and real backend mutations/SSE only; no remote provider or real student data
 - **Memorable idea:** evidence gaps and human decisions become a traceable family brief and timeline
+
+The local customer-revision/recovery branch adds actual supported country or
+parent budget edits, advisor confirmation of the displayed candidate, explicit
+family budget/trade-off choices and final consent. Qualified terminal tasks
+require separate advisor consent for a fresh task and renewed review; hard or
+unknown failures have no retry action. This implementation does not change the
+published v0.1.6 boundary. See the [walkthrough](docs/operations/customer-revision-recovery.md)
+and [acceptance evidence](docs/evidence/customer-revision-recovery.md).
 
 ## Aesthetic direction
 

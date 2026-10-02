@@ -71,6 +71,10 @@ class PlanningRevisionSpec(TypedDict):
     candidate_id: UUID
     verification_id: UUID
     fact_id: UUID
+    budget_message_id: UUID
+    budget_candidate_id: UUID
+    budget_verification_id: UUID
+    budget_fact_id: UUID
     event_sequence: int
 
 
@@ -85,6 +89,10 @@ PLANNING_REVISION_CASES: tuple[PlanningRevisionSpec, ...] = (
         "candidate_id": UUID("4d000000-0000-0000-0000-000000000001"),
         "verification_id": UUID("4e000000-0000-0000-0000-000000000001"),
         "fact_id": UUID("4f000000-0000-0000-0000-000000000001"),
+        "budget_message_id": UUID("4c000000-0000-0000-0000-000000000101"),
+        "budget_candidate_id": UUID("4d000000-0000-0000-0000-000000000101"),
+        "budget_verification_id": UUID("4e000000-0000-0000-0000-000000000101"),
+        "budget_fact_id": UUID("4f000000-0000-0000-0000-000000000101"),
         "event_sequence": 1,
     },
     {
@@ -97,6 +105,10 @@ PLANNING_REVISION_CASES: tuple[PlanningRevisionSpec, ...] = (
         "candidate_id": UUID("4d000000-0000-0000-0000-000000000002"),
         "verification_id": UUID("4e000000-0000-0000-0000-000000000002"),
         "fact_id": UUID("4f000000-0000-0000-0000-000000000002"),
+        "budget_message_id": UUID("4c000000-0000-0000-0000-000000000102"),
+        "budget_candidate_id": UUID("4d000000-0000-0000-0000-000000000102"),
+        "budget_verification_id": UUID("4e000000-0000-0000-0000-000000000102"),
+        "budget_fact_id": UUID("4f000000-0000-0000-0000-000000000102"),
         "event_sequence": 1,
     },
 )
@@ -946,6 +958,10 @@ async def _seed_planning_revision_cases(
                 ).hexdigest(),
             },
         )
+        await connection.execute(
+            text("SELECT app.seed_demo_planning_revision_budget(:org,:case)"),
+            {"org": DEMO_ORG, "case": case_id},
+        )
         await _clone_planning_snapshot(
             connection,
             case_id=case_id,
@@ -1050,6 +1066,76 @@ async def _assert_exact_fixture_rows(
         raise RuntimeError("demo planning revision fixture seed mismatch")
 
 
+async def _assert_exact_initial_budget_lineage(
+    connection: AsyncConnection,
+    fixture: ValidatedPlanningFixture,
+    spec: Mapping[str, object],
+) -> None:
+    case_id = cast(UUID, spec["case_id"])
+    value = fixture.planning_input.case.family.budget.model_dump(mode="json")
+    parameters = {
+        "case": case_id,
+        "thread": spec["thread_id"],
+        "parent": ACTORS[2][1],
+        "advisor": ACTORS[0][1],
+        "value": json.dumps(value),
+        "value_hash": canonical_sha256(value),
+        **{
+            kind: spec[f"budget_{kind}_id"]
+            for kind in ("message", "candidate", "verification", "fact")
+        },
+        **{
+            f"{kind}_hash": hashlib.sha256(
+                f"revision-budget-seed-{kind}:{case_id}".encode()
+            ).hexdigest()
+            for kind in ("message", "candidate", "verification")
+        },
+        "body_hash": hashlib.sha256(b"Synthetic initial family budget.").hexdigest(),
+    }
+    checks = (
+        (
+            "message_events",
+            "id=:message",
+            "id=:message AND thread_id=:thread AND case_id=:case AND sequence_no=2 AND actor_id=:parent AND actor_role='parent' AND body='Synthetic initial family budget.' AND content_sha256=:body_hash AND request_sha256=:message_hash AND created_at=timestamptz '2026-01-01 00:00:01+00'",
+        ),
+        (
+            "memory_candidates",
+            "id=:candidate",
+            "id=:candidate AND case_id=:case AND case_revision=1 AND message_event_id=:message AND subject_actor_id=:parent AND subject_role='parent' AND proposing_actor_id=:parent AND proposing_role='parent' AND fact_key='family.budget' AND proposed_value=CAST(:value AS jsonb) AND value_sha256=:value_hash AND request_sha256=:candidate_hash AND provenance_kind='participant_proposal' AND created_at=timestamptz '2026-01-01 00:00:02+00' AND expires_at=timestamptz '2026-01-08 00:00:02+00'",
+        ),
+        (
+            "memory_candidate_verifications",
+            "id=:verification",
+            "id=:verification AND candidate_id=:candidate AND case_id=:case AND advisor_actor_id=:advisor AND advisor_role='advisor' AND decision='confirm' AND reason='Synthetic initial budget fact seed.' AND request_sha256=:verification_hash AND result_fact_id=:fact AND result_revision=1 AND created_at=timestamptz '2026-01-01 00:00:03+00'",
+        ),
+        (
+            "confirmed_facts",
+            "id=:fact",
+            "id=:fact AND case_id=:case AND fact_key='family.budget' AND value=CAST(:value AS jsonb) AND value_sha256=:value_hash AND source_candidate_id=:candidate AND source_message_event_id=:message AND subject_actor_id=:parent AND subject_role='parent' AND confirming_advisor_actor_id=:advisor AND confirming_advisor_role='advisor' AND supersedes_fact_id IS NULL AND fact_version=1 AND confirmed_at=timestamptz '2026-01-01 00:00:03+00'",
+        ),
+        (
+            "case_revision_confirmed_fact_refs",
+            "fact_key='family.budget'",
+            "case_id=:case AND case_revision=1 AND fact_key='family.budget' AND confirmed_fact_id=:fact AND created_at=timestamptz '2026-01-01 00:00:03+00'",
+        ),
+    )
+    for table, scope, exact in checks:
+        await _assert_exact_fixture_rows(
+            connection,
+            table=table,
+            scope="case_id=:case",
+            exact="true",
+            parameters=parameters,
+            expected_count=2,
+        )
+        await _assert_exact_fixture_rows(
+            connection,
+            table=table,
+            scope=f"case_id=:case AND {scope}",
+            exact=exact,
+            parameters=parameters,
+        )
+
 async def _assert_exact_planning_revision_fixture(
     connection: AsyncConnection,
     fixture: ValidatedPlanningFixture,
@@ -1138,7 +1224,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="message_events",
-        scope="case_id=:case",
+        scope="case_id=:case AND id=:message",
         exact=(
             "id=:message AND thread_id=:thread AND case_id=:case "
             "AND sequence_no=1 AND actor_id=:student_actor AND actor_role='student' "
@@ -1159,7 +1245,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="memory_candidates",
-        scope="case_id=:case",
+        scope="case_id=:case AND id=:candidate",
         exact=(
             "id=:candidate AND case_id=:case AND case_revision=1 "
             "AND message_event_id=:message AND subject_actor_id=:student_actor "
@@ -1185,7 +1271,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="memory_candidate_verifications",
-        scope="case_id=:case",
+        scope="case_id=:case AND id=:verification",
         exact=(
             "id=:verification AND candidate_id=:candidate AND case_id=:case "
             "AND advisor_actor_id=:advisor AND advisor_role='advisor' "
@@ -1206,7 +1292,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="confirmed_facts",
-        scope="case_id=:case",
+        scope="case_id=:case AND id=:fact",
         exact=(
             "id=:fact AND case_id=:case "
             "AND fact_key='student.preferred_countries' "
@@ -1233,7 +1319,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="case_revision_confirmed_fact_refs",
-        scope="case_id=:case",
+        scope="case_id=:case AND fact_key='student.preferred_countries'",
         exact=(
             "case_id=:case AND case_revision=1 "
             "AND fact_key='student.preferred_countries' "
@@ -1242,6 +1328,7 @@ async def _assert_exact_planning_revision_fixture(
         ),
         parameters={"case": case_id, "fact": spec["fact_id"]},
     )
+    await _assert_exact_initial_budget_lineage(connection, fixture, spec)
     await _assert_exact_planning_snapshot(
         connection,
         case_id=case_id,

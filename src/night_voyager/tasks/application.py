@@ -14,11 +14,12 @@ from night_voyager.tasks.models import (
     AgentTaskState,
     CancelTaskCommand,
     CreateTaskCommand,
+    RetryTaskCommand,
 )
 from night_voyager.tasks.policy import project_task_status
 from night_voyager.tasks.ports import TaskRepository
 
-__all__ = ["CancelTaskCommand", "CreateTaskCommand", "TaskService"]
+__all__ = ["CancelTaskCommand", "CreateTaskCommand", "RetryTaskCommand", "TaskService"]
 
 
 class TaskService:
@@ -40,9 +41,7 @@ class TaskService:
         idempotency_key: str,
     ) -> dict[str, object]:
         self._require_advisor(context)
-        skill_key, semantic_version = await self._repository.resolve_active_skill_version(
-            context
-        )
+        skill_key, semantic_version = await self._repository.resolve_active_skill_version(context)
         try:
             skill_manifest = self._registry.get(skill_key, semantic_version)
         except SkillRuntimeIncompatibility as error:
@@ -55,6 +54,24 @@ class TaskService:
             skill_manifest,
         )
         return self._project(row)
+
+    async def retry(
+        self,
+        context: ActorContext,
+        command: RetryTaskCommand,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        self._require_advisor(context)
+        skill_key, semantic_version = await self._repository.resolve_active_skill_version(context)
+        try:
+            manifest = self._registry.get(skill_key, semantic_version)
+        except SkillRuntimeIncompatibility as error:
+            raise TaskConflictError("skill_version_unavailable") from error
+        return self._project(
+            await self._repository.retry(
+                context, command, self._id_factory(), idempotency_key, manifest
+            )
+        )
 
     async def get(
         self,
@@ -78,11 +95,7 @@ class TaskService:
     ) -> dict[str, object] | None:
         self._require_advisor(context)
         row = await self._repository.get_by_idempotency(context, idempotency_key)
-        return (
-            None
-            if row is None
-            else self._project(row, include_live_authority=True)
-        )
+        return None if row is None else self._project(row, include_live_authority=True)
 
     async def cancel(
         self,
@@ -91,9 +104,7 @@ class TaskService:
         idempotency_key: str,
     ) -> dict[str, object]:
         self._require_advisor(context)
-        return self._project(
-            await self._repository.cancel(context, command, idempotency_key)
-        )
+        return self._project(await self._repository.cancel(context, command, idempotency_key))
 
     @staticmethod
     def _require_advisor(context: ActorContext) -> None:
@@ -172,11 +183,7 @@ class TaskService:
             raise RuntimeError("pinned task runtime identity is unavailable")
         entry = self._registry.get(str(skill_key), str(semantic_version))
         leaf = next(
-            (
-                item
-                for item in entry.operation_bindings or ()
-                if item.operation == operation
-            ),
+            (item for item in entry.operation_bindings or () if item.operation == operation),
             None,
         )
         if leaf is None:

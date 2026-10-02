@@ -24,6 +24,7 @@ from night_voyager.decision.models import (
 from night_voyager.planning.models import CaseState, Country, RouteOutcome
 from night_voyager.planning.revision import PlanningRevisionComparisonV1
 from night_voyager.tasks.models import TaskViewStatus
+from night_voyager.tasks.policy import terminal_recovery_allowed
 
 
 class FrozenModel(BaseModel):
@@ -247,7 +248,8 @@ class AdvisorLedgerV1(FrozenModel):
                 TaskViewStatus.OUTDATED,
             }
             if (
-                self.task is None
+                self.canonical_task_inputs is not None
+                or self.task is None
                 or self.task.status not in terminal
                 or self.planning_run is not None
                 or self.routes
@@ -257,6 +259,20 @@ class AdvisorLedgerV1(FrozenModel):
                 or self.recovery is None
             ):
                 raise ValueError("terminal-task-failure projection is invalid")
+        if (
+            self.recovery is not None
+            and self.recovery.retry_allowed
+            and (
+                self.task is None
+                or self.recovery.code != self.task.public_code
+                or not terminal_recovery_allowed(
+                    self.task.status.value,
+                    self.task.public_code,
+                    has_result=self.task.planning_run_id is not None,
+                )
+            )
+        ):
+            raise ValueError("terminal recovery authority is invalid")
         return self
 
 
@@ -279,6 +295,99 @@ class AdvisorLedgerV2(FrozenModel):
 
     @model_validator(mode="after")
     def validate_revision_projection(self) -> AdvisorLedgerV2:
+        inputs = self.canonical_task_inputs
+        if inputs is not None and (
+            inputs.case_id != self.case_id or inputs.expected_case_revision != self.case_revision
+        ):
+            raise ValueError("canonical task identity is invalid")
+        if self.review_inputs is not None and (
+            self.planning_run is None
+            or self.review_inputs.planning_run_id != self.planning_run.planning_run_id
+            or self.review_inputs.expected_case_revision != self.case_revision
+        ):
+            raise ValueError("review identity is invalid")
+        if (
+            self.planning_run is not None
+            and self.task is not None
+            and (self.task.planning_run_id != self.planning_run.planning_run_id)
+        ):
+            raise ValueError("planning task identity is invalid")
+        if self.phase is DemoPhaseV2.TERMINAL_TASK_FAILURE:
+            allowed = self.recovery is not None and self.recovery.retry_allowed
+            if (inputs is not None) != allowed:
+                raise ValueError("terminal recovery inputs are unavailable")
+            if allowed and (
+                self.case_state is not CaseState.PLANNING
+                or self.task is None
+                or self.recovery is None
+                or self.recovery.code != self.task.public_code
+                or not terminal_recovery_allowed(
+                    self.task.status.value,
+                    self.task.public_code,
+                    has_result=self.task.planning_run_id is not None,
+                )
+            ):
+                raise ValueError("terminal recovery authority is invalid")
+        if self.phase in {
+            DemoPhaseV2.TASK_READY,
+            DemoPhaseV2.ACTIVE_TASK,
+            DemoPhaseV2.REPLAN_REQUIRED,
+            DemoPhaseV2.REVISION_TASK_ACTIVE,
+        }:
+            if (
+                inputs is None
+                or self.planning_run is not None
+                or self.routes
+                or self.evidence
+                or self.review_inputs is not None
+                or self.recovery is not None
+                or self.current_brief_id is not None
+                or self.comparison is not None
+            ):
+                raise ValueError("task phase contains unavailable authority")
+            active = self.phase in {DemoPhaseV2.ACTIVE_TASK, DemoPhaseV2.REVISION_TASK_ACTIVE}
+            if active != (self.task is not None) or (
+                active
+                and self.task is not None
+                and self.task.status is not TaskViewStatus.PREPARING
+            ):
+                raise ValueError("task phase is invalid")
+        if self.phase is not DemoPhaseV2.TERMINAL_TASK_FAILURE and self.recovery is not None:
+            raise ValueError("nonterminal phase contains recovery authority")
+        if (
+            self.phase in {DemoPhaseV2.REPLAN_REQUIRED, DemoPhaseV2.REVISION_TASK_ACTIVE}
+            and self.case_revision < 2
+        ):
+            raise ValueError("revision task requires a successor revision")
+        if self.phase in {DemoPhaseV2.REVIEW_REQUIRED, DemoPhaseV2.REVISION_REVIEW_REQUIRED} and (
+            self.task is None
+            or self.task.status is not TaskViewStatus.NEEDS_ADVISOR_REVIEW
+            or self.planning_run is None
+            or self.planning_run.state != "review_required"
+            or not self.routes
+            or not self.evidence
+            or self.review_inputs is None
+            or self.current_brief_id is not None
+            or (self.phase is DemoPhaseV2.REVIEW_REQUIRED and self.comparison is not None)
+        ):
+            raise ValueError("review phase is incomplete")
+        if self.phase in {DemoPhaseV2.REVISION_REQUESTED, DemoPhaseV2.REVISION_FACT_PENDING} and (
+            self.task is None
+            or self.planning_run is None
+            or self.comparison is not None
+            or self.current_brief_id is not None
+        ):
+            raise ValueError("revision request phase is incomplete")
+        if self.phase in {DemoPhaseV2.FAMILY_REVIEW, DemoPhaseV2.PLAN_READY} and (
+            inputs is not None
+            or self.planning_run is not None
+            or self.routes
+            or self.evidence
+            or self.comparison is not None
+            or self.review_inputs is not None
+            or self.current_brief_id is None
+        ):
+            raise ValueError("family phase is incomplete")
         revised = {
             DemoPhaseV2.REVISION_REVIEW_REQUIRED,
             DemoPhaseV2.REVISION_BLOCKED,
@@ -288,8 +397,7 @@ class AdvisorLedgerV2(FrozenModel):
             or self.planning_run is None
             or self.comparison is None
             or self.comparison.current_revision != self.case_revision
-            or self.comparison.current_planning_run_id
-            != self.planning_run.planning_run_id
+            or self.comparison.current_planning_run_id != self.planning_run.planning_run_id
         ):
             raise ValueError(f"{self.phase.value.replace('_', '-')} projection is incomplete")
         if self.phase is DemoPhaseV2.REVISION_REVIEW_REQUIRED and (
@@ -392,9 +500,7 @@ class CurrentDecisionBriefV1(FrozenModel):
             self.receipt is not None or self.timeline is not None
         ):
             raise ValueError("family-review projection cannot contain receipt or timeline")
-        if self.phase is DemoPhase.PLAN_READY and (
-            self.receipt is None or self.timeline is None
-        ):
+        if self.phase is DemoPhase.PLAN_READY and (self.receipt is None or self.timeline is None):
             raise ValueError("plan-ready projection requires receipt and timeline")
         return self
 
@@ -419,8 +525,6 @@ class CurrentDecisionBriefV2(FrozenModel):
             self.receipt is not None or self.timeline is not None
         ):
             raise ValueError("family-review projection cannot contain receipt or timeline")
-        if self.phase is DemoPhaseV2.PLAN_READY and (
-            self.receipt is None or self.timeline is None
-        ):
+        if self.phase is DemoPhaseV2.PLAN_READY and (self.receipt is None or self.timeline is None):
             raise ValueError("plan-ready projection requires receipt and timeline")
         return self

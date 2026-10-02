@@ -28,6 +28,19 @@ RETRYABLE_FAILURES = frozenset(
 )
 
 
+TERMINAL_RECOVERY_CODES = frozenset(
+    {"transient_unavailable", "transport_interrupted", "lease_expired", "deadline_exceeded"}
+)
+
+
+def terminal_recovery_allowed(state: str, code: str | None, *, has_result: bool) -> bool:
+    """Explicit fresh-task eligibility for the current terminal producers."""
+    return not has_result and (
+        (state == "failed" and code in TERMINAL_RECOVERY_CODES - {"deadline_exceeded"})
+        or (state == "timed_out" and code == "deadline_exceeded")
+    )
+
+
 class AdapterPayloadError(ValueError):
     def __init__(self, code: str) -> None:
         self.code = code
@@ -41,9 +54,7 @@ class RetryDecision:
     public_code: str
 
 
-def project_task_status(
-    state: AgentTaskState, *, result_is_current: bool
-) -> TaskViewStatus:
+def project_task_status(state: AgentTaskState, *, result_is_current: bool) -> TaskViewStatus:
     if not result_is_current and state in {
         AgentTaskState.WAITING_REVIEW,
         AgentTaskState.SUCCEEDED,

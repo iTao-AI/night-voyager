@@ -140,3 +140,12 @@ RESET_DEMO=1 make reset-demo
 M4A/M5 and the governed mixed closure do not provide distributed failover, remote provider integration,
 production monitoring, or an availability SLA. The connected frontend controls
 only the approved local synthetic workflow.
+
+## Advisor-authorized fresh tasks
+
+Worker retry remains bounded to three attempts. The separate terminal recovery
+operation uses assigned-advisor consent and current server eligibility to create
+a fresh task; it never resumes or rewrites the failed execution. The source pins
+are preserved, the active packaged Skill is validated and the new result requires
+fresh review. Follow the [customer recovery walkthrough](customer-revision-recovery.md)
+and [ADR 0015](../decisions/0015-guarded-terminal-task-recovery.md).

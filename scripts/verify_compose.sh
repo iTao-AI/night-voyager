@@ -63,6 +63,12 @@ cleanup() {
         kill "$planning_revision_browser_pid" 2>/dev/null || true
         wait "$planning_revision_browser_pid" 2>/dev/null || true
     fi
+    # Stopping the Compose CLI does not stop its detached one-off browser container.
+    for browser_container in $(docker ps --all --quiet \
+        --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" \
+        --filter "label=com.docker.compose.service=browser-proof"); do
+        docker rm --force "$browser_container" >/dev/null 2>&1 || true
+    done
     if [ -n "$worker_start_pid" ]; then
         kill "$worker_start_pid" 2>/dev/null || true
         wait "$worker_start_pid" 2>/dev/null || true
@@ -370,12 +376,24 @@ run_planning_revision_lane() {
     : > "$PLANNING_REVISION_WORKER_READY_FILE"
     chmod 0666 "$PLANNING_REVISION_PROOF_FILE" "$PLANNING_REVISION_WORKER_READY_FILE"
     mkdir -p "$PLANNING_REVISION_REVIEW_DIR"
+    chmod 0777 "$PLANNING_REVISION_REVIEW_DIR"
+    trace_dir="$PLANNING_REVISION_REVIEW_DIR/trace-$lane_locale"
+    mkdir -p "$trace_dir"
+    chmod 0777 "$trace_dir"
     for viewport in 1440 390; do
-        for state in happy blocked; do
+        for state in happy blocked country-editor candidate-confirmation family-consent receipt; do
             review_file="$PLANNING_REVISION_REVIEW_DIR/planning-revision-$lane_locale-$viewport-$state.png"
             rm -f "$review_file"
             : > "$review_file"
             chmod 0666 "$review_file"
+            case "$state" in
+                happy|blocked|country-editor|candidate-confirmation|family-consent|receipt)
+                    panel_file="${review_file%.png}-panel.png"
+                    rm -f "$panel_file"
+                    : > "$panel_file"
+                    chmod 0666 "$panel_file"
+                    ;;
+            esac
         done
     done
     docker compose pause worker
@@ -386,6 +404,7 @@ run_planning_revision_lane() {
         -e PLANNING_REVISION_RESTART_SENTINEL="$PLANNING_REVISION_RESTART_SENTINEL" \
         -e PLANNING_REVISION_REVIEW_ROOT="/workspace/tmp/planning-revision-review" \
         -v "$PWD/$PLANNING_REVISION_REVIEW_DIR:/workspace/tmp/planning-revision-review" \
+        -v "$PWD/$trace_dir:/workspace/web/test-results" \
         browser-proof npx playwright test \
             --config playwright.compose.config.ts planning-revision.spec.ts &
     planning_revision_browser_pid=$!
@@ -498,6 +517,8 @@ trap 'exit 143' TERM
 docker compose config --quiet
 docker compose --profile browser-proof build
 docker compose up --no-build --wait
+docker compose images --format json
+docker compose exec -T api python -c "import hashlib,json; from pathlib import Path; from importlib.resources import files; import night_voyager; import night_voyager.tasks.application as application; package=Path(night_voyager.__file__).resolve(); assert 'site-packages' in package.parts; print(json.dumps({'runtime_package':str(package),'task_application_sha256':hashlib.sha256(Path(application.__file__).read_bytes()).hexdigest(),'runtime_manifest_sha256':hashlib.sha256(files('night_voyager.skills').joinpath('data/runtime-manifest-v1.json').read_bytes()).hexdigest()},sort_keys=True))"
 
 for service in postgres api web; do
     container=$(docker compose ps -q "$service")
