@@ -28,6 +28,7 @@ def _run_compose_cleanup_harness(
     down_status: int = 0,
     residue: str = "",
     signal_name: str | None = None,
+    browser_container_id: str = "",
 ) -> subprocess.CompletedProcess[str]:
     source = Path("scripts/verify_compose.sh").read_text(encoding="utf-8")
     cleanup = source.split("cleanup() {", 1)[1].split(
@@ -44,7 +45,14 @@ def _run_compose_cleanup_harness(
             """\
             #!/bin/sh
             printf '%s|%s\n' "$COMPOSE_PROJECT_NAME" "$*" >> "$STUB_LOG"
+            project_label="label=com.docker.compose.project=$COMPOSE_PROJECT_NAME"
+            browser_selector="ps --all --quiet --filter $project_label"
+            service_label="label=com.docker.compose.service=browser-proof"
+            browser_selector="$browser_selector --filter $service_label"
             case "$*" in
+                "$browser_selector")
+                    printf '%s' "$STUB_BROWSER_CONTAINER_ID" ;;
+                "ps --all --quiet"*) printf '%s' "unrelated-container" ;;
                 "compose down"*) exit "$STUB_DOWN_STATUS" ;;
                 "compose ps --all --quiet") printf '%s' "$STUB_RESIDUE" ;;
             esac
@@ -96,6 +104,7 @@ def _run_compose_cleanup_harness(
         STUB_LOG=str(tmp_path / "docker.log"),
         STUB_DOWN_STATUS=str(down_status),
         STUB_RESIDUE=residue,
+        STUB_BROWSER_CONTAINER_ID=browser_container_id,
     )
     return subprocess.run(
         ["sh", str(harness)],
@@ -119,7 +128,12 @@ def test_compose_interruptions_preserve_signal_status_and_cleanup_once(
         log = (tmp_path / signal_name.lower() / "docker.log").read_text(
             encoding="utf-8"
         )
-        assert log.count("night-voyager-cleanup-contract|") == 2
+        assert log.count("night-voyager-cleanup-contract|") == 3
+        assert (
+            "ps --all --quiet "
+            "--filter label=com.docker.compose.project=night-voyager-cleanup-contract "
+            "--filter label=com.docker.compose.service=browser-proof"
+        ) in log
         assert "compose down --volumes --remove-orphans --rmi local" in log
         assert "compose ps --all --quiet" in log
 
@@ -136,9 +150,35 @@ def test_compose_cleanup_preserves_main_failure_and_fails_on_teardown_or_residue
     assert residue_failure.returncode != 0
     for case in ("original", "down", "residue"):
         log = (tmp_path / case / "docker.log").read_text(encoding="utf-8")
-        assert log.count("night-voyager-cleanup-contract|") == 2
+        assert log.count("night-voyager-cleanup-contract|") == 3
+        assert (
+            "ps --all --quiet "
+            "--filter label=com.docker.compose.project=night-voyager-cleanup-contract "
+            "--filter label=com.docker.compose.service=browser-proof"
+        ) in log
         assert "compose down --volumes --remove-orphans --rmi local" in log
         assert "compose ps --all --quiet" in log
+
+
+def test_compose_cleanup_removes_only_exact_project_browser_oneoffs(
+    tmp_path: Path,
+) -> None:
+    result = _run_compose_cleanup_harness(
+        tmp_path, browser_container_id="owned-browser-oneoff"
+    )
+
+    assert result.returncode == 0
+    log = (tmp_path / "docker.log").read_text(encoding="utf-8")
+    assert log.count("night-voyager-cleanup-contract|") == 4
+    assert log.count(
+        "ps --all --quiet "
+        "--filter label=com.docker.compose.project=night-voyager-cleanup-contract "
+        "--filter label=com.docker.compose.service=browser-proof"
+    ) == 1
+    assert log.count("rm --force owned-browser-oneoff\n") == 1
+    assert "unrelated-container" not in log
+    assert log.count("compose down --volumes --remove-orphans --rmi local") == 1
+    assert log.count("compose ps --all --quiet") == 1
 
 
 def test_web_healthcheck_uses_ipv4_loopback() -> None:

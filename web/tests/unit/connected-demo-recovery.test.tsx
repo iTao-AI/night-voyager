@@ -652,7 +652,7 @@ it("submits the bounded student proposal and reconciles status before role rotat
 
   const { result } = renderHook(() => useConnectedDemo());
   await waitFor(() => expect(result.current.state.value).toBe("revision_requested"));
-  await act(async () => result.current.submitPreferredCountries());
+  await act(async () => result.current.submitRevision({ expectedCaseRevision: 1, factKey: "student.preferred_countries", value: ["australia", "japan"] }));
   await waitFor(() => expect(result.current.state.value).toBe("role_switching"));
 
   const proposal = calls.find((call) => call.path.endsWith("/memory-candidates") && call.init?.method === "POST");
@@ -716,7 +716,7 @@ it("reuses both student proposal keys after the candidate response is lost", asy
   const { result } = renderHook(() => useConnectedDemo());
   await waitFor(() => expect(result.current.state.value).toBe("revision_requested"));
 
-  await act(async () => result.current.submitPreferredCountries());
+  await act(async () => result.current.submitRevision({ expectedCaseRevision: 1, factKey: "student.preferred_countries", value: ["australia", "japan"] }));
   expect(result.current.state.value).toBe("recoverable_error");
   await act(async () => result.current.retry());
   await waitFor(() => expect(result.current.state).toMatchObject({
@@ -736,13 +736,15 @@ it("reuses both student proposal keys after the candidate response is lost", asy
   });
 });
 
-it("confirms only the exact pending preferred-country candidate", async () => {
+it("confirms the actual pending candidate with the advisor entered reason", async () => {
   saveRecoveryMetadata({
     ...advisorMetadata(),
     phase: "revision_fact_pending",
   });
   let verified = false;
-  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+  let verificationBody: unknown;
+  const verificationKeys: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path.endsWith("/journey-status")) {
       return Response.json(status(verified ? "replan_required" : "revision_fact_pending"));
@@ -750,10 +752,13 @@ it("confirms only the exact pending preferred-country candidate", async () => {
     if (path.endsWith("/advisor-ledger")) return Response.json(ledger(verified ? "replan_required" : "revision_fact_pending"));
     if (path.endsWith("/confirmed-facts")) return Response.json({ schema_version: 1, current: [], history: [], next_cursor: null });
     if (path.endsWith("/collaboration-thread")) return Response.json(thread);
-    if (path.endsWith("/memory-candidates")) return Response.json([advisorCandidate]);
+    if (path.endsWith("/memory-candidates")) return Response.json([{ ...advisorCandidate, value: ["malaysia"], state: verificationKeys.length ? "confirmed" : "pending" }]);
     if (path.includes("/messages?")) return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
     if (path.includes("/verification-decisions")) {
+      verificationKeys.push(new Headers(init?.headers).get("Idempotency-Key") ?? "");
+      if (verificationKeys.length === 1) return Response.json({ code: "upstream_unavailable" }, { status: 503 });
       verified = true;
+      verificationBody = JSON.parse(String(init?.body));
       return Response.json({
         schema_version: 1,
         verification_id: MESSAGE_ID,
@@ -769,6 +774,11 @@ it("confirms only the exact pending preferred-country candidate", async () => {
   }));
   const { result } = renderHook(() => useConnectedDemo());
   await waitFor(() => expect(result.current.state.value).toBe("revision_fact_pending"));
-  await act(async () => result.current.confirmPreferredCountries());
+  await act(async () => result.current.confirmRevision("The student confirmed the scope after reviewing the route trade-offs."));
+  expect(result.current.state.value).toBe("recoverable_error");
+  await act(async () => result.current.retry());
   await waitFor(() => expect(result.current.state.value).toBe("replan_required"));
+  expect(verificationKeys).toHaveLength(2);
+  expect(verificationKeys[0]).toBe(verificationKeys[1]);
+  expect(verificationBody).toEqual({ schema_version: 1, expected_case_revision: 1, decision: "confirm", reason: "The student confirmed the scope after reviewing the route trade-offs." });
 });

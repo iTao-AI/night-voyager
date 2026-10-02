@@ -43,10 +43,10 @@ def _mke_marked_functions(path: Path) -> set[str]:
     return marked
 
 
-def test_sdist_excludes_only_task_local_tmp_boundary() -> None:
+def test_sdist_excludes_only_task_local_scratch_boundaries() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     sdist = pyproject["tool"]["hatch"]["build"]["targets"]["sdist"]
-    assert sdist["exclude"] == ["/tmp"]
+    assert sdist["exclude"] == ["/tmp", "/.superpowers"]
 
 
 def test_task_local_native_evidence_tests_are_explicitly_mke_marked() -> None:

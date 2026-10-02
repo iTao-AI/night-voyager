@@ -183,13 +183,16 @@ TIMELINE_EXECUTION_FUNCTION_IDENTITIES = {
 }
 TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES = TIMELINE_EXECUTION_FUNCTION_IDENTITIES
 TIMELINE_EXECUTION_WORKER_FUNCTION_IDENTITIES: set[tuple[str, str]] = set()
-PLANNING_REVISION_PENDING_REVISIONS = {"0012", "0013", "0014", "0015"}
-PLANNING_REVISION_SEED_REVISIONS = {"0013", "0014", "0015"}
+PLANNING_REVISION_PENDING_REVISIONS = {"0012", "0013", "0014", "0015", "0016"}
+PLANNING_REVISION_SEED_REVISIONS = {"0013", "0014", "0015", "0016"}
 PLANNING_REVISION_PENDING_IDENTITY = (
     "read_connected_journey_fact_pending",
     "uuid, uuid, text, uuid",
 )
-PLANNING_REVISION_SEED_IDENTITY = (
+PLANNING_REVISION_BUDGET_SEED_IDENTITY: tuple[str, str] = (
+    "seed_demo_planning_revision_budget", "uuid, uuid",
+)
+PLANNING_REVISION_SEED_IDENTITY: tuple[str, str] = (
     "seed_demo_planning_revision_fact",
     "uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, uuid, jsonb, "
     "text, text, text, text",
@@ -197,7 +200,7 @@ PLANNING_REVISION_SEED_IDENTITY = (
 
 
 def expected_app_policy_count(alembic_revision: str) -> int:
-    return 44 if alembic_revision in {"0014", "0015"} else 38
+    return 44 if alembic_revision in {"0014", "0015", "0016"} else 38
 
 
 def timeline_execution_function_identities(
@@ -205,7 +208,7 @@ def timeline_execution_function_identities(
 ) -> set[tuple[str, str]]:
     return (
         set(TIMELINE_EXECUTION_FUNCTION_IDENTITIES)
-        if alembic_revision in {"0014", "0015"}
+        if alembic_revision in {"0014", "0015", "0016"}
         else set()
     )
 IGNORED_DIRECTORIES = {
@@ -1292,8 +1295,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0015"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0015")
+    if heads != {"0016"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0016")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -1306,10 +1309,16 @@ def verify_alembic_contract() -> None:
         "inside-dra-strict-migration": 3,
         "tests/integration/dra/test_dra_strict_migration.py": 2,
         'run_lane "${BASE_PROJECT_NAME}-dra-strict-migration"': 2,
-        "inside-planning-revision": 11,
+        "inside-planning-revision": 14,
         "inside-planning-revision-seed-migration": 3,
         "tests/integration/planning/test_revision_seed_migration.py": 4,
         'run_lane "${BASE_PROJECT_NAME}-planning-revision-seed-migration"': 2,
+        "inside-planning-revision-budget-seed-migration": 3,
+        'run_lane "${BASE_PROJECT_NAME}-planning-revision-budget-seed-migration"': 2,
+        "tests/integration/planning/test_revision_budget_seed.py": 5,
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=absent-0015": 2,
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=authority-0016": 1,
+        "NIGHT_VOYAGER_BUDGET_SEED_PHASE=restored-0016": 1,
         "inside-timeline-execution-migration": 3,
         "inside-timeline-execution-authority": 3,
         "inside-timeline-execution-http": 3,
@@ -1339,9 +1348,10 @@ def verify_alembic_contract() -> None:
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0015 with planning-start, "
+        "proof migrations: exact Alembic head 0016 with planning-start, "
         "DRA live, strict parity, planning-revision, migrator-only "
-        "revision-seed, governed timeline-execution, and closed demo-identity "
+        "revision-seed and initial-budget seed, governed timeline-execution, "
+        "and closed demo-identity "
         "lanes confirmed"
     )
 
@@ -1524,7 +1534,7 @@ async def verify_database_catalog(database_url: str) -> None:
             )
             timeline_execution_tables = (
                 TIMELINE_EXECUTION_TABLES
-                if alembic_revision in {"0014", "0015"}
+                if alembic_revision in {"0014", "0015", "0016"}
                 else set[str]()
             )
             tenant_tables = (
@@ -1641,6 +1651,7 @@ async def verify_database_catalog(database_url: str) -> None:
                           ('publish_case_revision','transition_case','persist_source_pack',
                            'persist_evidence_ref','persist_planning_result','review_planning_run',
                            'decide_family_brief','create_agent_task','cancel_agent_task',
+                           'retry_agent_task','project_agent_task_retry_eligible',
                            'claim_agent_task','start_agent_task','heartbeat_agent_task',
                            'fail_agent_task','finalize_agent_task_result')
                            OR p.proname IN
@@ -1657,7 +1668,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'read_memory_candidates','read_confirmed_facts',
                            'read_connected_journey_fact_pending',
                            'seed_demo_collaboration',
-                           'seed_demo_planning_revision_fact')
+                           'seed_demo_planning_revision_fact',
+                           'seed_demo_planning_revision_budget')
                            OR p.proname IN
                           ('create_skill_change_candidate','record_skill_candidate_evaluation',
                            'promote_skill_change_candidate','rollback_skill_activation',
@@ -1702,6 +1714,11 @@ async def verify_database_catalog(database_url: str) -> None:
                 | SKILL_API_FUNCTIONS
                 | SKILL_WORKER_FUNCTIONS
             )
+            if alembic_revision == "0016":
+                expected_app_functions |= {
+                    "retry_agent_task", "project_agent_task_retry_eligible",
+                    PLANNING_REVISION_BUDGET_SEED_IDENTITY[0],
+                }
             app_function_identities = {
                 (row["proname"], row["identity_arguments"]) for row in app_functions
             }
@@ -1786,11 +1803,13 @@ async def verify_database_catalog(database_url: str) -> None:
             if alembic_revision in PLANNING_REVISION_PENDING_REVISIONS:
                 api_functions.remove("persist_planning_result")
                 api_functions.add(PLANNING_REVISION_PENDING_IDENTITY[0])
-            if alembic_revision in {"0014", "0015"}:
+            if alembic_revision in {"0014", "0015", "0016"}:
                 api_functions |= {
                     identity[0]
                     for identity in TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES
                 }
+            if alembic_revision == "0016":
+                api_functions |= {"retry_agent_task", "project_agent_task_retry_eligible"}
             worker_functions = {
                 "claim_agent_task",
                 "start_agent_task",
@@ -1915,13 +1934,20 @@ async def verify_database_catalog(database_url: str) -> None:
                     row["worker_execute"],
                 )
                 for row in app_functions
-                if row["proname"] == PLANNING_REVISION_SEED_IDENTITY[0]
+                if row["proname"] in {
+                    PLANNING_REVISION_SEED_IDENTITY[0],
+                    PLANNING_REVISION_BUDGET_SEED_IDENTITY[0],
+                }
             }
             expected_planning_revision_seed_function = (
                 {PLANNING_REVISION_SEED_IDENTITY: (False, False)}
                 if alembic_revision in PLANNING_REVISION_SEED_REVISIONS
                 else {}
             )
+            if alembic_revision == "0016":
+                expected_planning_revision_seed_function[
+                    PLANNING_REVISION_BUDGET_SEED_IDENTITY
+                ] = (False, False)
             if (
                 planning_revision_seed_function
                 != expected_planning_revision_seed_function

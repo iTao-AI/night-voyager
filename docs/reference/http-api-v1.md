@@ -94,6 +94,7 @@ exact configured `Origin`, session CSRF, and `Idempotency-Key`. Responses use
 | `POST /api/v1/cases/{case_id}/agent-tasks` | `202` idempotent synthetic or governed mixed planning create |
 | `GET /api/v1/tasks/{task_id}` | public task projection |
 | `POST /api/v1/tasks/{task_id}/cancel` | expected-row-version, idempotent cancellation |
+| `POST /api/v1/tasks/{task_id}/retry` | `202` guarded fresh task from an eligible terminal source |
 | `GET /api/v1/tasks/{task_id}/events` | authorized SSE replay/reconnect |
 
 Create accepts schema version 1, expected Case revision, source-pack ID/version,
@@ -106,6 +107,20 @@ Public responses expose status, attempts,
 sanitized code, and an optional PlanningRun ID/currentness; they do not expose
 internal task state, dispatch, leases, tenant/session IDs, raw output, or worker
 errors.
+
+Retry accepts exactly `{schema_version: 1, expected_row_version: positive integer,
+expected_case_revision: positive integer}` and no operation, source or Skill pins.
+It requires the current assigned advisor, current planning Case/revision, latest
+exact terminal source, matching row version, no accepted result and no successor.
+Allowlisted outcomes are `failed` with `transient_unavailable`,
+`transport_interrupted` or `lease_expired`, and `timed_out` with
+`deadline_exceeded`. Hard/unknown/cancelled/outdated failures are ineligible.
+The server preserves the canonical source operation/pack/policy and resolves the
+current packaged Skill. A fresh key records advisor consent; exact body/key replay
+returns the same successor while current authority still applies. Stale/ineligible
+commands return `409`; unauthorized identity remains non-enumerating. Ordinary
+create keys cannot replay as retry. The old task and diagnostics remain history,
+and the new result requires fresh advisor review. See [ADR 0015](../decisions/0015-guarded-terminal-task-recovery.md).
 
 Migration `0009` changes only the transaction behind the existing create route; its
 request and response schemas are unchanged. An assigned advisor's first valid
@@ -157,8 +172,13 @@ current Case revision, current successor, current Brief, and exact approving
 advisor review form one durable chain.
 
 The journey-status is participant-safe recovery authority, not browser storage.
-Assigned advisor, student, and parent see the same durable phase and only their
-own verified `active_role`. The exact response keys are `schema`, `case_id`,
+Assigned advisor, student, and parent see the same durable phase. During
+`revision_requested`, a verified parent receives `active_role=parent` for a
+budget proposal; verified students and the advisor entry receive `student` for
+country preferences. Other phases retain their existing advisor/parent mapping.
+This projection does not grant mutation authority: the source-role fact matrix
+still permits `family.budget` only for parents and country preferences only for
+students. The exact response keys are `schema`, `case_id`,
 `current_revision`, `phase`, and `active_role`. It exposes no task, run, review,
 route, Evidence, comparison, candidate, hash, value, or authority identity.
 Unassigned and cross-tenant callers keep the existing role-safe unavailable
@@ -340,8 +360,8 @@ explicit historical status.
 
 ## M5 same-origin BFF
 
-The connected browser uses thirteen explicit `/api/demo/*` Route Handlers for
-session bootstrap/create/delete, Ledger read, task create/read/cancel/events,
+The connected browser uses explicit `/api/demo/*` Route Handlers for
+session bootstrap/create/delete, Ledger read, task create/read/cancel/retry/events,
 advisor review, current Brief read, journey-status read, case-scoped plan-execution
 context read, and family decision. There is no catch-all
 proxy. The BFF validates UUID path segments, bounded bodies and deadlines,
@@ -357,6 +377,23 @@ The current Brief `decision_requirements` contains the eligible Australia route
 identity, `currency=CNY`, pinned cost, hard ceiling, and exact one-element
 `required_trade_offs=["budget_elasticity"]`. These values come from current
 PostgreSQL rows and deterministic policy, not fixture labels or client constants.
+
+The parent form suggests a cost-to-ceiling range but sends its actual edited
+whole-yuan CNY inputs as safe integer minor units. It requires a positive interval
+containing the pinned cost, within the ceiling, a separate acknowledgment for
+`budget_elasticity`, and final parent consent. The route and expected Brief version
+come from that current Brief. The body schema and backend eligibility policy are
+unchanged. The returned immutable receipt preserves submitted choices.
+
+The closed V3 advisor-family recovery envelope may contain optional `familyIntent`
+with exact `schema_version=1`, `briefId` and the existing `FamilyDecisionBody` as
+`body`, paired with a persisted `family-decision` fingerprint/key. Only a current
+matching Brief ID/version and requirements may restore these explicitly submitted
+choices; final consent is unchecked on reload. Key-only envelopes do not rebuild
+submitted choices or acknowledge trade-offs. Edited submitted values receive a new
+intention/key; ambiguous retries retain the exact original body/key. Brief identity
+or version changes discard old acceptance and replay; a stale decision rejection
+reloads authoritative current state.
 
 Planning-revision clients opt the Ledger and current Brief into exact
 `contract_version=2`, recover from `/journey-status`, and persist a closed V3
@@ -375,3 +412,8 @@ The UI cannot submit role, current action, due date, risk, or an authority date.
 Lost acknowledgements may replay only the exact persisted request body and
 idempotency key. Presentation locale, viewport, focus, and reduced-motion
 preference never enter these requests.
+
+For the local editable-revision and explicit family/retry UI walkthrough, see
+[customer revision and recovery](../operations/customer-revision-recovery.md)
+and its [acceptance record](../evidence/customer-revision-recovery.md).
+These current branch contracts do not alter immutable tagged-release guidance.

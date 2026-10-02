@@ -26,7 +26,7 @@ from night_voyager.tasks.errors import (
     TaskLeaseLostError,
     TaskTransientError,
 )
-from night_voyager.tasks.models import CancelTaskCommand, CreateTaskCommand
+from night_voyager.tasks.models import CancelTaskCommand, CreateTaskCommand, RetryTaskCommand
 from night_voyager.tasks.worker import (
     AgentTaskClaim,
     TaskPinInvalidError,
@@ -120,6 +120,41 @@ class PostgresTaskRepository:
             raise RuntimeError("created task is not readable")
         return {**row, "replayed": created.replayed}
 
+    async def retry(
+        self,
+        context: ActorContext,
+        command: RetryTaskCommand,
+        task_id: UUID,
+        idempotency_key: str,
+        skill_manifest: SkillRuntimeManifestEntryV1,
+    ) -> dict[str, object]:
+        try:
+            result = await self._session.execute(
+                text(
+                    "SELECT * FROM app.retry_agent_task("
+                    ":org,:actor,:source,:version,:revision,:task,"
+                    "CAST(:manifest AS jsonb),:request_hash,:key_hash)"
+                ),
+                {
+                    "org": context.organization_id,
+                    "actor": context.actor_id,
+                    "source": command.task_id,
+                    "version": command.expected_row_version,
+                    "revision": command.expected_case_revision,
+                    "task": task_id,
+                    "manifest": skill_manifest.model_dump_json(exclude_none=True),
+                    "request_hash": canonical_request_sha256(command.model_dump(mode="json")),
+                    "key_hash": self._key_hash(idempotency_key),
+                },
+            )
+        except DBAPIError as error:
+            self._raise_mapped(error)
+        created = result.mappings().one()
+        row = await self.get(context, created.task_id)
+        if row is None:
+            raise RuntimeError("retried task is not readable")
+        return {**row, "replayed": created.replayed}
+
     async def get(self, context: ActorContext, task_id: UUID) -> dict[str, object] | None:
         result = await self._session.execute(
             text(
@@ -150,18 +185,22 @@ class PostgresTaskRepository:
             return None
         task = dict(row)
         authority = (
-            await self._session.execute(
-                text(
-                    "SELECT execution_id,terminal_event_id "
-                    "FROM app.project_agent_task_live_authority(:org,:actor,:task)"
-                ),
-                {
-                    "org": context.organization_id,
-                    "actor": context.actor_id,
-                    "task": task_id,
-                },
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT execution_id,terminal_event_id "
+                        "FROM app.project_agent_task_live_authority(:org,:actor,:task)"
+                    ),
+                    {
+                        "org": context.organization_id,
+                        "actor": context.actor_id,
+                        "task": task_id,
+                    },
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         task.update(authority)
         if task["skill_definition_id"] is None:
             task["skill_key"] = None
@@ -253,6 +292,8 @@ class PostgresTaskRepository:
             raise TaskConflictError("skill_version_unavailable") from error
         if sqlstate == "NV022":
             raise TaskConflictError("skill_pin_invalid") from error
+        if sqlstate == "NV023":
+            raise TaskConflictError("task_retry_ineligible") from error
         if sqlstate == "NV007":
             raise TaskAuthorizationError from error
         raise error

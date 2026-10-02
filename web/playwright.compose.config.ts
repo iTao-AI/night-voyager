@@ -10,6 +10,7 @@ export default defineConfig({
     "collaboration-demo.spec.ts",
     "fact-to-plan.spec.ts",
     "planning-revision.spec.ts",
+    "customer-revision-recovery.spec.ts",
     "plan-execution-minimal.spec.ts",
     "plan-execution.spec.ts",
     ...(presentationAudit

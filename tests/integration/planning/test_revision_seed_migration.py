@@ -47,7 +47,7 @@ async def _set_context(connection: AsyncConnection) -> None:
     )
 
 
-async def _seed_anchor(
+async def seed_anchor(
     connection: AsyncConnection,
     *,
     case_id: UUID,
@@ -136,7 +136,7 @@ def _helper_parameters() -> dict[str, object]:
     }
 
 
-async def _call_helper(
+async def call_helper(
     connection: AsyncConnection,
     parameters: dict[str, object] | None = None,
 ) -> None:
@@ -151,7 +151,7 @@ async def _call_helper(
     )
 
 
-async def _authority_count(connection: AsyncConnection) -> int:
+async def authority_count(connection: AsyncConnection) -> int:
     value = await connection.scalar(
         text(
             "SELECT "
@@ -216,12 +216,12 @@ async def test_planning_revision_seed_helper_migration_phase() -> None:
 
         async with engine.begin() as connection:
             await _set_context(connection)
-            await _seed_anchor(
+            await seed_anchor(
                 connection,
                 case_id=HAPPY_CASE,
                 thread_id=HAPPY_THREAD,
             )
-            await _seed_anchor(
+            await seed_anchor(
                 connection,
                 case_id=BUDGET_CASE,
                 thread_id=BUDGET_THREAD,
@@ -273,10 +273,10 @@ async def test_planning_revision_seed_helper_migration_phase() -> None:
                         DBAPIError,
                         match="planning revision demo seed mismatch",
                     ):
-                        await _call_helper(connection)
+                        await call_helper(connection)
                 finally:
                     await nested.rollback()
-                assert await _authority_count(connection) == 0
+                assert await authority_count(connection) == 0
 
             invalid = _helper_parameters()
             invalid["value_hash"] = "f" * 64
@@ -286,14 +286,14 @@ async def test_planning_revision_seed_helper_migration_phase() -> None:
                     DBAPIError,
                     match="planning revision demo seed mismatch",
                 ):
-                    await _call_helper(connection, invalid)
+                    await call_helper(connection, invalid)
             finally:
                 await nested.rollback()
-            assert await _authority_count(connection) == 0
+            assert await authority_count(connection) == 0
 
-            await _call_helper(connection)
-            assert await _authority_count(connection) == 5
-            await _call_helper(connection)
-            assert await _authority_count(connection) == 5
+            await call_helper(connection)
+            assert await authority_count(connection) == 5
+            await call_helper(connection)
+            assert await authority_count(connection) == 5
     finally:
         await engine.dispose()

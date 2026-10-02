@@ -848,7 +848,10 @@ test("fact-to-plan.spec.ts proves one governed same-Case browser-to-database jou
   await expect(page.getByRole("heading", { name: presentationCopy.familyBrief })).toBeVisible({ timeout: 30_000 });
   await page.reload();
   await expect(page.getByRole("heading", { name: presentationCopy.familyBrief })).toBeVisible();
-  await page.getByRole("checkbox").check();
+  await page.getByLabel(/接受预算下限（元）|Accepted budget minimum \(yuan\)/).fill("300000");
+  await page.getByLabel(/接受预算上限（元）|Accepted budget maximum \(yuan\)/).fill("350000");
+  await page.getByRole("checkbox", { name: /我接受：预算弹性|I accept: Budget flexibility/ }).check();
+  await page.getByRole("checkbox", { name: /我以家长身份确认|As parent, I confirm/ }).check();
   await page.getByRole("button", { name: presentationCopy.continueDecision }).click();
   await expect(page.getByRole("heading", { name: presentationCopy.receipt })).toBeVisible();
   await expect(page.getByRole("heading", { name: presentationCopy.timeline })).toBeVisible();

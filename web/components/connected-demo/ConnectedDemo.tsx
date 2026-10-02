@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 
-import type { ConfirmedFactAdvisor } from "../../lib/collaboration-demo/contracts";
+import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor } from "../../lib/collaboration-demo/contracts";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import type { DemoDisplayState } from "../../lib/connected-demo/reducer";
@@ -57,7 +57,7 @@ export function ConnectedDemo() {
   };
 
   useEffect(() => {
-    const busy = ["task_creating", "review_submitting", "decision_submitting", "role_switching"].includes(state.value);
+    const busy = demo.retrySubmitting || ["task_creating", "review_submitting", "decision_submitting", "role_switching"].includes(state.value);
     if (userTransition.current && previousState.current !== state.value && !busy) {
       const heading = document.querySelector<HTMLElement>("#demo-main .workspace-current-work > h2");
       heading?.setAttribute("tabindex", "-1");
@@ -65,7 +65,7 @@ export function ConnectedDemo() {
       userTransition.current = false;
     }
     previousState.current = state.value;
-  }, [state.value]);
+  }, [state.value, demo.retrySubmitting]);
 
   useEffect(() => {
     if (demo.journeyConflict && previousConflict.current !== demo.journeyConflict) conflictHeading.current?.focus();
@@ -88,12 +88,12 @@ export function ConnectedDemo() {
     state.value,
     "prior" in state && state.prior ? workflowReference(state.prior) : undefined,
   );
-  const busy = ["task_creating", "task_streaming", "review_submitting", "role_switching", "recoverable_error"].includes(state.value);
+  const busy = demo.retrySubmitting || ["task_creating", "task_streaming", "review_submitting", "role_switching", "recoverable_error"].includes(state.value);
   const primaryFor = (current: Ledger) => {
     switch (current.phase) {
       case "task_ready": return () => demo.createTask();
+      case "terminal_task_failure": return () => demo.retryTerminalTask();
       case "review_required": return () => demo.approve();
-      case "revision_fact_pending": return () => demo.confirmPreferredCountries();
       case "replan_required": return () => demo.createRevisionTask();
       case "revision_review_required": return () => demo.approveRevision();
       default: return () => undefined;
@@ -132,7 +132,11 @@ export function ConnectedDemo() {
     <RevisionFactEditor
       currentFacts={demo.currentFacts}
       expectedCaseRevision={state.status.current_revision}
-      onSubmit={() => runUserAction(() => demo.submitPreferredCountries())}
+      activeRole={state.status.active_role === "parent" ? "parent" : "student"}
+      onPrepareFact={(factKey) => runUserAction(() => demo.prepareRevisionFact(factKey))}
+      onSubmit={(intent) => runUserAction(() => demo.submitRevision(intent))}
+      submittedIntent={demo.revisionIntent}
+      busy={demo.revisionSubmitting}
     />
   ) : rotateAction ? (
     <section className="collaboration-action" aria-live="polite">
@@ -141,13 +145,15 @@ export function ConnectedDemo() {
       <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" onClick={() => runUserAction(rotateAction.run)}>{copy(rotateAction.action)}</button>
     </section>
   ) : state.value === "family_review" ? (
-    <FamilyDecisionAction brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} />
+    <FamilyDecisionAction brief={state.brief} draft={demo.familyDraft} onDraftChange={demo.setFamilyDraft} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} />
   ) : state.value === "recoverable_error" ? (
     <RecoveryAction onReconnect={() => runUserAction(() => demo.retry())} />
   ) : ledgerOwnsAction && ledger ? (
     <AdvisorLedgerAction
       ledger={ledger}
       busy={busy}
+      revisionCandidates={demo.revision?.candidates.filter((candidate): candidate is MemoryCandidateAdvisor => "candidate_id" in candidate)}
+      onConfirmRevision={(reason) => runUserAction(() => demo.confirmRevision(reason))}
       onPrimaryAction={() => runUserAction(primaryFor(ledger))}
       onSecondaryAction={ledger.phase === "review_required" ? () => runUserAction(() => demo.requestRevision()) : undefined}
     />
@@ -208,7 +214,7 @@ export function ConnectedDemo() {
         <section className="ledger-hero" aria-live="polite"><h3>{copy(rotateAction.title)}</h3><p>{copy(rotateAction.body)}</p></section>
       ) : null}
 
-      {!demo.journeyConflict && state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} renderAction={false} /> : null}
+      {!demo.journeyConflict && state.value === "family_review" ? <FamilyDecisionBrief brief={state.brief} draft={demo.familyDraft} onDraftChange={demo.setFamilyDraft} confirmed={demo.confirmed} onConfirm={demo.setConfirmed} onSubmit={() => runUserAction(() => demo.decide())} renderAction={false} /> : null}
       {!demo.journeyConflict && state.value === "decision_submitting" ? <section className="ledger-hero" aria-live="polite"><h3>{copy("demoRecordingDecision")}</h3></section> : null}
       {!demo.journeyConflict && state.value === "plan_ready" ? (
         <>

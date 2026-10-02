@@ -156,8 +156,8 @@ def _verified_row(*, blocked: bool) -> dict[str, object]:
         "run_predecessor": "4d000000-0000-0000-0000-000000000001",
         "current_run_state": "blocked" if blocked else "review_required",
         "revision_count": 2,
-        "candidate_count": 2,
-        "confirmed_fact_count": 2,
+        "candidate_count": 3,
+        "confirmed_fact_count": 3,
         "run_count": 2,
         "current_run_count": 1,
         "revised_task_count": 1,
@@ -203,7 +203,7 @@ def test_revision_browser_proof_parser_and_exact_count_validation(tmp_path: Path
 
 @pytest.mark.parametrize(
     ("field", "value"),
-    (("candidate_count", 1), ("execution_count", 1), ("task_event_count", 6)),
+    (("candidate_count", 2), ("execution_count", 1), ("task_event_count", 6)),
 )
 def test_revision_happy_verifier_fails_closed_on_count_drift(
     field: str, value: int

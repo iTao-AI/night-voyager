@@ -17,6 +17,7 @@ from night_voyager.skills.registry import SkillRuntimeRegistry
 from night_voyager.tasks.application import (
     CancelTaskCommand,
     CreateTaskCommand,
+    RetryTaskCommand,
     TaskService,
 )
 from night_voyager.tasks.errors import TaskAuthorizationError
@@ -95,6 +96,16 @@ class FakeRepository:
         self.calls.append(("create", context, command, task_id, idempotency_key, skill_manifest))
         assert self.row is not None
         return {**self.row, "task_id": task_id, "replayed": False}
+
+    async def retry(
+        self,
+        context: ActorContext,
+        command: RetryTaskCommand,
+        task_id: UUID,
+        idempotency_key: str,
+        skill_manifest: SkillRuntimeManifestEntryV1,
+    ) -> dict[str, object]:
+        raise AssertionError("unexpected recovery operation")
 
     async def get(self, context: ActorContext, task_id: UUID) -> dict[str, object] | None:
         self.calls.append(("get", context, task_id))
@@ -192,9 +203,7 @@ async def test_get_applies_currentness_override_and_non_enumeration() -> None:
     assert result["status"] == "outdated"
     assert result["planning_run_id"] == UUID(int=7)
 
-    authority = await service.get(
-        actor(), TASK, include_live_authority=True
-    )
+    authority = await service.get(actor(), TASK, include_live_authority=True)
     assert authority is not None
     assert {
         key: authority[key]

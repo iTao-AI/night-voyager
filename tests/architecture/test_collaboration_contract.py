@@ -233,7 +233,7 @@ def test_database_runner_proves_empty_round_trips_before_full_collaboration_seed
         < full_seed
         < refusal
     )
-    assert "0015 plan execution demo identity exists" in runner
+    assert "terminal task recovery history exists" in runner
 
 
 def test_database_runner_isolates_legacy_mixed_downgrade_from_collaboration_history() -> None:
@@ -323,7 +323,7 @@ def test_database_runner_explicitly_bounds_plan_execution_seed_capability() -> N
         "--without-planning-revision --without-plan-execution",
     )
     assert historical_invocations[0] in runner
-    assert runner.count(historical_invocations[1]) == 4
+    assert runner.count(historical_invocations[1]) == 6
 
     migration_lane = runner[
         runner.index('if [ "${1:-}" = "inside-timeline-execution-migration" ]') :
@@ -333,14 +333,14 @@ def test_database_runner_explicitly_bounds_plan_execution_seed_capability() -> N
     ]
     assert (
         "uv run --no-editable python scripts/seed_demo.py "
-        "--without-plan-execution"
+        "--without-planning-revision --without-plan-execution"
     ) in migration_lane
     assert (
         migration_lane.index("--without-plan-execution")
         < migration_lane.rindex("uv run --no-editable python scripts/seed_demo.py")
         < migration_lane.index("uv run alembic upgrade head")
     )
-    assert runner.count("--without-plan-execution") == 9
+    assert runner.count("--without-plan-execution") == 10
 
     head_seed_lanes = (
         "inside-skill-seed-replay",

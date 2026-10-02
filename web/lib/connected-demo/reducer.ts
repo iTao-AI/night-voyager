@@ -57,7 +57,7 @@ function authoritative(
   after = 0,
 ): DemoDisplayState {
   if (status.phase === "revision_requested") {
-    return status.active_role === "student" && ledger === undefined && brief === undefined
+    return ["student", "parent"].includes(status.active_role) && ledger === undefined && brief === undefined
       ? { value: "revision_requested", status }
       : invalid;
   }
