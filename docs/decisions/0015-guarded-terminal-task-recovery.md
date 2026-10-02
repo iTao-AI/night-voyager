@@ -2,10 +2,10 @@
 
 Status: Accepted
 
-Implementation status: Local Task 3 implementation independently reviewed;
-Task 4 native/Compose/browser acceptance is locally verified. Final branch review
-and owner acceptance remain pending. No hosted delivery or provider action
-is implied by this decision.
+Implementation status: Local implementation, Task 4 native/Compose/bilingual
+browser acceptance, final branch review and owner acceptance are complete.
+Scoped review resolved the final copy/document findings. No hosted delivery or
+provider action is implied by this decision.
 
 ## Context
 

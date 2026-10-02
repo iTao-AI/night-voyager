@@ -38,11 +38,13 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 ## Editable decisions and terminal recovery
 
 The [approved design](specs/2026-10-01-customer-revision-recovery.md) and
-[active implementation plan](plans/2026-10-01-customer-revision-recovery.md) cover
+[completed local implementation plan](plans/2026-10-01-customer-revision-recovery.md) cover
 supported household revisions, explicit family choices, and advisor-authorized
 fresh-task recovery. The revision and family input slices are implemented locally.
 Recovery implementation is independently reviewed locally. Migration `0016` is
 current in this branch; complete native/Compose and bilingual browser acceptance
 is locally verified. See the [walkthrough](../operations/customer-revision-recovery.md)
 and [acceptance record](../evidence/customer-revision-recovery.md). Final branch
-review and owner acceptance remain pending. This work is not released.
+review, scoped correction review and owner acceptance are complete locally.
+Task-owned ephemeral resources are released; the branch/worktree and evidence are
+retained. This work is not released.

@@ -1,13 +1,16 @@
 # Customer revision and recovery acceptance
 
-Date: 2026-10-02. Status: local native/UI acceptance verified; final branch review and
-owner acceptance pending. This controlled synthetic pilot is not a published
+Date: 2026-10-02. Status: local native/UI verification, independent review and
+owner acceptance complete. This controlled synthetic pilot is not a published
 release, deployment, real-family outcome or live-provider proof.
 
-The reviewed implementation input is `5d2ec2ca3ea4e0966b67e90868f8060eda657056`
-on `codex/customer-revision-recovery`. Tasks 1–3 are independently reviewed.
+The final executable verification input is `cf4871a113fefe780651544b9189f41e4061ae7e`
+on `codex/customer-revision-recovery`. Native authority gates ran at
+`5d2ec2ca3ea4e0966b67e90868f8060eda657056`; their unchanged source, fixture and
+migration trees were checked before reusing those results. Tasks 1–3 are
+independently reviewed. Final documentation reconciliation preserves these inputs.
 Acceptance follows the [approved design](../superpowers/specs/2026-10-01-customer-revision-recovery.md)
-and [active plan](../superpowers/plans/2026-10-01-customer-revision-recovery.md).
+and [completed local plan](../superpowers/plans/2026-10-01-customer-revision-recovery.md).
 See the [runnable walkthrough](../operations/customer-revision-recovery.md).
 
 ## Current verified boundaries
@@ -36,13 +39,13 @@ locks; counts describe their separate lanes and are not unique-test totals.
 | `SUITE=authority sh scripts/run_collaboration_db_tests.sh` | Exit 0: catalog 51, native 46, revision/historical and five downgrade scenarios |
 | Required backend `-m "not database and not mke"` | 1505 passed / 386 deselected |
 | `uv lock --check`, Ruff, Pyright with isolated interpreter | Exit 0; Pyright 0 errors/warnings |
-| Web lint, TypeScript, Vitest, default Next.js build | Exit 0; 46 files / 555 tests; Next.js 16.3.6 Turbopack build |
+| Web lint, TypeScript, Vitest, default Next.js build | Exit 0; final 46 files / 559 tests; Next.js 16.3.6 Turbopack build, including the final compiled Compose web input |
 | DRA fixture/rehearsal, synthetic fixture validation | Exit 0, provider-free |
 | Existing hermetic MKE smoke | 10 passed; separate from unavailable external artifact proof |
 | Hash-constrained `uv build` and actual archive inspection | Exit 0; sdist has no task scratch/venv/node_modules/Next build; wheel resources equal both authoritative fixtures |
 | `Dockerfile.proof` target `proof`, task-owned tag | Exit 0; isolated installed-wheel import and API app factory |
 | `sh scripts/verify_compose.sh planning-revision` | Exit 0: base health/native flows, API/worker restart, SSE, real lock/lease reclaim; zh-CN/en country revision, fresh review, receipt and blocked counterfactual |
-| Bilingual parent-budget/native recovery supplement | Exit 0: zh-CN 28.8s / en 34.7s; real parent 503/reload, changed budget, native timeout, explicit retry 202/new task/SSE, fresh review, receipt 300000–360000, hard/controlled-unknown negatives and exact source-diagnostic equality |
+| Bilingual parent-budget/native recovery supplement | Exit 0: final copy run zh-CN 33.3s / en 34.7s; real parent 503/reload, changed budget, native timeout, explicit retry 202/new task/SSE, fresh review, receipt 300000–360000, hard/controlled-unknown negatives and exact source-diagnostic equality |
 
 The default native main explicitly imports from installed `site-packages` with
 `uv run --no-editable python -m pytest`, without a source `PYTHONPATH`. Host
@@ -62,8 +65,8 @@ fixture tree: `878f179bb67ff51a56de7c305592a9bfe447ca89`.
 | Host wheel `night_voyager-0.1.6-py3-none-any.whl` (258,502 bytes) | `68f9e3b944564cc2d7035a762d41a3c0fa089a37b5dda1b5f78bc3cd629b010f` |
 
 The native UI API image was
-`sha256:664f019232e30c66ab81bb95f42f15bdf83b486e3770be3cea1b08add0e97f30`;
-web image `sha256:317f77da4b84258c4797afa984efc6389112aadd60f7e051f39d96ca0841ce2d`.
+`sha256:b8303f7765ede99007558c46964d19a86838303f5cfbccd9d88a1a8d96c071f9`;
+web image `sha256:e221d7f0f487c29492e398bff9033b8e5f40f7777c16a6ca4f042c2550178731`.
 Their installed package/resource bytes were checked before disposable cleanup.
 Migration `0016` hash is
 `818652d2f639608613273041b6479719581a14646a4168bcb76361f1ef300d64`;
@@ -150,6 +153,27 @@ Fresh country proof also passes its 1440/768/390/320 overflow/restart/reclaim ga
 No generated public screenshot was replaced. UI review evidence does not replace
 native functional authority.
 
+## Final review and local completion
+
+The single whole-branch review at
+`7ec9e8852bf13756e75432d6b15ea62f9b97ecbc` was Approved with no Critical or
+Important finding. Both Minor findings are resolved: the eligible terminal
+caption correction at `f8c08eb5192b3dcc0dec47d3cc3b2ab0e595731d` and the stale
+route-map handler count at `cf4871a113fefe780651544b9189f41e4061ae7e` received
+targeted re-review. The caption regression failed before the correction, then
+the focused 56-test suite and final 559-test frontend suite passed.
+
+Fresh compiled zh-CN/en captures at 1440/390 show both eligible summaries describing
+the server-authorized action. Hard and controlled-unknown failures retain the
+no-action explanation and expose no retry controls. The delivery owner inspected
+the actual captures, native logs, archive bytes, resource hashes and source binding
+before accepting the local result. Earlier successful country and native gates
+are reused only where their executable inputs are unchanged.
+
+Task-owned Compose/build resources and sleep assertions were released. Shared
+Docker resources and all Git worktrees were preserved; the task branch, isolated
+environment and recoverable evidence remain available. No pull request was created.
+
 ## Remaining boundaries
 
 Nine optional MKE retained-artifact tests require the separately retained native
@@ -158,4 +182,4 @@ passed; it is not fabricated or copied from another checkout. Required backend
 CI excludes `mke`; hermetic provider-free contracts are separate evidence.
 Reassessment successor automation, new dependencies, paid providers, hosted CI,
 push/PR/merge/tag/release/deploy and remote cleanup are outside authorization.
-The final whole-branch review and owner acceptance are still pending.
+All required local acceptance and review gates are complete.
