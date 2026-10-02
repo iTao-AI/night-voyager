@@ -17,7 +17,7 @@ Current presentation wording: advisor-centered route-analysis and downstream cli
 The current visual authority is the [reference-driven presentation spec](../superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](../superpowers/plans/2026-08-14-reference-driven-presentation.md). The root projects `¥300,000–400,000` for the same Case; the connected form suggests `¥305,500–400,000` and persists the parent's explicit accepted interval; `/demo/plan` remains independent.
 
 `/demo` also remains independently available as the advisor route-analysis and
-downstream client-confirmation surface. Thirteen explicit same-origin BFF handlers connect it to the existing FastAPI
+downstream client-confirmation surface. Explicit same-origin BFF handlers connect it to the existing FastAPI
 identity, task, review, decision, SSE, and four connected read endpoints, including
 participant-safe `journey-status`. The approved shell uses one dark product frame,
 warm decision surface, five-stage workflow rail, current-work canvas, evidence rail,
