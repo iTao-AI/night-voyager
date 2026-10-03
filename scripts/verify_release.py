@@ -615,6 +615,7 @@ def verify_public_hygiene() -> None:
         "Developer/" + "Career",
         "BEGIN " + "PRIVATE KEY",
     )
+    local_state_ignore_rules = {"." + "sessions/", "." + "gstack/"}
     credential = re.compile(r"(?i)(api[_-]?key|access[_-]?token)\s*[:=]\s*['\"][^'\"]+['\"]")
     scanned: list[str] = []
     violations: list[str] = []
@@ -624,6 +625,10 @@ def verify_public_hygiene() -> None:
         text = path.read_text(encoding="utf-8", errors="strict")
         relative = str(path.relative_to(ROOT))
         scanned.append(relative)
+        if relative == ".gitignore":
+            text = "\n".join(
+                line for line in text.splitlines() if line not in local_state_ignore_rules
+            )
         if any(value in text for value in forbidden) or credential.search(text):
             violations.append(relative)
     if violations:

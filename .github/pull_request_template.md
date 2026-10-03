@@ -1,4 +1,4 @@
-<!-- 默认使用简体中文填写正文；技术字面量保持原样。仅对真实待完成 merge gate 使用 checkbox。已满足的 merge gate 必须改为 `[x]`；merge 后、closeout 前必须回写并回读最终 PR body；不得保留过期 pending 或 risk 文案。不要增加无实际 gate 的 checklist。 -->
+<!-- 默认使用简体中文填写正文；技术字面量保持原样。说明实际结果、验证和剩余风险；标题与 checkbox 格式不构成额外 merge gate。仅对真实待完成 merge gate 使用 checkbox。创建或更新 PR 后回读 title、body、base、head 和 draft state；交付状态变化后修正过期说明。文档回写失败时，单独报告剩余工作及已验证的代码、merge 和 CI 结果。 -->
 
 ## Summary
 
