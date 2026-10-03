@@ -147,6 +147,21 @@ source manifest
 
 Never implement automatic promotion merely because a model or Agent reports high confidence. Synthetic fixtures and demonstrations must be visibly labelled as synthetic.
 
+## Development Roles And Reasoning Effort
+
+Use the current Sol model configured for the workspace, with only `max`, `high`, and `low`:
+
+- `max`: project-owner conversations, PRD and design, architecture and implementation
+  plans, consequential tradeoffs, delivery coordination, and final acceptance.
+- `high`: complex implementation, root-cause investigations, deep code review,
+  and computer or browser operations.
+- `low`: routine implementation, fixes with an identified cause, tests, and mechanical
+  documentation work when the scope is clear and the result is easy to verify.
+
+Select effort by the assigned responsibility and risk, not the output's file format;
+acceptance standards stay the same. The owner conversation keeps its configured effort;
+explicitly assign the model and effort for each new worker. Delegation is optional.
+
 ## Risk-based execution
 
 Use the lightest process that still produces trustworthy evidence:
@@ -161,16 +176,20 @@ Do not make `autoplan`, a second-model review, subagents, repeated full-reposito
 
 - Use the official `gstack-workflows` plugin for relevant design and review work, and Superpowers
   for implementation, debugging, and verification; select only the current phase's method.
+- Read the current Skill instructions before use. Handoffs include the relevant
+  Skill names and entry points; each worker loads the Skills needed for its task.
+  Briefly identify the chosen method in the existing progress or return.
 - Accept a public-neutral brief or approved repository spec with scope, constraints, observable
   acceptance, delivery owner, Git starting point, and authorization. Use the persistence rules
   below; small work needs only a brief. Directory placement alone is not approval.
-- For a task with a user-designated delegated approval owner, route new approval requests
-  to that owner with the action, scope, impact, and supporting evidence. Existing authorization
-  remains valid within its scope. Require the user's own confirmation when delegation or
-  host rules do not permit delegated approval.
 - Reuse approved design, verify current rules and Git state, and use
   `superpowers:writing-plans` only for implementation gaps. The delivery owner decides in-scope
   details; changes to goals, key design, acceptance, or authorization return to the design owner.
+- When implementation is authorized, the handoff states whether the delivery owner
+  may review and decide in-scope plan details; do not infer this from a spec's directory.
+- Verify rules in the actual execution worktree; another checkout's update does not
+  update this one. Route unresolved approval decisions to the designated coordinating
+  owner when present, and reuse existing authorization within its scope.
 - Choose direct execution for small work, or one plan route: `superpowers:executing-plans` for
   self-implementation, or `superpowers:subagent-driven-development` for managed implementation
   and review. Do not restart the full manager workflow inside a task worker.
@@ -233,6 +252,13 @@ material. For an internal change with no documentation effect, record
 - Every bug fix needs a regression test that demonstrates the failure.
 - Prefer pure functions for deterministic policy and state transitions.
 - Keep remote-provider tests mocked in required CI. Real-provider checks are opt-in and separately documented.
+- Reuse verification when its inputs have not changed; documentation-only edits do
+  not repeat runtime checks. Before another authorized costly run, establish the
+  prior failure's cause and usable diagnostics; changing the harness does not reset
+  failure of the same goal. Scripted provider tests do not prove live model quality.
+- After a second substantive failure of the same real/costly acceptance goal,
+  stop those runs and return to the coordinating owner for a route decision.
+  An explicitly frozen stage requires an explicit instruction to resume.
 - Test tenant isolation and RLS with roles that match runtime behavior, not only a database owner.
 - Cover contracts, invalid transitions, lease expiry/reclaim, idempotency, path validation, and evidence-boundary failures.
 - Avoid speculative dependencies. Add a library only when it removes meaningful risk or complexity, and document why it is needed.
@@ -259,13 +285,13 @@ Report command success only when the command exists and has actually passed in t
 - Local commits are normal task completion after verification and diff review.
 - Write PR titles in concise English Conventional Commit style unless the user explicitly requests otherwise.
 - Write PR descriptions in Simplified Chinese by default for efficient local review, while keeping section headings, commands, code identifiers, API names, CLI output, file paths, and public product terms in English. Use English throughout only when the PR explicitly targets external collaborators or the user requests it.
-- Structure PR descriptions result-first with `Summary`, `Completion`, and `Verification`, followed when relevant by `Scope`, `Risk / Impact`, and `Documentation impact`.
+- Explain the problem, resulting behavior, actual verification and material limits;
+  scale detail to the change. Headings and checkbox style are not extra merge gates.
 - After creating or updating a PR, read back its persisted title, body, base, head, and
   draft state. Use checkboxes only for genuine pending merge gates.
-- When a merge gate becomes satisfied, the PR body must update each corresponding checkbox to `[x]`.
-- After merge and before closeout, perform a final PR body reconciliation. Replace pending claims about hosted checks, authorization, mergeability, review or platform blockers, and cleanup with their actual terminal state and necessary links; update remaining risk while preserving true non-claims such as work that was intentionally not performed.
-- Read back the persisted PR body after final reconciliation. If that update or readback fails, you must not claim that PR closeout is fully complete.
-- A merged PR must not permanently retain a satisfied gate as unchecked or continue to claim that authorization, CI, or cleanup is still pending.
+- Correct materially stale PR claims when delivery changes them. If documentation
+  write-back fails, report remaining work separately from the verified code, merge
+  and CI result.
 - Query hosted CI at low frequency and for a bounded duration. If the wait times out,
   record the exact pending check or trigger and stop instead of polling indefinitely.
 - Before merge, bind the exact base, reviewed HEAD, current PR head, required approvals,
@@ -273,10 +299,9 @@ Report command success only when the command exists and has actually passed in t
   The reviewed HEAD, current PR head, and check SHA must identify the same commit. Any
   commit or diff added after review requires targeted re-review before merge.
 - After a squash merge, verify that the reviewed head tree equals the merge commit tree.
-- Cleanup is a separate ownership and authorization gate. Authorization is specific to
-  each linked worktree, local branch, and remote branch; authorization for one resource
-  class does not authorize another. Remote branch deletion requires separate explicit
-  authorization.
+- Cleanup uses existing explicit authorization for its task-owned targets and resource
+  classes. Do not ask again per object within that scope; a new resource class or
+  expanded deletion scope goes back to the designated approval owner.
 - Remove only task-owned, clean, inactive resources with no open PR or running task,
   after proving that all intended unique changes are retained by merged history, a tag,
   or another explicit authority. Preserve unclear or unrelated resources and confirm
@@ -285,7 +310,9 @@ Report command success only when the command exists and has actually passed in t
   and which task resources were retained or cleaned up.
 - Repository or bootstrap setup is complete only after the applicable GitHub-hosted merge policy, security settings, and `main` ruleset are configured and verified by a live API, CLI, or connector re-query.
 - Required check names must come from successful hosted runs; never infer them from workflow files or memory.
-- Do not push, create or merge a PR, tag, release, publish, or deploy without explicit user authorization.
+- Do not push, create or merge a PR, tag, release, publish, or deploy without explicit
+  authorization, including a valid user delegation. Tool-required user confirmation
+  remains binding.
 - Do not start a feature that depends on an unmerged prerequisite unless the dependency and stacking strategy are explicit.
 
 ## Issues

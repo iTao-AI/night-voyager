@@ -644,8 +644,9 @@ def test_repository_governance_covers_merge_cleanup_and_bounded_ci() -> None:
         "mergeability",
         "requires targeted re-review",
         "After a squash merge",
-        "linked worktree, local branch, and remote branch",
-        "Remote branch deletion requires separate explicit",
+        "Cleanup uses existing explicit authorization for its task-owned targets",
+        "Do not ask again per object within that scope",
+        "expanded deletion scope goes back to the designated approval owner",
         "unique commits",
         "retained or cleaned up",
         "low frequency and for a bounded duration",
@@ -670,32 +671,25 @@ def test_pull_request_template_matches_repository_contract() -> None:
     assert "默认使用简体中文填写正文" in template
 
 
-def final_pr_body_reconciliation_errors(agents: str, template: str) -> list[str]:
+def pr_body_delivery_errors(agents: str, template: str) -> list[str]:
+    agents = " ".join(agents.split())
     required_agent_semantics = {
-        "satisfied_gate_checkbox": (
-            "must update each corresponding checkbox to `[x]`",
+        "no_formatting_gate": (
+            "Headings and checkbox style are not extra merge gates",
         ),
-        "final_reconciliation_timing": (
-            "After merge and before closeout",
-            "final PR body reconciliation",
+        "real_pending_gates": (
+            "Use checkboxes only for genuine pending merge gates",
         ),
-        "terminal_facts": (
-            "hosted checks, authorization, mergeability, review or platform blockers, "
-            "and cleanup",
-            "actual terminal state",
-            "necessary links",
+        "persisted_pr_readback": (
+            "After creating or updating a PR, read back its persisted title, body, base, "
+            "head, and draft state",
         ),
-        "remaining_risk_and_non_claims": (
-            "remaining risk",
-            "true non-claims",
+        "correct_stale_claims": (
+            "Correct materially stale PR claims when delivery changes them",
         ),
-        "persisted_body_gate": (
-            "Read back the persisted PR body",
-            "must not claim that PR closeout is fully complete",
-        ),
-        "no_stale_merged_pr": (
-            "A merged PR must not permanently retain a satisfied gate as unchecked",
-            "authorization, CI, or cleanup is still pending",
+        "separate_documentation_status": (
+            "If documentation write-back fails, report remaining work separately from "
+            "the verified code, merge and CI result",
         ),
     }
     errors = [
@@ -704,28 +698,26 @@ def final_pr_body_reconciliation_errors(agents: str, template: str) -> list[str]
         if not all(token in agents for token in tokens)
     ]
     template_tokens = (
-        "已满足的 merge gate 必须改为 `[x]`",
-        "merge 后、closeout 前必须回写并回读最终 PR body",
-        "不得保留过期 pending 或 risk 文案",
+        "仅对真实待完成 merge gate 使用 checkbox",
+        "创建或更新 PR 后回读 title、body、base、head 和 draft state",
+        "文档回写失败时，单独报告剩余工作",
     )
     if not all(token in template for token in template_tokens):
-        errors.append("template_final_reconciliation")
+        errors.append("template_delivery_facts")
     return errors
 
 
-def test_pr_body_contract_requires_final_reconciliation() -> None:
+def test_pr_body_contract_keeps_verified_delivery_separate_from_documentation_failure() -> None:
     agents = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     template = (ROOT / ".github/pull_request_template.md").read_text(encoding="utf-8")
-    assert final_pr_body_reconciliation_errors(agents, template) == []
+    assert pr_body_delivery_errors(agents, template) == []
 
     counterfactual = agents.replace(
-        "must update each corresponding checkbox to `[x]`",
-        "may leave each corresponding checkbox unchecked",
+        "report remaining work separately from",
+        "block all delivery closeout regardless of",
         1,
     )
-    assert "satisfied_gate_checkbox" in final_pr_body_reconciliation_errors(
-        counterfactual, template
-    )
+    assert "separate_documentation_status" in pr_body_delivery_errors(counterfactual, template)
 
 
 def test_current_documentation_release_and_planning_boundaries_do_not_drift() -> None:

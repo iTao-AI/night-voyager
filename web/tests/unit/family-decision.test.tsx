@@ -165,3 +165,10 @@ it("keeps key-only legacy recovery unacknowledged and rejects malformed submitte
     expect(loadRecoveryMetadata()).toBeNull();
   }
 });
+
+it("separates the English receipt milestone label from its unchanged formatted date", async () => {
+  localStorage.setItem("night-voyager:presentation-locale:v1", "en");
+  render(<PresentationProvider><DecisionReceiptTimeline brief={brief("plan_ready")} /></PresentationProvider>);
+  await screen.findByText("Documents");
+  expect(screen.getByRole("listitem")).toHaveTextContent("Documents · Sep 1, 2026");
+});

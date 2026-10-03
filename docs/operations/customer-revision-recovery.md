@@ -23,14 +23,23 @@ Verified participants share safe current facts; only the parent may propose a
 budget change. Reading a budget as the student does not grant write authority.
 
 1. The assigned advisor requests revision of the current plan.
-2. Choose one fact in the editor. For countries, select a materially different,
+2. Choose one editable confirmed fact in the editor. Choices come from the current
+   server projection: budget-only starts on budget and still requires explicit
+   parent preparation; country-only offers countries; both retain both paths.
+   Missing country confirmation is explained and cannot be supplied by reloading.
+   Missing, stale or wrong-Case projections offer no edit or role-preparation action.
+   A saved submission remains identified, and an unavailable/stale saved fact is
+   retained rather than silently changed into another proposal. For countries,
+   select a materially different,
    nonempty subset of Australia/Japan/Malaysia and continue as the student.
    For budget, choose **Edit budget as parent** to complete the real session
    handoff and load authoritative current facts before entering preferred and
    maximum CNY amounts. Submit the budget proposal as the parent.
    The current and proposed values remain visible. Invalid, unchanged or stale
    facts cannot authorize a revision.
-3. Continue as advisor. Inspect the actual pending candidate and enter a
+3. Click the explicit next-role action; revoke/mint runs after that action,
+   not merely because the waiting panel appeared. Continue as advisor. Inspect the
+   actual pending candidate and enter a
    confirmation reason. Confirmation publishes the next CaseRevision; a draft
    or participant proposal alone cannot change confirmed facts.
 4. Create the revised planning task explicitly. Wait for its authorized SSE

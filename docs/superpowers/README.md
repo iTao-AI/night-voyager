@@ -48,3 +48,8 @@ and [acceptance record](../evidence/customer-revision-recovery.md). Final branch
 review, scoped correction review and owner acceptance are complete locally.
 Task-owned ephemeral resources are released; the branch/worktree and evidence are
 retained. This work is not released.
+
+The [revision UI availability repair](specs/2026-10-03-revision-ui-availability.md)
+is implemented and locally verified. It improves confirmed-fact selection,
+explicit role-handoff guidance and receipt readability while retaining the
+existing server contracts and release boundary.

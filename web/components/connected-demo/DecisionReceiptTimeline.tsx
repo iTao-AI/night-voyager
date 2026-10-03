@@ -26,7 +26,7 @@ export function DecisionReceiptTimeline({ brief }: { brief: CurrentDecisionBrief
       <ol className="timeline">
         {timeline.milestones.map((milestone) => (
           <li key={`${milestone.key}-${milestone.due_date}`}>
-            <strong>{presentCode(locale, "milestone", milestone.key)}</strong>
+            <strong>{presentCode(locale, "milestone", milestone.key)}</strong>{" · "}
             <span>{formatIsoDate(locale, milestone.due_date)}</span>
           </li>
         ))}
