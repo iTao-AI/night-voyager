@@ -1,10 +1,10 @@
 # Controlled February intake revision
 
-Status: Draft for maintainer review; neither approved for implementation nor implemented.
+Status: Approved for local implementation; implementation in progress, runtime acceptance pending.
 Date: 2026-10-06.
 Git starting point: `68de260b1e207f83153d51801501c7775b4f4374`, the merged PR #128 main baseline.
 Delivery owner: the maintainer-directed delivery owner retains design, integration and acceptance.
-Companion: [draft implementation plan](../plans/2026-10-06-controlled-intake-revision.md).
+Companion: [implementation plan](../plans/2026-10-06-controlled-intake-revision.md).
 
 ## Purpose and fixed scenario
 
@@ -111,6 +111,14 @@ stored source-pack rows; they are not derived from a runtime intake request.
 Existing `fixtures/m3a`, all `BASELINE_*` constants, DRA baseline identities and
 tagged Release records remain byte-for-byte unchanged.
 
+The new fixture is also included as package data under
+`night_voyager/planning/data/intake-delay-v1`; its loader resolves installed
+resources independently of checkout cwd. The API builder copies the new
+fixture into its build context, and the final runtime retains the existing
+`/home/app/fixtures` layout. Wheel/archive inventory and exact resource digests
+are checked without calling a source overlay an installed-image proof. A new
+Docker image acceptance run remains a separately authorized gate.
+
 An opt-in `scripts/seed_demo.py --with-intake-revision` setup registers the new
 pack, entries, Evidence and dedicated initial Case through a new migrator-only
 seed helper. The initial confirmed-intake fixture includes student message,
@@ -154,6 +162,12 @@ existing `0016` retry whitelist does not authorize the new pack; a failed new-pa
 task must not advertise retry eligibility. Downgrade refuses before mutation if
 the new fixture has been persisted or intake revision/new-pack task lineage
 exists; otherwise it restores exact `0016` bodies and grants.
+
+Current-source Alembic verification, role/seed revision sets, DB lane current-head
+checks and package/source inventory must explicitly recognize `0017` and the
+new fixture/helper. Historical downgrade and initial-budget phase checks at
+`0016` stay explicit. This is a targeted current-source update, not a replacement
+of every `0016` literal or a change to tagged Release verification history.
 
 ## DTO, HTTP and comparison compatibility
 
@@ -223,14 +237,18 @@ February timeline calculation.
 5. V1/V2 old-contract regressions, strict V3 negotiation, exact one-of-three deltas, malformed extra fields, role handoff, saved old intents and new intake recovery remain covered. API/worker grants and RLS are tested with runtime roles.
 6. Inspect database facts and persisted identities for final acceptance. UI success, mocked repositories or fake facades alone are insufficient. Assert exact new-source references, distinct cost, receipt interval, decision actor and the four dated milestones.
 
-This stage authorizes the written draft and its document checks only. Migration,
-public-contract and fixture implementation require targeted spec/plan approval.
-Heavy database/Compose, browser/build/pull and hosted delivery require a concrete
-separate verification authorization. No such runtime acceptance is claimed here.
+Local fixture, migration, public-contract, UI and documentation implementation
+is approved, including existing locked isolated dependencies and the bounded
+real PostgreSQL/runtime-role lane in the plan. Full native/browser/image rebuild,
+pull and hosted delivery require concrete separate verification authorization.
+No such full runtime acceptance is claimed here.
 The deferred native recovery CI stage remains separate and frozen. No new
 dependencies, lock changes, arbitrary-month rules, batch replans, N3 work, remote
 publication, tag, Release or deployment belongs to this design preparation.
 
-Implementation must include an ADR for these source-pin/read-contract decisions
+Implementation includes an ADR for these source-pin/read-contract decisions
 and update the affected reference/how-to documentation. The intended minimum
-sequence and evidence ownership are in the companion draft plan.
+sequence and evidence ownership are in the companion plan. The targeted engineering
+review used executable source; the GStack plugin is unavailable in this environment
+and has not been invoked. Repository document checks cover the affected entry,
+reference and how-to surfaces; any concrete gap is recorded explicitly.

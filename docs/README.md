@@ -29,7 +29,7 @@ The [revision UI availability repair](superpowers/specs/2026-10-03-revision-ui-a
 
 The current presentation authority is the [reference-driven presentation spec](superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](superpowers/plans/2026-08-14-reference-driven-presentation.md).
 
-The controlled `2027-02` to `2028-02` intake revision has a [draft spec](superpowers/specs/2026-10-06-controlled-intake-revision.md) and [draft implementation plan](superpowers/plans/2026-10-06-controlled-intake-revision.md) for maintainer review. This is design preparation only; the migration, new source fixture and read contracts are not approved for implementation or available in current runtime.
+The controlled `2027-02` to `2028-02` intake revision has an [approved spec](superpowers/specs/2026-10-06-controlled-intake-revision.md) and [implementation plan](superpowers/plans/2026-10-06-controlled-intake-revision.md). Local implementation is in progress; the new migration, source fixture and read contracts are not yet verified or available in the default-branch runtime.
 
 - Connected same-Case plan execution continuation v1: [Approved design](superpowers/specs/2026-08-28-connected-same-case-plan-execution-continuation-design.md) and [implementation plan](superpowers/plans/2026-08-28-connected-same-case-plan-execution-continuation.md); merged on the current default branch in PR #103; local synthetic and provider-free; included in v0.1.6; not deployed. The existing bare `/demo/plan` Happy and `?scenario=blocked` scenarios remain independent.
 

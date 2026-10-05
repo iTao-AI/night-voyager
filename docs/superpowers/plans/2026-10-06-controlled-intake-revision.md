@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Draft for targeted maintainer review. No implementation task has started.
+**Status:** Approved for local implementation; implementation in progress. Full native/browser/image and hosted gates remain separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.
@@ -18,7 +18,45 @@
 - Preserve role/RLS, exact request-review, active-task, stale, idempotency, predecessor/successor, finalized-Case and fresh-consent gates.
 - Keep old V1/V2 country/budget response shapes; new ledger uses exact `contract_version=3`, comparison V2 and stored cost intake; brief stays V2.
 - Do not widen the existing terminal recovery source whitelist or change runtime Skill manifests, dependency locks or February date rules.
-- Written design approval precedes implementation; concrete heavy/remote verification approval precedes those runs. The deferred native recovery CI proof is not a dependency or acceptance substitute.
+- Written design/plan approval is complete. The bounded PostgreSQL/runtime-role lane below is approved; full native/browser/image and remote verification require separate approval. The deferred native recovery CI proof is not a dependency or acceptance substitute.
+
+## Authorized bounded PostgreSQL lane
+
+Use only retained PostgreSQL image
+`postgres:18.4-alpine3.24@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`
+(Docker Engine `29.7.2` readback at preparation). No application image rebuild or
+pull is needed for this lane. A task-only Compose file in the ignored plan
+workspace starts PostgreSQL under project `night-voyager-intake-n2-20261006-db`,
+binding `127.0.0.1:52139` after a free-port check. Its named volume and network
+carry only this project's labels and begin empty. Preserve all other projects,
+volumes, images and worktrees. Retained API/worker/browser images are not mutated.
+
+Commands use the task-local `.venv/bin/python`, `.venv/bin/alembic` and runtime
+role URLs generated for this disposable database; no private `.env` is read:
+
+```sh
+docker compose -p night-voyager-intake-n2-20261006-db -f "$N2_PG_COMPOSE" up -d --pull never postgres
+.venv/bin/alembic upgrade head
+.venv/bin/python scripts/seed_demo.py --with-intake-revision
+.venv/bin/python scripts/verify_release.py --check-db-roles
+.venv/bin/python -m pytest -o addopts='' -q -m database tests/integration/planning/test_intake_revision_migration.py tests/integration/planning/test_intake_revision_authority.py tests/integration/planning/test_intake_revision_source_pins.py
+docker compose -p night-voyager-intake-n2-20261006-db -f "$N2_PG_COMPOSE" down --volumes
+```
+
+Migration/downgrade cases use separate task-owned disposable databases on that
+server; old-contract and runtime-role flow tests use the fresh seeded lane.
+Record actual commands/results in the ignored ledger. Reuse the running PG
+server for focused cases without starting unrelated services. Hold temporary
+`caffeinate` only for this task and release its recorded process at closeout.
+Cleanup is limited to this project's containers/network/volume, test databases
+and task-owned temporary processes; existing retained images stay retained.
+
+The new fixture must ship in wheel data and the existing final image resource
+layout. Target `pyproject.toml` package-data includes and `Dockerfile.api` builder
+COPY only as needed; test installed-wheel resource/digest from a different cwd.
+Extend current-source `scripts/verify_release.py` Alembic/role/seed/inventory
+checks and applicable `scripts/run_db_tests.sh` current-head checks to `0017`.
+Keep explicit historical `0016` downgrade/seed-phase checks and tagged records.
 
 ## Review focus
 
@@ -42,25 +80,27 @@
 ### Task 1: Define and verify the independent source fixture
 
 **Create:** `fixtures/intake-delay-v1/manifest.json`, manifest-owned sources, `src/night_voyager/planning/intake_fixture.py`, `tests/unit/planning/test_intake_revision_fixture.py`, `tests/unit/adapters/test_intake_planning.py`.
-**Modify:** `src/night_voyager/planning/synthetic.py`; `tests/unit/planning/test_synthetic.py`.
+**Modify:** `src/night_voyager/planning/synthetic.py`, `pyproject.toml`, `Dockerfile.api`, release/source inventory checks; `tests/unit/planning/test_synthetic.py` and installed-wheel asset regressions.
 **Interfaces:** Produce `load_exact_intake_delay_fixture() -> PlanningInput` and a closed `(source_pack_id, source_pack_version, policy_version)` to exact fixture descriptor. Each descriptor fixes intake, path and raw/canonical hashes. `materialize_persisted_synthetic_input(snapshot)` continues consuming the persisted Case and tuple, with unchanged baseline defaults and no mutable current-source lookup.
 
 - [ ] Write failing assertions for distinct identity/cost, `2028-02`, accepted synthetic source references, one Australia cost row, baseline byte preservation and manifest/source/path/hash drift refusal.
 - [ ] Run the new focused tests and record RED for the missing second identity, not an import-only or environment error.
 - [ ] Add the independently declared fixture, compute its two frozen hashes and implement exact two-entry selection. Preserve persisted intake/budget/countries and existing policy/input/output schemas.
 - [ ] Run new fixture and existing synthetic/adapter tests; assert `32,640,000` and rejection of wrong/mixed pins. Review the frozen descriptor values for the next task.
+- [ ] Build/install the project wheel in a task-only environment and verify packaged manifest/source digests from a different cwd. Verify final-image COPY/resource declarations; leave actual new-image proof pending separate authorization.
 - [ ] Commit exact paths as one source-fixture outcome.
 
 ### Task 2: Add intake revision authority, source checks and exact seed
 
 **Create tests:** `tests/integration/planning/test_intake_revision_migration.py`, `test_intake_revision_authority.py`, `test_intake_revision_source_pins.py`; add calendar/error-map unit coverage to existing collaboration tests.
-**Create/modify:** New migration `0017_controlled_intake_revision.py`; the seed and collaboration files in the map.
+**Create/modify:** New migration `0017_controlled_intake_revision.py`; the seed and collaboration files in the map; current-source `scripts/verify_release.py` and `scripts/run_db_tests.sh` gates and their focused regressions.
 **Interfaces:** Consume Task 1's exact descriptor. Replace the five existing function bodies named in the spec without changing signatures. Add a migrator-only `app.assert_controlled_intake_source` and `app.seed_demo_intake_revision`; map SQLSTATE `NV027` through `IntakeEvidenceUnavailableError` to the exact public error. Add opt-in `--with-intake-revision` to the existing seed CLI. Before creation, choose the target from the exact intake delta or retain a non-intake predecessor pin; initial baseline planning remains unchanged.
 
 - [ ] Write database regressions with API/worker roles: student authorship, assigned advisor/request-review gate, adjacent publication, pending boolean, no auto-task, illegal year/month, unchanged/stale/expired/replay/conflict, source absence/drift, wrong old/new pack and finalized refusal. Snapshot refused confirmation before/after.
-- [ ] Obtain concrete authorization for the isolated database lane before running it; first demonstrate the intake whitelist/source-pinning failure in that environment. Unit/fake SQL checks cannot satisfy this task's acceptance.
+- [ ] Use the approved isolated database lane above to demonstrate the intake whitelist/source-pinning failure. Unit/fake SQL checks cannot satisfy this task's acceptance.
 - [ ] Implement the additive replacements and source checks in the existing transaction order. Keep every inherited finalized/active-task/lineage fence, grants and RLS. The seed persists the independent pack and a confirmed-intake initial Case with exact message/candidate/verification/fact references, without updating other Cases.
 - [ ] Test exact seed replay, drift rollback, PUBLIC/API/worker privilege denial, stable old function signatures, and downgrade refusal after new fixture/lineage exists. Without new data, compare restored bodies/grants to the `0016` state.
+- [ ] Test exact current Alembic head `0017`, role/seed helper inventory and current-source DB lane checks; retain historical `0016` phases and old Release bytes.
 - [ ] Run the affected collaboration, planning-revision and planning-start database regressions within the approved bounded lane; confirm old baseline, mixed-provider and terminal-recovery source boundaries are retained. Commit exact authority paths with the proposed ADR.
 
 ### Task 3: Version the comparison and advisor ledger
@@ -93,7 +133,7 @@
 - [ ] Write a real-role flow that starts on the fixed initial Case, records `request_revision`, submits student `2028-02`, confirms as assigned advisor, explicitly creates the successor Task and processes it with the existing deterministic worker. Assert the actual adapter input and PostgreSQL source/cost/evidence pins.
 - [ ] Add fresh advisor approval and direct parent decision accepting `32,000,000`–`36,000,000` CNY minor with `budget_elasticity`; read the receipt, actor, brief/revision/run/source joins and timeline from PostgreSQL. Assert `2027-09-01`, `2027-10-15`, `2027-12-15`, `2028-01-20` and unchanged policy.
 - [ ] Exercise finalized denial and unsupported `2028-09` confirmation on separate controlled negative fixtures. Compare all refused business writes; compare predecessor output/routes/cost/evidence and review bytes across success, allowing only the existing intentional `is_current` change.
-- [ ] Under separately approved bounded runtime verification, run affected and required broader checks plus the real database flow; then perform targeted review and the `gstack-workflows:document-release` audit. Missing database/browser gates remain explicitly pending, not local READY.
+- [ ] Run the approved bounded real database flow and relevant checks, then perform targeted review. GStack is unavailable and is not invoked; use existing repository document/link checks for the affected reference/how-to/entry. Actual new-image/browser gates remain pending until separately approved, not full local READY.
 - [ ] Document opt-in setup, both read-contract versions, unavailable-source refusal, fixed synthetic values/as-of and the limited pre-consent path. Inspect diff/links/privacy and semantic commits. Report exact HEAD, actual checks, docs impact and remaining gates; no push/PR/merge/release/deploy without separate authorization.
 
 ## Plan self-review and handoff
@@ -104,8 +144,8 @@ UI value/role/replay (4), persisted receipt/timeline/history truth (5). The five
 Review Focus cases have explicit assertions in those tasks. New types and
 method names above are proposed interfaces for review, not existing functions.
 
-Approve or revise the written spec/plan and the named migration/read-contract/
-source refusal choices before execution. Direct execution is the proposed
-method; no additional agents, runtime runs or remote actions are implied by
-this draft. At this checkpoint only documentation review/checks and a local
-semantic commit are in scope.
+Written spec/plan and the named migration/read-contract/source refusal choices
+are approved. Execute directly using the selected controller; bounded PG tests
+are in scope, while complete native/browser/image proof and remote actions are
+separate gates. Return a frozen local candidate with actual low-cost and
+runtime-role evidence before requesting those broader gates.
