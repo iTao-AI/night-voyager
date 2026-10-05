@@ -1,6 +1,7 @@
-# Approved Specs and Plans
+# Specs and Plans
 
-These specs and plans are approved, public-neutral implementation history. They explain
+These specs and plans record public-neutral decisions and implementation history. Drafts
+are explicitly marked and have not been approved or implemented. These records explain
 intent and delivery sequencing but are not current runtime authority. When records
 disagree, use this order:
 
@@ -14,6 +15,7 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 
 | Scope | Status | Specs and plans |
 | --- | --- | --- |
+| Controlled February intake revision | Draft for maintainer review; design preparation only; not approved for implementation | [Spec](specs/2026-10-06-controlled-intake-revision.md) · [Plan](plans/2026-10-06-controlled-intake-revision.md) |
 | M2 identity, session, and RLS | Implemented | [Spec](specs/2026-07-12-m2-identity-session-rls-design.md) · [Plan](plans/2026-07-12-m2-identity-session-rls.md) |
 | M3A deterministic planning | Implemented | [Spec](specs/2026-07-12-m3a-deterministic-planning-design.md) · [Plan](plans/2026-07-12-m3a-deterministic-planning.md) |
 | M3B advisor and family decision | Implemented | [Spec](specs/2026-07-13-m3b-advisor-family-decision-design.md) · [Plan](plans/2026-07-13-m3b-advisor-family-decision.md) |
