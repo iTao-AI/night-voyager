@@ -64,6 +64,36 @@ def test_release_verifier_checks_the_public_v0_1_6_surface(
     ) in output
 
 
+@pytest.mark.parametrize(
+    ("relative", "current", "stale"),
+    (
+        (
+            "README.md",
+            "v0.1.6 is published and not deployed.",
+            "v0.1.6 is not deployed; publication remains separately gated.",
+        ),
+        (
+            "README_CN.md",
+            "v0.1.6 已发布，尚未部署。",
+            "v0.1.6 尚未部署；publication 仍单独受 gate。",
+        ),
+    ),
+)
+def test_release_verifier_rejects_stale_publication_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: str, current: str, stale: str
+) -> None:
+    copy_release_surface(tmp_path)
+    verifier = load_verifier()
+    monkeypatch.setattr(verifier, "ROOT", tmp_path)
+    verifier.verify_release_surface()
+    readme = tmp_path / relative
+    source = readme.read_text()
+    assert current in source
+    readme.write_text(source.replace(current, stale))
+    with pytest.raises(SystemExit, match=f"missing v0.1.6 README contract: {relative}"):
+        verifier.verify_release_surface()
+
+
 def test_release_verifier_rejects_candidate_token_that_exists_only_in_html_comment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

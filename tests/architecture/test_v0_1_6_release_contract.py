@@ -367,7 +367,7 @@ def test_current_guidance_reconciles_to_v0_1_6_without_unlocking_or_deploying() 
         "The current release boundary is v0.1.6, a local synthetic and provider-free "
         "portfolio release."
     ) in readme
-    assert "publication remains separately gated" in readme
+    assert "v0.1.6 is published and not deployed." in readme
     assert "is included in v0.1.6 and is not deployed" in readme
     assert "当前 release boundary 是 v0.1.6" in readme_cn
     assert "已纳入 v0.1.6，仍未部署。" in readme_cn

@@ -1173,7 +1173,7 @@ def verify_release_surface() -> None:
             "README.md",
             "The current release boundary is v0.1.6, a local synthetic and provider-free "
             "portfolio release.",
-            "v0.1.6 is not deployed; publication remains separately gated.",
+            "v0.1.6 is published and not deployed.",
             "## Engineering proof",
             "## Evaluate the release",
             "## Synthetic and local limits",
@@ -1183,7 +1183,7 @@ def verify_release_surface() -> None:
             "README_CN.md",
             "当前 release boundary 是 v0.1.6：local synthetic、provider-free 的 "
             "portfolio release。",
-            "v0.1.6 尚未部署；publication 仍单独受 gate。",
+            "v0.1.6 已发布，尚未部署。",
             "## 工程证据",
             "## 验证 release",
             "## 合成与本地边界",

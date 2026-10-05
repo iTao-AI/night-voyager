@@ -2,6 +2,19 @@
 
 Night Voyager helps study-abroad advisors turn confirmed facts into a clear, reviewable path from route comparison to client decision.
 
+## Try the current budget-change journey
+
+The current source supports revising an existing synthetic Case's confirmed budget:
+
+1. The advisor requests a revision; the parent proposes a new preferred budget and hard ceiling.
+2. The advisor confirms the proposal as a fact, producing a new revision of the same Case.
+3. An explicit action starts revised planning. Its fresh result and comparison require new advisor review.
+4. The parent chooses a route, enters the accepted budget interval, acknowledges required trade-offs and gives consent. The decision receipt records those actual values and parent authority.
+
+Follow the [confirmed-fact revision walkthrough](docs/operations/customer-revision-recovery.md#revise-one-confirmed-fact) on a fresh pilot volume. For a qualified terminal task, the [recovery walkthrough](docs/operations/customer-revision-recovery.md#recover-a-qualified-failed-task) requires advisor consent, a fresh Task/SSE stream and fresh review; the original task remains unchanged.
+
+`/` is a static presentation entry. The live local flow starts at `/demo/collaboration` and continues the same Case through `/demo`, then `/demo/plan?case_id=<case_id>` after a decision. Bare `/demo/plan` is an independent scenario. Current source uses migration `0016`; the published [v0.1.6 release](https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6) is historical migration `0015`. Both use synthetic data and deterministic adapters; neither establishes a production deployment.
+
 ## Advisor workspace overview
 
 ![Advisor workspace overview](docs/assets/advisor-workspace-overview.png)
@@ -44,13 +57,13 @@ The mobile frame shows the same real route-analysis workspace at the standard 39
 
 - **Quickstart:** run `make help`, `make doctor`, `make demo`, and `make proof`; then open `http://127.0.0.1:3000/`.
 - **Architecture:** read the [architecture and milestone history](DESIGN.md) and the [documentation index](docs/README.md).
-- **Release:** the [v0.1.6 release notes](docs/releases/v0.1.6.md) and [release verification guide](docs/how-to/verify-v0.1.6-release.md) describe the current local synthetic portfolio release; this showcase is presentation-only and publication remains separately gated.
+- **Release:** the [v0.1.6 release notes](docs/releases/v0.1.6.md) and [release verification guide](docs/how-to/verify-v0.1.6-release.md) describe the current local synthetic portfolio release; current-source budget revision and terminal recovery are subsequent changes.
 
 ## Detailed proof
 
 The current runtime, contracts, authority boundaries, and release evidence remain below. Historical visual assets are retained for proof and context, but are no longer the README first layer.
 
-The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. v0.1.6 is not deployed; publication remains separately gated. Night Voyager remains an AI collaboration platform for study-abroad advisors. The current release presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell. The root is static presentation evidence, while the demo routes are local synthetic and provider-free. The connected same-Case execution continuation is merged on the current default branch in PR #103. It remains local synthetic and provider-free, is included in v0.1.6 and is not deployed. The presentation-only root performs no API, session, task, or EventSource work.
+The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. v0.1.6 is published and not deployed. Night Voyager remains an AI collaboration platform for study-abroad advisors. The current release presents the reference-driven advisor-centered root and three demo routes through one shared workspace shell. The root is static presentation evidence, while the demo routes are local synthetic and provider-free. The connected same-Case execution continuation is merged on the current default branch in PR #103. It remains local synthetic and provider-free, is included in v0.1.6 and is not deployed. The presentation-only root performs no API, session, task, or EventSource work.
 
 The complete governed walkthrough begins at `/demo/collaboration`, continues the same Case through `/demo`, and at `plan_ready` offers `/demo/plan?case_id=<case_id>` as the primary continuation into the existing execution workspace. The connected proof preserves the server-derived revision, decision, receipt, timeline, execution, role handoff, blocked checkpoint, and `pending_future_authorization`; bare `/demo/plan` and `?scenario=blocked` remain independently seeded Happy / Blocked recovery scenarios. Screenshots are review evidence, not functional authority; semantic assertions remain the acceptance authority.
 
@@ -101,7 +114,7 @@ make down
 
 Open `http://127.0.0.1:3000/` for the advisor workspace entry. It server-renders in exact `zh-CN`; use the labelled `中文` / `English` control to select exact `en`. The presentation-only preference is stored at `night-voyager:presentation-locale:v1` and never enters the session journey, HTTP/BFF requests, task, SSE, or domain authority. For the connected same-Case proof, follow the [collaboration runbook](docs/operations/collaboration-walkthrough.md) from `/demo/collaboration` through `/demo` and the primary `/demo/plan?case_id=<case_id>` continuation. For the independent deterministic execution scenarios, use the [execution walkthrough](docs/operations/plan-execution-walkthrough.md) at bare `/demo/plan` or `?scenario=blocked`. The [v0.1.6 release/source-archive verification guide](docs/how-to/verify-v0.1.6-release.md) defines the current release gates.
 
-For the current same-Case release walkthrough, begin at `/demo/collaboration`,
+For the current-source same-Case walkthrough, begin at `/demo/collaboration`,
 enter the preferred and hard-ceiling total program budgets (the default
 `300,000` / `400,000` CNY example or the `100,000` / `120,000` tight-budget
 example), confirm the synthetic family fact, choose `继续进入规划` (`Continue to
