@@ -8,6 +8,12 @@ from uuid import UUID
 from pydantic import ConfigDict, PositiveInt, model_validator
 
 from night_voyager.planning.fixtures import DEFAULT_MANIFEST, validate_planning_fixture
+from night_voyager.planning.intake_fixture import (
+    INTAKE_DELAY_INTAKE,
+    INTAKE_DELAY_SOURCE_PACK_ID,
+    INTAKE_DELAY_SOURCE_PACK_VERSION,
+    load_exact_intake_delay_fixture,
+)
 from night_voyager.planning.models import (
     CostEvidence,
     FrozenModel,
@@ -21,9 +27,7 @@ BASELINE_SOURCE_PACK_ID = UUID("50000000-0000-0000-0000-000000000001")
 BASELINE_SOURCE_PACK_VERSION = 1
 BASELINE_POLICY_VERSION = "m3a-policy-v1"
 BASELINE_MANIFEST_SHA256 = "84350ea5705d9681d3e6550e1bd06e3340a9fcf0e7e7bbed4478ed3403405f28"
-BASELINE_RAW_MANIFEST_SHA256 = (
-    "5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25"
-)
+BASELINE_RAW_MANIFEST_SHA256 = "5d455d2c409c322e093f3a116387f3cef0fb7ea0f7357fec5e76e9da5b3a2a25"
 
 
 class PersistedSyntheticSnapshotV1(FrozenModel):
@@ -43,9 +47,7 @@ class PersistedSyntheticSnapshotV1(FrozenModel):
         return self
 
 
-def load_exact_synthetic_baseline(
-    *, manifest_path: Path = DEFAULT_MANIFEST
-) -> PlanningInput:
+def load_exact_synthetic_baseline(*, manifest_path: Path = DEFAULT_MANIFEST) -> PlanningInput:
     raw_manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     if raw_manifest_sha256 != BASELINE_RAW_MANIFEST_SHA256:
         raise ValueError("synthetic baseline raw manifest mismatch")
@@ -78,14 +80,22 @@ def project_selected_country_rows(
 def materialize_persisted_synthetic_input(
     snapshot: PersistedSyntheticSnapshotV1,
     *,
-    manifest_path: Path = DEFAULT_MANIFEST,
+    manifest_path: Path | None = None,
 ) -> PlanningInput:
-    baseline = load_exact_synthetic_baseline(manifest_path=manifest_path)
-    if (
-        snapshot.source_pack_id != baseline.source_pack.pack_id
-        or snapshot.source_pack_version != baseline.source_pack.version
-        or snapshot.policy_version != BASELINE_POLICY_VERSION
+    pin = (snapshot.source_pack_id, snapshot.source_pack_version, snapshot.policy_version)
+    if pin == (BASELINE_SOURCE_PACK_ID, BASELINE_SOURCE_PACK_VERSION, BASELINE_POLICY_VERSION):
+        baseline = load_exact_synthetic_baseline(
+            manifest_path=manifest_path if manifest_path is not None else DEFAULT_MANIFEST
+        )
+    elif pin == (
+        INTAKE_DELAY_SOURCE_PACK_ID,
+        INTAKE_DELAY_SOURCE_PACK_VERSION,
+        BASELINE_POLICY_VERSION,
     ):
+        if snapshot.case.student.intake != INTAKE_DELAY_INTAKE:
+            raise ValueError("persisted intake does not match source pack")
+        baseline = load_exact_intake_delay_fixture(manifest_path=manifest_path)
+    else:
         raise ValueError("persisted synthetic snapshot pins are invalid")
 
     costs = tuple(

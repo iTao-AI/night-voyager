@@ -551,6 +551,13 @@ PLANNING_REVISION_SURFACE = (
     "docs/design/projection-matrix.md",
     "docs/design/state-and-interaction-matrix.md",
 )
+INTAKE_REVISION_SOURCE_SURFACE = (
+    "fixtures/intake-delay-v1/manifest.json",
+    "fixtures/intake-delay-v1/sources/australia.txt",
+    "fixtures/intake-delay-v1/sources/japan.txt",
+    "fixtures/intake-delay-v1/sources/malaysia.txt",
+    "src/night_voyager/planning/intake_fixture.py",
+)
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
 os.environ.setdefault("UV_REQUIRE_HASHES", "1")
@@ -1035,6 +1042,11 @@ def verify_skill_surface() -> None:
 
 
 def verify_planning_revision_surface() -> None:
+    from night_voyager.planning.intake_fixture import load_exact_intake_delay_fixture
+
+    if any(not (ROOT / relative).is_file() for relative in INTAKE_REVISION_SOURCE_SURFACE):
+        raise SystemExit("controlled intake source surface is incomplete")
+    load_exact_intake_delay_fixture(manifest_path=ROOT / INTAKE_REVISION_SOURCE_SURFACE[0])
     if any(not (ROOT / relative).is_file() for relative in PLANNING_REVISION_SURFACE):
         raise SystemExit("planning revision authority surface is incomplete")
     migration, adr, database_roles, worker, tasks, collaboration, http, projection, state = (
@@ -1493,12 +1505,18 @@ def verify_wheel() -> None:
             "import sys; from night_voyager.api import create_app; "
             "from night_voyager.skills.registry import SkillRuntimeRegistry; "
             "from night_voyager.skills.evaluation import SkillEvaluator; "
+            "from night_voyager.planning.intake_fixture import load_exact_intake_delay_fixture; "
+            "intake = load_exact_intake_delay_fixture(); "
+            "assert intake.case.student.intake == '2028-02'; "
+            "assert int((intake.costs[0].tuition_minor + intake.costs[0].living_minor) "
+            "* intake.costs[0].fx_rate) == 32640000; "
             "registry = SkillRuntimeRegistry.load_packaged(); "
             "evaluator = SkillEvaluator.load_packaged(registry); "
             "assert len(registry.entries) == 7; "
             "assert len(evaluator.manifest.datasets) == 7; "
             f"assert create_app().version == {VERSION!r}; "
             "assert \"httpx2\" not in sys.modules",
+            cwd=Path(temp),
         )
     print(f"proof wheel: isolated installed-wheel import and app factory passed ({wheel.name})")
 

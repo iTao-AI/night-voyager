@@ -9,6 +9,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     && pip wheel --no-cache-dir --wheel-dir /wheels/dependencies -r requirements.txt
 COPY src ./src
 COPY fixtures/skills ./fixtures/skills
+COPY fixtures/intake-delay-v1 ./fixtures/intake-delay-v1
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv build --wheel --build-constraints build-constraints.txt --require-hashes \
     --out-dir /wheels/project
