@@ -1,5 +1,7 @@
 # Documentation
 
+For current source, start with the [parent-budget revision walkthrough](operations/customer-revision-recovery.md#revise-one-confirmed-fact) and [qualified terminal recovery](operations/customer-revision-recovery.md#recover-a-qualified-failed-task): parent proposal, advisor-confirmed revision, fresh planning/review and explicit family choices with a receipt. Current source uses migration `0016`; the published v0.1.6 archive remains fixed at historical `0015`. `/` is static presentation; the connected local routes are live synthetic workflows.
+
 v0.1.6 is the current local synthetic portfolio release of Night Voyager. It
 includes the governed portfolio workflow plus governed timeline execution,
 recovery/reassessment authority, reconciliation, professional presentation,
@@ -21,9 +23,9 @@ safe stop: no `MkeCaptureArtifactV2`, terminal receipt, information-gain conclus
 candidate persistence, Slice 1/2 unlock, or successful cross-project evidence loop exists.
 PR #87 is merged; hosted CI and publication cleanup are complete; this status is included in v0.1.6.
 
-The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. It is not deployed; publication remains separately gated. The release contains the reference-driven AI collaboration platform for study-abroad advisors, the connected same-Case execution continuation merged on the current default branch in PR #103, and presentation evidence. The continuation remains local synthetic and provider-free; it is included in v0.1.6 and is not deployed.
+The current release boundary is v0.1.6, a local synthetic and provider-free portfolio release. It is published and not deployed. The release contains the reference-driven AI collaboration platform for study-abroad advisors, the connected same-Case execution continuation merged on the current default branch in PR #103, and presentation evidence. The continuation remains local synthetic and provider-free; it is included in v0.1.6 and is not deployed.
 
-The [revision UI availability repair](superpowers/specs/2026-10-03-revision-ui-availability.md) is implemented and locally verified. It improves confirmed-fact option selection, explicit role-handoff guidance and receipt readability without changing server contracts or the published release boundary. Hosted delivery is separately gated.
+The [revision UI availability repair](superpowers/specs/2026-10-03-revision-ui-availability.md) is implemented and locally verified. It improves confirmed-fact option selection, explicit role-handoff guidance and receipt readability without changing server contracts or the published release boundary. It is merged on the default branch in PR #127; this does not publish a new release.
 
 The current presentation authority is the [reference-driven presentation spec](superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](superpowers/plans/2026-08-14-reference-driven-presentation.md).
 

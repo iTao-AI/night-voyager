@@ -2,6 +2,19 @@
 
 Night Voyager 帮助留学顾问把已确认事实整理成从路线比较到客户决定的清晰、可复核路径。
 
+## 体验当前预算变更闭环
+
+当前 source 支持修改已有合成 Case 的已确认预算：
+
+1. 顾问发起修订，家长提出新的首选预算与硬上限。
+2. 顾问将提案确认为事实，生成同一 Case 的新 revision。
+3. 显式启动修订规划；新结果与前后比较需要重新经过顾问审核。
+4. 家长选择路线、填写实际接受的预算区间、逐项确认取舍并同意。决策回执记录这些实际值及家长权限。
+
+在新的 pilot volume 中按 [已确认事实修订指南](docs/operations/customer-revision-recovery.md#revise-one-confirmed-fact) 操作。符合条件的终态 Task 按 [恢复指南](docs/operations/customer-revision-recovery.md#recover-a-qualified-failed-task) 由顾问明确同意后创建新 Task，使用新的 SSE 并重新审核；原 Task 保持不变。
+
+`/` 是静态展示入口。Live 本地流程从 `/demo/collaboration` 进入 `/demo`，在决定完成后通过 `/demo/plan?case_id=<case_id>` 继续同一 Case；裸 `/demo/plan` 是独立场景。当前 source 使用 migration `0016`；已发布的 [v0.1.6 Release](https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6) 固定在历史 migration `0015`。两者都使用合成数据与确定性适配器，不构成生产部署证据。
+
 ## 顾问工作台概览
 
 ![顾问工作台概览](docs/assets/advisor-workspace-overview.png)
@@ -44,13 +57,13 @@ Night Voyager 面向留学顾问团队，支持他们与参与确认的学生和
 
 - **快速开始：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
 - **架构：** 阅读 [架构与里程碑历史](DESIGN.md) 与 [文档索引](docs/README.md)。
-- **发布：** [v0.1.6 发布说明](docs/releases/v0.1.6.md) 与 [v0.1.6 发布验证指南](docs/how-to/verify-v0.1.6-release.md) 说明当前 local synthetic portfolio release；本展示层仅用于呈现，publication 仍单独受 gate。
+- **发布：** [v0.1.6 发布说明](docs/releases/v0.1.6.md) 与 [v0.1.6 发布验证指南](docs/how-to/verify-v0.1.6-release.md) 说明当前 local synthetic portfolio release；当前 source 的预算修订与终态恢复属于后续变更。
 
 ## 详细证明
 
 当前 runtime、contracts、authority boundaries 与 release evidence 继续保留在下方。历史视觉资产仍用于 proof 与 context，但不再作为 README 首层画廊。
 
-当前 release boundary 是 v0.1.6：local synthetic、provider-free 的 portfolio release。v0.1.6 尚未部署；publication 仍单独受 gate。Night Voyager 仍是面向留学顾问的 AI 协作平台，展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell。root 是 static presentation evidence，demo route 则是 local synthetic、provider-free。same-Case execution continuation 已在当前 default branch 通过 PR #103 合并。它仍是 local synthetic、provider-free，已纳入 v0.1.6，仍未部署。presentation-only root 不发起 API、session、task 或 EventSource。
+当前 release boundary 是 v0.1.6：local synthetic、provider-free 的 portfolio release。v0.1.6 已发布，尚未部署。Night Voyager 仍是面向留学顾问的 AI 协作平台，展示 reference-driven advisor-centered root 与三个 demo route 共享的 workspace shell。root 是 static presentation evidence，demo route 则是 local synthetic、provider-free。same-Case execution continuation 已在当前 default branch 通过 PR #103 合并。它仍是 local synthetic、provider-free，已纳入 v0.1.6，仍未部署。presentation-only root 不发起 API、session、task 或 EventSource。
 
 完整 governed walkthrough 从 `/demo/collaboration` 开始，经 `/demo` 继续同一 Case；到达 `plan_ready` 后，主操作会进入 `/demo/plan?case_id=<case_id>`，继续使用现有 execution workspace。连接证明会保留 server-derived revision、decision、receipt、timeline、execution、role handoff、blocked checkpoint 与 `pending_future_authorization`。裸 `/demo/plan` 与 `?scenario=blocked` 仍是独立播种的 Happy / Blocked recovery 场景，不承接连接 Case 或 session。截图是评审证据，不是功能权威；semantic assertions 才是 acceptance authority。
 
@@ -101,7 +114,7 @@ make down
 
 当前 advisor workspace 入口位于 `http://127.0.0.1:3000/`，SSR 使用 exact `zh-CN`；页头 `中文` / `English` 控件可显式选择 exact `en`。仅展示使用的 preference key 是 `night-voyager:presentation-locale:v1`，不会进入 session journey、HTTP/BFF request、task、SSE 或 domain authority。连接证明按 [collaboration runbook](docs/operations/collaboration-walkthrough.md) 从 `/demo/collaboration` 进入 `/demo`，再进入主操作 `/demo/plan?case_id=<case_id>`；独立执行场景按 [plan execution walkthrough](docs/operations/plan-execution-walkthrough.md) 访问裸 `/demo/plan` 或 `?scenario=blocked`。[v0.1.6 release/source-archive verification guide](docs/how-to/verify-v0.1.6-release.md)定义 current release gates。
 
-如需验证当前 same-Case release walkthrough，请从
+如需验证当前 source 的 same-Case walkthrough，请从
 `/demo/collaboration` 开始，先输入 preferred 与 hard-ceiling total program budget：默认示例为
 `300,000` / `400,000` CNY，`紧预算`示例为 `100,000` / `120,000`。输入必须是正的整元金额，
 本地校验通过前不会发送 mutation；提交后的 intent 会在 proposal、advisor review 与 reload recovery
