@@ -9,6 +9,7 @@ from night_voyager.connected_demo.fixtures import CanonicalDemoSourceContract
 from night_voyager.connected_demo.models import (
     AdvisorLedgerV1,
     AdvisorLedgerV2,
+    AdvisorLedgerV3,
     ConnectedJourneyStatusV1,
     CurrentDecisionBriefV1,
     CurrentDecisionBriefV2,
@@ -20,11 +21,21 @@ class FakeRepository:
     def __init__(self) -> None:
         self.ledger_call: tuple[ActorContext, UUID, CanonicalDemoSourceContract] | None = None
         self.brief_call: tuple[ActorContext, UUID] | None = None
-        self.ledger_v2_call: tuple[
-            ActorContext, UUID, CanonicalDemoSourceContract
-        ] | None = None
+        self.ledger_v2_call: tuple[ActorContext, UUID, CanonicalDemoSourceContract] | None = None
         self.brief_v2_call: tuple[ActorContext, UUID] | None = None
         self.journey_call: tuple[ActorContext, UUID] | None = None
+        self.ledger_v3_call: (
+            tuple[ActorContext, UUID, tuple[CanonicalDemoSourceContract, ...]] | None
+        ) = None
+
+    async def advisor_ledger_v3(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        sources: tuple[CanonicalDemoSourceContract, ...],
+    ) -> AdvisorLedgerV3 | None:
+        self.ledger_v3_call = (context, case_id, sources)
+        return None
 
     async def advisor_ledger(
         self,
@@ -121,9 +132,7 @@ async def test_service_selects_v2_only_for_exact_explicit_negotiation() -> None:
 
     assert await service.advisor_ledger(context, case_id, contract_version=2) is None
     assert repository.ledger_v2_call == (context, case_id, source)
-    assert await service.current_decision_brief(
-        context, case_id, contract_version=2
-    ) is None
+    assert await service.current_decision_brief(context, case_id, contract_version=2) is None
     assert repository.brief_v2_call == (context, case_id)
     assert await service.journey_status(context, case_id) is None
     assert repository.journey_call == (context, case_id)

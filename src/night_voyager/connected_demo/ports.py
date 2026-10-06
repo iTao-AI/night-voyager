@@ -7,6 +7,7 @@ from night_voyager.connected_demo.fixtures import CanonicalDemoSourceContract
 from night_voyager.connected_demo.models import (
     AdvisorLedgerV1,
     AdvisorLedgerV2,
+    AdvisorLedgerV3,
     ConnectedJourneyStatusV1,
     CurrentDecisionBriefV1,
     CurrentDecisionBriefV2,
@@ -32,6 +33,13 @@ class ConnectedDemoRepository(Protocol):
         case_id: UUID,
         source: CanonicalDemoSourceContract,
     ) -> AdvisorLedgerV2 | None: ...
+
+    async def advisor_ledger_v3(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        sources: tuple[CanonicalDemoSourceContract, ...],
+    ) -> AdvisorLedgerV3 | None: ...
 
     async def current_decision_brief_v2(
         self, context: ActorContext, case_id: UUID

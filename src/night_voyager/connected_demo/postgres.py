@@ -12,12 +12,15 @@ from night_voyager.connected_demo.fixtures import CanonicalDemoSourceContract
 from night_voyager.connected_demo.models import (
     AdvisorLedgerV1,
     AdvisorLedgerV2,
+    AdvisorLedgerV3,
     AdvisorReviewInputs,
     AdvisorRouteProjection,
+    AdvisorRouteProjectionV2,
     CanonicalDemoTaskInputs,
     ComparisonDimensionProjection,
     ConnectedJourneyStatusV1,
     CostProjection,
+    CostProjectionV2,
     CurrentDecisionBriefV1,
     CurrentDecisionBriefV2,
     DemoPhase,
@@ -36,24 +39,34 @@ from night_voyager.decision.models import (
     DecisionReceiptProjection,
     TimelinePlan,
 )
+from night_voyager.identity.demo_seed import INTAKE_REVISION_CASE_ID
 from night_voyager.identity.models import ActorContext, ActorRole
+from night_voyager.planning.hashing import canonical_sha256
+from night_voyager.planning.intake_fixture import INTAKE_DELAY_SOURCE_PACK_ID
 from night_voyager.planning.models import (
     Country,
     DimensionOutcome,
     DimensionResult,
     EvidenceRole,
     EvidenceUse,
+    FamilyPreferences,
     RouteOutcome,
     RouteResult,
     RunState,
+    StudentPreferences,
 )
 from night_voyager.planning.revision import (
     FamilyBudgetFactDeltaV1,
     PersistedPlanningResultProjectionV1,
     PlanningRevisionComparisonV1,
+    PlanningRevisionComparisonV2,
     PreferredCountriesFactDeltaV1,
+    PreviousRequestReviewV1,
     build_planning_revision_comparison,
+    build_planning_revision_comparison_v2,
+    derive_planning_revision_fact_delta,
 )
+from night_voyager.planning.synthetic import BASELINE_SOURCE_PACK_ID
 from night_voyager.tasks.models import AgentTaskState, TaskViewStatus
 from night_voyager.tasks.policy import project_task_status
 
@@ -63,6 +76,218 @@ class PostgresConnectedDemoRepository:
         self._session = session
 
     async def advisor_ledger(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        source: CanonicalDemoSourceContract,
+    ) -> AdvisorLedgerV1 | None:
+        if context.role is not ActorRole.ADVISOR:
+            return None
+        intake_scenario = await self._session.scalar(
+            text(
+                "SELECT (c.id=:controlled OR EXISTS(SELECT 1 FROM app.agent_tasks t "
+                "WHERE t.organization_id=c.organization_id AND t.case_id=c.id "
+                "AND t.case_revision=c.current_revision AND t.source_pack_id=:new_pack) "
+                "OR EXISTS(SELECT 1 FROM app.student_case_revisions r "
+                "JOIN app.planning_runs old_run ON old_run.organization_id=r.organization_id "
+                "AND old_run.id=r.superseded_planning_run_id "
+                "JOIN app.student_case_revisions old_revision "
+                "ON old_revision.organization_id=old_run.organization_id "
+                "AND old_revision.case_id=old_run.case_id "
+                "AND old_revision.revision=old_run.case_revision "
+                "WHERE r.organization_id=c.organization_id AND r.case_id=c.id "
+                "AND r.revision=c.current_revision AND (old_run.source_pack_id=:new_pack "
+                "OR r.student_preferences->'intake' IS DISTINCT FROM "
+                "old_revision.student_preferences->'intake'))) "
+                "FROM app.student_cases c JOIN app.student_case_participants p "
+                "ON p.organization_id=c.organization_id AND p.case_id=c.id "
+                "AND p.actor_id=:actor AND p.role='advisor' "
+                "WHERE c.organization_id=:org AND c.id=:case"
+            ),
+            {
+                "org": context.organization_id,
+                "actor": context.actor_id,
+                "case": case_id,
+                "controlled": INTAKE_REVISION_CASE_ID,
+                "new_pack": INTAKE_DELAY_SOURCE_PACK_ID,
+            },
+        )
+        if intake_scenario:
+            raise DemoContractUnavailableError("legacy intake projection is unavailable")
+        return await self._advisor_ledger_projection(context, case_id, source)
+
+    async def advisor_ledger_v3(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        sources: tuple[CanonicalDemoSourceContract, ...],
+    ) -> AdvisorLedgerV3 | None:
+        if context.role is not ActorRole.ADVISOR:
+            return None
+        try:
+            selected = await self._source_for_current_revision(context, case_id, sources)
+            if selected is None:
+                return None
+            revision, intake, source = selected
+            legacy = await self._advisor_ledger_projection(context, case_id, source)
+            if legacy is None:
+                return None
+            if legacy.case_revision != revision:
+                raise DemoContractUnavailableError("current revision changed during projection")
+            projection = await self._versioned_advisor_ledger(
+                context,
+                case_id,
+                source,
+                legacy,
+                version=3,
+                case_intake=intake,
+            )
+            assert isinstance(projection, AdvisorLedgerV3)
+            return projection
+        except (ValueError, TypeError, KeyError) as error:
+            raise DemoContractUnavailableError("versioned demo contract unavailable") from error
+
+    async def _source_for_current_revision(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        sources: tuple[CanonicalDemoSourceContract, ...],
+    ) -> tuple[int, str, CanonicalDemoSourceContract] | None:
+        row = (
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT c.current_revision,"
+                        "revision.student_preferences->>'intake' AS intake,"
+                        "revision.superseded_planning_run_id,old_run.source_pack_id AS old_pack,"
+                        "old_run.source_pack_version AS old_version,"
+                        "old_run.policy_version AS old_policy,"
+                        "old_run.case_revision AS old_revision,"
+                        "old_revision.student_preferences->>'intake' AS old_intake,"
+                        "request_review.id AS request_review_id,task.source_pack_id AS task_pack,"
+                        "task.source_pack_version AS task_version,"
+                        "task.policy_version AS task_policy,"
+                        "task.result_planning_run_id,result_run.case_id AS result_case,"
+                        "result_run.case_revision AS result_revision,"
+                        "result_run.source_pack_id AS result_pack,"
+                        "result_run.source_pack_version AS result_version,"
+                        "result_run.policy_version AS result_policy "
+                        "FROM app.student_cases c JOIN app.student_case_participants p "
+                        "ON p.organization_id=c.organization_id AND p.case_id=c.id "
+                        "AND p.actor_id=:actor AND p.role='advisor' "
+                        "JOIN app.student_case_revisions revision "
+                        "ON revision.organization_id=c.organization_id "
+                        "AND revision.case_id=c.id AND revision.revision=c.current_revision "
+                        "LEFT JOIN app.planning_runs old_run "
+                        "ON old_run.organization_id=revision.organization_id "
+                        "AND old_run.id=revision.superseded_planning_run_id "
+                        "AND old_run.case_id=revision.case_id "
+                        "LEFT JOIN app.student_case_revisions old_revision "
+                        "ON old_revision.organization_id=old_run.organization_id "
+                        "AND old_revision.case_id=old_run.case_id "
+                        "AND old_revision.revision=old_run.case_revision "
+                        "LEFT JOIN app.advisor_reviews request_review "
+                        "ON request_review.organization_id=revision.organization_id "
+                        "AND request_review.id=revision.revision_requested_by_review_id "
+                        "AND request_review.case_id=c.id "
+                        "AND request_review.case_revision=old_run.case_revision "
+                        "AND request_review.planning_run_id=old_run.id "
+                        "AND request_review.action='request_revision' "
+                        "LEFT JOIN LATERAL (SELECT t.* FROM app.agent_tasks t "
+                        "WHERE t.organization_id=c.organization_id AND t.case_id=c.id "
+                        "AND t.case_revision=c.current_revision "
+                        "ORDER BY t.created_at DESC,t.id LIMIT 1) task ON true "
+                        "LEFT JOIN app.planning_runs result_run "
+                        "ON result_run.organization_id=task.organization_id "
+                        "AND result_run.id=task.result_planning_run_id "
+                        "WHERE c.organization_id=:org AND c.id=:case"
+                    ),
+                    {"org": context.organization_id, "actor": context.actor_id, "case": case_id},
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        registered = {
+            (source.source_pack_id, source.source_pack_version, source.policy_version): source
+            for source in sources
+        }
+        if len(sources) != 2 or set(registered) != {
+            (BASELINE_SOURCE_PACK_ID, 1, "m3a-policy-v1"),
+            (INTAKE_DELAY_SOURCE_PACK_ID, 1, "m3a-policy-v1"),
+        }:
+            raise DemoContractUnavailableError("closed demo source contracts unavailable")
+        expected = (BASELINE_SOURCE_PACK_ID, 1, "m3a-policy-v1")
+        if row["superseded_planning_run_id"] is not None:
+            if (
+                row["old_revision"] != row["current_revision"] - 1
+                or row["request_review_id"] is None
+            ):
+                raise DemoContractUnavailableError("source revision lineage is unavailable")
+            expected = (row["old_pack"], row["old_version"], row["old_policy"])
+            if row["intake"] != row["old_intake"]:
+                if (
+                    row["old_intake"] != "2027-02"
+                    or row["intake"] != "2028-02"
+                    or expected != (BASELINE_SOURCE_PACK_ID, 1, "m3a-policy-v1")
+                ):
+                    raise DemoContractUnavailableError("controlled intake source is unavailable")
+                expected = (INTAKE_DELAY_SOURCE_PACK_ID, 1, "m3a-policy-v1")
+        if expected not in registered or (
+            expected[0] == INTAKE_DELAY_SOURCE_PACK_ID and row["intake"] != "2028-02"
+        ):
+            raise DemoContractUnavailableError("persisted source contract is unavailable")
+        if row["task_pack"] is not None:
+            stored = (row["task_pack"], row["task_version"], row["task_policy"])
+            if stored != expected:
+                raise DemoContractUnavailableError("stored task source is unavailable")
+            expected = stored
+        if row["result_planning_run_id"] is not None and (
+            row["result_case"] != case_id
+            or row["result_revision"] != row["current_revision"]
+            or (row["result_pack"], row["result_version"], row["result_policy"]) != expected
+        ):
+            raise DemoContractUnavailableError("stored run source is unavailable")
+        return row["current_revision"], row["intake"], registered[expected]
+
+    async def _intake_routes(
+        self,
+        context: ActorContext,
+        run_id: UUID,
+        routes: tuple[AdvisorRouteProjection, ...],
+        intake: str,
+    ) -> tuple[AdvisorRouteProjectionV2, ...]:
+        rows = (
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT country,intake FROM app.cost_evidence "
+                        "WHERE organization_id=:org AND planning_run_id=:run"
+                    ),
+                    {"org": context.organization_id, "run": run_id},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        cost_intakes = {row["country"]: row["intake"] for row in rows}
+        if len(cost_intakes) != len(rows):
+            raise DemoContractUnavailableError("cost intake projection is ambiguous")
+        projected: list[AdvisorRouteProjectionV2] = []
+        for route in routes:
+            payload = route.model_dump(mode="python")
+            if route.cost is not None:
+                if cost_intakes.get(route.country.value) != intake:
+                    raise DemoContractUnavailableError("stored cost intake is unavailable")
+                payload["cost"] = CostProjectionV2(
+                    **route.cost.model_dump(mode="python"), intake=cost_intakes[route.country.value]
+                )
+            projected.append(AdvisorRouteProjectionV2.model_validate(payload))
+        return tuple(projected)
+
+    async def _advisor_ledger_projection(
         self,
         context: ActorContext,
         case_id: UUID,
@@ -250,32 +475,52 @@ class PostgresConnectedDemoRepository:
         legacy = await self.advisor_ledger(context, case_id, source)
         if legacy is None:
             return None
+        projection = await self._versioned_advisor_ledger(
+            context, case_id, source, legacy, version=2
+        )
+        assert isinstance(projection, AdvisorLedgerV2)
+        return projection
+
+    async def _versioned_advisor_ledger(
+        self,
+        context: ActorContext,
+        case_id: UUID,
+        source: CanonicalDemoSourceContract,
+        legacy: AdvisorLedgerV1,
+        *,
+        version: Literal[2, 3],
+        case_intake: str | None = None,
+    ) -> AdvisorLedgerV2 | AdvisorLedgerV3:
         revision_request = (
-            await self._session.execute(
-                text(
-                    "SELECT EXISTS(SELECT 1 FROM app.advisor_reviews review_row "
-                    "JOIN app.planning_runs run_row "
-                    "ON run_row.organization_id=review_row.organization_id "
-                    "AND run_row.id=review_row.planning_run_id "
-                    "AND run_row.case_id=review_row.case_id "
-                    "AND run_row.case_revision=review_row.case_revision "
-                    "AND run_row.is_current "
-                    "WHERE review_row.organization_id=:org "
-                    "AND review_row.case_id=:case "
-                    "AND review_row.case_revision=:revision "
-                    "AND review_row.action='request_revision') AS requested,"
-                    "app.read_connected_journey_fact_pending("
-                    ":org,:actor,:role,:case) AS fact_pending"
-                ),
-                {
-                    "org": context.organization_id,
-                    "actor": context.actor_id,
-                    "role": context.role.value,
-                    "case": case_id,
-                    "revision": legacy.case_revision,
-                },
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT EXISTS(SELECT 1 FROM app.advisor_reviews review_row "
+                        "JOIN app.planning_runs run_row "
+                        "ON run_row.organization_id=review_row.organization_id "
+                        "AND run_row.id=review_row.planning_run_id "
+                        "AND run_row.case_id=review_row.case_id "
+                        "AND run_row.case_revision=review_row.case_revision "
+                        "AND run_row.is_current "
+                        "WHERE review_row.organization_id=:org "
+                        "AND review_row.case_id=:case "
+                        "AND review_row.case_revision=:revision "
+                        "AND review_row.action='request_revision') AS requested,"
+                        "app.read_connected_journey_fact_pending("
+                        ":org,:actor,:role,:case) AS fact_pending"
+                    ),
+                    {
+                        "org": context.organization_id,
+                        "actor": context.actor_id,
+                        "role": context.role.value,
+                        "case": case_id,
+                        "revision": legacy.case_revision,
+                    },
+                )
             )
-        ).mappings().one()
+            .mappings()
+            .one()
+        )
         phase = {
             DemoPhase.TASK_READY: DemoPhaseV2.TASK_READY,
             DemoPhase.ACTIVE_TASK: DemoPhaseV2.ACTIVE_TASK,
@@ -284,7 +529,7 @@ class PostgresConnectedDemoRepository:
             DemoPhase.PLAN_READY: DemoPhaseV2.PLAN_READY,
             DemoPhase.TERMINAL_TASK_FAILURE: DemoPhaseV2.TERMINAL_TASK_FAILURE,
         }[legacy.phase]
-        comparison: PlanningRevisionComparisonV1 | None = None
+        comparison: PlanningRevisionComparisonV1 | PlanningRevisionComparisonV2 | None = None
         payload = legacy.model_dump(mode="python")
         lineage = await self._current_planning_revision_lineage(
             context,
@@ -317,7 +562,11 @@ class PostgresConnectedDemoRepository:
                         "versioned planning run projection is unavailable"
                     )
                 comparison = await self._planning_revision_comparison(
-                    context, case_id, legacy.case_revision, run.planning_run_id
+                    context,
+                    case_id,
+                    legacy.case_revision,
+                    run.planning_run_id,
+                    comparison_version=2 if version == 3 else 1,
                 )
                 phase = (
                     DemoPhaseV2.REVISION_REVIEW_REQUIRED
@@ -330,9 +579,7 @@ class PostgresConnectedDemoRepository:
                         "routes": routes,
                         "evidence": evidence,
                         "review_inputs": (
-                            legacy.review_inputs
-                            if run.state == "review_required"
-                            else None
+                            legacy.review_inputs if run.state == "review_required" else None
                         ),
                         "recovery": (
                             None if phase is DemoPhaseV2.REVISION_BLOCKED else legacy.recovery
@@ -376,11 +623,38 @@ class PostgresConnectedDemoRepository:
             )
         payload.update(
             {
-                "schema_version": 2,
+                "schema_version": version,
                 "phase": phase,
                 "comparison": comparison,
             }
         )
+        if version == 3:
+            if case_intake is None:
+                raise DemoContractUnavailableError("persisted intake is unavailable")
+            payload["case_intake"] = case_intake
+            if payload["planning_run"] is not None:
+                run_id = PublicPlanningRunProjectionV2.model_validate(
+                    payload["planning_run"]
+                ).planning_run_id
+                persisted, output_hash = await self._persisted_planning_result(context, run_id)
+                if (
+                    persisted.case_id != case_id
+                    or persisted.case_revision != legacy.case_revision
+                    or canonical_sha256(persisted.planning_result().model_dump(mode="json"))
+                    != output_hash
+                ):
+                    raise DemoContractUnavailableError(
+                        "persisted planning result hash is unavailable"
+                    )
+                payload["routes"] = await self._intake_routes(
+                    context,
+                    run_id,
+                    tuple(
+                        AdvisorRouteProjection.model_validate(route) for route in payload["routes"]
+                    ),
+                    case_intake,
+                )
+            return AdvisorLedgerV3.model_validate(payload)
         return AdvisorLedgerV2.model_validate(payload)
 
     async def _initial_blocked_projection(
@@ -716,46 +990,88 @@ class PostgresConnectedDemoRepository:
         case_id: UUID,
         revision: int,
         current_run_id: UUID,
-    ) -> PlanningRevisionComparisonV1:
+        *,
+        comparison_version: Literal[1, 2] = 1,
+    ) -> PlanningRevisionComparisonV1 | PlanningRevisionComparisonV2:
         lineage = (
-            await self._session.execute(
-                text(
-                    "SELECT current_revision.superseded_planning_run_id,"
-                    "current_revision.student_preferences AS current_student,"
-                    "current_revision.family_preferences AS current_family,"
-                    "previous_revision.student_preferences AS previous_student,"
-                    "previous_revision.family_preferences AS previous_family "
-                    "FROM app.student_case_revisions current_revision "
-                    "JOIN app.student_case_revisions previous_revision "
-                    "ON previous_revision.organization_id=current_revision.organization_id "
-                    "AND previous_revision.case_id=current_revision.case_id "
-                    "AND previous_revision.revision=current_revision.revision-1 "
-                    "WHERE current_revision.organization_id=:org "
-                    "AND current_revision.case_id=:case "
-                    "AND current_revision.revision=:revision "
-                    "AND current_revision.superseded_planning_run_id IS NOT NULL"
-                ),
-                {
-                    "org": context.organization_id,
-                    "case": case_id,
-                    "revision": revision,
-                },
+            (
+                await self._session.execute(
+                    text(
+                        "SELECT current_revision.superseded_planning_run_id,"
+                        "current_revision.student_preferences AS current_student,"
+                        "current_revision.family_preferences AS current_family,"
+                        "previous_revision.student_preferences AS previous_student,"
+                        "previous_revision.family_preferences AS previous_family,"
+                        "request_review.id AS review_id,request_review.review_version,"
+                        "request_review.planning_run_id AS review_run_id,"
+                        "request_review.case_revision AS review_case_revision,"
+                        "request_review.action AS review_action "
+                        "FROM app.student_case_revisions current_revision "
+                        "JOIN app.student_case_revisions previous_revision "
+                        "ON previous_revision.organization_id=current_revision.organization_id "
+                        "AND previous_revision.case_id=current_revision.case_id "
+                        "AND previous_revision.revision=current_revision.revision-1 "
+                        "LEFT JOIN app.advisor_reviews request_review "
+                        "ON request_review.organization_id=current_revision.organization_id "
+                        "AND request_review.id=current_revision.revision_requested_by_review_id "
+                        "AND request_review.case_id=current_revision.case_id "
+                        "AND request_review.case_revision=previous_revision.revision "
+                        "AND request_review.planning_run_id="
+                        "current_revision.superseded_planning_run_id "
+                        "AND request_review.action='request_revision' "
+                        "WHERE current_revision.organization_id=:org "
+                        "AND current_revision.case_id=:case "
+                        "AND current_revision.revision=:revision "
+                        "AND current_revision.superseded_planning_run_id IS NOT NULL"
+                    ),
+                    {
+                        "org": context.organization_id,
+                        "case": case_id,
+                        "revision": revision,
+                    },
+                )
             )
-        ).mappings().one_or_none()
+            .mappings()
+            .one_or_none()
+        )
         if lineage is None:
             raise DemoContractUnavailableError("revision lineage is unavailable")
+        if comparison_version == 2:
+            if lineage["review_id"] is None:
+                raise DemoContractUnavailableError("frozen request review is unavailable")
+            changed = derive_planning_revision_fact_delta(
+                previous_student=StudentPreferences.model_validate(lineage["previous_student"]),
+                current_student=StudentPreferences.model_validate(lineage["current_student"]),
+                previous_family=FamilyPreferences.model_validate(lineage["previous_family"]),
+                current_family=FamilyPreferences.model_validate(lineage["current_family"]),
+            )
+            previous, previous_hash = await self._persisted_planning_result(
+                context, lineage["superseded_planning_run_id"]
+            )
+            current, current_hash = await self._persisted_planning_result(context, current_run_id)
+            return build_planning_revision_comparison_v2(
+                changed_fact=changed,
+                previous_request_review=PreviousRequestReviewV1(
+                    review_id=lineage["review_id"],
+                    review_version=lineage["review_version"],
+                    planning_run_id=lineage["review_run_id"],
+                    case_revision=lineage["review_case_revision"],
+                    action=lineage["review_action"],
+                ),
+                previous=previous,
+                current=current,
+                previous_output_sha256=previous_hash,
+                current_output_sha256=current_hash,
+            )
         previous_student = dict(lineage["previous_student"])
         current_student = dict(lineage["current_student"])
         previous_family = dict(lineage["previous_family"])
         current_family = dict(lineage["current_family"])
-        preferred_changed = (
-            previous_student.get("preferred_countries")
-            != current_student.get("preferred_countries")
-        )
-        budget_changed = previous_family.get("budget") != current_family.get("budget")
-        previous_student["preferred_countries"] = current_student.get(
+        preferred_changed = previous_student.get("preferred_countries") != current_student.get(
             "preferred_countries"
         )
+        budget_changed = previous_family.get("budget") != current_family.get("budget")
+        previous_student["preferred_countries"] = current_student.get("preferred_countries")
         previous_family["budget"] = current_family.get("budget")
         if (
             previous_student != current_student
@@ -780,9 +1096,7 @@ class PostgresConnectedDemoRepository:
         previous, previous_hash = await self._persisted_planning_result(
             context, lineage["superseded_planning_run_id"]
         )
-        current, current_hash = await self._persisted_planning_result(
-            context, current_run_id
-        )
+        current, current_hash = await self._persisted_planning_result(context, current_run_id)
         return build_planning_revision_comparison(
             changed_fact=changed_fact,
             previous=previous,

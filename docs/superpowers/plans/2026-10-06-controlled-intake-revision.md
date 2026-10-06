@@ -110,10 +110,10 @@ Runtime-role authority and source tests are complete. The actual post-receipt fi
 **Modify:** Versioned read files in the map, `tests/unit/planning/test_revision.py`, unit connected-demo tests, and existing HTTP/read-model integration tests.
 **Interfaces:** Produce strict `IntakeFactDeltaV1`, `PlanningRevisionComparisonV2`, bounded `PreviousRequestReviewV1`, `CostProjectionV2` with stored intake, and `AdvisorLedgerV3` with `case_intake`. Add repository/service V3 read methods; exactly one `contract_version=3` selects the ledger. Current-decision-brief stays V2.
 
-- [ ] Write failing tests for exactly one of three deltas, actual persisted intake, frozen old review joins, source selection before task creation, stored pins after creation, matching cost intake and output-hash validation. Cover extra/malformed values and simultaneous changes.
-- [ ] Record focused RED, then build V3 from verified persisted Case/task/run/source/review data. Keep V1 builders/models and V2 old-scenario responses unchanged; new-scenario legacy reads return the existing bounded unavailable response.
-- [ ] Test absent/default, exact V2/V3, empty/repeated/unknown negotiation, participant isolation and safe errors. Use persisted database rows for identity/authority assertions after Task 2's runtime gate is authorized.
-- [ ] Run affected unit/API contracts and legacy country/budget regressions; commit the versioned read outcome.
+- [x] Write failing tests for exactly one of three deltas, actual persisted intake, frozen old review joins, source selection before task creation, stored pins after creation, matching cost intake and output-hash validation. Cover extra/malformed values and simultaneous changes.
+- [x] Record focused RED, then build V3 from verified persisted Case/task/run/source/review data. Keep V1 builders/models and V2 old-scenario responses unchanged; new-scenario legacy reads return the existing bounded unavailable response.
+- [x] Test absent/default, exact V2/V3, empty/repeated/unknown negotiation, participant isolation and safe errors. Use persisted database rows for identity/authority assertions after Task 2's runtime gate is authorized.
+- [x] Run affected unit/API contracts and legacy country/budget regressions; commit the versioned read outcome.
 
 ### Task 4: Carry the actual intake through the existing UI
 
