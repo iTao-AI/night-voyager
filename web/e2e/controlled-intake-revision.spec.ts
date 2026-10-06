@@ -6,7 +6,7 @@ import type { AdvisorLedger, CurrentDecisionBrief } from "../lib/connected-demo/
 const root = process.env.CONTROLLED_INTAKE_REVIEW_ROOT;
 const origin = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const caseId = "49000000-0000-0000-0000-000000000003";
-const defaultCase = "49000000-0000-0000-0000-000000000001";
+const defaultCase = "40000000-0000-0000-0000-000000000002";
 const pack = "50000000-0000-0000-0000-000000000017";
 type Json = Record<string, unknown>;
 
@@ -82,7 +82,7 @@ test("controlled intake preserves the active journey and reaches a real parent r
     await expect(page.getByRole("button", { name: "开始顾问流程", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "开始顾问流程", exact: true }).click();
     await expect.poll(async () => (await envelope(page)).caseId).toBe(defaultCase);
-    await expect(page.getByRole("button", { name: "请求修订", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "创建规划任务", exact: true })).toBeVisible();
     const saved = await envelope(page);
     const prior = await read<AdvisorLedger>(page, `/api/demo/cases/${defaultCase}/advisor-ledger`);
     await page.goto("/demo?scenario=intake-delay");
@@ -140,7 +140,7 @@ test("controlled intake preserves the active journey and reaches a real parent r
     expect(revised.comparison?.countries.every(country => country.delta === "unchanged")).toBe(true);
     expect(revised.comparison?.previous_request_review).toMatchObject({ review_id: oldReview.review_id, case_revision: 1, action: "request_revision" });
     await expect(page.locator(".changed-fact-summary").filter({ hasText: "326,400" })).toContainText("2028-02");
-    await capture(page, "actual-cost-zh", ".changed-fact-summary");
+    await capture(page, "actual-cost-zh", '.changed-fact-summary:has-text("326,400")');
     await capture(page, "fresh-review-zh", ".revision-comparison");
     await page.evaluate(() => localStorage.setItem("night-voyager:presentation-locale:v1", "en"));
     await page.reload();
