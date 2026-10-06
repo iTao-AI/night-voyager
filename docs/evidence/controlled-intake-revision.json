@@ -121,7 +121,7 @@
       "red_failed": 1,
       "red_passed": 1
     },
-    "status": "local test repair and source/readback audit complete; native/browser remains DEFERRED",
+    "status": "local test repair and source/readback audit complete; native/browser was DEFERRED at that checkpoint, before the later authorized third attempt passed",
     "substantive_native_failures": 2,
     "test_source_head": "34acfa87b38e7813bcd29f2915c36d4015f4b0ac",
     "test_source_tree": "63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff",
@@ -144,7 +144,7 @@
         {
           "attempt": 2,
           "cause": "exact getByLabel text does not match label wrapping the intake option; accessible combobox exists",
-          "proposed_fix": "exact combobox role/name repaired in the later low-cost test phase; third browser run remains unauthorized",
+          "proposed_fix": "at the second-failure checkpoint: exact combobox role/name was proposed and a third browser run was not yet authorized; later repaired in the low-cost phase and passed in the explicitly authorized third attempt",
           "result": "failed",
           "test_elapsed_seconds": 240
         },
@@ -187,7 +187,7 @@
       "containers_networks_pg_artifact_volumes_released": true
     },
     "frozen": false,
-    "hosted_delivery": "not authorized; no remote branch or PR",
+    "hosted_delivery": "not established by this local native acceptance record; ordinary PR/CI/merge delivery is separately authorized",
     "image_ids": {
       "api": "sha256:37db0d264e9644281c680735e6bd7433520ab76be62144d4727bbbc7f132a557",
       "browser": "sha256:8a1d65defcd9632e0554faf0525068594eabb3621c14d66a091d1e4cf56ddbc3",
@@ -327,10 +327,10 @@
     ]
   },
   "remaining_gates": [
-    "coordinating owner hosted-delivery decision; no GitHub mutation authorized"
+    "hosted PR checks, standard merge and exact merge-SHA main CI/CodeQL acceptance; separate from this local native record"
   ],
   "schema_version": 1,
-  "scope": "local synthetic unit and runtime-role database acceptance; application-image/startup verified; focused browser acceptance deferred",
+  "scope": "local synthetic unit, runtime-role database and full native/browser acceptance passed; hosted acceptance pending at this local checkpoint",
   "verification_date": "2026-10-06",
   "verified_implementation_head": "816ced9bd32af2977d5a269344575c7881b149ab"
 }

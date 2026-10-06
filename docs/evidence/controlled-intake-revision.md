@@ -232,8 +232,8 @@ volumes, the exited profiled browser one-off, builder/cache and caffeinate were
 released. Other Docker inventories are unchanged. Six candidate images, all
 source/bindings, raw logs and screenshots remain retained in ignored task evidence.
 The two prior substantive failures stay recorded; no fourth run occurred.
-Local native/browser acceptance is complete. Hosted delivery and default-branch
-availability remain separately gated; no PR, release or deployment is established.
+Local native/browser acceptance is complete. Hosted PR/check/merge acceptance is
+tracked separately; this local record establishes no release or deployment.
 
 See the [walkthrough](../operations/controlled-intake-revision.md),
 [approved plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md)

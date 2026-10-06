@@ -2,8 +2,9 @@
 
 This opt-in local synthetic scenario defers the same unfinalized Case from
 `2027-02` to `2028-02`. It uses an independent hypothetical source pack and the
-existing deterministic worker. It is not included in the current default-branch
-runtime or published v0.1.6. Bounded database and unit proof is recorded in the
+existing deterministic worker. Default seeding does not enable this scenario; it
+is not included in the published v0.1.6 archive. Bounded database and unit proof
+is recorded in the
 [acceptance evidence](../evidence/controlled-intake-revision.md); complete
 native/browser acceptance is also verified; hosted delivery remains a separate gate.
 
@@ -110,7 +111,8 @@ then remove only their task-owned artifact volumes. Re-query containers, network
 and volumes after teardown. Retain candidate images and copied diagnostics; this
 procedure does not authorize cleanup of other projects or shared caches.
 
-The controlled native/browser acceptance is currently DEFERRED after two failures.
-See the [acceptance record](../evidence/controlled-intake-revision.md) and the
-[active plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md) before
-resuming a frozen stage.
+The explicitly authorized third controlled native/browser attempt passed. The
+two prior failures remain history, with no fourth attempt. See the
+[acceptance record](../evidence/controlled-intake-revision.md) and the
+[completed local plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md)
+for exact results and the separately gated hosted-delivery scope.
