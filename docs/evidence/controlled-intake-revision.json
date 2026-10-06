@@ -85,7 +85,7 @@
         "Web",
         "PostgreSQL-init"
       ],
-      "status": "proposal only; explicit route decision required for one image derivation and one third runtime/browser attempt"
+      "status": "one browser derivation and one controlled third runtime/browser attempt explicitly authorized after repair/audit acceptance; not yet executed"
     },
     "production_business_or_lock_changes": false,
     "remaining_step_audit": {
@@ -172,7 +172,7 @@
       "candidate_images_and_ignored_diagnostics_retained": true,
       "containers_networks_pg_artifact_volumes_released": true
     },
-    "frozen": true,
+    "frozen": false,
     "hosted_delivery": "not authorized; no remote branch or PR",
     "image_ids": {
       "api": "sha256:37db0d264e9644281c680735e6bd7433520ab76be62144d4727bbbc7f132a557",
@@ -213,6 +213,11 @@
     },
     "status": "DEFERRED",
     "substantive_failures": 2,
+    "third_attempt": {
+      "automatic_fourth_attempt": false,
+      "prior_substantive_failures": 2,
+      "status": "explicitly authorized; not yet executed"
+    },
     "verification_date": "2026-10-06"
   },
   "persisted_readback": {

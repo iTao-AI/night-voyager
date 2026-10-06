@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Local implementation, bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. The native/browser phase is DEFERRED and frozen after two substantive failures; a separate explicit route decision is required before another image build or runtime/browser run. Hosted delivery remains separate.
+**Status:** Local implementation, bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. Native/browser acceptance remains incomplete after two substantive failures. The maintainer has explicitly authorized one controlled third attempt; no automatic fourth attempt is allowed. Hosted delivery remains separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.
@@ -418,19 +418,19 @@ unchanged. A discovered business gap requires a separate route decision.
   verification; no second whole-branch review.
 - [x] Prepare the audit and minimal next proposal below, retain raw RED/GREEN logs
   in ignored task artifacts and freeze the exact local candidate for the owner.
-- [ ] Receive explicit authorization for the proposed third native attempt.
+- [x] Receive explicit authorization for one controlled third native attempt; keep the two prior failures and prohibit an automatic fourth attempt.
 
 Test repair input is `34acfa87b38e7813bcd29f2915c36d4015f4b0ac`, tree
 `63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff`. Documentation-only commits do not
 change that browser input. See the [remaining-step audit](../../evidence/controlled-intake-revision.md#low-cost-test-repair-and-remaining-step-audit)
 for findings, sources and actual verification limits.
 
-### Minimal next acceptance proposal (not authorized)
+### Authorized third native acceptance (one attempt)
 
-This is one proposed third attempt of the **same** N2 goal. It does not reset its
-two substantive failures. Approval must explicitly permit the one browser-image
-derivation and one runtime/browser run; another failure stops immediately for an
-owner route decision. N1 remains frozen and N3 is not started.
+The maintainer explicitly authorized this one third attempt of the **same** N2
+goal after accepting the low-cost repair/audit. It does not reset its two
+substantive failures. Only one browser-image derivation and one runtime/browser
+run are allowed; another failure stops immediately for an owner route decision. N1 remains frozen and N3 is not started.
 
 Reuse the existing frozen API/worker/migrator/seed, Web and PostgreSQL-init images
 listed in Task 7. Their application inputs are unchanged. Retain both prior
@@ -443,7 +443,7 @@ rebuild is needed. Bind those four file hashes, source HEAD/tree and the new ima
 ID before execution. Use the already verified task-only BuildKit/OCI-context path;
 release its temporary builder/cache before runtime startup.
 
-Proposed project: `night-voyager-intake-native-n2-20261006-a3`, fresh own
+Authorized project: `night-voyager-intake-native-n2-20261006-a3`, fresh own
 PostgreSQL/artifact volumes, database `night_voyager`, existing API/worker roles,
 migration `0017` and `--with-intake-revision` seed. Recheck the five retained image
 IDs, unchanged locks/application inputs, free ports `52130`/`52131`/`52132`, task
@@ -472,4 +472,10 @@ caffeinate. Explicitly inventory exited profiled one-off browser containers afte
 `compose down --volumes`, since they were retained by that command previously.
 Preserve all candidate images and diagnostics. Record final resource/worktree
 inventory and return exact HEAD/tree, source/image binding, actual results and
-cumulative failure count once. This proposal is reviewable; no part has executed.
+cumulative failure count once. Authorization is recorded before preparation;
+build/runtime acceptance has not yet executed.
+
+- [ ] Verify retained image/file identities, current inputs, ports, capacity and ownership.
+- [ ] Derive and bind the single browser image; release builder/cache.
+- [ ] Run the single real BFF/API/worker/browser chain and verify current persisted results.
+- [ ] Inspect rendered captures, retain raw evidence, release task-owned resources and return once.

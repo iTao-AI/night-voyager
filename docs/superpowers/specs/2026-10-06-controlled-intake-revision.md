@@ -1,6 +1,6 @@
 # Controlled February intake revision
 
-Status: Approved and locally implemented; bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. Focused browser acceptance is DEFERRED and frozen after two substantive failures; a separate explicit route decision is required before another image build or runtime/browser run. Hosted delivery remains separately gated.
+Status: Approved and locally implemented; bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. Focused browser acceptance remains incomplete after two substantive failures; one controlled third attempt is explicitly authorized, with no automatic fourth attempt. Hosted delivery remains separately gated.
 Date: 2026-10-06.
 Git starting point: `68de260b1e207f83153d51801501c7775b4f4374`, the merged PR #128 main baseline.
 Delivery owner: the maintainer-directed delivery owner retains design, integration and acceptance.

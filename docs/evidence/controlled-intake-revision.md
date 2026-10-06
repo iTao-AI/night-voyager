@@ -177,8 +177,9 @@ Actual follow-up checks: **7 files / 96 unit tests passed**, frontend typecheck 
 lint passed, and discovery found exactly one focused E2E. The unchanged 1,570/614
 full suites and earlier PostgreSQL acceptance were reused within their original
 scope. No second whole-branch review or production behavior change was introduced.
-The [plan's minimal next acceptance proposal](../superpowers/plans/2026-10-06-controlled-intake-revision.md#minimal-next-acceptance-proposal-not-authorized)
-requires a separate explicit route decision before building or running anything.
+The maintainer subsequently accepted this repair/audit and explicitly authorized
+[one controlled third attempt](../superpowers/plans/2026-10-06-controlled-intake-revision.md#authorized-third-native-acceptance-one-attempt).
+The two prior failures remain; this authorization is not a new runtime pass.
 
 See the [walkthrough](../operations/controlled-intake-revision.md),
 [approved plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md)
