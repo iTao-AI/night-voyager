@@ -276,6 +276,10 @@ versions, timestamps, subject/advisor role labels, and only their own proposal
 status; they do not receive internal IDs, source digests, reasons, or history.
 Problems use the closed collaboration codes documented in
 [Collaboration and confirmed facts](collaboration-and-confirmed-facts.md#closed-public-errors).
+The controlled intake revision adds bounded `409 intake_evidence_unavailable`
+when its independently pinned source is unsupported, absent or drifted. Refusal
+leaves the current predecessor authoritative and publishes no confirmed fact
+or Case revision. Existing mutation request shapes remain unchanged.
 PR A owns the backend authority. PR C consumes it through seven explicit same-origin
 BFF route files with exactly eight HTTP methods:
 

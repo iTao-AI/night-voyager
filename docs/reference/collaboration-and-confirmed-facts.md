@@ -169,10 +169,20 @@ waiting task remains blocking.
 `read_connected_journey_fact_pending(uuid,uuid,text,uuid)` is a separate,
 API-only boolean projection for assigned participants. It loads the Case's
 current revision internally and counts only an exact unexpired, unverified
-`student.preferred_countries` or `family.budget` candidate for that revision.
+`student.preferred_countries`, `family.budget`, or `student.intake` candidate for that revision.
 It returns no candidate row or internal identity. It does not broaden
 `read_memory_candidates(...)`, and the API and worker retain no direct
 candidate-table privilege.
+
+Migration `0017` adds the controlled pre-consent intake revision. Its exact
+`2027-02` to `2028-02` delta requires independently registered synthetic source
+`50000000-0000-0000-0000-000000000017/v1`. Missing, unsupported or drifted source
+returns `409 intake_evidence_unavailable` before any confirmation writes. The
+old current run remains available. Intake is strict ASCII `YYYY-MM` with years
+`0001` through `9999`; input is not normalized. Initial planning keeps its prior
+semantics. The migrator-only `assert_controlled_intake_source(...)` and
+`seed_demo_intake_revision(...)` helpers grant no direct runtime execution.
+See [ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
 
 Idempotency reuses `app.idempotency_records` with these exact operation names:
 
@@ -281,6 +291,7 @@ memory_candidate_expired
 memory_candidate_terminal
 collaboration_thread_full
 active_task_blocks_revision
+intake_evidence_unavailable
 invalid_collaboration_message
 unsupported_fact_key
 unsafe_fact_value

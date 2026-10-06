@@ -1,6 +1,6 @@
 # Documentation
 
-For current source, start with the [parent-budget revision walkthrough](operations/customer-revision-recovery.md#revise-one-confirmed-fact) and [qualified terminal recovery](operations/customer-revision-recovery.md#recover-a-qualified-failed-task): parent proposal, advisor-confirmed revision, fresh planning/review and explicit family choices with a receipt. Current source uses migration `0016`; the published v0.1.6 archive remains fixed at historical `0015`. `/` is static presentation; the connected local routes are live synthetic workflows.
+For current source, start with the [parent-budget revision walkthrough](operations/customer-revision-recovery.md#revise-one-confirmed-fact) and [qualified terminal recovery](operations/customer-revision-recovery.md#recover-a-qualified-failed-task): parent proposal, advisor-confirmed revision, fresh planning/review and explicit family choices with a receipt. Current source uses migration `0017`; the published v0.1.6 archive remains fixed at historical `0015`. `/` is static presentation; the connected local routes are live synthetic workflows.
 
 v0.1.6 is the current local synthetic portfolio release of Night Voyager. It
 includes the governed portfolio workflow plus governed timeline execution,
@@ -29,7 +29,7 @@ The [revision UI availability repair](superpowers/specs/2026-10-03-revision-ui-a
 
 The current presentation authority is the [reference-driven presentation spec](superpowers/specs/2026-08-14-reference-driven-presentation.md) and [implementation plan](superpowers/plans/2026-08-14-reference-driven-presentation.md).
 
-The controlled `2027-02` to `2028-02` intake revision has an [approved spec](superpowers/specs/2026-10-06-controlled-intake-revision.md) and [implementation plan](superpowers/plans/2026-10-06-controlled-intake-revision.md). Local implementation is in progress; the new migration, source fixture and read contracts are not yet verified or available in the default-branch runtime.
+The controlled `2027-02` to `2028-02` intake revision has an [approved spec](superpowers/specs/2026-10-06-controlled-intake-revision.md) and [implementation plan](superpowers/plans/2026-10-06-controlled-intake-revision.md). Local implementation is in progress: the independent fixture and migration authority have isolated runtime-role verification. The new read contracts and UI remain in progress; the feature is not yet available in the default-branch runtime. See [ADR 0016](decisions/0016-controlled-intake-revision-source-pins.md).
 
 - Connected same-Case plan execution continuation v1: [Approved design](superpowers/specs/2026-08-28-connected-same-case-plan-execution-continuation-design.md) and [implementation plan](superpowers/plans/2026-08-28-connected-same-case-plan-execution-continuation.md); merged on the current default branch in PR #103; local synthetic and provider-free; included in v0.1.6; not deployed. The existing bare `/demo/plan` Happy and `?scenario=blocked` scenarios remain independent.
 

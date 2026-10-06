@@ -114,6 +114,14 @@ cannot replace them. Preferred countries are a non-empty sorted unique subset of
 Australia, Japan, and Malaysia. Route, cost, ranking, route-to-Evidence, and eligible
 advisor-review product projections contain selected countries only.
 
+For the controlled `2027-02` to `2028-02` revision, migration `0017` resolves
+the successor from the persisted intake delta and frozen predecessor to
+`50000000-0000-0000-0000-000000000017/v1`. A later non-intake revision retains
+its predecessor's source. Wrong Task pins or drifted registered source cannot
+reuse old costs. Worker snapshot loading repeats the source checks; the new
+pack is excluded from the existing terminal retry allowlist. See
+[ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
+
 ## Versioned planning predecessor and successor
 
 Migration `0012` binds a revision task to one predecessor through

@@ -83,12 +83,12 @@ Keep explicit historical `0016` downgrade/seed-phase checks and tagged records.
 **Modify:** `src/night_voyager/planning/synthetic.py`, `pyproject.toml`, `Dockerfile.api`, release/source inventory checks; `tests/unit/planning/test_synthetic.py` and installed-wheel asset regressions.
 **Interfaces:** Produce `load_exact_intake_delay_fixture() -> PlanningInput` and a closed `(source_pack_id, source_pack_version, policy_version)` to exact fixture descriptor. Each descriptor fixes intake, path and raw/canonical hashes. `materialize_persisted_synthetic_input(snapshot)` continues consuming the persisted Case and tuple, with unchanged baseline defaults and no mutable current-source lookup.
 
-- [ ] Write failing assertions for distinct identity/cost, `2028-02`, accepted synthetic source references, one Australia cost row, baseline byte preservation and manifest/source/path/hash drift refusal.
-- [ ] Run the new focused tests and record RED for the missing second identity, not an import-only or environment error.
-- [ ] Add the independently declared fixture, compute its two frozen hashes and implement exact two-entry selection. Preserve persisted intake/budget/countries and existing policy/input/output schemas.
-- [ ] Run new fixture and existing synthetic/adapter tests; assert `32,640,000` and rejection of wrong/mixed pins. Review the frozen descriptor values for the next task.
-- [ ] Build/install the project wheel in a task-only environment and verify packaged manifest/source digests from a different cwd. Verify final-image COPY/resource declarations; leave actual new-image proof pending separate authorization.
-- [ ] Commit exact paths as one source-fixture outcome.
+- [x] Write failing assertions for distinct identity/cost, `2028-02`, accepted synthetic source references, one Australia cost row, baseline byte preservation and manifest/source/path/hash drift refusal.
+- [x] Run the new focused tests and record RED for the missing second identity, not an import-only or environment error.
+- [x] Add the independently declared fixture, compute its two frozen hashes and implement exact two-entry selection. Preserve persisted intake/budget/countries and existing policy/input/output schemas.
+- [x] Run new fixture and existing synthetic/adapter tests; assert `32,640,000` and rejection of wrong/mixed pins. Review the frozen descriptor values for the next task.
+- [x] Build/install the project wheel in a task-only environment and verify packaged manifest/source digests from a different cwd. Verify final-image COPY/resource declarations; leave actual new-image proof pending separate authorization.
+- [x] Commit exact paths as one source-fixture outcome.
 
 ### Task 2: Add intake revision authority, source checks and exact seed
 
@@ -96,12 +96,14 @@ Keep explicit historical `0016` downgrade/seed-phase checks and tagged records.
 **Create/modify:** New migration `0017_controlled_intake_revision.py`; the seed and collaboration files in the map; current-source `scripts/verify_release.py` and `scripts/run_db_tests.sh` gates and their focused regressions.
 **Interfaces:** Consume Task 1's exact descriptor. Replace the five existing function bodies named in the spec without changing signatures. Add a migrator-only `app.assert_controlled_intake_source` and `app.seed_demo_intake_revision`; map SQLSTATE `NV027` through `IntakeEvidenceUnavailableError` to the exact public error. Add opt-in `--with-intake-revision` to the existing seed CLI. Before creation, choose the target from the exact intake delta or retain a non-intake predecessor pin; initial baseline planning remains unchanged.
 
-- [ ] Write database regressions with API/worker roles: student authorship, assigned advisor/request-review gate, adjacent publication, pending boolean, no auto-task, illegal year/month, unchanged/stale/expired/replay/conflict, source absence/drift, wrong old/new pack and finalized refusal. Snapshot refused confirmation before/after.
-- [ ] Use the approved isolated database lane above to demonstrate the intake whitelist/source-pinning failure. Unit/fake SQL checks cannot satisfy this task's acceptance.
-- [ ] Implement the additive replacements and source checks in the existing transaction order. Keep every inherited finalized/active-task/lineage fence, grants and RLS. The seed persists the independent pack and a confirmed-intake initial Case with exact message/candidate/verification/fact references, without updating other Cases.
-- [ ] Test exact seed replay, drift rollback, PUBLIC/API/worker privilege denial, stable old function signatures, and downgrade refusal after new fixture/lineage exists. Without new data, compare restored bodies/grants to the `0016` state.
-- [ ] Test exact current Alembic head `0017`, role/seed helper inventory and current-source DB lane checks; retain historical `0016` phases and old Release bytes.
-- [ ] Run the affected collaboration, planning-revision and planning-start database regressions within the approved bounded lane; confirm old baseline, mixed-provider and terminal-recovery source boundaries are retained. Commit exact authority paths with the proposed ADR.
+- [x] Write database regressions with API/worker roles: student authorship, assigned advisor/request-review gate, adjacent publication, pending boolean, no auto-task, illegal year/month, unchanged/stale/expired/replay/conflict, source absence/drift, wrong old/new pack and finalized refusal. Snapshot refused confirmation before/after.
+- [x] Use the approved isolated database lane above to demonstrate the intake whitelist/source-pinning failure. Unit/fake SQL checks cannot satisfy this task's acceptance.
+- [x] Implement the additive replacements and source checks in the existing transaction order. Keep every inherited finalized/active-task/lineage fence, grants and RLS. The seed persists the independent pack and a confirmed-intake initial Case with exact message/candidate/verification/fact references, without updating other Cases.
+- [x] Test exact seed replay, drift rollback, PUBLIC/API/worker privilege denial, stable old function signatures, and downgrade refusal after new fixture/lineage exists. Without new data, compare restored bodies/grants to the `0016` state.
+- [x] Test exact current Alembic head `0017`, role/seed helper inventory and current-source DB lane checks; retain historical `0016` phases and old Release bytes.
+- [x] Run the affected collaboration, planning-revision and planning-start database regressions within the approved bounded lane; confirm old baseline, mixed-provider and terminal-recovery source boundaries are retained. Commit exact authority paths with the proposed ADR.
+
+Runtime-role authority and source tests are complete. The actual post-receipt finalized denial and later non-intake inheritance assertions remain owned by Task 5's persisted flow, as recorded in the execution ledger.
 
 ### Task 3: Version the comparison and advisor ledger
 

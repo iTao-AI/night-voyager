@@ -20,6 +20,7 @@ from night_voyager.collaboration.errors import (
     CollaborationPersistenceError,
     CollaborationThreadFullError,
     IdempotencyConflictError,
+    IntakeEvidenceUnavailableError,
     InvalidCollaborationMessageError,
     MemoryCandidateExpiredError,
     MemoryCandidateStaleError,
@@ -182,6 +183,12 @@ def _runtime_problem(
         return problem(error.status_code, code, detail)
 
     mappings: tuple[tuple[type[CollaborationError], int, str, str], ...] = (
+        (
+            IntakeEvidenceUnavailableError,
+            status.HTTP_409_CONFLICT,
+            "intake_evidence_unavailable",
+            "evidence for the proposed intake is unavailable",
+        ),
         (
             CollaborationAuthorizationError,
             status.HTTP_404_NOT_FOUND,

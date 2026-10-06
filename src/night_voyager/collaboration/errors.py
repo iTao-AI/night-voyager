@@ -5,6 +5,10 @@ class CollaborationError(Exception):
     """Base for bounded collaboration failures."""
 
 
+class IntakeEvidenceUnavailableError(CollaborationError):
+    pass
+
+
 class CollaborationAuthorizationError(CollaborationError):
     pass
 
