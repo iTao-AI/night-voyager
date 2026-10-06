@@ -347,9 +347,32 @@ BEGIN
        AND task.state IN ('queued','leased','running','waiting_review')
        AND NOT (
          task.state='waiting_review'
-         AND task.case_revision=p_expected_revision
-         AND task.result_planning_run_id=current_run.id
-         AND request_review.id IS NOT NULL
+         AND (
+           (task.case_revision=p_expected_revision
+            AND task.result_planning_run_id=current_run.id
+            AND request_review.id IS NOT NULL)
+           OR (task.case_revision<p_expected_revision AND EXISTS (
+             SELECT 1 FROM app.planning_runs retired
+             JOIN app.student_case_revisions successor
+               ON successor.organization_id=retired.organization_id
+              AND successor.case_id=retired.case_id
+              AND successor.revision=retired.case_revision+1
+              AND successor.superseded_planning_run_id=retired.id
+             JOIN app.advisor_reviews frozen_review
+               ON frozen_review.organization_id=successor.organization_id
+              AND frozen_review.id=successor.revision_requested_by_review_id
+              AND frozen_review.case_id=retired.case_id
+              AND frozen_review.case_revision=retired.case_revision
+              AND frozen_review.planning_run_id=retired.id
+              AND frozen_review.action='request_revision'
+             WHERE retired.organization_id=task.organization_id
+               AND retired.id=task.result_planning_run_id
+               AND retired.case_id=task.case_id
+               AND retired.case_revision=task.case_revision
+               AND retired.state='review_required' AND NOT retired.is_current
+               AND successor.revision<=p_expected_revision
+           ))
+         )
        )
   ) THEN
     RAISE EXCEPTION USING ERRCODE='NV014', MESSAGE='active task blocks revision publication';

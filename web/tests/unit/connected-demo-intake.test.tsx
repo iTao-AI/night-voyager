@@ -25,7 +25,7 @@ it("uses the current confirmed intake as the sole editable authority and submits
   expect(revisionMessageBody(intent).body).toContain('student.intake: "2028-02"');
 });
 
-it.each(["0000-02", "2028-00", "2028-13", "2028-2", "２０２８-02", "2028-02 ", " 2028-02", 202802, "2027-02"])("rejects invalid, coerced or unchanged intake %s", (value) => {
+it.each(["0000-02", "2028-00", "2028-13", "2028-2", "２０２８-02", "2028-02 ", " 2028-02", "2028-02\n", "2028-02\r", "2028-02\u2028", 202802, "2027-02"])("rejects invalid, coerced or unchanged intake %s", (value) => {
   expect(validateRevisionIntent({ ...intent, value } as never, facts).ok).toBe(false);
 });
 

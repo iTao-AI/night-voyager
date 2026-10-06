@@ -26,6 +26,12 @@ Caller-supplied Task pins must agree; worker loading repeats the authority
 checks. There is no mutable current-intake source lookup or old-cost fallback.
 The new pack remains outside the terminal retry allowlist introduced in `0016`.
 
+Active Tasks still block fact publication. A historical `waiting_review` result
+is exempt only when its non-current run was explicitly retired by a successor
+revision and a frozen `request_revision` review. This preserves the old Task
+without preventing a later country or budget revision from inheriting the new
+intake's source. Missing or orphan lineage grants no exception.
+
 An opt-in seed creates a separate unfinalized Case and complete initial intake
 message/candidate/verification/ConfirmedFact lineage. Exact replay writes
 nothing; conflicting source or Case data refuses atomically. Private helpers

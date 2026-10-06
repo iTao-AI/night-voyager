@@ -49,6 +49,16 @@ def test_unknown_database_failure_is_not_disguised_as_idempotency_conflict() -> 
     assert captured.value is unknown
 
 
+def test_nv027_maps_to_bounded_intake_source_unavailable() -> None:
+    with pytest.raises(TaskConflictError) as captured:
+        PostgresTaskRepository._raise_mapped(  # pyright: ignore[reportPrivateUsage]
+            db_error("NV027")
+        )
+
+    assert captured.value.code == "intake_evidence_unavailable"
+    assert "raw database detail" not in str(captured.value)
+
+
 def test_worker_load_uses_only_the_task_owned_revision_predecessor() -> None:
     load_source = inspect.getsource(PostgresWorkerTaskRepository.load)
 
