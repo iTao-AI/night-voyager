@@ -261,6 +261,26 @@ with suffix `-state`. Release that cache/container after builds and before the
 second capacity check, retaining the four candidate images. PostgreSQL and
 browser volumes are the project name plus `_postgres-data`/`_browser-artifacts`.
 
+All four builds passed. The frozen-source candidate IDs are:
+
+| Service image | Image ID |
+| --- | --- |
+| API / worker / migrator / seed | `sha256:37db0d264e9644281c680735e6bd7433520ab76be62144d4727bbbc7f132a557` |
+| Web | `sha256:760c5a55cec497d0c21702b8f4bddeae402bafeb5166591cf1ec01217ec4036d` |
+| PostgreSQL with copied init | `sha256:9f66e90766d16b77d613d0c26b0e8e881fff72aef312355b294e30b8a043e58e` |
+| Browser with focused frozen test | `sha256:cd70a5d396c6c3328f8f0fc7320d4c0ca902f466556d8f584fafd4b0af38bb87` |
+
+`compose-bound.json` SHA-256 is
+`4506829762e6fef187f8453b01886cbab3527c5c70f1268d1029caecabd87b39`.
+The task builder/container/cache are released. The runtime-start preflight passed
+with `8832520 KiB` available in the Docker VM and all three task ports free. The
+earlier capacity observation while the builder was active remains in ignored
+diagnostics; runtime startup was not attempted at that point. The bounded ignored
+`native.py` orchestrates the commands above, installed-asset checks and the
+read-only review checkpoint; its argv and SHA are frozen in the approval checkpoint
+before startup. Business snapshots use the API role; PostgreSQL's bootstrap role
+reads only cluster identity and migration metadata.
+
 Each image build is bounded to 600 seconds, startup to 120 seconds and the focused
 browser test to 240 seconds, with no Playwright retry and one worker. The browser
 pauses at its actual request-review response for at most 45 seconds while an
@@ -278,7 +298,7 @@ caffeinate; retain candidate images, source and diagnostics.
 - [x] Prepare the focused spec/config and validate their discovery/type/lint.
   Acceptance tests verify existing behavior; do not invent a RED result when they
   already pass. Ordinary product fixes found here require proportional TDD.
-- [ ] Freeze input HEAD/tree and archived input hashes; prepare local base contexts,
+- [x] Freeze input HEAD/tree and archived input hashes; prepare local base contexts,
   task builder/config and image bindings, then build the task application images.
 - [ ] Start the empty seeded cluster with `--with-intake-revision`; prove actual
   API/worker roles, installed package/fixture/Skill/migration assets and no source
