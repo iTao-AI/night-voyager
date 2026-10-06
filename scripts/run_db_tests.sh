@@ -47,6 +47,11 @@ if [ "${1:-}" = "inside" ]; then
         tests/integration/decision/test_postgres_decision.py tests/integration/tasks \
         tests/integration/connected_demo tests/integration/dra \
         tests/integration/collaboration \
+        --ignore=tests/integration/planning/test_intake_revision_source_pins.py \
+        --ignore=tests/integration/planning/test_intake_revision_authority.py \
+        --ignore=tests/integration/planning/test_intake_revision_migration.py \
+        --ignore=tests/integration/connected_demo/test_intake_read_models.py \
+        --ignore=tests/integration/connected_demo/test_intake_revision_flow.py \
         --ignore=tests/security/test_terminal_recovery_authority.py \
         --ignore=tests/integration/tasks/test_retry_skill_activation.py \
         --ignore=tests/integration/tasks/test_planning_start_migration.py \
@@ -365,6 +370,34 @@ if [ "${1:-}" = "inside-timeline-execution-journey" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "inside-intake-revision-migration" ]; then
+    # The empty predecessor and unavailable-source checks must run before any
+    # controlled intake seed or business history is published in this database.
+    uv run alembic downgrade 0016
+    uv run alembic current | grep '0016'
+    NIGHT_VOYAGER_INTAKE_MIGRATION_TEST=true \
+        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_intake_revision_migration.py
+    uv run alembic current | grep '0017'
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
+    exit 0
+fi
+
+if [ "${1:-}" = "inside-intake-revision" ]; then
+    uv run alembic upgrade head
+    uv run alembic current | grep '0017'
+    uv run --no-editable python scripts/seed_demo.py --with-intake-revision
+    # Replay/source checks precede the journey that advances the fixed Case.
+    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        tests/integration/planning/test_intake_revision_source_pins.py \
+        tests/integration/planning/test_intake_revision_authority.py \
+        tests/integration/connected_demo/test_intake_read_models.py \
+        tests/integration/connected_demo/test_intake_revision_flow.py
+    uv run alembic current | grep '0017'
+    uv run --no-editable python scripts/verify_release.py --check-db-roles
+    exit 0
+fi
+
 BASE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-night-voyager-db-check-$$}
 ACTIVE_PROJECT_NAME=
 
@@ -478,6 +511,29 @@ if [ "${1:-}" = "plan-execution-identity-migration" ]; then
     exit 0
 fi
 
+if [ "${1:-}" = "intake-revision" ]; then
+    suite=${2:-all}
+    case "$suite" in
+        migration)
+            run_lane "${BASE_PROJECT_NAME}-intake-revision-migration" \
+                inside-intake-revision-migration
+            ;;
+        runtime)
+            run_lane "${BASE_PROJECT_NAME}-intake-revision" inside-intake-revision
+            ;;
+        all)
+            run_lane "${BASE_PROJECT_NAME}-intake-revision-migration" \
+                inside-intake-revision-migration
+            run_lane "${BASE_PROJECT_NAME}-intake-revision" inside-intake-revision
+            ;;
+        *)
+            echo "unknown intake revision suite: $suite" >&2
+            exit 2
+            ;;
+    esac
+    exit 0
+fi
+
 if [ -n "${1:-}" ]; then
     echo "unknown database test mode: $1" >&2
     exit 2
@@ -499,4 +555,6 @@ run_lane "${BASE_PROJECT_NAME}-timeline-execution-http" inside-timeline-executio
 run_lane "${BASE_PROJECT_NAME}-timeline-execution-seed" inside-timeline-execution-seed
 run_lane "${BASE_PROJECT_NAME}-terminal-recovery" inside-terminal-recovery
 run_lane "${BASE_PROJECT_NAME}-main" inside
+run_lane "${BASE_PROJECT_NAME}-intake-revision-migration" inside-intake-revision-migration
+run_lane "${BASE_PROJECT_NAME}-intake-revision" inside-intake-revision
 run_lane "${BASE_PROJECT_NAME}-mixed-downgrade" inside-mixed-downgrade

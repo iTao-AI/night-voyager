@@ -74,6 +74,22 @@ retain their shapes. Legacy ledger requests for this controlled intake Case retu
 bounded `503 demo_contract_unavailable`, preventing misleading month/cost display.
 Browser hashes, locale and URL metadata grant no authority.
 
+## Verify the isolated database lanes
+
+`make db-check` includes two disposable intake lanes in addition to the ordinary
+demo baseline. To run just those lanes, use:
+
+```bash
+sh scripts/run_db_tests.sh intake-revision all
+```
+
+The migration lane starts unseeded at `0016`, enables all four `0017` migration
+tests, and verifies unavailable-source refusal before controlled seeding. The
+runtime lane registers the opt-in source before source/replay, role authority,
+read-model and complete decision regressions. Each lane owns a separate fresh
+database; its Cases and source material never alter the fixed ordinary-demo RLS
+baseline. A failing intake test fails the required database gate.
+
 ## Verify persisted results
 
 After the full decision, use the configured runtime API role:
