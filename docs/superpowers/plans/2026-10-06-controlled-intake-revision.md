@@ -18,7 +18,7 @@
 - Preserve role/RLS, exact request-review, active-task, stale, idempotency, predecessor/successor, finalized-Case and fresh-consent gates.
 - Keep old V1/V2 country/budget response shapes; new ledger uses exact `contract_version=3`, comparison V2 and stored cost intake; brief stays V2.
 - Do not widen the existing terminal recovery source whitelist or change runtime Skill manifests, dependency locks or February date rules.
-- Written design/plan approval is complete. The bounded PostgreSQL/runtime-role lane below is approved; full native/browser/image and remote verification require separate approval. The deferred native recovery CI proof is not a dependency or acceptance substitute.
+- Written design/plan approval is complete. The bounded PostgreSQL/runtime-role lane and the focused native/browser/image follow-up below are approved. Hosted delivery remains separate. The deferred native recovery CI proof is not a dependency or acceptance substitute.
 
 ## Authorized bounded PostgreSQL lane
 
@@ -148,6 +148,120 @@ method names above are proposed interfaces for review, not existing functions.
 
 Written spec/plan and the named migration/read-contract/source refusal choices
 are approved. Execute directly using the selected controller; bounded PG tests
-are in scope, while complete native/browser/image proof and remote actions are
-separate gates. Return a frozen local candidate with actual low-cost and
-runtime-role evidence before requesting those broader gates.
+are in scope. The frozen local candidate and its bounded evidence were accepted;
+the focused native/browser/image phase below is now authorized. Remote actions
+remain a separate gate.
+
+## Authorized focused native follow-up
+
+This phase was approved on `2026-10-06`. Reuse the design and direct execution;
+do not dispatch a second whole-branch reviewer. Do not run the frozen terminal
+recovery proof or real providers. No base-image pull, new dependency/tool,
+shared-cache or permanent host setting change, or hosted mutation is authorized.
+
+### Task 6: Correct the seed description and freeze the documentation follow-up
+
+- [x] Distinguish the initial intake ConfirmedFact chain from budget values held
+  in revision preferences. Update current status while retaining the original
+  review finding as history.
+- [x] Run documentation governance only: `32 passed`; reuse unchanged runtime
+  checks. Index the 18 `tmp/intake-n2-20261006/final-review-*.txt` raw logs by
+  relative path, SHA-256 and observed exit result, including the failed/superseded
+  runs, in the ignored approval checkpoint.
+- [x] Semantic commit `4456217e37f574da4c209e7dbd022a8ab95885ef`, tree
+  `9823138750ddab2f439182c499ea98a9a185832a`. No deferred minor remains.
+
+### Task 7: Prove the controlled intake through actual images and browser
+
+**Create:** `web/e2e/controlled-intake-revision.spec.ts` and
+`web/playwright.intake.compose.config.ts`. Use the existing Playwright framework,
+real BFF requests, actual API/worker and empty PostgreSQL. A task-only runner and
+Compose configuration remain ignored diagnostic/environment artifacts; this is
+one focused acceptance lane, not a general proof platform.
+
+**Frozen source:** freeze the application/E2E input HEAD and tree after committing
+the focused spec/config. Record those exact values here and in the checkpoint
+before building. Build from a `git archive` of that commit inside the task's ignored
+directory. Later documentation-only commits do not change the archived input or
+cause a rebuild. Any changed runtime/E2E input requires new binding and affected
+verification.
+
+**Images:** locally available Python
+`sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36`,
+Node Alpine `sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd`,
+PostgreSQL `sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15`
+and retained Chromium/locked browser dependencies
+`sha256:c46303754e0a27744be8d839c5a298bf031855a49f7244cda43158880757ce07`.
+The browser image's package-lock SHA equals the current web lock. Use a dedicated
+builder from retained BuildKit
+`sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea`
+with task-only Docker client configuration and cache volume. Export existing
+bases to local OCI contexts rather than resolving registry images; Buildx
+[supports local OCI contexts](https://docs.docker.com/reference/cli/docker/buildx/build/#additional-build-contexts---build-context).
+Apply only base aliases/task cache IDs to copies of the existing Dockerfiles;
+retain their package/wheel/build operations. Record the derived Dockerfile hashes,
+all resulting image IDs, frozen source and lock hashes. Copy PostgreSQL init assets
+and focused E2E assets into their task images; no source bind mounts.
+
+**Resources:** Compose project `night-voyager-intake-native-n2-20261006-a1`;
+database `night_voyager` on a new project-owned cluster/volume; host web/API/PG
+ports `52130`/`52131`/`52132`; public/browser origin
+`http://127.0.0.1:52130`. The browser's existing socat bridges that origin to the
+actual web service. Only named task PostgreSQL/browser-artifact volumes are
+mounted. Labels and inventory must prove ownership. Hold only a task caffeinate
+process. Recheck the established 8 GiB Docker VM capacity gate before costly work
+and before runtime startup; do not bypass it or prune unrelated resources.
+
+**Actual commands:** the ignored runner executes these explicit phases with
+arguments/assets recorded in its checkpoint (all from this worktree):
+
+```bash
+MODE=dev NIGHT_VOYAGER_DOCTOR_PORTS='52130 52131 52132' \
+  NIGHT_VOYAGER_DOCTOR_PROBE_IMAGE=sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 make doctor
+git archive <frozen-input-head> | tar -x -C <task-build-context>
+docker buildx build --builder <task-builder> --load --pull=false \
+  --build-context <base-alias>=oci-layout:///<task-oci-layout>@sha256:<manifest> \
+  --label org.opencontainers.image.revision=<frozen-input-head> \
+  --metadata-file <task-build-metadata> --file <derived-Dockerfile> \
+  --tag <task-image> <archived-context>
+docker compose -p night-voyager-intake-native-n2-20261006-a1 -f <task-compose> \
+  up -d --no-build --pull never --wait --wait-timeout 120 api worker web
+docker compose -p night-voyager-intake-native-n2-20261006-a1 -f <task-compose> \
+  run --no-deps --name <task-browser-container> browser-proof \
+  ./node_modules/.bin/playwright test --config playwright.intake.compose.config.ts
+docker compose -p night-voyager-intake-native-n2-20261006-a1 -f <task-compose> \
+  down --volumes
+```
+
+Each image build is bounded to 600 seconds, startup to 120 seconds and the focused
+browser test to 240 seconds, with no Playwright retry and one worker. Preserve
+diagnostics after the first failure and identify its cause before another run.
+The second substantive failure of this same costly goal stops the lane for a
+route decision, even if its harness changed. Do not rebuild for documentation or
+verification-record changes. Capture browser results/screenshots, pre/post API-role
+database snapshots, installed image assets and role/cluster identity. Clean up
+only this stage's containers, networks, temporary builder/cache volumes and
+caffeinate; retain candidate images, source and diagnostics.
+
+- [ ] Prepare the focused spec/config and validate their discovery/type/lint.
+  Acceptance tests verify existing behavior; do not invent a RED result when they
+  already pass. Ordinary product fixes found here require proportional TDD.
+- [ ] Freeze input HEAD/tree and archived input hashes; prepare local base contexts,
+  task builder/config and image bindings, then build the task application images.
+- [ ] Start the empty seeded cluster with `--with-intake-revision`; prove actual
+  API/worker roles, installed package/fixture/Skill/migration assets and no source
+  overlays. Save the initial same-Case/history snapshot before browser mutation.
+- [ ] In Chinese, explicitly start an existing default journey, demonstrate the
+  controlled entry cannot overwrite it, explicitly end it and start Case3. Request
+  revision, submit actual student `2028-02`, reload pending state, hand off to advisor,
+  confirm and explicitly create the new task. Replay one captured mutation with its
+  original idempotency key and assert one persisted business result.
+- [ ] Verify V3 actual intake/new pack/cost `32640000`, fresh review, then direct
+  parent `32000000`–`36000000` with `budget_elasticity`, receipt and four dates.
+  Reload the completed view; compare old output/review bytes with only the intended
+  old run `is_current` change. Capture desktop/mobile rendered screens and inspect
+  them. Choose other-language coverage only for the actual changed surfaces.
+- [ ] Collect exact input/final HEAD/tree, image/artifact/DB/browser evidence and
+  raw log hashes/exit results; update current public evidence and scope status.
+  Verify task resource release and unaffected worktrees, then return once. Hosted
+  delivery remains separately gated.
