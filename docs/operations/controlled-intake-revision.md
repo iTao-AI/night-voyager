@@ -5,7 +5,7 @@ This opt-in local synthetic scenario defers the same unfinalized Case from
 existing deterministic worker. It is not included in the current default-branch
 runtime or published v0.1.6. Bounded database and unit proof is recorded in the
 [acceptance evidence](../evidence/controlled-intake-revision.md); complete
-application-image/browser acceptance and hosted delivery remain separate gates.
+native/browser acceptance is also verified; hosted delivery remains a separate gate.
 
 ## Prepare the independent Case
 
@@ -29,8 +29,9 @@ receipt or timeline. Exact initial replay is a no-op; a drifted or progressed Ca
 refuses atomically. Preserve existing volumes and history; reseeding is not a reset.
 The baseline Task is a copied `legacy_unpinned` fixture; the successor below must
 be an actual runtime-pinned worker result. Application images, installed assets
-and runtime startup are verified; focused browser acceptance remains DEFERRED
-after two substantive failures. See the current acceptance evidence for scope.
+and runtime startup are verified. The explicitly authorized third focused browser
+attempt also passed, with the two earlier failures retained as history. See the
+current acceptance evidence for scope and comparison-density limitations.
 
 ## Revise and explicitly decide
 

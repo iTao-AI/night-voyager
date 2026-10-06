@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Local implementation, bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. Native/browser acceptance remains incomplete after two substantive failures. The maintainer has explicitly authorized one controlled third attempt; no automatic fourth attempt is allowed. Hosted delivery remains separate.
+**Status:** Local implementation, bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. The explicitly authorized third native/browser attempt passed; the two earlier failures remain history. Images, assets, real BFF/API/worker/parent results and rendered captures are verified; task resources are released. No fourth attempt occurred. Hosted delivery remains separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.
@@ -361,9 +361,10 @@ implements a role/name selector with a local selector-engine regression; no
 third runtime/browser run has occurred. An earlier diagnosis suggesting a missing preparation/handoff
 action was corrected after inspecting the actual failure; handoff had succeeded.
 
-This is the second substantive failure of the same goal. The native stage is
-**DEFERRED and frozen**, with no third run. The subsequent Task 8 authorization
-unfreezes only low-cost test repair/audit; runtime and image work remain frozen.
+This was the second substantive failure of the same goal. At that checkpoint the
+native stage was **DEFERRED and frozen**, with no third run. The subsequent Task 8 authorization
+unfroze only low-cost test repair/audit; runtime and image work remained frozen
+until the explicit third-attempt authorization below.
 The images/assets/runtime roles/startup, active-journey protection, explicit
 controlled start and real request-review are established. Student submission,
 successor worker/cost/fresh approval and parent receipt/timeline remain unverified
@@ -380,17 +381,17 @@ Return the exact candidate and evidence for a route decision before resuming.
 - [x] Start the empty seeded cluster with `--with-intake-revision`; prove actual
   API/worker roles, installed package/fixture/Skill/migration assets and no source
   overlays. Save the initial same-Case/history snapshot before browser mutation.
-- [ ] In Chinese, explicitly start an existing default journey, demonstrate the
+- [x] In Chinese, explicitly start an existing default journey, demonstrate the
   controlled entry cannot overwrite it, explicitly end it and start Case3. Request
   revision, submit actual student `2028-02`, reload pending state, hand off to advisor,
   confirm and explicitly create the new task. Replay one captured mutation with its
   original idempotency key and assert one persisted business result.
-- [ ] Verify V3 actual intake/new pack/cost `32640000`, fresh review, then direct
+- [x] Verify V3 actual intake/new pack/cost `32640000`, fresh review, then direct
   parent `32000000`–`36000000` with `budget_elasticity`, receipt and four dates.
   Reload the completed view; compare old output/review bytes with only the intended
   old run `is_current` change. Capture desktop/mobile rendered screens and inspect
   them. Choose other-language coverage only for the actual changed surfaces.
-- [ ] Collect exact input/final HEAD/tree, image/artifact/DB/browser evidence and
+- [x] Collect exact input/final HEAD/tree, image/artifact/DB/browser evidence and
   raw log hashes/exit results; update current public evidence and scope status.
   Verify task resource release and unaffected worktrees, then return once. Hosted
   delivery remains separately gated.
@@ -426,6 +427,8 @@ change that browser input. See the [remaining-step audit](../../evidence/control
 for findings, sources and actual verification limits.
 
 ### Authorized third native acceptance (one attempt)
+
+**Status:** Completed. The single browser derivation and real native/browser flow passed; prior failure count remains 2, no fourth run, owned resources released. See the [actual acceptance](../../evidence/controlled-intake-revision.md#authorized-third-attempt-local-nativebrowser-passed).
 
 The maintainer explicitly authorized this one third attempt of the **same** N2
 goal after accepting the low-cost repair/audit. It does not reset its two
@@ -472,10 +475,15 @@ caffeinate. Explicitly inventory exited profiled one-off browser containers afte
 `compose down --volumes`, since they were retained by that command previously.
 Preserve all candidate images and diagnostics. Record final resource/worktree
 inventory and return exact HEAD/tree, source/image binding, actual results and
-cumulative failure count once. Authorization is recorded before preparation;
-build/runtime acceptance has not yet executed.
+cumulative failure count once. Authorization was recorded before preparation at `5217d22`; the single derivation
+and runtime/browser acceptance subsequently passed. Browser image
+`sha256:8a1d65defcd9632e0554faf0525068594eabb3621c14d66a091d1e4cf56ddbc3`
+contains the four frozen file hashes. Browser process exit `0`, `18.854` seconds;
+real API-role result/history verification passed. All 12 rendered captures and
+geometry checks were inspected; retain the comparison-density limitations in the
+acceptance record. Six candidate images and ignored diagnostics are retained.
 
-- [ ] Verify retained image/file identities, current inputs, ports, capacity and ownership.
-- [ ] Derive and bind the single browser image; release builder/cache.
-- [ ] Run the single real BFF/API/worker/browser chain and verify current persisted results.
-- [ ] Inspect rendered captures, retain raw evidence, release task-owned resources and return once.
+- [x] Verify retained image/file identities, current inputs, ports, capacity and ownership.
+- [x] Derive and bind the single browser image; release builder/cache.
+- [x] Run the single real BFF/API/worker/browser chain and verify current persisted results.
+- [x] Inspect rendered captures, retain raw evidence, release task-owned resources and return once.

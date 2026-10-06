@@ -6,7 +6,7 @@ The [curated database summary](controlled-intake-revision.json) contains the act
 old/new run identities, output hashes, new pack, direct parent receipt and timeline.
 The scenario is hypothetical, local synthetic and provider-free, with source/FX
 as-of `2026-07-01`. This is bounded runtime-role database and unit evidence;
-full native/browser acceptance and hosted delivery are pending.
+the later authorized native/browser acceptance below also passed; hosted delivery remains pending.
 
 ## Persisted behavior
 
@@ -84,7 +84,7 @@ follow-up; unchanged runtime verification was reused.
 This record does not establish default-branch availability, full local runtime
 READY, a new release or deployment.
 
-## Native follow-up: deferred after two failures
+## First two native attempts: retained failure history
 
 The separately authorized image/browser follow-up on `2026-10-06` built the
 application, web and PostgreSQL init images from `6154bfd` and verified all 134
@@ -112,8 +112,8 @@ check reproduced `要修改的事实入学月份`, which does not equal the test
 selector; no new browser run has verified it. This was not a missing student
 handoff or intake control.
 
-The native/browser phase is **DEFERRED and frozen after two substantive failures**.
-There was no third run. It does not establish actual browser submission of
+At that checkpoint the native/browser phase was **DEFERRED and frozen after two
+substantive failures**. Neither failed attempt established actual browser submission of
 `2028-02`, successor-worker processing, the new cost, fresh approval or parent
 receipt/timeline. The earlier bounded database acceptance above remains valid
 within its original scope. Post-failure API-role readback confirmed revision 1,
@@ -132,7 +132,8 @@ The separately authorized low-cost follow-up is implemented at
 `63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff`. It uses the existing locked local
 environment and changes only focused tests/configuration and current documentation.
 No Docker runtime, image build/pull, browser business run, provider or hosted
-action occurred. The native failure count stays **2** and the stage stays frozen.
+action occurred during that repair. At its checkpoint the native failure count
+stayed **2** and the runtime stage stayed frozen.
 
 The selector regression renders the actual `RevisionFactEditor` and runs the
 installed Playwright `1.58.2` selector engine inside JSDOM. Exact label matches
@@ -179,7 +180,60 @@ full suites and earlier PostgreSQL acceptance were reused within their original
 scope. No second whole-branch review or production behavior change was introduced.
 The maintainer subsequently accepted this repair/audit and explicitly authorized
 [one controlled third attempt](../superpowers/plans/2026-10-06-controlled-intake-revision.md#authorized-third-native-acceptance-one-attempt).
-The two prior failures remain; this authorization is not a new runtime pass.
+The two prior failures remain. The actual third-attempt results follow.
+
+## Authorized third attempt: local native/browser passed
+
+The maintainer accepted the low-cost repair/audit and explicitly allowed one
+third attempt of the same goal. Browser input is `34acfa87b38e7813bcd29f2915c36d4015f4b0ac` /
+tree `63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff`; unchanged application input is
+`6154bfd1b4a56e79527b0c03109fefc75f8a1193` /
+tree `37291ccb39d1fdb2032aa1163643ad95ac1a99a9`. Only the browser image was
+derived by copying the four frozen spec/helper/config files from the retained
+browser candidate. No application/Web/PostgreSQL rebuild, install, browser
+download, base pull or source bind occurred.
+
+The new browser image is
+`sha256:8a1d65defcd9632e0554faf0525068594eabb3621c14d66a091d1e4cf56ddbc3`.
+The retained API/worker/migrator/seed, Web and PostgreSQL-init image IDs in the
+JSON record were reused. Their installed sources/fixture/Skill/migration assets
+and the four new browser file hashes were verified. Both capacity checks exceeded
+8 GiB, all task ports were free before startup, and the build-only builder/cache
+was released before the second check.
+
+One worker and zero retries executed the single real BFF/API/worker journey.
+The browser process passed with exit `0` in `18.854` seconds. Its exact participant
+replay, actual advisor candidate UUID, confirmation result revision `2`, canonical
+pack `500…017/v1` Task and successor worker were all verified. Six observed
+business POSTs used the real UI; the captured proposal was replayed with its
+original key. Final API-role readback found exactly one matching intake candidate.
+Actual V3 month/cost, Chinese and English comparison, renewed approval and the
+Brief-bound parent decision passed. The receipt stores CNY minor
+`32000000`–`36000000`, `budget_elasticity`, parent maker/recorder and `direct`
+source. The four dates and unchanged receipt/timeline after reload passed.
+
+The independent read-only API-role checkpoint and final verifier establish
+byte-equal predecessor output, child rows/Evidence, frozen request-review and old
+revision, apart from the intended old run retirement. The new cluster used
+`night_voyager_api` / `night_voyager_worker`, database `night_voyager`, migration
+`0017` and the opt-in seed. Current curated run/receipt IDs come from this actual
+attempt; the prior bounded readback and both failed attempts remain history.
+
+All 12 screenshots at viewport widths `1440` and `390` were inspected; all 12
+panel geometry checks and page overflow checks passed. The captured intake,
+actual cost, bilingual comparison, explicit parent choices, receipt and four-date
+timeline are present. The comparison table still wraps country/change columns
+tightly, and English history/authority captions sit adjacent to their labels;
+this acceptance makes no broader visual-polish claim. No new trace archive or
+plaintext session/CSRF/idempotency-key field was saved in the new logs/artifacts.
+
+Artifacts were copied before cleanup. Exact a3 containers/network/PG and artifact
+volumes, the exited profiled browser one-off, builder/cache and caffeinate were
+released. Other Docker inventories are unchanged. Six candidate images, all
+source/bindings, raw logs and screenshots remain retained in ignored task evidence.
+The two prior substantive failures stay recorded; no fourth run occurred.
+Local native/browser acceptance is complete. Hosted delivery and default-branch
+availability remain separately gated; no PR, release or deployment is established.
 
 See the [walkthrough](../operations/controlled-intake-revision.md),
 [approved plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md)
