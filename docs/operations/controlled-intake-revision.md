@@ -21,8 +21,10 @@ From the current source checkout and its installed project environment, run:
 ```
 
 Default seeding does not add this Case. The flag adds fixed Case
-`49000000-0000-0000-0000-000000000003`, its full initial intake and budget fact
-lineage and a baseline plan awaiting advisor review. It creates no family decision,
+`49000000-0000-0000-0000-000000000003`, its full initial intake ConfirmedFact
+lineage and a baseline plan awaiting advisor review. Initial budget values remain
+in the Case revision's family preferences; this seed does not create a budget
+ConfirmedFact chain. It creates no family decision,
 receipt or timeline. Exact initial replay is a no-op; a drifted or progressed Case
 refuses atomically. Preserve existing volumes and history; reseeding is not a reset.
 The baseline Task is a copied `legacy_unpinned` fixture; the successor below must

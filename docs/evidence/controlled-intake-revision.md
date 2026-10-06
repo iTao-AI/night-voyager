@@ -74,9 +74,13 @@ HTTP/API-role boundary and fixed in `816ced9`, with the migration, persisted-flo
 default Python and relevant runtime-role suites green. This was one fix pass
 verified by tests, with no second review.
 
-One Minor documentation finding is deferred: the walkthrough says the opt-in seed
-includes an initial budget fact lineage. The actual seed supplies an intake
-ConfirmedFact chain; its initial budget values are revision preferences.
+One Minor documentation finding was deferred at the initial review gate: the
+walkthrough said the opt-in seed included an initial budget fact lineage. An
+authorized documentation follow-up on `2026-10-06` corrected that description:
+the seed supplies an intake ConfirmedFact chain, while its initial budget values
+are revision preferences. The original review finding remains in the JSON record
+as history; no deferred minor remains. Documentation checks were run for this
+follow-up; unchanged runtime verification was reused.
 This record does not establish default-branch availability, full local runtime
 READY, a new release or deployment.
 See the [walkthrough](../operations/controlled-intake-revision.md),

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Complete for approved local implementation, bounded runtime-role verification and final whole-branch review fix pass, with one deferred documentation minor. Full native/browser/image and hosted gates remain separate.
+**Status:** Local implementation, bounded runtime-role verification, final review fix pass and documentation minor correction complete. The separately authorized native/browser/image phase is pending; hosted delivery remains separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.

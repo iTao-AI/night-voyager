@@ -30,16 +30,22 @@
     },
     "ruff": "passed"
   },
+  "documentation_followup": {
+    "date": "2026-10-06",
+    "initial_budget_lineage_wording": "corrected; intake ConfirmedFact chain and budget revision preferences distinguished",
+    "runtime_verification": "reused unchanged inputs"
+  },
   "final_review": {
     "critical": 0,
-    "deferred_minors": [
+    "deferred_minors": [],
+    "fix_pass": "one TDD pass and green relevant suites; no re-review",
+    "historical_deferred_minors": [
       {
         "file": "docs/operations/controlled-intake-revision.md",
         "finding": "initial budget values are revision preferences, not a budget ConfirmedFact seed chain",
         "line": 24
       }
     ],
-    "fix_pass": "one TDD pass and green relevant suites; no re-review",
     "important_fixed": 1,
     "important_found": 1,
     "reviewed_head": "d91085b0e365f8b9a6537bb07412a839e3daf15c"
