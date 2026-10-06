@@ -8,11 +8,15 @@ import {
   type Request,
 } from "@playwright/test";
 
+import { createPlanningRevisionDiagnostics, type PlanningRevisionDiagnostics } from "./support/planning-revision-diagnostics";
+
 const proofFile = process.env.PLANNING_REVISION_PROOF_FILE;
 const workerReadyFile = process.env.PLANNING_REVISION_WORKER_READY_FILE;
 const initialSentinel = process.env.PLANNING_REVISION_INITIAL_SENTINEL;
 const restartSentinel = process.env.PLANNING_REVISION_RESTART_SENTINEL;
 const reviewRoot = process.env.PLANNING_REVISION_REVIEW_ROOT;
+const diagnosticHead = process.env.PLANNING_REVISION_DIAGNOSTIC_HEAD ?? "0".repeat(40);
+const diagnostics = new WeakMap<Page, PlanningRevisionDiagnostics>();
 const screenshotFile =
   process.env.PLANNING_REVISION_SCREENSHOT_FILE ??
   "/workspace/docs/assets/night-voyager-planning-revision.png";
@@ -222,7 +226,7 @@ async function hydrate(
 async function lostAck(
   page: Page,
   pattern: string,
-  operation: string,
+  operation: "request-revision" | "fact-confirmation" | "create-task",
   action: () => Promise<void>,
 ): Promise<{ response: Json; idempotencyKey: string }> {
   expect([
@@ -230,6 +234,8 @@ async function lostAck(
     "fact-confirmation",
     "create-task",
   ]).toContain(operation);
+  const diagnostic = diagnostics.get(page);
+  diagnostic?.mark(operation);
   let first = true;
   let captured: Json | null = null;
   let idempotencyKey = "";
@@ -241,6 +247,7 @@ async function lostAck(
     ) {
       const key = request.headers()["idempotency-key"];
       if (key) keys.push(key);
+      diagnostic?.observeReplay(keys.length, keys.length ? new Set(keys).size === 1 : null);
     }
   };
   page.on("request", listener);
@@ -251,19 +258,25 @@ async function lostAck(
       return;
     }
     first = false;
+    diagnostic?.mark("lost-ack-intercepted");
     idempotencyKey = route.request().headers()["idempotency-key"] ?? "";
     expect(idempotencyKey).toBeTruthy();
     const response = await route.fetch();
     captured = await response.json() as Json;
+    diagnostic?.mark("lost-ack-committed");
     await route.abort();
+    diagnostic?.mark("lost-ack-aborted");
   });
   await action();
   await expect(page.getByRole("button", { name: copy.reconnect })).toBeVisible();
+  diagnostic?.mark("replay-action");
   await page.getByRole("button", { name: copy.reconnect }).click();
   await expect.poll(() => keys.length).toBeGreaterThanOrEqual(2);
+  diagnostic?.mark("replay-post-observed");
   expect(new Set(keys)).toEqual(new Set([idempotencyKey]));
   page.off("request", listener);
   await page.unroute(matcher);
+  diagnostic?.mark("helper-unrouted");
   expect(captured).not.toBeNull();
   return { response: captured!, idempotencyKey };
 }
@@ -494,6 +507,19 @@ async function blockedFlow(page: Page, advisorCsrf: string): Promise<FlowProof> 
   };
 }
 
+test.afterEach(async ({ page }, testInfo) => {
+  const diagnostic = diagnostics.get(page);
+  if (!diagnostic) return;
+  try {
+    if (testInfo.status !== testInfo.expectedStatus) await diagnostic.saveFailure();
+  } catch {
+    console.error("planning-revision diagnostics unavailable; original failure preserved");
+  } finally {
+    diagnostic.stop();
+    diagnostics.delete(page);
+  }
+});
+
 test(
   "planning-revision.spec.ts proves revision recovery, restart, comparison, and blocked counterfactual",
   async ({ page }) => {
@@ -506,6 +532,7 @@ test(
         !reviewRoot,
       "runs only in the isolated planning revision Compose lane",
     );
+    if (reviewRoot) diagnostics.set(page, createPlanningRevisionDiagnostics(page, reviewRoot, locale, diagnosticHead));
     await page.goto("/");
     if (locale === "en") {
       await page.evaluate(() => {
@@ -533,9 +560,11 @@ test(
         await page.getByRole("button", { name: copy.requestRevision }).click();
       },
     );
+    diagnostics.get(page)?.mark("student-handoff-assertion");
     await expect(
       page.getByRole("button", { name: copy.continueStudent }),
     ).toBeVisible();
+    diagnostics.get(page)?.mark("student-handoff-observed");
     await page.getByRole("button", { name: copy.continueStudent }).click();
     csrf = String(
       await page.evaluate(() => {

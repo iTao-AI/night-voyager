@@ -93,10 +93,36 @@ jobs:
     timeout-minutes: 30
     env:
       COMPOSE_PROJECT_NAME: night-voyager-ci-${{ github.run_id }}-${{ github.run_attempt }}-compose-proof
+      PLANNING_REVISION_DIAGNOSTIC_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
       - run: make compose-proof
+      - name: Prepare safe planning revision failure diagnostics
+        id: planning_revision_diagnostics
+        if: failure()
+        run: |
+          python3 scripts/prepare_planning_revision_diagnostics.py \
+            --review-root tmp/planning-revision-review \
+            --output tmp/planning-revision-ci-artifacts \
+            --candidate-sha "$PLANNING_REVISION_DIAGNOSTIC_HEAD" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Upload safe planning revision failure diagnostics
+        if: failure() && steps.planning_revision_diagnostics.outputs.ready == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: planning-revision-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          retention-days: 7
+          if-no-files-found: error
+          include-hidden-files: false
+          path: |
+            tmp/planning-revision-ci-artifacts/manifest.json
+            tmp/planning-revision-ci-artifacts/en/diagnostics.json
+            tmp/planning-revision-ci-artifacts/en/context.md
+            tmp/planning-revision-ci-artifacts/en/visible-action.png
+            tmp/planning-revision-ci-artifacts/zh-CN/diagnostics.json
+            tmp/planning-revision-ci-artifacts/zh-CN/context.md
+            tmp/planning-revision-ci-artifacts/zh-CN/visible-action.png
       - if: always()
         run: make down
 

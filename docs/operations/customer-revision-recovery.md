@@ -103,6 +103,26 @@ real predecessor-lock/lease reclaim, bilingual country revision, comparison,
 renewed review, explicit family choices and a blocked budget counterfactual.
 It retains screenshots under `tmp/planning-revision-review` by default.
 
+On failure, the planning-revision test also retains a closed diagnostic projection
+for the requested locale under `diagnostics-en` or `diagnostics-zh-CN` in that
+review directory. It records the last observed stage, normalized synthetic HTTP
+paths, response status and duration, same-key replay equality, document language,
+and visibility of the approved recovery/handoff actions. In-flight requests and
+unobserved UI remain explicitly `pending` or unknown. An abrupt browser exit can
+leave only the last atomically written `progress.json`; this is partial evidence.
+The shell propagates the actual browser child failure status through its existing
+project cleanup.
+
+The `compose / proof` CI job prepares failure artifacts with
+`scripts/prepare_planning_revision_diagnostics.py`, binding them to the PR head
+(or branch SHA). It uploads only its validated JSON, generated context, SHA-256
+manifest and an optional crop of one exact static action button. The exporter
+rejects unknown fields, paths, mismatched heads, symlinks and PNG metadata. Raw
+Playwright traces, whole-page screenshots, error contexts, storage, HTTP
+headers/bodies, cookies, CSRF/session tokens and idempotency values stay excluded.
+The existing required proof gates, timeouts, retry policy and always-run teardown
+remain in place; these diagnostics do not turn a failed proof into a pass.
+
 For the bounded parent-budget/recovery supplement, build the existing images and
 then run the no-build runner:
 
@@ -131,7 +151,10 @@ fail closed on the now-evolved canonical Case. Screenshots supplement functional
 
 ## Environment notes
 
-Verified on 2026-10-02 with the existing locked Python and web dependencies.
+The runtime walkthrough was verified on 2026-10-02 with the existing locked Python
+and web dependencies. The failure-diagnostic projection was added on 2026-10-07
+and verified with focused unit, hook/DOM and mocked subprocess checks; live
+hosted capture and artifact upload still require a subsequent CI run.
 
 A task-owned BuildKit builder can be selected only for these commands with
 `BUILDX_BUILDER`; avoid changing the global builder or pruning unrelated cache.

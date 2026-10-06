@@ -353,6 +353,17 @@ run_fact_to_plan_lane() {
     printf 'compose-proof: governed fact-to-plan browser and database proof passed locale=%s\n' "$lane_locale"
 }
 
+require_planning_revision_browser() {
+    if kill -0 "$planning_revision_browser_pid" 2>/dev/null; then
+        return 0
+    fi
+    browser_status=0
+    wait "$planning_revision_browser_pid" || browser_status=$?
+    planning_revision_browser_pid=
+    [ "$browser_status" -ne 0 ] || browser_status=1
+    return "$browser_status"
+}
+
 run_planning_revision_lane() {
     lane_locale=$1
     case "$lane_locale" in
@@ -377,6 +388,15 @@ run_planning_revision_lane() {
     chmod 0666 "$PLANNING_REVISION_PROOF_FILE" "$PLANNING_REVISION_WORKER_READY_FILE"
     mkdir -p "$PLANNING_REVISION_REVIEW_DIR"
     chmod 0777 "$PLANNING_REVISION_REVIEW_DIR"
+    diagnostic_dir="$PLANNING_REVISION_REVIEW_DIR/diagnostics-$lane_locale"
+    [ ! -L "$diagnostic_dir" ] || {
+        printf 'compose-proof: diagnostic directory must not be a symlink\n' >&2
+        exit 1
+    }
+    mkdir -p "$diagnostic_dir"
+    chmod 0777 "$diagnostic_dir"
+    rm -f "$diagnostic_dir/progress.json" "$diagnostic_dir/progress.pending" \
+        "$diagnostic_dir/diagnostics.json" "$diagnostic_dir/visible-action.png"
     trace_dir="$PLANNING_REVISION_REVIEW_DIR/trace-$lane_locale"
     mkdir -p "$trace_dir"
     chmod 0777 "$trace_dir"
@@ -403,6 +423,7 @@ run_planning_revision_lane() {
         -e PLANNING_REVISION_INITIAL_SENTINEL="$PLANNING_REVISION_INITIAL_SENTINEL" \
         -e PLANNING_REVISION_RESTART_SENTINEL="$PLANNING_REVISION_RESTART_SENTINEL" \
         -e PLANNING_REVISION_REVIEW_ROOT="/workspace/tmp/planning-revision-review" \
+        -e PLANNING_REVISION_DIAGNOSTIC_HEAD="${PLANNING_REVISION_DIAGNOSTIC_HEAD:-0000000000000000000000000000000000000000}" \
         -v "$PWD/$PLANNING_REVISION_REVIEW_DIR:/workspace/tmp/planning-revision-review" \
         -v "$PWD/$trace_dir:/workspace/web/test-results" \
         browser-proof npx playwright test \
@@ -415,7 +436,7 @@ run_planning_revision_lane() {
             "$PLANNING_REVISION_WORKER_READY_FILE"; then
             break
         fi
-        kill -0 "$planning_revision_browser_pid"
+        require_planning_revision_browser
         [ "$attempt" -lt 120 ] || {
             printf 'compose-proof: timed out waiting for revised task SSE locale=%s\n' \
                 "$lane_locale" >&2
@@ -435,7 +456,7 @@ run_planning_revision_lane() {
             '^[0-9a-f-]{36}:running:1:1:[0-9a-f-]{36}:1:1:running$'; then
             break
         fi
-        kill -0 "$planning_revision_browser_pid"
+        require_planning_revision_browser
         kill -0 "$barrier_pid"
         [ "$attempt" -lt 120 ] || {
             printf 'compose-proof: durable running identity timeout locale=%s\n' \
@@ -452,7 +473,7 @@ run_planning_revision_lane() {
             "$PLANNING_REVISION_WORKER_READY_FILE"; then
             break
         fi
-        kill -0 "$planning_revision_browser_pid"
+        require_planning_revision_browser
         kill -0 "$barrier_pid"
         [ "$attempt" -lt 120 ] || {
             printf 'compose-proof: restart sentinel timeout locale=%s\n' \
