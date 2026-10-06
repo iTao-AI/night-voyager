@@ -15,7 +15,7 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 
 | Scope | Status | Specs and plans |
 | --- | --- | --- |
-| Controlled February intake revision | Locally implemented and runtime-role verified; final review and full native/browser/image/hosted gates pending | [Spec](specs/2026-10-06-controlled-intake-revision.md) · [Plan](plans/2026-10-06-controlled-intake-revision.md) |
+| Controlled February intake revision | Locally implemented, runtime-role verified and reviewed with fixes; one deferred documentation minor; full native/browser/image/hosted gates pending | [Spec](specs/2026-10-06-controlled-intake-revision.md) · [Plan](plans/2026-10-06-controlled-intake-revision.md) |
 | M2 identity, session, and RLS | Implemented | [Spec](specs/2026-07-12-m2-identity-session-rls-design.md) · [Plan](plans/2026-07-12-m2-identity-session-rls.md) |
 | M3A deterministic planning | Implemented | [Spec](specs/2026-07-12-m3a-deterministic-planning-design.md) · [Plan](plans/2026-07-12-m3a-deterministic-planning.md) |
 | M3B advisor and family decision | Implemented | [Spec](specs/2026-07-13-m3b-advisor-family-decision-design.md) · [Plan](plans/2026-07-13-m3b-advisor-family-decision.md) |
