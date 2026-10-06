@@ -611,10 +611,10 @@ BEGIN
   SELECT * INTO current_case FROM app.student_cases c
    WHERE c.organization_id=p_org AND c.id=p_case FOR UPDATE;
   IF NOT FOUND OR current_case.current_revision<>p_revision
-     OR NOT EXISTS (
+     OR (p_pack IS DISTINCT FROM '50000000-0000-0000-0000-000000000017'::uuid AND NOT EXISTS (
        SELECT 1 FROM app.source_packs s
        WHERE s.organization_id=p_org AND s.id=p_pack AND s.version=p_pack_version
-     ) THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='task input is stale'; END IF;
+     )) THEN RAISE EXCEPTION USING ERRCODE='NV003', MESSAGE='task input is stale'; END IF;
   SELECT * INTO current_revision FROM app.student_case_revisions revision_row
    WHERE revision_row.organization_id=p_org AND revision_row.case_id=p_case
      AND revision_row.revision=p_revision FOR SHARE;

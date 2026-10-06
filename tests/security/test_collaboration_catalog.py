@@ -143,7 +143,12 @@ def test_demo_seed_script_uses_only_migrator_owned_collaboration_functions() -> 
     script = (ROOT / "scripts/seed_demo.py").read_text(encoding="utf-8")
     assert "SELECT app.seed_demo_collaboration(" in script
     assert "SELECT app.seed_demo_pinned_collaboration_task(" in script
-    assert "SELECT app.seed_demo_planning_revision_fact(" in script
+    assert (
+        'helper = "seed_demo_intake_revision" if intake_seed '
+        'else "seed_demo_planning_revision_fact"'
+        in script
+    )
+    assert 'f"SELECT app.{helper}("' in script
     assert "await _seed_collaboration(" in script
     for table in TABLES:
         assert f"INSERT INTO app.{table}" not in script
