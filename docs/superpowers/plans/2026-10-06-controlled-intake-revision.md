@@ -179,10 +179,13 @@ real BFF requests, actual API/worker and empty PostgreSQL. A task-only runner an
 Compose configuration remain ignored diagnostic/environment artifacts; this is
 one focused acceptance lane, not a general proof platform.
 
-**Frozen source:** freeze the application/E2E input HEAD and tree after committing
-the focused spec/config. Record those exact values here and in the checkpoint
-before building. Build from a `git archive` of that commit inside the task's ignored
-directory. Later documentation-only commits do not change the archived input or
+**Frozen source:** application/E2E input HEAD
+`6154bfd1b4a56e79527b0c03109fefc75f8a1193`, tree
+`37291ccb39d1fdb2032aa1163643ad95ac1a99a9`. The focused spec/config passed
+typecheck, lint and discovery (one test). The task's ignored `native-a1/source.tar`
+is a `git archive` of that commit, SHA-256
+`7ee8866818b03b101c3a181381b83420e1eaf7a950d435a34f69829191253876`.
+Later documentation-only commits do not change the archived input or
 cause a rebuild. Any changed runtime/E2E input requires new binding and affected
 verification.
 
@@ -195,7 +198,10 @@ and retained Chromium/locked browser dependencies
 The browser image's package-lock SHA equals the current web lock. Use a dedicated
 builder from retained BuildKit
 `sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea`
-with task-only Docker client configuration and cache volume. Export existing
+with task-only Docker client configuration and cache volume. Start it with
+`docker run --pull never` and connect Buildx's `remote` driver over the existing
+Docker container connection helper; the managed container driver would attempt
+a registry pull. No builder port or Docker socket is mounted. Export existing
 bases to local OCI contexts rather than resolving registry images; Buildx
 [supports local OCI contexts](https://docs.docker.com/reference/cli/docker/buildx/build/#additional-build-contexts---build-context).
 Apply only base aliases/task cache IDs to copies of the existing Dockerfiles;
@@ -216,25 +222,51 @@ and before runtime startup; do not bypass it or prune unrelated resources.
 arguments/assets recorded in its checkpoint (all from this worktree):
 
 ```bash
+N2ROOT="$PWD/tmp/intake-n2-20261006/native-a1"
+# Capture the already configured local endpoint before selecting task client config.
+N2_DOCKER_ENDPOINT=$(docker context inspect --format '{{.Endpoints.docker.Host}}')
+export DOCKER_HOST="$N2_DOCKER_ENDPOINT" DOCKER_CONFIG="$N2ROOT/docker-client"
 MODE=dev NIGHT_VOYAGER_DOCTOR_PORTS='52130 52131 52132' \
   NIGHT_VOYAGER_DOCTOR_PROBE_IMAGE=sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 make doctor
-git archive <frozen-input-head> | tar -x -C <task-build-context>
-docker buildx build --builder <task-builder> --load --pull=false \
-  --build-context <base-alias>=oci-layout:///<task-oci-layout>@sha256:<manifest> \
-  --label org.opencontainers.image.revision=<frozen-input-head> \
-  --metadata-file <task-build-metadata> --file <derived-Dockerfile> \
-  --tag <task-image> <archived-context>
-docker compose -p night-voyager-intake-native-n2-20261006-a1 -f <task-compose> \
+git archive 6154bfd1b4a56e79527b0c03109fefc75f8a1193 -o "$N2ROOT/source.tar"
+tar -xf "$N2ROOT/source.tar" -C "$N2ROOT/source"
+.venv/bin/python "$N2ROOT/prepare.py"
+.venv/bin/python "$N2ROOT/build.py" # records exact argv without executing builds
+N2_EXECUTE_BUILD=1 .venv/bin/python "$N2ROOT/build.py"
+docker compose -p night-voyager-intake-native-n2-20261006-a1 -f "$N2ROOT/compose-bound.json" \
   up -d --no-build --pull never --wait --wait-timeout 120 api worker web
-docker compose -p night-voyager-intake-native-n2-20261006-a1 -f <task-compose> \
-  run --no-deps --name <task-browser-container> browser-proof \
+docker compose -p night-voyager-intake-native-n2-20261006-a1 -f "$N2ROOT/compose-bound.json" \
+  run --no-deps --name night-voyager-intake-native-n2-20261006-a1-browser browser-proof \
   ./node_modules/.bin/playwright test --config playwright.intake.compose.config.ts
-docker compose -p night-voyager-intake-native-n2-20261006-a1 -f <task-compose> \
+docker compose -p night-voyager-intake-native-n2-20261006-a1 -f "$N2ROOT/compose-bound.json" \
   down --volumes
 ```
 
+The pre-execution checkpoint binds `preparation.json`, `build-commands.json`,
+the task client config (existing bundled CLI plugin directory only), and the
+derived Dockerfiles. Their SHA-256 values are:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `api.Dockerfile` | `f48424b64b8f9e75efbc0af73bdc64c81420c194d358b7a4d8ccee0e0b7317ca` |
+| `web.Dockerfile` | `c4915510aa1b1230ece8b47503d01731801a741b9517d02bafb738faa56d16ca` |
+| `postgres.Dockerfile` | `4f5d129197cd011a5373dc1f5cd8cee2518c98b2822af7fb6ad8ed7ec1981a4f` |
+| `browser.Dockerfile` | `91a3d099d9d4aaf772eeb1b5f0b64476343006a5f58f2ad158efd1d960f00e4e` |
+| Proposed Compose with unique task tags | `059e12c1582be45be2a86f63c58d87974233b4c1eca158de89d8fa1d583a16a3` |
+
+The resulting image IDs replace only those tags in `compose-bound.json` before
+startup; record its final hash and image-to-service binding. The builder is
+`nv-intake-n2-native-20261006-a1`, container with suffix `-buildkit`, state volume
+with suffix `-state`. Release that cache/container after builds and before the
+second capacity check, retaining the four candidate images. PostgreSQL and
+browser volumes are the project name plus `_postgres-data`/`_browser-artifacts`.
+
 Each image build is bounded to 600 seconds, startup to 120 seconds and the focused
-browser test to 240 seconds, with no Playwright retry and one worker. Preserve
+browser test to 240 seconds, with no Playwright retry and one worker. The browser
+pauses at its actual request-review response for at most 45 seconds while an
+observer captures a read-only API-role snapshot and acknowledges the stage in
+the task artifact volume; this does not alter business state or control the worker.
+Preserve
 diagnostics after the first failure and identify its cause before another run.
 The second substantive failure of this same costly goal stops the lane for a
 route decision, even if its harness changed. Do not rebuild for documentation or
@@ -243,7 +275,7 @@ database snapshots, installed image assets and role/cluster identity. Clean up
 only this stage's containers, networks, temporary builder/cache volumes and
 caffeinate; retain candidate images, source and diagnostics.
 
-- [ ] Prepare the focused spec/config and validate their discovery/type/lint.
+- [x] Prepare the focused spec/config and validate their discovery/type/lint.
   Acceptance tests verify existing behavior; do not invent a RED result when they
   already pass. Ordinary product fixes found here require proportional TDD.
 - [ ] Freeze input HEAD/tree and archived input hashes; prepare local base contexts,
