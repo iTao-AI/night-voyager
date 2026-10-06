@@ -121,10 +121,10 @@ Runtime-role authority and source tests are complete. The actual post-receipt fi
 **Tests:** Existing revision/editor/contract/API/recovery/UI suites plus intake-specific cases.
 **Interfaces:** Add the `student.intake` `RevisionIntent` branch, strict month validation and exact candidate/message bodies. The allowlisted `intake-delay` entry supplies the fixed initial Case only for an explicit fresh start; resumed metadata remains bound to its existing Case. The ledger BFF requests V3 and brief BFF continues V2.
 
-- [ ] Write failing tests for intake-only/current/missing/stale facts, parent rejection, no change/invalid month, actual proposal value, explicit student/advisor handoff, restored intake intention and retained old intent replay. URL entry must not overwrite an active journey.
-- [ ] Observe RED, then connect the third editor branch, matcher, saved intent and controlled entry using existing handoff/CSRF/idempotency rules. Display the hypothetical supported alternate and the actual current cost intake. Show old request-review context as history.
-- [ ] Decode V3 exactly; retain tests for V1/V2 old contracts rather than accepting unknown discriminators. Assert unchanged country eligibility and changed intake can coexist in the comparison.
-- [ ] Run focused Vitest and frontend lint/typecheck, using an authorized locked isolated environment if needed. Browser/build/pull/native proof remains a separately authorized gate; no scripted facade success proves runtime completion. Commit exact UI paths.
+- [x] Write failing tests for intake-only/current/missing/stale facts, parent rejection, no change/invalid month, actual proposal value, explicit student/advisor handoff, restored intake intention and retained old intent replay. URL entry must not overwrite an active journey.
+- [x] Observe RED, then connect the third editor branch, matcher, saved intent and controlled entry using existing handoff/CSRF/idempotency rules. Display the hypothetical supported alternate and the actual current cost intake. Show old request-review context as history.
+- [x] Decode V3 exactly; retain tests for V1/V2 old contracts rather than accepting unknown discriminators. Assert unchanged country eligibility and changed intake can coexist in the comparison.
+- [x] Run focused Vitest and frontend lint/typecheck, using an authorized locked isolated environment if needed. Browser/build/pull/native proof remains a separately authorized gate; no scripted facade success proves runtime completion. Commit exact UI paths.
 
 ### Task 5: Verify the persisted end-to-end chain and finish documentation
 

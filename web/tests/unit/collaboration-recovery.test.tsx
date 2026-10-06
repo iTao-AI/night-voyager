@@ -60,7 +60,7 @@ const customAdvisor = { ...advisor, value: CUSTOM_BUDGET, candidate_id: CUSTOM_C
 const customFact = { ...fact, value: CUSTOM_BUDGET, confirmed_fact_id: CUSTOM_FACT, candidate_id: CUSTOM_CANDIDATE, verification_id: CUSTOM_MESSAGE, source_message_event_id: CUSTOM_MESSAGE, source_message_sha256_prefix: "bbbbbbbbbbbb" };
 
 function ledger(caseRevision: number) {
-  return { schema_version: 2 as const, proof_mode: "synthetic-demo" as const, phase: "task_ready" as const, case_id: CASE, case_revision: caseRevision, case_state: "intake" as const, canonical_task_inputs: { schema_version: 1 as const, operation: "generate_planning_run_v1" as const, case_id: CASE, expected_case_revision: caseRevision, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
+  return { schema_version: 3 as const, case_intake: "2027-02", proof_mode: "synthetic-demo" as const, phase: "task_ready" as const, case_id: CASE, case_revision: caseRevision, case_state: "intake" as const, canonical_task_inputs: { schema_version: 1 as const, operation: "generate_planning_run_v1" as const, case_id: CASE, expected_case_revision: caseRevision, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
 }
 
 function handoffLedger(phase: "task_ready" | "active_task" | "review_required" | "terminal_task_failure") {

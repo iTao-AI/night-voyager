@@ -11,8 +11,9 @@ import { PresentationProvider } from "../../lib/presentation/context";
 afterEach(cleanup);
 
 describe("M5 connected demo design contract", () => {
-  it("starts fail closed with one connected advisor action", () => {
-    render(<PresentationProvider><DemoPage /></PresentationProvider>);
+  it("starts fail closed with one connected advisor action", async () => {
+    const page = await DemoPage({ searchParams: Promise.resolve({}) });
+    render(<PresentationProvider>{page}</PresentationProvider>);
 
     expect(screen.getByText("本地合成演示")).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1, name: "让路线分析先通过顾问判断" })).toBeInTheDocument();

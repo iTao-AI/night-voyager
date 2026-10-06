@@ -40,6 +40,7 @@ export function PlanningRevisionComparison({ comparison }: { comparison: Compari
     ?? comparison.countries[0];
   const changed = comparison.changed_fact;
   const presentFactValue = (value: Comparison["changed_fact"]["previous_value"]): string => {
+    if (typeof value === "string") return value;
     if (Array.isArray(value)) {
       return value.map((country) => presentCode(locale, "country", country)).join(locale === "zh-CN" ? "、" : ", ");
     }
@@ -61,12 +62,18 @@ export function PlanningRevisionComparison({ comparison }: { comparison: Compari
       </header>
       <section className="changed-fact-summary" aria-labelledby="changed-fact-title">
         <h3 id="changed-fact-title">{copy("changedFactTitle")}</h3>
-        <p>{copy(changed.fact_key === "student.preferred_countries" ? "preferredCountriesChanged" : "familyBudgetChanged")}</p>
+        <p>{copy(changed.fact_key === "student.preferred_countries" ? "preferredCountriesChanged" : changed.fact_key === "student.intake" ? "intakeChanged" : "familyBudgetChanged")}</p>
         <dl>
           <div><dt>{copy("previousValueLabel")}</dt><dd>{presentFactValue(changed.previous_value)}</dd></div>
           <div><dt>{copy("revisedValueLabel")}</dt><dd>{presentFactValue(changed.current_value)}</dd></div>
         </dl>
       </section>
+      <section className="changed-fact-summary" aria-label={copy("previousRequestReviewLabel")}>
+        <h3>{copy("previousRequestReviewLabel")}</h3>
+        <p>{copy("caseRevisionLabel")} {comparison.previous_request_review.case_revision} · {copy("revisionReviewVersionLabel")} {comparison.previous_request_review.review_version}</p>
+        <details><summary>{copy("revisionHistoryReferences")}</summary><p>{comparison.previous_request_review.review_id}</p><p>{comparison.previous_request_review.planning_run_id}</p></details>
+      </section>
+      {changed.fact_key === "student.intake" ? <p>{copy("revisionIntakeOutcomeBoundary")}</p> : null}
       <div className="revision-plan-labels" aria-label={copy("revisionComparisonTitle")}>
         <div className="revision-plan-history">
           <strong>{copy("previousPlanLabel")}</strong>

@@ -18,6 +18,7 @@ import type {
   ConnectedJourneyStatus,
 } from "./contracts";
 import { familyDraftFromIntent, familyIntentMatchesBrief, suggestFamilyDecisionDraft, validateFamilyDecisionDraft, type FamilyDecisionDraft, type SubmittedFamilyIntent } from "./family-decision";
+import { connectedEntryConflict, initialDemoCaseId, type ConnectedDemoScenario } from "./scenario";
 import { idempotencyFor } from "./idempotency";
 import { demoReducer, type DemoDisplayState, type RecoveryCode } from "./reducer";
 import {
@@ -42,7 +43,7 @@ import {
 const api = createConnectedDemoApi();
 const collaboration = createCollaborationDemoApi();
 const initial: DemoDisplayState = { value: "bootstrapping" };
-const CASE_ID = "40000000-0000-0000-0000-000000000002";
+
 
 export interface CurrentFactsProjection {
   caseId: string;
@@ -60,6 +61,7 @@ export interface RevisionCollaborationProjection {
 }
 
 function failure(error: unknown): RecoveryCode {
+  if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.code === "intake_evidence_unavailable") return "intake_evidence_unavailable";
   if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.status === 401) return "session_expired";
   if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.code === "bff_session_recovery_required") return "session_recovery_required";
   if ((error instanceof ConnectedDemoApiError || error instanceof CollaborationDemoApiError) && error.status === 409) return "stale_conflict";
@@ -139,7 +141,7 @@ function pendingRoleMetadata(
   };
 }
 
-export function useConnectedDemo() {
+export function useConnectedDemo(scenario: ConnectedDemoScenario = "default") {
   const [state, dispatch] = useReducer(demoReducer, initial);
   const [confirmed, setConfirmed] = useState(false);
   const [familyDraft, setFamilyDraftValue] = useState<FamilyDecisionDraft>({ minimumYuan: "", maximumYuan: "", acknowledgedTradeOffs: [] });
@@ -154,9 +156,9 @@ export function useConnectedDemo() {
   const [inspector, setInspector] = useState<PlanningSkillInspector | null>(null);
   const [currentFacts, setCurrentFacts] = useState<CurrentFactsProjection | null>(null);
   const [revision, setRevision] = useState<RevisionCollaborationProjection | null>(null);
-  const [journeyConflict, setJourneyConflict] = useState<"collaboration" | null>(() => {
+  const [journeyConflict, setJourneyConflict] = useState<"collaboration" | "advisor-family" | null>(() => {
     if (typeof window === "undefined") return null;
-    return loadDemoJourneyEnvelope()?.journey === "collaboration" ? "collaboration" : null;
+    return connectedEntryConflict(scenario, loadDemoJourneyEnvelope());
   });
   const [revisionIntent, setRevisionIntent] = useState<RevisionIntent | null>(() => typeof window === "undefined" ? null : loadRecoveryMetadata()?.revisionIntent ?? null);
   const [revisionSubmitting, setRevisionSubmitting] = useState(false);
@@ -335,18 +337,20 @@ export function useConnectedDemo() {
 
   const connectAdvisor = useCallback(async () => {
     const existing = loadDemoJourneyEnvelope();
-    if (existing?.journey === "collaboration") {
-      setJourneyConflict("collaboration");
+    const conflict = connectedEntryConflict(scenario, existing);
+    if (conflict) {
+      setJourneyConflict(conflict);
       return;
     }
     try {
       const bootstrap = await api.bootstrap();
       const session = await api.mint("advisor", bootstrap.csrf_token);
-      await loadAuthoritative(CASE_ID, "advisor", session.csrf_token);
+      const caseId = existing?.journey === "advisor-family" ? existing.caseId : initialDemoCaseId(scenario);
+      await loadAuthoritative(caseId, "advisor", session.csrf_token);
     } catch (error) {
       dispatch({ type: "RECOVERABLE_FAILURE", code: failure(error) });
     }
-  }, [loadAuthoritative]);
+  }, [loadAuthoritative, scenario]);
 
   const replayTerminalRetry = useCallback(async (metadata: RecoveryMetadata) => {
     const intent = metadata.retryIntent;
@@ -367,8 +371,9 @@ export function useConnectedDemo() {
 
   const recover = useCallback(async () => {
     const journey = loadDemoJourneyEnvelope();
-    if (journey?.journey === "collaboration") {
-      setJourneyConflict("collaboration");
+    const conflict = connectedEntryConflict(scenario, journey);
+    if (conflict) {
+      setJourneyConflict(conflict);
       return;
     }
     const metadata = loadRecoveryMetadata();
@@ -395,7 +400,7 @@ export function useConnectedDemo() {
       }
       dispatch({ type: "RECOVERABLE_FAILURE", code });
     }
-  }, [connectAdvisor, loadAuthoritative, replayTerminalRetry, transitionRole]);
+  }, [connectAdvisor, loadAuthoritative, replayTerminalRetry, transitionRole, scenario]);
 
   useEffect(() => {
     if (recoveryStarted.current) return;
@@ -479,7 +484,9 @@ export function useConnectedDemo() {
     preserveOnStale = false,
   ) => {
     const code = failure(error);
-    if (code === "session_expired") {
+    if (code === "intake_evidence_unavailable") {
+      retryAction.current = null;
+    } else if (code === "session_expired") {
       retryAction.current = null;
       clearRecoveryMetadata();
     } else if (code === "stale_conflict") {
@@ -587,7 +594,7 @@ export function useConnectedDemo() {
 
   const prepareRevisionFact = useCallback(async (factKey: RevisionFactKey) => {
     if (state.value !== "revision_requested" || revisionMutationBusy.current
-      || !["student.preferred_countries", "family.budget"].includes(factKey)) return;
+      || !["student.preferred_countries", "family.budget", "student.intake"].includes(factKey)) return;
     const metadata = loadRecoveryMetadata();
     if (!metadata || !["student", "parent"].includes(metadata.role)
       || metadata.caseId !== state.status.case_id) return;
@@ -687,13 +694,13 @@ export function useConnectedDemo() {
     await attempt();
   }, [currentFacts, handleMutationFailure, loadAuthoritative, mutationRecord, recover, revision, state, transitionRole]);
 
-  const confirmRevision = useCallback(async (reason: string) => {
+  const verifyRevision = useCallback(async (reason: string, decision: "confirm" | "reject") => {
     if (state.value !== "revision_fact_pending" || !revision || !validRevisionReason(reason) || revisionMutationBusy.current) return;
     const metadata = loadRecoveryMetadata();
     if (!metadata || metadata.role !== "advisor" || metadata.caseId !== revision.caseId) return;
     const displayed = pendingRevisionCandidate(revision.candidates.filter((candidate): candidate is MemoryCandidateAdvisor => "candidate_id" in candidate), state.status.current_revision);
-    if (!displayed) return;
-    const body = { schema_version: 1 as const, expected_case_revision: state.status.current_revision, decision: "confirm" as const, reason: reason.trim() };
+    if (!displayed || (decision === "reject" && displayed.fact_key !== "student.intake")) return;
+    const body = { schema_version: 1 as const, expected_case_revision: state.status.current_revision, decision, reason: reason.trim() };
     let submitted = false;
     const attempt = async () => {
       if (revisionMutationBusy.current) return;
@@ -701,7 +708,7 @@ export function useConnectedDemo() {
       try {
         const current = loadRecoveryMetadata() ?? metadata;
         const candidates = await collaboration.candidates(current.caseId, "advisor");
-        const replay = submitted ? candidates.find((candidate) => candidate.candidate_id === displayed.candidate_id && candidate.state === "confirmed" && candidate.case_revision === body.expected_case_revision) : null;
+        const replay = submitted ? candidates.find((candidate) => candidate.candidate_id === displayed.candidate_id && candidate.state === (decision === "confirm" ? "confirmed" : "rejected") && candidate.case_revision === body.expected_case_revision) : null;
         const candidate = replay ?? pendingRevisionCandidate(candidates, body.expected_case_revision);
         if (!candidate || candidate.candidate_id !== displayed.candidate_id || JSON.stringify(candidate.value) !== JSON.stringify(displayed.value)) {
           retryAction.current = null;
@@ -769,7 +776,7 @@ export function useConnectedDemo() {
 
   const endConflictingJourney = useCallback(async () => {
     const existing = loadDemoJourneyEnvelope();
-    if (!existing || existing.journey !== "collaboration") {
+    if (!existing || existing.journey !== journeyConflict) {
       setJourneyConflict(null);
       return;
     }
@@ -784,7 +791,7 @@ export function useConnectedDemo() {
     clearRecoveryMetadata();
     setJourneyConflict(null);
     await connectAdvisor();
-  }, [connectAdvisor]);
+  }, [connectAdvisor, journeyConflict]);
 
   return {
     state,
@@ -812,7 +819,8 @@ export function useConnectedDemo() {
     revisionIntent,
     revisionSubmitting,
     rotateToAdvisor: (caseId: string) => rotate(caseId, "advisor"),
-    confirmRevision,
+    confirmRevision: (reason: string) => verifyRevision(reason, "confirm"),
+    rejectRevision: (reason: string) => verifyRevision(reason, "reject"),
     approveRevision: () => review("approve_for_consultation"),
     rotateToParent: (caseId: string) => rotate(caseId, "parent"),
     decide,

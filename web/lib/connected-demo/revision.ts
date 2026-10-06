@@ -1,13 +1,15 @@
+import { isIntakeMonth } from "./intake";
 import { isBudgetValue, validateBudgetDraft, type BudgetDraft } from "../collaboration-demo/budget";
 import type { BudgetValue, ConfirmedFactProjection, MemoryCandidateAdvisor } from "../collaboration-demo/contracts";
 import type { CurrentFactsProjection } from "./use-connected-demo";
 import type { Country } from "./contracts";
 
 export const REVISION_COUNTRIES: readonly Country[] = ["australia", "japan", "malaysia"];
-export type RevisionFactKey = "student.preferred_countries" | "family.budget";
+export type RevisionFactKey = "student.preferred_countries" | "family.budget" | "student.intake";
 export type RevisionIntent =
   | { expectedCaseRevision: number; factKey: "student.preferred_countries"; value: readonly Country[] }
-  | { expectedCaseRevision: number; factKey: "family.budget"; value: BudgetValue };
+  | { expectedCaseRevision: number; factKey: "family.budget"; value: BudgetValue }
+  | { expectedCaseRevision: number; factKey: "student.intake"; value: string };
 export type RevisionValidation =
   | { ok: true; intent: RevisionIntent }
   | { ok: false; code: "stale" | "unavailable" | "invalid" | "unchanged" };
@@ -33,6 +35,7 @@ export function isRevisionIntent(value: unknown): value is RevisionIntent {
   const record = value as Record<string, unknown>;
   if (Object.keys(record).sort().join() !== "expectedCaseRevision,factKey,value"
     || !Number.isSafeInteger(record.expectedCaseRevision) || Number(record.expectedCaseRevision) <= 0) return false;
+  if (record.factKey === "student.intake") return isIntakeMonth(record.value);
   return record.factKey === "student.preferred_countries"
     ? isRevisionCountries(record.value)
     : record.factKey === "family.budget" && editableBudget(record.value)
@@ -45,6 +48,11 @@ export function validateRevisionIntent(intent: RevisionIntent, current: CurrentF
   if (!isRevisionIntent(intent)) return { ok: false, code: "invalid" };
   const fact = revisionFact(current.facts, intent.factKey);
   if (!fact) return { ok: false, code: "unavailable" };
+  if (intent.factKey === "student.intake") {
+    if (fact.subject_role !== "student" || !isIntakeMonth(fact.value)) return { ok: false, code: "unavailable" };
+    if (intent.value === fact.value) return { ok: false, code: "unchanged" };
+    return { ok: true, intent: { ...intent } };
+  }
   if (intent.factKey === "student.preferred_countries") {
     if (!isRevisionCountries(fact.value)) return { ok: false, code: "unavailable" };
     const value = [...intent.value].sort();
@@ -72,10 +80,12 @@ export function validateBudgetRevision(draft: BudgetDraft, expectedCaseRevision:
 export function pendingRevisionCandidate(candidates: readonly MemoryCandidateAdvisor[], expectedCaseRevision: number): MemoryCandidateAdvisor | null {
   const matches = candidates.filter((candidate) => candidate.state === "pending"
     && candidate.case_revision === expectedCaseRevision
-    && ["student.preferred_countries", "family.budget"].includes(candidate.fact_key));
+    && ["student.preferred_countries", "family.budget", "student.intake"].includes(candidate.fact_key));
   if (matches.length !== 1) return null;
   const candidate = matches[0];
-  const valid = candidate.fact_key === "student.preferred_countries"
+  const valid = candidate.fact_key === "student.intake"
+    ? candidate.subject_role === "student" && isIntakeMonth(candidate.value)
+    : candidate.fact_key === "student.preferred_countries"
     ? isRevisionCountries(candidate.value)
     : editableBudget(candidate.value);
   return valid ? candidate : null;

@@ -419,12 +419,17 @@ intention/key; ambiguous retries retain the exact original body/key. Brief ident
 or version changes discard old acceptance and replay; a stale decision rejection
 reloads authoritative current state.
 
-Planning-revision clients opt the Ledger and current Brief into exact
-`contract_version=2`, recover from `/journey-status`, and persist a closed V3
-advisor-family envelope. The UI may submit the bounded request-revision review and
-student preferred-country proposal through existing authority endpoints, but it
-cannot submit predecessor/run hashes, synthesize comparison, reuse an old approval,
-or decide a non-current Brief.
+Planning-revision clients request the Ledger with exact `contract_version=3`
+and the current Brief with exact `contract_version=2`, recover from
+`/journey-status`, and persist a closed V3 advisor-family envelope. The UI may
+submit a bounded request-revision review and one supported country, parent budget,
+or student intake proposal through existing authority endpoints. The controlled
+`/demo?scenario=intake-delay` entry uses the separately seeded synthetic Case for
+an explicit fresh start; an active journey must be explicitly ended before
+changing Cases. A refused intake confirmation retains the pending candidate and
+current revision. The advisor may explicitly reject that candidate before a
+replacement proposal. The browser cannot submit predecessor/run hashes,
+synthesize comparison, reuse an old approval, or decide a non-current Brief.
 
 ## Governed timeline execution transport
 
