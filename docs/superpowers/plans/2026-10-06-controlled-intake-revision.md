@@ -295,6 +295,53 @@ database snapshots, installed image assets and role/cluster identity. Clean up
 only this stage's containers, networks, temporary builder/cache volumes and
 caffeinate; retain candidate images, source and diagnostics.
 
+### First native failure and bounded recovery
+
+Attempt 1 reached the real ordinary `/demo` advisor journey, then failed in
+`14.5 seconds` because the new E2E incorrectly expected the separate revision
+fixture `490…001`. The actual ordinary entry is `400…002`, in `plan_ready` with
+the action **Create planning task**. No revision mutation was submitted; the
+API-role controlled Case snapshot remained byte-for-byte equal to its pre-run
+snapshot. Installed package/assets, runtime-role identity, empty cluster and
+service startup had passed. Keep this as the first substantive failure of the
+same goal; there is exactly one remaining native acceptance attempt.
+
+The focused test fix binds the actual default Case/action and targets the rendered
+cost panel explicitly. Typecheck, lint and one-test discovery passed. Product code
+and the API/web/PostgreSQL inputs are unchanged, so retain their three image IDs
+and source HEAD/tree above. Rebuild only the affected browser image from E2E HEAD
+`2542195263547cdb3125edc30a10a6500dfc76bf`, tree
+`9847cb6c6cc6841bb5bff935dcfa21353d7d0ea4`; the new browser archive SHA-256 is
+`04b295ddfea0135f3b7a5b9671d4b2d2d673468ea3765392098af686497637b0`.
+The same derived browser Dockerfile/local Chromium OCI base is reused. Labels
+bind the new browser HEAD/tree and its unchanged application source separately.
+
+Attempt 1 containers/network/volumes were released after diagnostics and the
+unchanged Case snapshot were saved; its images and evidence remain retained.
+Recovery uses `night-voyager-intake-native-n2-20261006-a2` and a fresh empty
+cluster/volume, with the same ports/origin and all previous deadlines. The ignored
+`native-a2` directory records exact argv and the source/image/assets hashes before
+each affected phase. Proposed Compose SHA-256 is
+`b862bdc942b753a93a6efb0fdcb154c2422e97a20c4b708129c15a21da93ded8`.
+
+```bash
+N2ROOT="$PWD/tmp/intake-n2-20261006/native-a2"
+export DOCKER_CONFIG="$N2ROOT/docker-client"
+# Retain the same already captured DOCKER_HOST and task caffeinate.
+MODE=dev NIGHT_VOYAGER_DOCTOR_PORTS='52130 52131 52132' \
+  NIGHT_VOYAGER_DOCTOR_PROBE_IMAGE=sha256:229a2c5bfa27522db7815ea81f9bed70af17ccb9de9fc7ad142b1877b5830d36 make doctor
+N2_EXECUTE_BUILD=1 .venv/bin/python "$N2ROOT/build.py" # one browser image only
+# Release the task builder/cache and repeat capacity/port preflight before startup.
+N2_EXECUTE_NATIVE=1 .venv/bin/python "$N2ROOT/native.py"
+docker compose -p night-voyager-intake-native-n2-20261006-a2 -f "$N2ROOT/compose-bound.json" down --volumes
+```
+
+The runtime runner executes the same `up --no-build --pull never --wait
+--wait-timeout 120` and one focused browser command with the `a2` project/container
+names. Capture the bound browser ID and final Compose hash before that startup.
+A second substantive failure returns for a route decision; changing the test,
+runner, project or cluster does not reset the failure count.
+
 - [x] Prepare the focused spec/config and validate their discovery/type/lint.
   Acceptance tests verify existing behavior; do not invent a RED result when they
   already pass. Ordinary product fixes found here require proportional TDD.
