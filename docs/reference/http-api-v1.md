@@ -431,6 +431,11 @@ current revision. The advisor may explicitly reject that candidate before a
 replacement proposal. The browser cannot submit predecessor/run hashes,
 synthesize comparison, reuse an old approval, or decide a non-current Brief.
 
+The same bounded `409 intake_evidence_unavailable` also applies to Task creation
+when its intake source is unavailable or its pins differ from frozen lineage.
+See the [controlled intake walkthrough](../operations/controlled-intake-revision.md)
+for the opt-in seed, actual source/cost values and read-only database proof.
+
 ## Governed timeline execution transport
 
 The development-only `/demo/plan` BFF supports two exclusive authority modes:

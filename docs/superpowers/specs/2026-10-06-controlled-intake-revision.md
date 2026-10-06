@@ -1,6 +1,6 @@
 # Controlled February intake revision
 
-Status: Approved for local implementation; implementation in progress, runtime acceptance pending.
+Status: Approved and locally implemented; bounded runtime-role verification complete; final review and full native/browser/image/hosted gates pending.
 Date: 2026-10-06.
 Git starting point: `68de260b1e207f83153d51801501c7775b4f4374`, the merged PR #128 main baseline.
 Delivery owner: the maintainer-directed delivery owner retains design, integration and acceptance.

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Approved for local implementation; implementation in progress. Full native/browser/image and hosted gates remain separate.
+**Status:** Complete for approved local implementation and bounded runtime-role verification; final whole-branch review pending. Full native/browser/image and hosted gates remain separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.
@@ -132,11 +132,11 @@ Runtime-role authority and source tests are complete. The actual post-receipt fi
 **Modify:** Existing February timeline/decision regressions, `docs/reference/collaboration-and-confirmed-facts.md`, `http-api-v1.md`, `agent-tasks-and-events.md`, `domain-and-source-manifests.md`, and the customer revision walkthrough; update the two draft status indexes after real acceptance.
 **Interfaces:** Consume the exact fixture descriptor, guarded confirmation/task creation and V3 projection. Produce an as-of-bound acceptance record with the final SHA, actual commands, old/new identities and immutable history snapshots.
 
-- [ ] Write a real-role flow that starts on the fixed initial Case, records `request_revision`, submits student `2028-02`, confirms as assigned advisor, explicitly creates the successor Task and processes it with the existing deterministic worker. Assert the actual adapter input and PostgreSQL source/cost/evidence pins.
-- [ ] Add fresh advisor approval and direct parent decision accepting `32,000,000`–`36,000,000` CNY minor with `budget_elasticity`; read the receipt, actor, brief/revision/run/source joins and timeline from PostgreSQL. Assert `2027-09-01`, `2027-10-15`, `2027-12-15`, `2028-01-20` and unchanged policy.
-- [ ] Exercise finalized denial and unsupported `2028-09` confirmation on separate controlled negative fixtures. Compare all refused business writes; compare predecessor output/routes/cost/evidence and review bytes across success, allowing only the existing intentional `is_current` change.
-- [ ] Run the approved bounded real database flow and relevant checks, then perform targeted review. GStack is unavailable and is not invoked; use existing repository document/link checks for the affected reference/how-to/entry. Actual new-image/browser gates remain pending until separately approved, not full local READY.
-- [ ] Document opt-in setup, both read-contract versions, unavailable-source refusal, fixed synthetic values/as-of and the limited pre-consent path. Inspect diff/links/privacy and semantic commits. Report exact HEAD, actual checks, docs impact and remaining gates; no push/PR/merge/release/deploy without separate authorization.
+- [x] Write a real-role flow that starts on the fixed initial Case, records `request_revision`, submits student `2028-02`, confirms as assigned advisor, explicitly creates the successor Task and processes it with the existing deterministic worker. Assert the actual adapter input and PostgreSQL source/cost/evidence pins.
+- [x] Add fresh advisor approval and direct parent decision accepting `32,000,000`–`36,000,000` CNY minor with `budget_elasticity`; read the receipt, actor, brief/revision/run/source joins and timeline from PostgreSQL. Assert `2027-09-01`, `2027-10-15`, `2027-12-15`, `2028-01-20` and unchanged policy.
+- [x] Exercise finalized denial and unsupported `2028-09` confirmation on separate controlled negative fixtures. Compare all refused business writes; compare predecessor output/routes/cost/evidence and review bytes across success, allowing only the existing intentional `is_current` change.
+- [x] Run the approved bounded real database flow and relevant checks, then perform targeted review. GStack is unavailable and is not invoked; use existing repository document/link checks for the affected reference/how-to/entry. Actual new-image/browser gates remain pending until separately approved, not full local READY.
+- [x] Document opt-in setup, both read-contract versions, unavailable-source refusal, fixed synthetic values/as-of and the limited pre-consent path. Inspect diff/links/privacy and semantic commits. Report exact HEAD, actual checks, docs impact and remaining gates; no push/PR/merge/release/deploy without separate authorization.
 
 ## Plan self-review and handoff
 

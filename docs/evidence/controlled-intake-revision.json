@@ -1,0 +1,64 @@
+{
+  "checks": {
+    "documentation_governance": {
+      "passed": 32
+    },
+    "focused_backend_units_and_docs": {
+      "passed": 282
+    },
+    "frontend_lint": "passed",
+    "frontend_typecheck": "passed",
+    "frontend_units": {
+      "passed": 614
+    },
+    "isolated_migration": {
+      "passed": 3
+    },
+    "persisted_flow": {
+      "command": ".venv/bin/python -m pytest -o addopts= -q -m database tests/integration/connected_demo/test_intake_revision_flow.py",
+      "passed": 4
+    },
+    "pyright": "0 errors",
+    "related_runtime_roles": {
+      "passed": 106,
+      "skipped": 3
+    },
+    "ruff": "passed"
+  },
+  "persisted_readback": {
+    "accepted_budget_minor": [
+      32000000,
+      36000000
+    ],
+    "as_of": "2026-07-01",
+    "browser_image_acceptance": "pending",
+    "case_id": "49000000-0000-0000-0000-000000000003",
+    "hosted_delivery": "pending",
+    "new_cost_minor": 32640000,
+    "new_intake": "2028-02",
+    "new_output_sha256": "8bc15aaeeb4d32a353aff1a483c37e1ec7631a86c926e32fd48573eafbd13b08",
+    "new_run_id": "b038f4fb-4ea3-419a-a62d-2691ceefb068",
+    "new_source_pack_id": "50000000-0000-0000-0000-000000000017",
+    "old_cost_minor": 30550000,
+    "old_intake": "2027-02",
+    "old_output_sha256": "ab7ed680bdabf6737c87c748501efb4340d85e68aed33c7e6620c1fbe4dc0621",
+    "old_run_id": "79000000-0000-0000-0000-000000000003",
+    "proof_mode": "local-synthetic-runtime-role-database",
+    "receipt_id": "d4301bf8-516c-4bff-9789-04db63e50282",
+    "timeline_dates": [
+      "2027-09-01",
+      "2027-10-15",
+      "2027-12-15",
+      "2028-01-20"
+    ]
+  },
+  "remaining_gates": [
+    "fresh whole-branch review",
+    "full native/application image/browser acceptance",
+    "hosted delivery"
+  ],
+  "schema_version": 1,
+  "scope": "local synthetic unit and runtime-role database acceptance",
+  "verification_date": "2026-10-06",
+  "verified_implementation_head": "5e4d5be8f42f0d4a3b37544272f0dd8f8bb1f044"
+}

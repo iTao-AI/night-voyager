@@ -184,6 +184,14 @@ semantics. The migrator-only `assert_controlled_intake_source(...)` and
 `seed_demo_intake_revision(...)` helpers grant no direct runtime execution.
 See [ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
 
+An unavailable-source confirmation leaves the candidate pending. The assigned
+advisor may explicitly reject it through the existing verification endpoint;
+rejection creates no fact or revision, and the student can propose a replacement.
+A historical `waiting_review` Task ceases to block another fact revision only
+when its result is non-current and an explicit successor revision retains the
+exact request-review/run relationship. Other active or orphan Tasks still block.
+See the [controlled intake walkthrough](../operations/controlled-intake-revision.md).
+
 Idempotency reuses `app.idempotency_records` with these exact operation names:
 
 ```text

@@ -1,12 +1,17 @@
 # Customer revision and terminal recovery
 
 This walkthrough uses the controlled local synthetic pilot and deterministic
-adapter. The current branch implements migration `0016`; the published v0.1.6
+adapter. Current source uses migration `0017`; the published v0.1.6
 record remains historical migration `0015`. No release or deployment is implied.
 See the [acceptance evidence](../evidence/customer-revision-recovery.md),
 [HTTP reference](../reference/http-api-v1.md),
 [task contract](../reference/agent-tasks-and-events.md) and
 [ADR 0015](../decisions/0015-guarded-terminal-task-recovery.md).
+
+The separate opt-in `2027-02` to `2028-02` Case and controlled entry are described
+in the [intake revision walkthrough](controlled-intake-revision.md). That source
+uses a new hypothetical pack and renewed family consent; its terminal Tasks are
+outside the recovery allowlist below. The published release remains unchanged.
 
 ## Revise one confirmed fact
 

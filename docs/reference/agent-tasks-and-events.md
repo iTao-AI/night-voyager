@@ -122,6 +122,14 @@ reuse old costs. Worker snapshot loading repeats the source checks; the new
 pack is excluded from the existing terminal retry allowlist. See
 [ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
 
+Task creation maps `NV027` to bounded `409 intake_evidence_unavailable`, including
+source disappearance or drift after fact confirmation. A valid calendar month
+does not grant source authority. The actual new Task pins the active packaged
+Skill; the controlled seed's copied baseline Task remains `legacy_unpinned`.
+Only explicit, frozen retirement of a historical `waiting_review` result removes
+its publication block; a queued, leased, running, current or orphan result retains
+the existing guard. See the [controlled intake walkthrough](../operations/controlled-intake-revision.md).
+
 ## Versioned planning predecessor and successor
 
 Migration `0012` binds a revision task to one predecessor through
