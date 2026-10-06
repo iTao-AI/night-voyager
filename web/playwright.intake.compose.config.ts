@@ -9,7 +9,7 @@ export default defineConfig({
   timeout: 240_000,
   outputDir: `${root}/playwright`,
   reporter: [["list"], ["json", { outputFile: `${root}/playwright-results.json` }]],
-  use: { ...compose.use, locale: "zh-CN" },
+  use: { ...compose.use, locale: "zh-CN", actionTimeout: 10_000, navigationTimeout: 20_000, trace: "off" },
   workers: 1,
   retries: 0,
 });
