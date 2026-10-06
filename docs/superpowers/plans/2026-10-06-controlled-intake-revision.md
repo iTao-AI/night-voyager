@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Local implementation, bounded runtime-role verification, final review fix pass and documentation minor correction complete. Application images, installed assets and runtime startup are verified. The native/browser phase is DEFERRED and frozen after two substantive failures; a route decision is required before resuming. Hosted delivery remains separate.
+**Status:** Local implementation, bounded runtime-role verification, final review fix pass, documentation correction and low-cost test repair/audit complete. Application images, installed assets and runtime startup are verified. The native/browser phase is DEFERRED and frozen after two substantive failures; a separate explicit route decision is required before another image build or runtime/browser run. Hosted delivery remains separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.
@@ -356,12 +356,14 @@ label selector after the actual student handoff. Its screenshot/accessibility
 snapshot contains the intake combobox. `RevisionFactEditor` wraps the select in
 the label; the option contributes to the full label text used by Playwright
 1.58.2. A cheap existing-DOM check produced `要修改的事实入学月份`, so the exact
-`getByLabel` matcher does not select it. A role/name selector is proposed and
-unimplemented. An earlier diagnosis suggesting a missing preparation/handoff
+`getByLabel` matcher does not select it. The later authorized low-cost Task 8
+implements a role/name selector with a local selector-engine regression; no
+third runtime/browser run has occurred. An earlier diagnosis suggesting a missing preparation/handoff
 action was corrected after inspecting the actual failure; handoff had succeeded.
 
 This is the second substantive failure of the same goal. The native stage is
-**DEFERRED and frozen**, with no third run or further runtime/E2E implementation.
+**DEFERRED and frozen**, with no third run. The subsequent Task 8 authorization
+unfreezes only low-cost test repair/audit; runtime and image work remain frozen.
 The images/assets/runtime roles/startup, active-journey protection, explicit
 controlled start and real request-review are established. Student submission,
 successor worker/cost/fresh approval and parent receipt/timeline remain unverified
@@ -392,3 +394,82 @@ Return the exact candidate and evidence for a route decision before resuming.
   raw log hashes/exit results; update current public evidence and scope status.
   Verify task resource release and unaffected worktrees, then return once. Hosted
   delivery remains separately gated.
+
+## Task 8: Authorized low-cost test repair and audit
+
+Only this task's local tests, focused configuration and current documentation may
+change. Use the existing locked environment; do not install dependencies or tools.
+Do not start Docker/runtime/browser business work, rebuild/pull an image, invoke a
+provider or mutate hosted state. The cumulative native failure count stays **2**.
+Production/business code, locks, runtime Skill assets and historical evidence stay
+unchanged. A discovered business gap requires a separate route decision.
+
+- [x] Reproduce exact label failure versus exact accessible role/name with the
+  actual component and installed Playwright selector engine in local JSDOM; record
+  genuine RED/GREEN and use the tested helper in the focused E2E.
+- [x] Audit all remaining controls, HTTP/DTO boundaries and stored result joins.
+  List certain differences before fixing; repair the participant-ID replay false
+  positive, bind the actual advisor candidate/Task/Brief/route and preserve gates.
+- [x] Add short action/navigation/request/response bounds and safe stage diagnostics;
+  preserve justified 45-second observer and 60-second worker waits. Save no raw
+  session, CSRF or idempotency headers; disable future focused traces.
+- [x] Run proportional local checks: 7 files / 96 unit tests, frontend typecheck,
+  lint and one-test discovery passed. Reuse unchanged full suites and database
+  verification; no second whole-branch review.
+- [x] Prepare the audit and minimal next proposal below, retain raw RED/GREEN logs
+  in ignored task artifacts and freeze the exact local candidate for the owner.
+- [ ] Receive explicit authorization for the proposed third native attempt.
+
+Test repair input is `34acfa87b38e7813bcd29f2915c36d4015f4b0ac`, tree
+`63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff`. Documentation-only commits do not
+change that browser input. See the [remaining-step audit](../../evidence/controlled-intake-revision.md#low-cost-test-repair-and-remaining-step-audit)
+for findings, sources and actual verification limits.
+
+### Minimal next acceptance proposal (not authorized)
+
+This is one proposed third attempt of the **same** N2 goal. It does not reset its
+two substantive failures. Approval must explicitly permit the one browser-image
+derivation and one runtime/browser run; another failure stops immediately for an
+owner route decision. N1 remains frozen and N3 is not started.
+
+Reuse the existing frozen API/worker/migrator/seed, Web and PostgreSQL-init images
+listed in Task 7. Their application inputs are unchanged. Retain both prior
+browser candidates (`cd70a5d…` and `bf83541…`) as evidence. Only the revised browser
+test image needs rebuilding: derive from retained
+`sha256:bf83541bd19eb042c7ea753edbf2c5f1760776b4d917479d7d1d198a927979fb`
+and copy the frozen focused spec, its two intake helpers and focused config into
+`/workspace/web/`. No npm install, browser download, base pull or application/Web/PG
+rebuild is needed. Bind those four file hashes, source HEAD/tree and the new image
+ID before execution. Use the already verified task-only BuildKit/OCI-context path;
+release its temporary builder/cache before runtime startup.
+
+Proposed project: `night-voyager-intake-native-n2-20261006-a3`, fresh own
+PostgreSQL/artifact volumes, database `night_voyager`, existing API/worker roles,
+migration `0017` and `--with-intake-revision` seed. Recheck the five retained image
+IDs, unchanged locks/application inputs, free ports `52130`/`52131`/`52132`, task
+ownership and at least 8 GiB Docker VM capacity before building and before startup.
+Preserve all unrelated Docker resources and all other worktrees. No source bind
+mount, shared cache, permanent host configuration, real provider or hosted action.
+
+Run exactly the one focused Chinese journey with the embedded English comparison
+and 1440/390 rendered captures: active-journey protection, explicit controlled
+start, real request-review, actual student proposal/replay/reload, advisor
+confirmation, canonical new Task/worker/cost, fresh approval and direct parent
+budget/tradeoff/acknowledgement, receipt/timeline/reload. Keep the real read-only
+API-role checkpoint observer and final immutable-history/unique-result verifier.
+Do not bypass UI mutations or replace the runtime with mocks.
+
+Bounds: browser-image build 600 seconds, startup 120 seconds, whole E2E 240 seconds
+and outer browser process 270 seconds; action/screenshot 10, navigation 20,
+response 15, API request 10, review observer 45 and worker phase 60 seconds. One
+worker, no retries and no automatic fourth attempt. Capture fixed stage names,
+bounded path/status, hashes, screenshots and synthetic API-role readbacks; preserve
+credential-free new diagnostics and the previous ignored failure evidence.
+
+At completion or failure, copy artifacts before teardown, then release only the
+new project's containers/network/PG and artifact volumes, task builder/cache and
+caffeinate. Explicitly inventory exited profiled one-off browser containers after
+`compose down --volumes`, since they were retained by that command previously.
+Preserve all candidate images and diagnostics. Record final resource/worktree
+inventory and return exact HEAD/tree, source/image binding, actual results and
+cumulative failure count once. This proposal is reviewable; no part has executed.

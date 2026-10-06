@@ -50,6 +50,84 @@
     "important_found": 1,
     "reviewed_head": "d91085b0e365f8b9a6537bb07412a839e3daf15c"
   },
+  "low_cost_test_followup": {
+    "bounds_seconds": {
+      "action_and_screenshot": 10,
+      "api_read_or_replay": 10,
+      "navigation": 20,
+      "post_response": 15,
+      "review_observer": 45,
+      "whole_test": 240,
+      "worker_phase": 60
+    },
+    "checks": {
+      "documentation_governance_passed": 32,
+      "e2e_discovery_tests": 1,
+      "focused_unit_files": 7,
+      "focused_unit_passed": 96,
+      "frontend_lint": "passed",
+      "frontend_typecheck": "passed"
+    },
+    "new_diagnostics": {
+      "fixed_stage_names": true,
+      "focused_trace": "off",
+      "old_ignored_failure_evidence_retained": true,
+      "plaintext_session_csrf_or_idempotency_key_saved": false
+    },
+    "new_image_builds_or_pulls": 0,
+    "new_native_attempts": 0,
+    "next_acceptance": {
+      "automatic_fourth_attempt": false,
+      "derive_browser_only_from": "sha256:bf83541bd19eb042c7ea753edbf2c5f1760776b4d917479d7d1d198a927979fb",
+      "new_dependencies_or_base_pulls": false,
+      "reuse": [
+        "API/worker/migrator/seed",
+        "Web",
+        "PostgreSQL-init"
+      ],
+      "status": "proposal only; explicit route decision required for one image derivation and one third runtime/browser attempt"
+    },
+    "production_business_or_lock_changes": false,
+    "remaining_step_audit": {
+      "basis": [
+        "actual components and catalog",
+        "BFF/HTTP DTOs",
+        "existing successful E2E and unit cases",
+        "earlier successful PostgreSQL runtime-role records"
+      ],
+      "business_gap_found": false,
+      "new_browser_acceptance": false,
+      "steps": [
+        "confirmation reason and verification-decisions",
+        "canonical pack17 Task and worker",
+        "actual month/cost/comparison and fresh approval",
+        "parent budget/tradeoff/acknowledgement",
+        "direct receipt/timeline/reload/replay"
+      ]
+    },
+    "replay_regression": {
+      "cause": "participant projection has no candidate_id; old assertion compared two undefined values",
+      "green_passed": 6,
+      "red_failed": 2,
+      "red_passed": 1,
+      "repair": "exact parsed participant replay; unique matching advisor array entry; candidate-bound confirmation"
+    },
+    "selector_regression": {
+      "exact_label_matches": 0,
+      "exact_role_name_matches": 1,
+      "green_passed": 2,
+      "method": "actual RevisionFactEditor markup; installed Playwright 1.58.2 selector engine in local JSDOM",
+      "real_browser_run": false,
+      "red_failed": 1,
+      "red_passed": 1
+    },
+    "status": "local test repair and source/readback audit complete; native/browser remains DEFERRED",
+    "substantive_native_failures": 2,
+    "test_source_head": "34acfa87b38e7813bcd29f2915c36d4015f4b0ac",
+    "test_source_tree": "63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff",
+    "unchanged_full_suites_and_database_evidence_reused": true,
+    "verification_date": "2026-10-06"
+  },
   "native_followup": {
     "additional_run_requires_explicit_route_decision": true,
     "application_source_head": "6154bfd1b4a56e79527b0c03109fefc75f8a1193",
@@ -66,7 +144,7 @@
         {
           "attempt": 2,
           "cause": "exact getByLabel text does not match label wrapping the intake option; accessible combobox exists",
-          "proposed_fix": "use the combobox accessible role/name; unimplemented because the native stage is frozen",
+          "proposed_fix": "exact combobox role/name repaired in the later low-cost test phase; third browser run remains unauthorized",
           "result": "failed",
           "test_elapsed_seconds": 240
         }

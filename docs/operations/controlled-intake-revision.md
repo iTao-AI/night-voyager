@@ -28,8 +28,9 @@ ConfirmedFact chain. It creates no family decision,
 receipt or timeline. Exact initial replay is a no-op; a drifted or progressed Case
 refuses atomically. Preserve existing volumes and history; reseeding is not a reset.
 The baseline Task is a copied `legacy_unpinned` fixture; the successor below must
-be an actual runtime-pinned worker result. Wheel resources and image asset layout
-are defined, but the new application image has not yet been built for acceptance.
+be an actual runtime-pinned worker result. Application images, installed assets
+and runtime startup are verified; focused browser acceptance remains DEFERRED
+after two substantive failures. See the current acceptance evidence for scope.
 
 ## Revise and explicitly decide
 

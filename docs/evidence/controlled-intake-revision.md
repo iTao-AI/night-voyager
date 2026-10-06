@@ -6,7 +6,7 @@ The [curated database summary](controlled-intake-revision.json) contains the act
 old/new run identities, output hashes, new pack, direct parent receipt and timeline.
 The scenario is hypothetical, local synthetic and provider-free, with source/FX
 as-of `2026-07-01`. This is bounded runtime-role database and unit evidence;
-full native/application-image/browser acceptance and hosted delivery are pending.
+full native/browser acceptance and hosted delivery are pending.
 
 ## Persisted behavior
 
@@ -108,8 +108,9 @@ selector for the fact dropdown. The failure screenshot/accessibility snapshot
 shows the intake combobox. Its wrapping label also contains the option text;
 the locked Playwright label matcher reads that full text. An existing local DOM
 check reproduced `要修改的事实入学月份`, which does not equal the test's exact
-`要修改的事实`. A role/name selector is proposed but remains unimplemented pending
-the route decision. This was not a missing student handoff or intake control.
+`要修改的事实`. The later low-cost repair below implements the exact role/name
+selector; no new browser run has verified it. This was not a missing student
+handoff or intake control.
 
 The native/browser phase is **DEFERRED and frozen after two substantive failures**.
 There was no third run. It does not establish actual browser submission of
@@ -123,6 +124,62 @@ Both attempts' containers, networks and PostgreSQL/artifact volumes, temporary
 builders/cache volumes and task caffeinate were released. Five candidate image
 IDs, source, screenshots, traces, raw logs and checkpoints remain retained as
 task evidence. Hosted delivery is separately gated; no remote branch or PR exists.
+
+## Low-cost test repair and remaining-step audit
+
+The separately authorized low-cost follow-up is implemented at
+`34acfa87b38e7813bcd29f2915c36d4015f4b0ac`, tree
+`63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff`. It uses the existing locked local
+environment and changes only focused tests/configuration and current documentation.
+No Docker runtime, image build/pull, browser business run, provider or hosted
+action occurred. The native failure count stays **2** and the stage stays frozen.
+
+The selector regression renders the actual `RevisionFactEditor` and runs the
+installed Playwright `1.58.2` selector engine inside JSDOM. Exact label matches
+zero controls; exact `combobox` role/name matches one. The old E2E helper produced
+a real RED failure, then the repaired helper passed both tests. This local DOM
+check establishes selector behavior without claiming real-browser acceptance.
+
+The participant proposal DTO contains six projection fields and no `candidate_id`.
+The previous replay assertion compared two undefined IDs. Its regression observed
+two RED failures for an altered/missing projection; the repair compares the exact
+parsed participant projection and requires one matching advisor candidate after
+the explicit handoff. Six readback regression tests pass. Confirmation is bound
+to that persisted candidate's actual UUID and result revision.
+
+The [focused E2E](../../web/e2e/controlled-intake-revision.spec.ts) was audited
+against actual components/copy, BFF/HTTP contracts, existing E2E and the earlier
+successful PostgreSQL records. The following are source/readback findings, not
+new browser passes:
+
+| Remaining step | Evidence-backed finding and test treatment |
+| --- | --- |
+| Student fact control | Actual wrapping label includes option text; use exact accessible `combobox` name `要修改的事实`. The `新入学月份` input label is already correct. |
+| Proposal and replay | `POST /api/demo/messages/{messageId}/memory-candidates` returns the participant projection. Compare all six fields, then require one matching entry in the advisor **array** DTO. |
+| Pending reload and handoff | Saved intent contains `expectedCaseRevision`, `factKey`, `value`; the existing recovery regression retains both original mutation keys. Preserve explicit advisor handoff. |
+| Confirmation reason | `AdvisorLedger` renders textarea label `确认理由`; the actual UTF-8 reason is within the existing 1–512-byte boundary. Bind `/verification-decisions` to the unique candidate UUID and assert revision `2`. |
+| Canonical Task | Existing ledger supplies operation `generate_planning_run_v1`, policy `m3a-policy-v1`, revision `2`, pack `500…017/v1`. Assert exact canonical inputs, actual case-scoped POST and returned Task UUID. |
+| Worker and comparison | Keep the 60-second durable phase wait. Require that same Task, new pack, `2028-02`, CNY minor `32640000`, fixed FX date, changed-fact leaf and frozen old request-review. Comparison leaf has no extra schema field. |
+| Cost and fresh approval | The actual cost panel is filtered by `326,400`; the Chinese/English approval names are correct. Bind fresh approval to the successor run and its actual Australia eligible route. |
+| Parent choice | The brief pins the Australia route. Existing family validation and successful E2E support the two budget labels, `budget_elasticity` checkbox and separate parent acknowledgement. Use the actual Brief ID/version/route; retain both disabled-button checks. |
+| Receipt, timeline and reload | Earlier API-role proof joins the fresh approval/Brief to direct parent receipt and four February dates. Assert Australia, intake, exact dates and unchanged receipt **and timeline** after reload. |
+
+Action and screenshot waits are 10 seconds, navigation 20 seconds, POST response
+waits 15 seconds and API read/replay requests 10 seconds. The justified database
+observer acknowledgement remains 45 seconds and the worker phase remains 60
+seconds inside the 240-second whole-test bound. There is one worker and no retry.
+New stage diagnostics contain fixed stage names, paths/status and synthetic DTOs;
+idempotency keys are hashed. Session equality reports a boolean and reload checks
+only the safe intent projection. Request failures omit raw headers. Focused traces
+are disabled to prevent saving credentials; earlier traces remain ignored history.
+
+Actual follow-up checks: **7 files / 96 unit tests passed**, frontend typecheck and
+lint passed, and discovery found exactly one focused E2E. The unchanged 1,570/614
+full suites and earlier PostgreSQL acceptance were reused within their original
+scope. No second whole-branch review or production behavior change was introduced.
+The [plan's minimal next acceptance proposal](../superpowers/plans/2026-10-06-controlled-intake-revision.md#minimal-next-acceptance-proposal-not-authorized)
+requires a separate explicit route decision before building or running anything.
+
 See the [walkthrough](../operations/controlled-intake-revision.md),
 [approved plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md)
 and [ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
