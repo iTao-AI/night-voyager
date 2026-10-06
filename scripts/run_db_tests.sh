@@ -377,7 +377,7 @@ if [ "${1:-}" = "inside-intake-revision-migration" ]; then
     uv run alembic downgrade 0016
     uv run alembic current | grep '0016'
     NIGHT_VOYAGER_INTAKE_MIGRATION_TEST=true \
-        PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+        PYTEST_ADDOPTS= uv run --no-editable python -m pytest -q -o addopts='' -m database \
         tests/integration/planning/test_intake_revision_migration.py
     uv run alembic current | grep '0017'
     uv run --no-editable python scripts/verify_release.py --check-db-roles
@@ -389,7 +389,7 @@ if [ "${1:-}" = "inside-intake-revision" ]; then
     uv run alembic current | grep '0017'
     uv run --no-editable python scripts/seed_demo.py --with-intake-revision
     # Replay/source checks precede the journey that advances the fixed Case.
-    PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
+    PYTEST_ADDOPTS= uv run --no-editable python -m pytest -q -o addopts='' -m database \
         tests/integration/planning/test_intake_revision_source_pins.py \
         tests/integration/planning/test_intake_revision_authority.py \
         tests/integration/connected_demo/test_http_intake_read_models.py \

@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +22,7 @@ MIGRATION_TEST = "tests/integration/planning/test_intake_revision_migration.py"
 
 
 def run_runner(
-    tmp_path: Path, *arguments: str, fail_pytest: bool = False
+    tmp_path: Path, *arguments: str, fail_pytest: bool = False, collect_pytest: bool = False
 ) -> tuple[subprocess.CompletedProcess[str], list[dict[str, Any]]]:
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()
@@ -32,6 +33,7 @@ def run_runner(
         + r"""
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -57,6 +59,17 @@ if record["tool"] == "uv":
             state.write_text("0017" if command[1] == "head" else command[1])
     if "pytest" in args and os.environ.get("TASK_RUNNER_FAIL_PYTEST") == "1":
         sys.exit(3)
+    if "pytest" in args and os.environ.get("TASK_RUNNER_COLLECT_PYTEST") == "1":
+        index = args.index("pytest")
+        launcher = (
+            [sys.executable, "-m", "pytest"]
+            if args[index - 2:index] == ["python", "-m"]
+            else [str(Path(sys.executable).with_name("pytest"))]
+        )
+        # Keep the runner's actual entrypoint and arguments; collect without DB I/O.
+        collection = subprocess.run([*launcher, *args[index + 1:], "--collect-only"])
+        if collection.returncode:
+            sys.exit(collection.returncode)
     if "pytest" in args and record["migration_phase"] == "true":
         # The four migration tests leave their isolated database at current head.
         Path(os.environ["TASK_RUNNER_REVISION"]).write_text("0017")
@@ -66,12 +79,18 @@ if record["tool"] == "uv":
         path = fake_bin / name
         path.write_text(fake_tool)
         path.chmod(0o755)
+    inherited = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in {"PYTHONPATH", "PYTEST_ADDOPTS", "NIGHT_VOYAGER_INTAKE_MIGRATION_TEST"}
+    }
     environment = {
-        **os.environ,
+        **inherited,
         "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}",
         "TASK_RUNNER_CALLS": str(calls),
         "TASK_RUNNER_REVISION": str(state),
         "TASK_RUNNER_FAIL_PYTEST": "1" if fail_pytest else "0",
+        "TASK_RUNNER_COLLECT_PYTEST": "1" if collect_pytest else "0",
         "COMPOSE_PROJECT_NAME": "intake-runner-test",
     }
     result = subprocess.run(
@@ -107,6 +126,7 @@ def test_intake_runtime_registers_source_before_all_owned_regressions(tmp_path: 
     selected = [arg for arg in calls[test]["arguments"] if arg.startswith("tests/")]
     assert selected == list(RUNTIME_TESTS)
     assert "--no-editable" in calls[test]["arguments"]
+    assert calls[test]["arguments"][:5] == ["run", "--no-editable", "python", "-m", "pytest"]
 
 
 def test_intake_migration_starts_at_unseeded_predecessor_and_enables_all_cases(
@@ -121,6 +141,7 @@ def test_intake_migration_starts_at_unseeded_predecessor_and_enables_all_cases(
     assert downgrade < test
     assert not any("scripts/seed_demo.py" in call["arguments"] for call in calls[:test])
     assert calls[test]["migration_phase"] == "true"
+    assert calls[test]["arguments"][:5] == ["run", "--no-editable", "python", "-m", "pytest"]
     assert [arg for arg in calls[test]["arguments"] if arg.startswith("tests/")] == [MIGRATION_TEST]
 
 
@@ -148,5 +169,29 @@ def test_required_default_database_gate_runs_both_intake_lanes_once(tmp_path: Pa
 
 @pytest.mark.parametrize("mode", ("inside-intake-revision", "inside-intake-revision-migration"))
 def test_intake_database_failures_propagate_to_required_gate(tmp_path: Path, mode: str) -> None:
-    result, _ = run_runner(tmp_path, mode, fail_pytest=True)
+    result, calls = run_runner(tmp_path, mode, fail_pytest=True)
     assert result.returncode == 3
+    assert "pytest" in calls[-1]["arguments"]
+    assert not any("scripts/verify_release.py" in call["arguments"] for call in calls)
+
+
+@pytest.mark.parametrize(
+    "mode,expected",
+    (
+        ("inside-intake-revision-migration", {MIGRATION_TEST: 4}),
+        ("inside-intake-revision", dict(zip(RUNTIME_TESTS, (4, 9, 1, 1, 4), strict=True))),
+    ),
+)
+def test_actual_intake_runner_entrypoint_collects_every_owned_node(
+    tmp_path: Path, mode: str, expected: dict[str, int]
+) -> None:
+    result, calls = run_runner(tmp_path, mode, collect_pytest=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    nodes = [
+        line for line in result.stdout.splitlines() if line.startswith("tests/") and "::" in line
+    ]
+    assert len(nodes) == len(set(nodes))
+    assert Counter(node.split("::", 1)[0] for node in nodes) == expected
+    selected = next(call for call in calls if "pytest" in call["arguments"])
+    assert selected["arguments"][:5] == ["run", "--no-editable", "python", "-m", "pytest"]
+    assert selected["migration_phase"] == ("true" if mode.endswith("migration") else None)

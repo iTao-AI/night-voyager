@@ -90,6 +90,21 @@ read-model and complete decision regressions. Each lane owns a separate fresh
 database; its Cases and source material never alter the fixed ordinary-demo RLS
 baseline. A failing intake test fails the required database gate.
 
+Both intake lanes use `uv run --no-editable python -m pytest`: the module
+entrypoint makes checkout-owned `tests.*` helpers importable while the product
+remains installed from its wheel in `site-packages`. A `pytest` console entrypoint
+can collect differently; matching file lists alone does not verify that runner.
+The runner regressions remove inherited `PYTHONPATH`/`PYTEST_ADDOPTS`, collect all
+four migration and nineteen runtime nodes through the actual command shape, and
+verify nonzero exit propagation. Database commands are mocked in these regressions;
+collection success does not replace the real database gate.
+
+For a host-only collection check in an existing locked installed-wheel environment,
+add `--offline --no-sync --no-build` to `uv run` and `--collect-only` to pytest.
+These flags preserve the existing environment and prevent installation/builds;
+they are validation-only additions to the hosted argv. Set
+`NIGHT_VOYAGER_INTAKE_MIGRATION_TEST=true` for the migration collection.
+
 ## Verify persisted results
 
 After the full decision, use the configured runtime API role:
