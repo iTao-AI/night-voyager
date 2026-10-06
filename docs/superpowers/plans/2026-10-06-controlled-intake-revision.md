@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` to implement this plan task by task only after written spec/plan approval. Steps use checkbox syntax for tracking.
 
-**Status:** Local implementation, bounded runtime-role verification, final review fix pass and documentation minor correction complete. The separately authorized native/browser/image phase is pending; hosted delivery remains separate.
+**Status:** Local implementation, bounded runtime-role verification, final review fix pass and documentation minor correction complete. Application images, installed assets and runtime startup are verified. The native/browser phase is DEFERRED and frozen after two substantive failures; a route decision is required before resuming. Hosted delivery remains separate.
 **Goal:** Prove a pre-consent same-Case `2027-02` to `2028-02` revision with separately pinned synthetic costs, fresh review and an explicit family receipt/timeline.
 **Architecture:** Extend existing fact/revision/task authority with one additive migration and a two-entry synthetic source allowlist. Negotiate new comparison/ledger read contracts; retain existing decision and February timeline policies.
 **Tech Stack:** Existing PostgreSQL/Alembic, Python/Pydantic/FastAPI and Next.js/TypeScript/Vitest; no new dependencies.
@@ -342,12 +342,40 @@ names. Capture the bound browser ID and final Compose hash before that startup.
 A second substantive failure returns for a route decision; changing the test,
 runner, project or cluster does not reset the failure count.
 
+The recovery browser image is
+`sha256:bf83541bd19eb042c7ea753edbf2c5f1760776b4d917479d7d1d198a927979fb`.
+Its bound Compose SHA-256 is
+`08ef69f2096a2912e2fd7b462957392abff65e159a2cea3d5c8d9e2550c5d828`.
+The recovery builder/cache are released and runtime preflight passed before the
+second and final permitted native/browser run.
+
+### Frozen native outcome
+
+The final permitted attempt timed out at 240 seconds on the exact fact-dropdown
+label selector after the actual student handoff. Its screenshot/accessibility
+snapshot contains the intake combobox. `RevisionFactEditor` wraps the select in
+the label; the option contributes to the full label text used by Playwright
+1.58.2. A cheap existing-DOM check produced `要修改的事实入学月份`, so the exact
+`getByLabel` matcher does not select it. A role/name selector is proposed and
+unimplemented. An earlier diagnosis suggesting a missing preparation/handoff
+action was corrected after inspecting the actual failure; handoff had succeeded.
+
+This is the second substantive failure of the same goal. The native stage is
+**DEFERRED and frozen**, with no third run or further runtime/E2E implementation.
+The images/assets/runtime roles/startup, active-journey protection, explicit
+controlled start and real request-review are established. Student submission,
+successor worker/cost/fresh approval and parent receipt/timeline remain unverified
+in the browser lane. API-role readback preserves the initial output/evidence and
+request-review bytes; only that review was newly written. All task running
+resources and caffeinate are released; candidate images and diagnostics remain.
+Return the exact candidate and evidence for a route decision before resuming.
+
 - [x] Prepare the focused spec/config and validate their discovery/type/lint.
   Acceptance tests verify existing behavior; do not invent a RED result when they
   already pass. Ordinary product fixes found here require proportional TDD.
 - [x] Freeze input HEAD/tree and archived input hashes; prepare local base contexts,
   task builder/config and image bindings, then build the task application images.
-- [ ] Start the empty seeded cluster with `--with-intake-revision`; prove actual
+- [x] Start the empty seeded cluster with `--with-intake-revision`; prove actual
   API/worker roles, installed package/fixture/Skill/migration assets and no source
   overlays. Save the initial same-Case/history snapshot before browser mutation.
 - [ ] In Chinese, explicitly start an existing default journey, demonstrate the

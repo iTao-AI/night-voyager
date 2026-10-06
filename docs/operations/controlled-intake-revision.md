@@ -97,3 +97,18 @@ See [ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md),
 [HTTP contracts](../reference/http-api-v1.md),
 [source contracts](../reference/domain-and-source-manifests.md) and the
 [approved plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md).
+
+## Task-owned native resource closure
+
+Verified on `2026-10-06`: default Compose teardown left the exited, profiled
+one-off browser containers and their artifact volumes. Copy the browser evidence
+first, inspect the exact task-labelled container/volume identities and confirm
+that no task is still running. Remove those exited browser containers explicitly,
+then remove only their task-owned artifact volumes. Re-query containers, networks
+and volumes after teardown. Retain candidate images and copied diagnostics; this
+procedure does not authorize cleanup of other projects or shared caches.
+
+The controlled native/browser acceptance is currently DEFERRED after two failures.
+See the [acceptance record](../evidence/controlled-intake-revision.md) and the
+[active plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md) before
+resuming a frozen stage.

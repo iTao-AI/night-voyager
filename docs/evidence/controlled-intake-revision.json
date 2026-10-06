@@ -50,6 +50,93 @@
     "important_found": 1,
     "reviewed_head": "d91085b0e365f8b9a6537bb07412a839e3daf15c"
   },
+  "native_followup": {
+    "additional_run_requires_explicit_route_decision": true,
+    "application_source_head": "6154bfd1b4a56e79527b0c03109fefc75f8a1193",
+    "application_source_tree": "37291ccb39d1fdb2032aa1163643ad95ac1a99a9",
+    "browser": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "cause": "E2E expected revision fixture 490...001 instead of ordinary /demo Case 400...002; fixed in 2542195",
+          "controlled_case_unchanged": true,
+          "result": "failed",
+          "test_elapsed_seconds": 14.5
+        },
+        {
+          "attempt": 2,
+          "cause": "exact getByLabel text does not match label wrapping the intake option; accessible combobox exists",
+          "proposed_fix": "use the combobox accessible role/name; unimplemented because the native stage is frozen",
+          "result": "failed",
+          "test_elapsed_seconds": 240
+        }
+      ],
+      "completed_stages": [
+        "existing-journey-not-overwritten",
+        "explicit-controlled-start",
+        "real-request-revision",
+        "student-role-handoff"
+      ],
+      "parent_receipt_timeline_verified": false,
+      "passed": false,
+      "revision_submitted": false,
+      "successor_worker_execution_verified": false
+    },
+    "browser_source_head": "2542195263547cdb3125edc30a10a6500dfc76bf",
+    "browser_source_tree": "9847cb6c6cc6841bb5bff935dcfa21353d7d0ea4",
+    "built_images": {
+      "api_web_postgres": 1,
+      "browser": 2
+    },
+    "cleanup": {
+      "buildkit_builders_and_cache_volumes_released": true,
+      "caffeinate_released": true,
+      "candidate_images_and_ignored_diagnostics_retained": true,
+      "containers_networks_pg_artifact_volumes_released": true
+    },
+    "frozen": true,
+    "hosted_delivery": "not authorized; no remote branch or PR",
+    "image_ids": {
+      "api": "sha256:37db0d264e9644281c680735e6bd7433520ab76be62144d4727bbbc7f132a557",
+      "browser": "sha256:bf83541bd19eb042c7ea753edbf2c5f1760776b4d917479d7d1d198a927979fb",
+      "postgres": "sha256:9f66e90766d16b77d613d0c26b0e8e881fff72aef312355b294e30b8a043e58e",
+      "web": "sha256:760c5a55cec497d0c21702b8f4bddeae402bafeb5166591cf1ec01217ec4036d"
+    },
+    "installed_assets": {
+      "browser_assets_equal": true,
+      "embedded_fixture_and_skill_manifests_equal": true,
+      "fixture_migration_script_files_equal": true,
+      "next_version": "16.3.6",
+      "package_version": "0.1.6",
+      "playwright_version": "1.58.2",
+      "python_source_files_equal": 134,
+      "source_overlays": false
+    },
+    "post_failure_readback": {
+      "browser_completed": false,
+      "case_revision": 1,
+      "new_briefs": 0,
+      "new_candidates": 0,
+      "new_facts": 0,
+      "new_family_decisions": 0,
+      "new_runs": 0,
+      "new_tasks": 0,
+      "new_timelines": 0,
+      "old_output_and_evidence_unchanged": true,
+      "request_review_unchanged": true
+    },
+    "runtime_identity": {
+      "alembic_head": "0017",
+      "api_role": "night_voyager_api",
+      "cluster_system_identifier": "7693517967913140263",
+      "compose_project": "night-voyager-intake-native-n2-20261006-a2",
+      "database": "night_voyager",
+      "worker_role": "night_voyager_worker"
+    },
+    "status": "DEFERRED",
+    "substantive_failures": 2,
+    "verification_date": "2026-10-06"
+  },
   "persisted_readback": {
     "accepted_budget_minor": [
       32000000,
@@ -78,11 +165,11 @@
     ]
   },
   "remaining_gates": [
-    "full native/application image/browser acceptance",
+    "focused browser successor/parent receipt/timeline acceptance; native phase frozen pending route decision",
     "hosted delivery"
   ],
   "schema_version": 1,
-  "scope": "local synthetic unit and runtime-role database acceptance",
+  "scope": "local synthetic unit and runtime-role database acceptance; application-image/startup verified; focused browser acceptance deferred",
   "verification_date": "2026-10-06",
   "verified_implementation_head": "816ced9bd32af2977d5a269344575c7881b149ab"
 }

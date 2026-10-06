@@ -83,6 +83,46 @@ as history; no deferred minor remains. Documentation checks were run for this
 follow-up; unchanged runtime verification was reused.
 This record does not establish default-branch availability, full local runtime
 READY, a new release or deployment.
+
+## Native follow-up: deferred after two failures
+
+The separately authorized image/browser follow-up on `2026-10-06` built the
+application, web and PostgreSQL init images from `6154bfd` and verified all 134
+installed Python source files, embedded intake fixture/Skill manifests, copied
+migrations/scripts and locked browser assets against the archived input. No
+source bind mount or base-image pull was used. Actual API/worker roles connected
+to a new isolated `night_voyager` cluster at migration `0017`. Image IDs and the
+cluster identity are retained in the JSON record. Startup and the capacity/port
+gates passed; build-only cache was released before runtime startup.
+
+The first focused browser attempt failed on an incorrect test assumption about
+the ordinary `/demo` Case; the actual Case is `400…002`, in `plan_ready`. No
+controlled business mutation occurred. The test fix passed typecheck/lint and
+one-test discovery. Only the browser image was rebuilt from `2542195`; unchanged
+application/web/PostgreSQL images were reused.
+
+The second attempt proved that an active journey was preserved, the controlled
+Case was explicitly started, `request_revision` was submitted through the real
+BFF/API and the student handoff succeeded. It timed out at the exact label
+selector for the fact dropdown. The failure screenshot/accessibility snapshot
+shows the intake combobox. Its wrapping label also contains the option text;
+the locked Playwright label matcher reads that full text. An existing local DOM
+check reproduced `要修改的事实入学月份`, which does not equal the test's exact
+`要修改的事实`. A role/name selector is proposed but remains unimplemented pending
+the route decision. This was not a missing student handoff or intake control.
+
+The native/browser phase is **DEFERRED and frozen after two substantive failures**.
+There was no third run. It does not establish actual browser submission of
+`2028-02`, successor-worker processing, the new cost, fresh approval or parent
+receipt/timeline. The earlier bounded database acceptance above remains valid
+within its original scope. Post-failure API-role readback confirmed revision 1,
+unchanged predecessor output/evidence and frozen request-review bytes, with no
+new candidate, confirmed fact, Task, run, brief, family decision or timeline.
+
+Both attempts' containers, networks and PostgreSQL/artifact volumes, temporary
+builders/cache volumes and task caffeinate were released. Five candidate image
+IDs, source, screenshots, traces, raw logs and checkpoints remain retained as
+task evidence. Hosted delivery is separately gated; no remote branch or PR exists.
 See the [walkthrough](../operations/controlled-intake-revision.md),
 [approved plan](../superpowers/plans/2026-10-06-controlled-intake-revision.md)
 and [ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
