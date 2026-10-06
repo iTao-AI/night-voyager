@@ -6,6 +6,10 @@ from uuid import UUID
 
 from night_voyager.planning.application import POLICY_VERSION
 from night_voyager.planning.fixtures import validate_planning_fixture
+from night_voyager.planning.intake_fixture import (
+    INTAKE_DELAY_MANIFEST_SHA256,
+    load_exact_intake_delay_fixture,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,4 +40,19 @@ def resolve_canonical_demo_source_contract() -> CanonicalDemoSourceContract:
         source_pack_version=pack.version,
         manifest_sha256=fixture.manifest_sha256,
         policy_version="m3a-policy-v1",
+    )
+
+
+def resolve_revision_demo_source_contracts() -> tuple[CanonicalDemoSourceContract, ...]:
+    """Closed fixture identities; the repository selects from persisted lineage."""
+    fixture = load_exact_intake_delay_fixture()
+    pack = fixture.source_pack
+    return (
+        resolve_canonical_demo_source_contract(),
+        CanonicalDemoSourceContract(
+            source_pack_id=pack.pack_id,
+            source_pack_version=pack.version,
+            manifest_sha256=INTAKE_DELAY_MANIFEST_SHA256,
+            policy_version="m3a-policy-v1",
+        ),
     )

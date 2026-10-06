@@ -82,6 +82,7 @@ async def set_context(
 async def seed_reviewable_case(
     migrator: AsyncEngine,
     revision_fixture: RevisionFixture,
+    *, policy_version: str = "revision-authority-v1",
 ) -> None:
     planning_input = validate_planning_fixture().planning_input
     async with migrator.begin() as connection:
@@ -118,7 +119,7 @@ async def seed_reviewable_case(
                 "organization_id,id,case_id,case_revision,source_pack_id,"
                 "source_pack_version,policy_version,evidence_projection_sha256,"
                 "state,is_current) VALUES("
-                ":org,:run,:case,1,:pack,1,'revision-authority-v1',repeat('a',64),"
+                ":org,:run,:case,1,:pack,1,:policy,repeat('a',64),"
                 "'synthesizing',true)"
             ),
             {
@@ -126,6 +127,7 @@ async def seed_reviewable_case(
                 "run": revision_fixture.run_id,
                 "case": revision_fixture.case_id,
                 "pack": PACK,
+                "policy": policy_version,
             },
         )
         await connection.execute(
@@ -309,6 +311,8 @@ async def prepare_preferred_countries_candidate(
         },
     )
     body = "I prefer Australia and Japan for this bounded revision."
+    if fact_key == "student.intake":
+        body = f"I propose intake {value} for this bounded synthetic revision."
     await set_context(connection, STUDENT, "student")
     await connection.execute(
         text(

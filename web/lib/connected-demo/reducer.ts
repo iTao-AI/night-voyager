@@ -9,6 +9,7 @@ export type RecoveryCode =
   | "session_expired"
   | "session_recovery_required"
   | "stale_conflict"
+  | "intake_evidence_unavailable"
   | "transport_failure";
 
 type AdvisorState =

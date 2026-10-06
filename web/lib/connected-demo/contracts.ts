@@ -1,3 +1,4 @@
+import { isIntakeMonth } from "./intake";
 import type { BudgetValue } from "../collaboration-demo/contracts";
 
 export type DemoPhaseV2 =
@@ -47,7 +48,7 @@ export interface PlanningRevisionCountryComparison {
   current_outcome: RouteOutcome | null;
   current_reason_code: string | null;
 }
-export interface PlanningRevisionComparison {
+export interface PlanningRevisionComparisonV1 {
   schema: "night-voyager.planning-revision-comparison.v1";
   case_id: string;
   previous_revision: number;
@@ -63,7 +64,7 @@ export interface PlanningRevisionComparison {
   current_run_state: "review_required" | "blocked";
   approval_eligible: boolean;
 }
-export interface RouteProjection {
+export interface RouteProjectionV1 {
   route_id: string; country: Country; outcome: RouteOutcome; reason_code: string;
   eligible: boolean; dimensions: Array<{ key: string; outcome: string; reason_code: string }>;
   cost: null | { source_currency: "AUD"; tuition_minor: number; living_minor: number; fx_rate: string | number; cny_total_minor: number; fx_source: string; fx_date: string };
@@ -74,16 +75,33 @@ export interface EvidenceProjection {
   claim: string; role: string; publisher: string; institution: string; snapshot_date: string;
   authority: "accepted_synthetic_demo"; limitation: string; known_gaps: string[];
 }
-export interface AdvisorLedger {
+export interface AdvisorLedgerV2 {
   schema_version: 2; proof_mode: "synthetic-demo"; phase: DemoPhaseV2; case_id: string;
   case_revision: number; case_state: string; canonical_task_inputs: CanonicalTaskInputs | null;
   task: TaskProjection | null; planning_run: PlanningRunProjection | null;
-  comparison: PlanningRevisionComparison | null;
-  routes: RouteProjection[]; evidence: EvidenceProjection[];
+  comparison: PlanningRevisionComparisonV1 | null;
+  routes: RouteProjectionV1[]; evidence: EvidenceProjection[];
   review_inputs: null | { planning_run_id: string; expected_case_revision: number;
     eligible_route_ids: string[]; risk_acceptance_options: Array<{ evidence_id: string; kind: "optional" | "stale" | "unverified"; reason: string }> };
   current_brief_id: string | null;
   recovery: null | { code: string; retry_allowed: boolean; guidance: string };
+}
+export interface PreviousRequestReview {
+  review_id: string; review_version: number; planning_run_id: string;
+  case_revision: number; action: "request_revision";
+}
+export interface PlanningRevisionComparison extends Omit<PlanningRevisionComparisonV1, "schema" | "changed_fact"> {
+  schema: "night-voyager.planning-revision-comparison.v2";
+  changed_fact: PlanningRevisionComparisonV1["changed_fact"]
+    | { fact_key: "student.intake"; previous_value: string; current_value: string };
+  previous_request_review: PreviousRequestReview;
+}
+export interface RouteProjection extends Omit<RouteProjectionV1, "cost"> {
+  cost: null | (NonNullable<RouteProjectionV1["cost"]> & { intake: string });
+}
+export interface AdvisorLedger extends Omit<AdvisorLedgerV2, "schema_version" | "comparison" | "routes"> {
+  schema_version: 3; case_intake: string;
+  comparison: PlanningRevisionComparison | null; routes: RouteProjection[];
 }
 export interface BriefRoute { route_id: string; country: Country; outcome: RouteOutcome; reason_code: string }
 export interface DecisionReceipt {
@@ -164,9 +182,9 @@ function task(value: unknown, standalone = false): value is TaskProjection {
 function canonical(value: unknown): value is CanonicalTaskInputs { return object(value) && exact(value, ["schema_version", "operation", "case_id", "expected_case_revision", "source_pack_id", "source_pack_version", "policy_version"]) && value.schema_version === 1 && value.operation === "generate_planning_run_v1" && uuid(value.case_id) && positive(value.expected_case_revision) && uuid(value.source_pack_id) && positive(value.source_pack_version) && value.policy_version === "m3a-policy-v1"; }
 function planningRun(value: unknown): value is PlanningRunProjection { return object(value) && exact(value, ["planning_run_id", "state", "source_pack_id", "source_pack_version", "policy_version", "source_snapshot_date"]) && uuid(value.planning_run_id) && ["review_required", "blocked"].includes(String(value.state)) && uuid(value.source_pack_id) && positive(value.source_pack_version) && value.policy_version === "m3a-policy-v1" && date(value.source_snapshot_date); }
 function dimension(value: unknown): boolean { return object(value) && exact(value, ["key", "outcome", "reason_code"]) && typeof value.key === "string" && typeof value.outcome === "string" && typeof value.reason_code === "string"; }
-function route(value: unknown): value is RouteProjection {
+function route(value: unknown, version: 2 | 3): boolean {
   if (!object(value) || !exact(value, ["route_id", "country", "outcome", "reason_code", "eligible", "dimensions", "cost", "ranking", "required_claims", "known_gaps"])) return false;
-  const cost = value.cost === null || (object(value.cost) && exact(value.cost, ["source_currency", "tuition_minor", "living_minor", "fx_rate", "cny_total_minor", "fx_source", "fx_date"]) && value.cost.source_currency === "AUD" && nonnegative(value.cost.tuition_minor) && nonnegative(value.cost.living_minor) && (typeof value.cost.fx_rate === "number" || typeof value.cost.fx_rate === "string") && positive(value.cost.cny_total_minor) && typeof value.cost.fx_source === "string" && date(value.cost.fx_date));
+  const cost = value.cost === null || (object(value.cost) && exact(value.cost, ["source_currency", "tuition_minor", "living_minor", "fx_rate", "cny_total_minor", "fx_source", "fx_date", ...(version === 3 ? ["intake"] : [])]) && value.cost.source_currency === "AUD" && nonnegative(value.cost.tuition_minor) && nonnegative(value.cost.living_minor) && (typeof value.cost.fx_rate === "number" || typeof value.cost.fx_rate === "string") && positive(value.cost.cny_total_minor) && typeof value.cost.fx_source === "string" && date(value.cost.fx_date) && (version === 2 || isIntakeMonth(value.cost.intake)));
   const ranking = value.ranking === null || (object(value.ranking) && exact(value.ranking, ["ranking_system", "rank", "publication_year"]) && typeof value.ranking.ranking_system === "string" && positive(value.ranking.rank) && positive(value.ranking.publication_year));
   return uuid(value.route_id) && COUNTRIES.includes(String(value.country)) && OUTCOMES.includes(String(value.outcome)) && typeof value.reason_code === "string" && typeof value.eligible === "boolean" && Array.isArray(value.dimensions) && value.dimensions.every(dimension) && cost && ranking && strings(value.required_claims) && strings(value.known_gaps);
 }
@@ -182,9 +200,10 @@ function budget(value: unknown): value is BudgetValue {
   if (value.refused) return value.preferred_minor === null && value.hard_ceiling_minor === null;
   return positive(value.preferred_minor) && positive(value.hard_ceiling_minor) && Number(value.preferred_minor) <= Number(value.hard_ceiling_minor);
 }
-function changedFact(value: unknown): boolean {
+function changedFact(value: unknown, includeIntake: boolean): boolean {
   if (!object(value) || !exact(value, ["fact_key", "previous_value", "current_value"])) return false;
   if (value.fact_key === "student.preferred_countries") return countryScope(value.previous_value) && countryScope(value.current_value) && JSON.stringify(value.previous_value) !== JSON.stringify(value.current_value);
+  if (includeIntake && value.fact_key === "student.intake") return isIntakeMonth(value.previous_value) && isIntakeMonth(value.current_value) && value.previous_value !== value.current_value;
   if (value.fact_key === "family.budget") return budget(value.previous_value) && budget(value.current_value) && JSON.stringify(value.previous_value) !== JSON.stringify(value.current_value);
   return false;
 }
@@ -201,9 +220,13 @@ function comparisonCountry(value: unknown): value is PlanningRevisionCountryComp
   const same = value.previous_outcome === value.current_outcome && value.previous_reason_code === value.current_reason_code;
   return value.delta === "unchanged" ? same : !same;
 }
-function comparison(value: unknown): value is PlanningRevisionComparison {
-  const keys = ["schema", "case_id", "previous_revision", "current_revision", "previous_planning_run_id", "current_planning_run_id", "previous_output_sha256", "current_output_sha256", "changed_fact", "countries", "current_run_state", "approval_eligible"];
-  if (!object(value) || !exact(value, keys) || value.schema !== "night-voyager.planning-revision-comparison.v1" || !uuid(value.case_id) || !positive(value.previous_revision) || value.current_revision !== Number(value.previous_revision) + 1 || !uuid(value.previous_planning_run_id) || !uuid(value.current_planning_run_id) || typeof value.previous_output_sha256 !== "string" || !SHA256.test(value.previous_output_sha256) || typeof value.current_output_sha256 !== "string" || !SHA256.test(value.current_output_sha256) || !changedFact(value.changed_fact) || !Array.isArray(value.countries) || !value.countries.every(comparisonCountry) || !["review_required", "blocked"].includes(String(value.current_run_state)) || typeof value.approval_eligible !== "boolean" || value.approval_eligible !== (value.current_run_state === "review_required")) return false;
+function comparison(value: unknown, version: 1 | 2): value is PlanningRevisionComparisonV1 | PlanningRevisionComparison {
+  const keys = ["schema", "case_id", "previous_revision", "current_revision", "previous_planning_run_id", "current_planning_run_id", "previous_output_sha256", "current_output_sha256", "changed_fact", "countries", "current_run_state", "approval_eligible", ...(version === 2 ? ["previous_request_review"] : [])];
+  if (!object(value) || !exact(value, keys) || value.schema !== `night-voyager.planning-revision-comparison.v${version}` || !uuid(value.case_id) || !positive(value.previous_revision) || value.current_revision !== Number(value.previous_revision) + 1 || !uuid(value.previous_planning_run_id) || !uuid(value.current_planning_run_id) || typeof value.previous_output_sha256 !== "string" || !SHA256.test(value.previous_output_sha256) || typeof value.current_output_sha256 !== "string" || !SHA256.test(value.current_output_sha256) || !changedFact(value.changed_fact, version === 2) || !Array.isArray(value.countries) || !value.countries.every(comparisonCountry) || !["review_required", "blocked"].includes(String(value.current_run_state)) || typeof value.approval_eligible !== "boolean" || value.approval_eligible !== (value.current_run_state === "review_required")) return false;
+  if (version === 2) {
+    const review = value.previous_request_review;
+    if (!object(review) || !exact(review, ["review_id", "review_version", "planning_run_id", "case_revision", "action"]) || !uuid(review.review_id) || !positive(review.review_version) || review.action !== "request_revision" || review.planning_run_id !== value.previous_planning_run_id || review.case_revision !== value.previous_revision) return false;
+  }
   const countries = value.countries.map((item) => (item as PlanningRevisionCountryComparison).country);
   return countries.join() === [...new Set(countries)].sort().join();
 }
@@ -267,11 +290,21 @@ export function parseJourneyStatus(value: unknown): ConnectedJourneyStatus {
   if (value.active_role !== expectedRole && !(value.phase === "revision_requested" && value.active_role === "parent")) throw new Error("invalid response");
   return value as unknown as ConnectedJourneyStatus;
 }
-export function parseLedger(value: unknown): AdvisorLedger {
-  const keys = ["schema_version", "proof_mode", "phase", "case_id", "case_revision", "case_state", "canonical_task_inputs", "task", "planning_run", "comparison", "routes", "evidence", "review_inputs", "current_brief_id", "recovery"];
-  if (!object(value) || !exact(value, keys) || value.schema_version !== 2 || value.proof_mode !== "synthetic-demo" || !PHASES.includes(value.phase as DemoPhaseV2) || !uuid(value.case_id) || !positive(value.case_revision) || typeof value.case_state !== "string" || !(value.canonical_task_inputs === null || canonical(value.canonical_task_inputs)) || !(value.task === null || task(value.task)) || !(value.planning_run === null || planningRun(value.planning_run)) || !(value.comparison === null || comparison(value.comparison)) || !Array.isArray(value.routes) || !value.routes.every(route) || !Array.isArray(value.evidence) || !value.evidence.every(evidence) || !(value.review_inputs === null || reviewInputs(value.review_inputs)) || !(value.current_brief_id === null || uuid(value.current_brief_id)) || !(value.recovery === null || recovery(value.recovery)) || !phaseValid(value)) throw new Error("invalid response");
+function decodeLedger(value: unknown, version: 2 | 3): AdvisorLedgerV2 | AdvisorLedger {
+  const keys = ["schema_version", "proof_mode", "phase", "case_id", "case_revision", "case_state", "canonical_task_inputs", "task", "planning_run", "comparison", "routes", "evidence", "review_inputs", "current_brief_id", "recovery", ...(version === 3 ? ["case_intake"] : [])];
+  if (!object(value) || !exact(value, keys) || value.schema_version !== version || value.proof_mode !== "synthetic-demo" || !PHASES.includes(value.phase as DemoPhaseV2) || !uuid(value.case_id) || !positive(value.case_revision) || typeof value.case_state !== "string" || !(value.canonical_task_inputs === null || canonical(value.canonical_task_inputs)) || !(value.task === null || task(value.task)) || !(value.planning_run === null || planningRun(value.planning_run)) || !(value.comparison === null || comparison(value.comparison, version === 3 ? 2 : 1)) || !Array.isArray(value.routes) || !value.routes.every(item => route(item, version)) || !Array.isArray(value.evidence) || !value.evidence.every(evidence) || !(value.review_inputs === null || reviewInputs(value.review_inputs)) || !(value.current_brief_id === null || uuid(value.current_brief_id)) || !(value.recovery === null || recovery(value.recovery)) || !phaseValid(value)) throw new Error("invalid response");
   if (value.comparison && (value.comparison.case_id !== value.case_id || value.comparison.current_revision !== value.case_revision || value.comparison.current_planning_run_id !== (value.planning_run as PlanningRunProjection | null)?.planning_run_id)) throw new Error("invalid response");
-  return value as unknown as AdvisorLedger;
+  if (version === 3) {
+    const current = value as unknown as AdvisorLedger;
+    if (!isIntakeMonth(value.case_intake) || current.routes.some(item => item.cost !== null && item.cost.intake !== current.case_intake) || (current.comparison?.changed_fact.fact_key === "student.intake" && current.comparison.changed_fact.current_value !== current.case_intake)) throw new Error("invalid response");
+  }
+  return value as unknown as AdvisorLedgerV2 | AdvisorLedger;
+}
+export function parseLedger(value: unknown): AdvisorLedger {
+  return decodeLedger(value, 3) as AdvisorLedger;
+}
+export function parseLedgerV2(value: unknown): AdvisorLedgerV2 {
+  return decodeLedger(value, 2) as AdvisorLedgerV2;
 }
 function briefRoute(value: unknown): value is BriefRoute { return object(value) && exact(value, ["route_id", "country", "outcome", "reason_code"]) && uuid(value.route_id) && COUNTRIES.includes(String(value.country)) && OUTCOMES.includes(String(value.outcome)) && typeof value.reason_code === "string"; }
 function familyProjection(value: unknown): boolean { return object(value) && exact(value, ["schema_version", "intake", "routes", "eligible_route_ids", "accepted_evidence_risks", "synthetic_proof"]) && value.schema_version === 1 && typeof value.intake === "string" && Array.isArray(value.routes) && value.routes.every(briefRoute) && Array.isArray(value.eligible_route_ids) && value.eligible_route_ids.every(uuid) && Array.isArray(value.accepted_evidence_risks) && value.accepted_evidence_risks.every(risk) && typeof value.synthetic_proof === "boolean"; }

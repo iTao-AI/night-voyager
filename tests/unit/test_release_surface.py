@@ -501,14 +501,14 @@ def copy_planning_start_gate_surface(destination: Path) -> None:
     shutil.copyfile(ROOT / "scripts/run_db_tests.sh", scripts / "run_db_tests.sh")
 
 
-def test_release_verifier_accepts_exactly_one_0016_alembic_head(
+def test_release_verifier_accepts_exactly_one_0017_alembic_head(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     verifier = load_verifier()
 
     verifier.verify_alembic_contract()
 
-    assert "proof migrations: exact Alembic head 0016" in capsys.readouterr().out
+    assert "proof migrations: exact Alembic head 0017" in capsys.readouterr().out
 
 
 def test_release_verifier_checks_governed_plan_execution_dx(
@@ -524,7 +524,7 @@ def test_release_verifier_checks_governed_plan_execution_dx(
     ) in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("mutation", ("remove_0016", "add_second_head"))
+@pytest.mark.parametrize("mutation", ("remove_0016", "remove_0017", "add_second_head"))
 def test_release_verifier_rejects_alembic_head_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -537,13 +537,15 @@ def test_release_verifier_rejects_alembic_head_mutation(
             tmp_path
             / "migrations/versions/0016_guarded_terminal_task_recovery.py"
         ).unlink()
+    elif mutation == "remove_0017":
+        (tmp_path / "migrations/versions/0017_controlled_intake_revision.py").unlink()
     else:
         (tmp_path / "migrations/versions/0099_test_branch.py").write_text(
             'revision = "0099"\ndown_revision = "0008"\n', encoding="utf-8"
         )
     monkeypatch.setattr(verifier, "ROOT", tmp_path)
 
-    with pytest.raises(SystemExit, match="exactly one Alembic head 0016"):
+    with pytest.raises(SystemExit, match="exactly one Alembic head 0017"):
         verifier.verify_alembic_contract()
 
 

@@ -25,6 +25,17 @@ unknown failures have no retry action. This implementation does not change the
 published v0.1.6 boundary. See the [walkthrough](docs/operations/customer-revision-recovery.md)
 and [acceptance evidence](docs/evidence/customer-revision-recovery.md).
 
+The controlled intake entry at `/demo?scenario=intake-delay` adds the local
+synthetic `2027-02` to `2028-02` revision. It displays the actual current month,
+the stored cost month and the predecessor's request-review context. The student
+proposes the month, the advisor confirms available evidence and explicitly starts
+a new planning task, and fresh review precedes family consent. The alternate
+fixture is hypothetical, with a `2026-07-01` cost/FX as-of date. Existing journey
+metadata remains bound to its Case until an explicit end action. Unit and bounded
+database checks do not replace the separately gated browser/image acceptance;
+the published v0.1.6 boundary remains unchanged. See the
+[approved intake spec](docs/superpowers/specs/2026-10-06-controlled-intake-revision.md).
+
 ## Aesthetic direction
 
 The previous visual layers are historical presentation context:

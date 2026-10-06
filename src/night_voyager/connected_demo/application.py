@@ -3,13 +3,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from uuid import UUID
 
+from night_voyager.connected_demo.errors import DemoContractUnavailableError
 from night_voyager.connected_demo.fixtures import (
     CanonicalDemoSourceContract,
     resolve_canonical_demo_source_contract,
+    resolve_revision_demo_source_contracts,
 )
 from night_voyager.connected_demo.models import (
     AdvisorLedgerV1,
     AdvisorLedgerV2,
+    AdvisorLedgerV3,
     ConnectedJourneyStatusV1,
     CurrentDecisionBriefV1,
     CurrentDecisionBriefV2,
@@ -26,22 +29,32 @@ class ConnectedDemoService:
         source_resolver: Callable[[], CanonicalDemoSourceContract] = (
             resolve_canonical_demo_source_contract
         ),
+        revision_source_resolver: Callable[[], tuple[CanonicalDemoSourceContract, ...]] = (
+            resolve_revision_demo_source_contracts
+        ),
     ) -> None:
         self._repository = repository
         self._source_resolver = source_resolver
+        self._revision_source_resolver = revision_source_resolver
 
     async def advisor_ledger(
         self, context: ActorContext, case_id: UUID, *, contract_version: int = 1
-    ) -> AdvisorLedgerV1 | AdvisorLedgerV2 | None:
+    ) -> AdvisorLedgerV1 | AdvisorLedgerV2 | AdvisorLedgerV3 | None:
+        if contract_version == 3:
+            try:
+                sources = self._revision_source_resolver()
+            except (OSError, ValueError) as error:
+                raise DemoContractUnavailableError(
+                    "versioned source contract unavailable"
+                ) from error
+            return await self._repository.advisor_ledger_v3(context, case_id, sources)
         if contract_version == 2:
             return await self._repository.advisor_ledger_v2(
                 context, case_id, self._source_resolver()
             )
         if contract_version != 1:
             raise ValueError("connected_demo_contract_version_invalid")
-        return await self._repository.advisor_ledger(
-            context, case_id, self._source_resolver()
-        )
+        return await self._repository.advisor_ledger(context, case_id, self._source_resolver())
 
     async def current_decision_brief(
         self, context: ActorContext, case_id: UUID, *, contract_version: int = 1

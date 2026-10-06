@@ -29,7 +29,7 @@ async def test_0015_catalog_is_closed_and_runtime_roles_keep_function_only_autho
     try:
         async with engine.connect() as connection:
             expected_revision = (
-                "0015" if os.environ.get("NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE") else "0016"
+                "0015" if os.environ.get("NIGHT_VOYAGER_IDENTITY_MIGRATION_PHASE") else "0017"
             )
             assert await connection.scalar(
                 text("SELECT version_num FROM alembic_version")

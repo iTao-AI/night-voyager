@@ -48,3 +48,17 @@ Confirmed facts retain source-message, subject, candidate, verification, advisor
 version, and supersession lineage. Participant projections expose only current safe
 values and their own proposal status; advisor projections retain the bounded
 authority history. See [Collaboration and confirmed facts](collaboration-and-confirmed-facts.md).
+
+The opt-in `fixtures/intake-delay-v1/manifest.json` is an independent hypothetical
+`2028-02` source, registered as `50000000-0000-0000-0000-000000000017/v1`.
+Its raw manifest SHA is
+`27cde816426600fe355eaca842a028b451395be5c9ded0b0e29418d58998cee2`;
+its canonical manifest SHA is
+`832aab1715564dee0e3a4530a181ccd4581bb7e5199144cb34dc55b20077add1`.
+All source entries, accepted synthetic Evidence references and metadata are
+frozen independently of the original M3A pack. Australia has exactly one
+`program_total` cost: AUD minor `4,200,000` tuition plus `2,600,000` living,
+FX `4.80` and source/FX date `2026-07-01`, yielding CNY minor `32,640,000`.
+These values are a controlled fixture, not current institutional prices.
+The original pack and DRA pins remain unchanged. See the
+[controlled intake walkthrough](../operations/controlled-intake-revision.md).

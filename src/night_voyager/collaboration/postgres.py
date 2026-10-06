@@ -19,6 +19,7 @@ from night_voyager.collaboration.errors import (
     CollaborationPersistenceError,
     CollaborationThreadFullError,
     IdempotencyConflictError,
+    IntakeEvidenceUnavailableError,
     InvalidCollaborationMessageError,
     MemoryCandidateExpiredError,
     MemoryCandidateStaleError,
@@ -525,6 +526,7 @@ class PostgresCollaborationRepository:
             "NV008": (IdempotencyConflictError, "idempotency_conflict"),
             "NV013": (MemoryCandidateExpiredError, "memory_candidate_expired"),
             "NV014": (ActiveTaskBlocksRevisionError, "active_task_blocks_revision"),
+            "NV027": (IntakeEvidenceUnavailableError, "intake_evidence_unavailable"),
         }
         mapping = mapped.get(str(sqlstate))
         if mapping is None:

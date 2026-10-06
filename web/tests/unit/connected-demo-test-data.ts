@@ -69,7 +69,7 @@ const route = (country: "australia" | "japan" | "malaysia", outcome: "recommende
       : "direct_program_fit_evidence_absent",
   eligible,
   dimensions: [{ key: "program_fit", outcome: eligible ? "supported" : "conditional", reason_code: `${country}_dimension` }],
-  cost: country === "australia" ? { source_currency: "AUD" as const, tuition_minor: 1, living_minor: 1, fx_rate: "5", cny_total_minor: 10, fx_source: "synthetic", fx_date: "2026-07-01" } : null,
+  cost: country === "australia" ? { intake: "2027-02", source_currency: "AUD" as const, tuition_minor: 1, living_minor: 1, fx_rate: "5", cny_total_minor: 10, fx_source: "synthetic", fx_date: "2026-07-01" } : null,
   ranking: null, required_claims: [`${country}_program_fit`], known_gaps: country === "australia" ? [] : [`${country}_gap`],
 });
 const evidence = { claim: "australia_program_fit", role: "program_fit", publisher: "Synthetic publisher", institution: "Synthetic institution", snapshot_date: "2026-07-01", authority: "accepted_synthetic_demo" as const, limitation: "Synthetic only", known_gaps: [] };
@@ -85,7 +85,8 @@ const LEGACY_PHASES: Record<string, DemoPhaseV2> = {
 
 export function comparison(blocked = false): PlanningRevisionComparison {
   return {
-    schema: "night-voyager.planning-revision-comparison.v1",
+    schema: "night-voyager.planning-revision-comparison.v2",
+    previous_request_review: { review_id: "90000000-0000-0000-0000-000000000001", review_version: 1, planning_run_id: "70000000-0000-0000-0000-000000000001", case_revision: 1, action: "request_revision" },
     case_id: CASE_ID,
     previous_revision: 1,
     current_revision: 2,
@@ -110,7 +111,7 @@ export function comparison(blocked = false): PlanningRevisionComparison {
 
 export function ledger(phaseInput: AdvisorLedger["phase"] | keyof typeof LEGACY_PHASES, status: TaskStatus = "preparing"): AdvisorLedger {
   const phase = LEGACY_PHASES[phaseInput] ?? phaseInput as DemoPhaseV2;
-  const base: AdvisorLedger = { schema_version: 2, proof_mode: "synthetic-demo", phase, case_id: CASE_ID, case_revision: 1, case_state: "planning", canonical_task_inputs: null, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
+  const base: AdvisorLedger = { schema_version: 3, case_intake: "2027-02", proof_mode: "synthetic-demo", phase, case_id: CASE_ID, case_revision: 1, case_state: "planning", canonical_task_inputs: null, task: null, planning_run: null, comparison: null, routes: [], evidence: [], review_inputs: null, current_brief_id: null, recovery: null };
   if (phase === "task_ready") base.canonical_task_inputs = { schema_version: 1, operation: "generate_planning_run_v1", case_id: CASE_ID, expected_case_revision: 1, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" };
   if (phase === "active_task") { base.canonical_task_inputs = { schema_version: 1, operation: "generate_planning_run_v1", case_id: CASE_ID, expected_case_revision: 1, source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1" }; base.task = task("preparing"); }
   if (phase === "review_required" || phase === "revision_requested" || phase === "revision_fact_pending") { base.task = task("needs_advisor_review"); base.planning_run = { planning_run_id: "70000000-0000-0000-0000-000000000001", state: "review_required", source_pack_id: "50000000-0000-0000-0000-000000000001", source_pack_version: 1, policy_version: "m3a-policy-v1", source_snapshot_date: "2026-07-01" }; base.routes = [route("australia", "recommended_with_condition", true), route("japan", "conditional", false), route("malaysia", "blocked", false)]; base.evidence = [evidence]; base.review_inputs = { planning_run_id: base.planning_run.planning_run_id, expected_case_revision: 1, eligible_route_ids: [ROUTE_ID], risk_acceptance_options: [] }; }

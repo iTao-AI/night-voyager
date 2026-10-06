@@ -12,6 +12,7 @@ from night_voyager.connected_demo.errors import DemoContractUnavailableError
 from night_voyager.connected_demo.models import (
     AdvisorLedgerV1,
     AdvisorLedgerV2,
+    AdvisorLedgerV3,
     ConnectedJourneyStatusV1,
     CurrentDecisionBriefV1,
     CurrentDecisionBriefV2,
@@ -30,9 +31,7 @@ def create_connected_demo_router(
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1")
 
-    async def read_context(
-        session: AsyncSession, raw_session: str | None
-    ) -> ActorContext:
+    async def read_context(session: AsyncSession, raw_session: str | None) -> ActorContext:
         service = IdentityService(IdentityRepository(session), settings.secret_key)
         return await resolve_actor_context(raw_session, service)
 
@@ -45,25 +44,27 @@ def create_connected_demo_router(
         expired.delete_cookie(BOOTSTRAP_COOKIE, path="/")
         return expired
 
-    def contract_version(request: Request) -> int | JSONResponse:
+    def contract_version(request: Request, *, ledger: bool = False) -> int | JSONResponse:
         values = request.query_params.getlist("contract_version")
         if not values:
             return 1
+        if values == ["3"] and ledger:
+            return 3
         if values != ["2"]:
             return problem(422, "request_validation_failed", "request validation failed")
         return 2
 
     @router.get(
         "/cases/{case_id}/advisor-ledger",
-        response_model=AdvisorLedgerV1 | AdvisorLedgerV2,
+        response_model=AdvisorLedgerV1 | AdvisorLedgerV2 | AdvisorLedgerV3,
     )
     async def advisor_ledger(  # pyright: ignore[reportUnusedFunction]
         case_id: UUID,
         request: Request,
         response: Response,
         raw_session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
-    ) -> AdvisorLedgerV1 | AdvisorLedgerV2 | JSONResponse:
-        version = contract_version(request)
+    ) -> AdvisorLedgerV1 | AdvisorLedgerV2 | AdvisorLedgerV3 | JSONResponse:
+        version = contract_version(request, ledger=True)
         if isinstance(version, JSONResponse):
             return version
         try:
@@ -77,9 +78,7 @@ def create_connected_demo_router(
                 return expired_session_response()
             raise
         except DemoContractUnavailableError:
-            return problem(
-                503, "demo_contract_unavailable", "connected demo contract unavailable"
-            )
+            return problem(503, "demo_contract_unavailable", "connected demo contract unavailable")
         if projection is None:
             return problem(404, "resource_unavailable", "resource unavailable")
         response.headers["Cache-Control"] = "no-store"
@@ -109,9 +108,7 @@ def create_connected_demo_router(
                 return expired_session_response()
             raise
         except DemoContractUnavailableError:
-            return problem(
-                503, "demo_contract_unavailable", "connected demo contract unavailable"
-            )
+            return problem(503, "demo_contract_unavailable", "connected demo contract unavailable")
         if projection is None:
             return problem(404, "resource_unavailable", "resource unavailable")
         response.headers["Cache-Control"] = "no-store"
@@ -137,9 +134,7 @@ def create_connected_demo_router(
                 return expired_session_response()
             raise
         except DemoContractUnavailableError:
-            return problem(
-                503, "demo_contract_unavailable", "connected demo contract unavailable"
-            )
+            return problem(503, "demo_contract_unavailable", "connected demo contract unavailable")
         if projection is None:
             return problem(404, "resource_unavailable", "resource unavailable")
         response.headers["Cache-Control"] = "no-store"

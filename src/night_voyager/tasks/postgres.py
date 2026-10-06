@@ -294,6 +294,8 @@ class PostgresTaskRepository:
             raise TaskConflictError("skill_pin_invalid") from error
         if sqlstate == "NV023":
             raise TaskConflictError("task_retry_ineligible") from error
+        if sqlstate == "NV027":
+            raise TaskConflictError("intake_evidence_unavailable") from error
         if sqlstate == "NV007":
             raise TaskAuthorizationError from error
         raise error

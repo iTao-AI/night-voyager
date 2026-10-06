@@ -48,6 +48,10 @@ from night_voyager.identity.demo_seed import (
 )
 from night_voyager.planning.application import POLICY_VERSION
 from night_voyager.planning.fixtures import ValidatedPlanningFixture, validate_planning_fixture
+from night_voyager.planning.intake_fixture import (
+    INTAKE_DELAY_MANIFEST_SHA256,
+    load_exact_intake_delay_fixture,
+)
 from night_voyager.skills.evaluation import SkillEvaluator
 from night_voyager.skills.registry import SkillRuntimeRegistry
 
@@ -114,6 +118,15 @@ PLANNING_REVISION_CASES: tuple[PlanningRevisionSpec, ...] = (
 )
 
 
+INTAKE_REVISION_CASE: PlanningRevisionSpec = cast(
+    PlanningRevisionSpec,
+    {
+        key: UUID(str(value)[:-1] + "3") if isinstance(value, UUID) else 3
+        for key, value in PLANNING_REVISION_CASES[0].items()
+    },
+)
+
+
 async def seed_demo(
     database_url: str,
     *,
@@ -122,7 +135,10 @@ async def seed_demo(
     include_planning_revision: bool = True,
     include_skills: bool = True,
     include_plan_execution: bool = True,
+    include_intake_revision: bool = False,
 ) -> None:
+    if include_intake_revision and (not include_planning or not include_skills):
+        raise ValueError("intake revision seed requires planning and Skills")
     fixture = validate_planning_fixture()
     engine = create_async_engine(database_url)
     try:
@@ -155,6 +171,11 @@ async def seed_demo(
                     await _seed_plan_execution_scenario(connection, fixture)
                 if include_planning_revision:
                     await _seed_planning_revision_cases(connection, fixture)
+                if include_intake_revision:
+                    await _seed_intake_source(connection)
+                    await _seed_planning_revision_cases(
+                        connection, fixture, specs=(INTAKE_REVISION_CASE,), intake_seed=True
+                    )
                 if include_collaboration:
                     await _seed_collaboration(
                         connection,
@@ -857,14 +878,84 @@ async def _assert_exact_plan_execution_fixture(
         raise RuntimeError("demo timeline execution fixture seed mismatch")
 
 
+async def _seed_intake_source(connection: AsyncConnection) -> None:
+    value = load_exact_intake_delay_fixture()
+    pack = value.source_pack
+    existing = await connection.scalar(
+        text(
+            "SELECT EXISTS(SELECT 1 FROM app.source_packs WHERE organization_id=:org AND id=:pack)"
+        ),
+        {"org": DEMO_ORG, "pack": pack.pack_id},
+    )
+    if not existing:
+        await connection.execute(
+            text(
+                "INSERT INTO app.source_packs(organization_id,id,version,schema_version,manifest_sha256) "
+                "VALUES(:org,:pack,1,1,:hash)"
+            ),
+            {"org": DEMO_ORG, "pack": pack.pack_id, "hash": INTAKE_DELAY_MANIFEST_SHA256},
+        )
+        for entry in pack.entries:
+            await connection.execute(
+                text(
+                    "INSERT INTO app.source_pack_entries(organization_id,source_pack_id,source_pack_version,id,declared_path,sha256,snapshot_date,publisher,institution,canonical_url,freshness_days,redistribution_class,evidence_class,coverage,known_gaps) "
+                    "VALUES(:org,:pack,1,:id,:path,:hash,:snapshot,:publisher,:institution,:url,:freshness,:redistribution,:class,CAST(:coverage AS jsonb),CAST(:gaps AS jsonb))"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "pack": pack.pack_id,
+                    "id": entry.entry_id,
+                    "path": entry.path,
+                    "hash": entry.sha256,
+                    "snapshot": entry.snapshot_date,
+                    "publisher": entry.publisher,
+                    "institution": entry.institution,
+                    "url": str(entry.canonical_url),
+                    "freshness": entry.freshness_days,
+                    "redistribution": entry.redistribution_class,
+                    "class": entry.evidence_class,
+                    "coverage": json.dumps(entry.coverage),
+                    "gaps": json.dumps(entry.known_gaps),
+                },
+            )
+        for evidence in value.evidence:
+            await connection.execute(
+                text(
+                    "INSERT INTO app.evidence_refs(organization_id,id,source_pack_id,source_pack_version,source_entry_id,claim,authority,source_sha256) "
+                    "VALUES(:org,:id,:pack,1,:entry,:claim,:authority,:hash)"
+                ),
+                {
+                    "org": DEMO_ORG,
+                    "id": evidence.evidence_id,
+                    "pack": pack.pack_id,
+                    "entry": evidence.source_entry_id,
+                    "claim": evidence.claim,
+                    "authority": evidence.authority.value,
+                    "hash": evidence.source_sha256,
+                },
+            )
+    await connection.execute(
+        text("SELECT app.assert_controlled_intake_source(:org,:pack,1,'2028-02')"),
+        {"org": DEMO_ORG, "pack": pack.pack_id},
+    )
+
+
 async def _seed_planning_revision_cases(
-    connection: AsyncConnection, fixture: ValidatedPlanningFixture
+    connection: AsyncConnection,
+    fixture: ValidatedPlanningFixture,
+    *,
+    specs: tuple[PlanningRevisionSpec, ...] = PLANNING_REVISION_CASES,
+    intake_seed: bool = False,
 ) -> None:
     source_case = fixture.planning_input.case
     preferred = source_case.student.preferred_countries
-    preferred_json = json.dumps([country.value for country in preferred])
-    preferred_hash = canonical_sha256([country.value for country in preferred])
-    for spec in PLANNING_REVISION_CASES:
+    initial_value: object = (
+        source_case.student.intake if intake_seed else [country.value for country in preferred]
+    )
+    preferred_json = json.dumps(initial_value)
+    preferred_hash = canonical_sha256(initial_value)
+    helper = "seed_demo_intake_revision" if intake_seed else "seed_demo_planning_revision_fact"
+    for spec in specs:
         case_id = spec["case_id"]
         inserted_case_id = (
             await connection.execute(
@@ -881,6 +972,7 @@ async def _seed_planning_revision_cases(
                 connection,
                 fixture,
                 spec,
+                intake_seed=intake_seed,
             )
             continue
         await connection.execute(
@@ -929,7 +1021,7 @@ async def _seed_planning_revision_cases(
         )
         await connection.execute(
             text(
-                "SELECT app.seed_demo_planning_revision_fact("
+                f"SELECT app.{helper}("
                 ":org,:case,:thread,:advisor,:student,:message,:candidate,"
                 ":verification,:fact,CAST(:value AS jsonb),:value_hash,"
                 ":message_request_hash,:candidate_request_hash,"
@@ -958,10 +1050,11 @@ async def _seed_planning_revision_cases(
                 ).hexdigest(),
             },
         )
-        await connection.execute(
-            text("SELECT app.seed_demo_planning_revision_budget(:org,:case)"),
-            {"org": DEMO_ORG, "case": case_id},
-        )
+        if not intake_seed:
+            await connection.execute(
+                text("SELECT app.seed_demo_planning_revision_budget(:org,:case)"),
+                {"org": DEMO_ORG, "case": case_id},
+            )
         await _clone_planning_snapshot(
             connection,
             case_id=case_id,
@@ -1136,21 +1229,33 @@ async def _assert_exact_initial_budget_lineage(
             parameters=parameters,
         )
 
+
 async def _assert_exact_planning_revision_fixture(
     connection: AsyncConnection,
     fixture: ValidatedPlanningFixture,
     spec: Mapping[str, object],
+    *,
+    intake_seed: bool = False,
 ) -> None:
     case_id = cast(UUID, spec["case_id"])
     run_id = cast(UUID, spec["run_id"])
     task_id = cast(UUID, spec["task_id"])
     source_case = fixture.planning_input.case
-    preferred = [country.value for country in source_case.student.preferred_countries]
+    preferred: object = (
+        source_case.student.intake
+        if intake_seed
+        else [country.value for country in source_case.student.preferred_countries]
+    )
+    fact_key = "student.intake" if intake_seed else "student.preferred_countries"
     preferred_json = json.dumps(preferred)
     preferred_hash = canonical_sha256(preferred)
     student_json = json.dumps(source_case.student.model_dump(mode="json"))
     family_json = json.dumps(source_case.family.model_dump(mode="json"))
-    body = "Synthetic initial preferred countries."
+    body = (
+        "Synthetic initial intake 2027-02."
+        if intake_seed
+        else "Synthetic initial preferred countries."
+    )
     body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
     message_request_hash = hashlib.sha256(
         f"revision-seed-message:{case_id}".encode()
@@ -1224,7 +1329,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="message_events",
-        scope="case_id=:case AND id=:message",
+        scope="case_id=:case" if intake_seed else "case_id=:case AND id=:message",
         exact=(
             "id=:message AND thread_id=:thread AND case_id=:case "
             "AND sequence_no=1 AND actor_id=:student_actor AND actor_role='student' "
@@ -1245,13 +1350,13 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="memory_candidates",
-        scope="case_id=:case AND id=:candidate",
+        scope="case_id=:case" if intake_seed else "case_id=:case AND id=:candidate",
         exact=(
             "id=:candidate AND case_id=:case AND case_revision=1 "
             "AND message_event_id=:message AND subject_actor_id=:student_actor "
             "AND subject_role='student' AND proposing_actor_id=:student_actor "
             "AND proposing_role='student' "
-            "AND fact_key='student.preferred_countries' "
+            f"AND fact_key='{fact_key}' "
             "AND proposed_value=CAST(:preferred AS jsonb) "
             "AND value_sha256=:value_hash AND request_sha256=:request_hash "
             "AND provenance_kind='participant_proposal' "
@@ -1271,7 +1376,7 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="memory_candidate_verifications",
-        scope="case_id=:case AND id=:verification",
+        scope="case_id=:case" if intake_seed else "case_id=:case AND id=:verification",
         exact=(
             "id=:verification AND candidate_id=:candidate AND case_id=:case "
             "AND advisor_actor_id=:advisor AND advisor_role='advisor' "
@@ -1292,10 +1397,10 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="confirmed_facts",
-        scope="case_id=:case AND id=:fact",
+        scope="case_id=:case" if intake_seed else "case_id=:case AND id=:fact",
         exact=(
             "id=:fact AND case_id=:case "
-            "AND fact_key='student.preferred_countries' "
+            f"AND fact_key='{fact_key}' "
             "AND value=CAST(:preferred AS jsonb) AND value_sha256=:value_hash "
             "AND source_candidate_id=:candidate "
             "AND source_message_event_id=:message "
@@ -1319,16 +1424,17 @@ async def _assert_exact_planning_revision_fixture(
     await _assert_exact_fixture_rows(
         connection,
         table="case_revision_confirmed_fact_refs",
-        scope="case_id=:case AND fact_key='student.preferred_countries'",
+        scope=f"case_id=:case AND fact_key='{fact_key}'",
         exact=(
             "case_id=:case AND case_revision=1 "
-            "AND fact_key='student.preferred_countries' "
+            f"AND fact_key='{fact_key}' "
             "AND confirmed_fact_id=:fact "
             "AND created_at=timestamptz '2026-01-01 00:00:03+00'"
         ),
         parameters={"case": case_id, "fact": spec["fact_id"]},
     )
-    await _assert_exact_initial_budget_lineage(connection, fixture, spec)
+    if not intake_seed:
+        await _assert_exact_initial_budget_lineage(connection, fixture, spec)
     await _assert_exact_planning_snapshot(
         connection,
         case_id=case_id,
@@ -1872,6 +1978,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--without-planning-revision", action="store_true")
     parser.add_argument("--without-skills", action="store_true")
     parser.add_argument("--without-plan-execution", action="store_true")
+    parser.add_argument("--with-intake-revision", action="store_true")
     arguments = parser.parse_args(argv)
     fixture = validate_planning_fixture()
     if arguments.validate_only:
@@ -1892,6 +1999,7 @@ def main(argv: list[str] | None = None) -> None:
             include_planning_revision=not arguments.without_planning_revision,
             include_skills=not arguments.without_skills,
             include_plan_execution=not arguments.without_plan_execution,
+            include_intake_revision=arguments.with_intake_revision,
         )
     )
 

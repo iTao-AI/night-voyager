@@ -372,7 +372,7 @@ it("renders the same route authority in explicit English", async () => {
   expect(container).not.toHaveTextContent(/review-required|needs_advisor_review/);
 });
 
-it("renders a bilingual server-owned revision comparison without identifiers", async () => {
+it("renders a bilingual server-owned revision comparison with bounded collapsed history", async () => {
   const comparison = comparisonFixture();
   const { container } = renderPresentation(
     <PlanningRevisionComparison comparison={comparison} />,
@@ -384,9 +384,13 @@ it("renders a bilingual server-owned revision comparison without identifiers", a
   expect(screen.getByRole("table", { name: "规划修订比较" })).toBeVisible();
   expect(screen.getByRole("group", { name: "选择要比较的国家" })).toBeInTheDocument();
   expect(container.querySelector(".revision-country-card dl")).toBeInTheDocument();
+  const history = screen.getByText("查看历史记录标识").closest("details");
+  expect(history).not.toHaveAttribute("open");
+  expect(history).toHaveTextContent(comparisonFixture().previous_request_review.review_id);
+  expect(history).toHaveTextContent(comparisonFixture().previous_request_review.planning_run_id);
   expect(container.querySelector("tr.revision-route-removed")).toHaveTextContent("马来西亚");
   expect(container).not.toHaveTextContent(
-    /40000000|70000000|previous_planning_run_id|current_planning_run_id|student\.preferred_countries/,
+    /40000000|previous_planning_run_id|current_planning_run_id|student\.preferred_countries/,
   );
   expect(container).not.toHaveTextContent(/Case revision|Fact version/i);
 

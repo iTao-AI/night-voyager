@@ -46,6 +46,14 @@ def budget() -> BudgetEnvelope:
     )
 
 
+@pytest.mark.parametrize(
+    "value", ("0000-02", "２０２８-02", "2028-02 ", " 2028-02", "2028-00", "2028-13")
+)
+def test_intake_refuses_zero_year_unicode_or_normalization(value: str) -> None:
+    with pytest.raises(ValidationError):
+        IntakeProposal(schema_version=1, fact_key=FactKey.STUDENT_INTAKE, value=value)
+
+
 def test_closed_vocabularies_are_exact() -> None:
     assert {item.value for item in FactKey} == {
         "student.intended_field",

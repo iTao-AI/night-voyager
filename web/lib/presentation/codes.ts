@@ -16,7 +16,7 @@ export const PRESENTATION_CODE_VALUES = {
   evidenceRisk: ["optional", "stale", "unverified"],
   riskTolerance: ["low", "medium", "high"],
   decisionSource: ["direct", "family_consultation"],
-  recoveryCode: ["invalid_transition", "session_expired", "session_recovery_required", "stale_conflict", "transport_failure"],
+  recoveryCode: ["invalid_transition", "session_expired", "session_recovery_required", "stale_conflict", "intake_evidence_unavailable", "transport_failure"],
   evidenceClaim: ["australia_program_fit", "japan_program_fit", "malaysia_program_fit", "australia_tuition", "australia_living_cost", "australia_fx", "australia_ranking", "japan_tuition", "japan_living_cost", "japan_fx", "japan_ranking", "malaysia_tuition", "malaysia_living_cost", "malaysia_fx", "malaysia_ranking"],
   knownGap: ["japan_gap", "malaysia_gap", "applicant_eligibility", "intake_availability"],
   milestone: ["documents", "application", "visa", "arrival"],
@@ -110,6 +110,7 @@ const CODE_COPY_KEYS = {
     session_expired: "recoverySessionExpired",
     session_recovery_required: "recoverySessionRequired",
     stale_conflict: "recoveryStaleConflict",
+    intake_evidence_unavailable: "recoveryIntakeEvidenceUnavailable",
     transport_failure: "recoveryTransportFailure",
   },
   evidenceClaim: {

@@ -491,9 +491,10 @@ def test_current_recovery_head_preserves_released_provider_boundaries() -> None:
         revisions.add(revision)
         if isinstance(parent, str):
             parents.add(parent)
-    assert revisions - parents == {"0016"}
+    assert revisions - parents == {"0017"}
     assert len(list((ROOT / "migrations/versions").glob("0016_*.py"))) == 1
-    assert not list((ROOT / "migrations/versions").glob("0017_*.py"))
+    assert len(list((ROOT / "migrations/versions").glob("0017_*.py"))) == 1
+    assert not list((ROOT / "migrations/versions").glob("0018_*.py"))
 
     provider_locks = _read("src/night_voyager/evidence_loop/provider_locks.py")
     assert 'Literal["v0.1.5"]' in provider_locks

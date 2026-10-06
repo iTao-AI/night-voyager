@@ -34,7 +34,7 @@ const cases = [
   ["bootstrap", "GET", bootstrap, "/api/v1/demo/session-bootstrap", undefined],
   ["sessions", "POST", sessions, "/api/v1/demo/sessions", undefined],
   ["session", "DELETE", session, "/api/v1/demo/session", undefined],
-  ["ledger", "GET", ledger, `/api/v1/cases/${ID}/advisor-ledger?contract_version=2`, { caseId: ID }],
+  ["ledger", "GET", ledger, `/api/v1/cases/${ID}/advisor-ledger?contract_version=3`, { caseId: ID }],
   ["journey-status", "GET", journeyStatus, `/api/v1/cases/${ID}/journey-status`, { caseId: ID }],
   ["tasks", "POST", tasks, `/api/v1/cases/${ID}/agent-tasks`, { caseId: ID }],
   ["task", "GET", task, `/api/v1/tasks/${ID}`, { taskId: ID }],

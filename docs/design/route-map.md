@@ -36,6 +36,13 @@ and default-closed technical disclosure across all three demo routes.
   -> retained predecessor + deterministic old/new comparison
   -> fresh advisor authorization -> only the current family decision
 
+/demo?scenario=intake-delay (local controlled intake revision)
+  -> explicit fresh start on the separately seeded synthetic Case
+  -> request revision -> student proposes 2028-02 -> advisor confirms
+  -> source-pinned successor task -> actual new cost and retained old review
+  -> fresh advisor review -> parent consent -> receipt + 2028-02 timeline
+  -> active different journey requires an explicit end action before entry
+
 /demo/collaboration (connected same-Case proof)
   -> parent bootstrap + shared thread
   -> parent message -> typed budget candidate

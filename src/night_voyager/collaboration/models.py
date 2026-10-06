@@ -148,7 +148,7 @@ class IntakeProposal(_StrictModel):
     @classmethod
     def validate_intake(cls, value: str) -> str:
         value = validate_safe_text(value, maximum_bytes=160, label="fact value")
-        if re.fullmatch(r"\d{4}-(?:0[1-9]|1[0-2])", value) is None:
+        if re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])", value) is None or value[:4] == "0000":
             raise ValueError("intake must be a valid calendar month in YYYY-MM")
         return value
 

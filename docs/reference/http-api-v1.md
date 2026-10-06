@@ -149,7 +149,7 @@ journey-status projection. All require the existing opaque session, use
 
 | Method and path | Assigned actor | Result |
 | --- | --- | --- |
-| `GET /api/v1/cases/{case_id}/advisor-ledger` | advisor | V1 by default; exact `contract_version=2` returns revision-aware V2 ledger and deterministic comparison |
+| `GET /api/v1/cases/{case_id}/advisor-ledger` | advisor | V1 by default; exact `contract_version=2` returns V2; exact `contract_version=3` adds persisted intake, cost intake and the three-fact comparison |
 | `GET /api/v1/cases/{case_id}/current-decision-brief` | advisor/student/parent | V1 by default; exact `contract_version=2` adds server-derived revision context |
 | `GET /api/v1/cases/{case_id}/journey-status` | advisor/student/parent | exact `night-voyager.connected-journey-status.v1` durable phase and verified active role |
 
@@ -160,7 +160,8 @@ These endpoints add no write authority, persistence, migration, or client-owned
 tenant, role, policy, route, task, run, Brief, receipt, or timeline selector.
 
 V1 read routes remain default. For the two existing routes, exactly one
-`contract_version=2` query value selects V2. Empty, repeated, missing-value, or
+`contract_version=2` query value selects V2. Only the Ledger also accepts exactly
+one `contract_version=3`; the current Brief continues using V2. Empty, repeated, missing-value, or
 unknown negotiation values fail validation. The caller cannot submit a
 predecessor, output hash, comparison, renewed authorization, or durable phase.
 
@@ -170,6 +171,25 @@ between the exact retained predecessor and current run; blocked successors omit
 review inputs. `CurrentDecisionBriefV2` marks renewed authorization only when the
 current Case revision, current successor, current Brief, and exact approving
 advisor review form one durable chain.
+
+`AdvisorLedgerV3` adds the actual persisted `case_intake`. Every non-null route
+cost is a `CostProjectionV2` carrying its stored `intake`, which must match that
+Case revision. Before a task exists, source selection follows the frozen
+predecessor and the exact registered intake delta. After creation, stored task
+and run pins must match that lineage. The independently registered `2028-02`
+pack cannot replace the baseline for arbitrary initial Cases. Run output hashes
+are checked against complete persisted route/dimension/Evidence projections.
+
+Revised V3 Ledgers carry `PlanningRevisionComparisonV2` with schema
+`night-voyager.planning-revision-comparison.v2`. Exactly one closed delta is
+allowed: `student.preferred_countries`, `family.budget`, or `student.intake`.
+Intake values are strict ASCII calendar months in years `0001..9999`. Country
+outcomes and approval eligibility retain their previous meaning. The bounded
+`previous_request_review` exposes only `review_id`, `review_version`,
+`planning_run_id`, `case_revision`, and `action=request_revision`, joined through
+the revision's frozen review reference. It exposes no notes or new write token.
+Legacy V1/V2 Ledger reads of the controlled intake/new-pack scenario return the
+safe `503 demo_contract_unavailable`; old scenarios keep their previous shapes.
 
 The journey-status is participant-safe recovery authority, not browser storage.
 Assigned advisor, student, and parent see the same durable phase. During
@@ -276,6 +296,10 @@ versions, timestamps, subject/advisor role labels, and only their own proposal
 status; they do not receive internal IDs, source digests, reasons, or history.
 Problems use the closed collaboration codes documented in
 [Collaboration and confirmed facts](collaboration-and-confirmed-facts.md#closed-public-errors).
+The controlled intake revision adds bounded `409 intake_evidence_unavailable`
+when its independently pinned source is unsupported, absent or drifted. Refusal
+leaves the current predecessor authoritative and publishes no confirmed fact
+or Case revision. Existing mutation request shapes remain unchanged.
 PR A owns the backend authority. PR C consumes it through seven explicit same-origin
 BFF route files with exactly eight HTTP methods:
 
@@ -395,12 +419,22 @@ intention/key; ambiguous retries retain the exact original body/key. Brief ident
 or version changes discard old acceptance and replay; a stale decision rejection
 reloads authoritative current state.
 
-Planning-revision clients opt the Ledger and current Brief into exact
-`contract_version=2`, recover from `/journey-status`, and persist a closed V3
-advisor-family envelope. The UI may submit the bounded request-revision review and
-student preferred-country proposal through existing authority endpoints, but it
-cannot submit predecessor/run hashes, synthesize comparison, reuse an old approval,
-or decide a non-current Brief.
+Planning-revision clients request the Ledger with exact `contract_version=3`
+and the current Brief with exact `contract_version=2`, recover from
+`/journey-status`, and persist a closed V3 advisor-family envelope. The UI may
+submit a bounded request-revision review and one supported country, parent budget,
+or student intake proposal through existing authority endpoints. The controlled
+`/demo?scenario=intake-delay` entry uses the separately seeded synthetic Case for
+an explicit fresh start; an active journey must be explicitly ended before
+changing Cases. A refused intake confirmation retains the pending candidate and
+current revision. The advisor may explicitly reject that candidate before a
+replacement proposal. The browser cannot submit predecessor/run hashes,
+synthesize comparison, reuse an old approval, or decide a non-current Brief.
+
+The same bounded `409 intake_evidence_unavailable` also applies to Task creation
+when its intake source is unavailable or its pins differ from frozen lineage.
+See the [controlled intake walkthrough](../operations/controlled-intake-revision.md)
+for the opt-in seed, actual source/cost values and read-only database proof.
 
 ## Governed timeline execution transport
 

@@ -242,11 +242,13 @@ def test_plan_execution_cli_defaults_strict_and_forwards_explicit_opt_out(
         include_planning_revision: bool = True,
         include_skills: bool = True,
         include_plan_execution: bool = True,
+        include_intake_revision: bool = False,
     ) -> None:
         assert include_planning is True
         assert include_collaboration is True
         assert include_planning_revision is True
         assert include_skills is True
+        assert include_intake_revision is False
         forwarded.append(include_plan_execution)
 
     monkeypatch.setattr(seed_script, "seed_demo", record_seed)

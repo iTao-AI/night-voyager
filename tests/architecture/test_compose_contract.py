@@ -211,7 +211,14 @@ def test_hosted_compose_heavy_gates_are_independent_and_exact() -> None:
         lane = jobs[lane_id]
         steps = lane["steps"]
         uses = [step["uses"] for step in steps if "uses" in step]
-        runs = [step["run"] for step in steps if "run" in step]
+        diagnostics = [
+            step for step in steps if step.get("id") == "planning_revision_diagnostics"
+        ]
+        runs = [
+            step["run"]
+            for step in steps
+            if "run" in step and step.get("id") != "planning_revision_diagnostics"
+        ]
         project_name = lane["env"]["COMPOSE_PROJECT_NAME"]
 
         assert "needs" not in lane
@@ -219,6 +226,12 @@ def test_hosted_compose_heavy_gates_are_independent_and_exact() -> None:
         assert any(use.startswith("actions/checkout@") for use in uses)
         assert any(use.startswith("docker/setup-buildx-action@") for use in uses)
         assert runs == [command, "make down"]
+        if lane_id == "compose_proof":
+            assert len(diagnostics) == 1
+            assert diagnostics[0]["if"] == "failure()"
+            assert "prepare_planning_revision_diagnostics.py" in diagnostics[0]["run"]
+        else:
+            assert diagnostics == []
         assert steps[-1] == {"if": "always()", "run": "make down"}
         assert "continue-on-error" not in lane
         assert all("continue-on-error" not in step for step in steps)

@@ -7,7 +7,7 @@ import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts
 import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor } from "../../lib/collaboration-demo/contracts";
 import { isBudgetValue } from "../../lib/collaboration-demo/budget";
 import { pendingRevisionCandidate, validRevisionReason } from "../../lib/connected-demo/revision";
-import { formatCnyRange } from "../../lib/presentation/format";
+import { formatCnyMinor, formatCnyRange, formatIsoDate } from "../../lib/presentation/format";
 import { usePresentation } from "../../lib/presentation/context";
 import { presentCode, presentRouteOutcome, presentRouteReason } from "../../lib/presentation/codes";
 import type { PresentationCopyKey } from "../../lib/presentation/catalog";
@@ -65,17 +65,18 @@ function stageDescription(ledger: Ledger, primaryAction: string | null, copy: (k
       : copy("noBusinessAction");
 }
 
-function RevisionConfirmation({ candidate, busy, onConfirm }: { candidate: MemoryCandidateAdvisor | null; busy: boolean; onConfirm?: (reason: string) => void }) {
+function RevisionConfirmation({ candidate, busy, onConfirm, onReject }: { candidate: MemoryCandidateAdvisor | null; busy: boolean; onConfirm?: (reason: string) => void; onReject?: (reason: string) => void }) {
   const { locale, copy } = usePresentation();
   const [reason, setReason] = useState("");
-  const value = candidate && (Array.isArray(candidate.value)
+  const value = candidate && (typeof candidate.value === "string" ? candidate.value : Array.isArray(candidate.value)
     ? candidate.value.map((country) => presentCode(locale, "country", country)).join(locale === "zh-CN" ? "、" : ", ")
     : isBudgetValue(candidate.value) ? formatCnyRange(locale, candidate.value.preferred_minor, candidate.value.hard_ceiling_minor, "CNY") : null);
   return <div className="revision-confirmation">
-    {candidate ? <dl><div><dt>{copy(candidate.fact_key === "family.budget" ? "revisionBudgetOption" : "revisionCountriesOption")}</dt><dd>{value}</dd></div></dl> : <p className="disabled-reason">{copy("revisionCandidateUnavailable")}</p>}
+    {candidate ? <dl><div><dt>{copy(candidate.fact_key === "family.budget" ? "revisionBudgetOption" : candidate.fact_key === "student.intake" ? "revisionIntakeOption" : "revisionCountriesOption")}</dt><dd>{value}</dd></div></dl> : <p className="disabled-reason">{copy("revisionCandidateUnavailable")}</p>}
     <label className="revision-field" htmlFor="revision-confirmation-reason"><span>{copy("revisionConfirmationReason")}</span><textarea id="revision-confirmation-reason" value={reason} disabled={busy || !candidate} onChange={(event) => setReason(event.target.value)} aria-describedby="revision-reason-help" /></label>
     <p id="revision-reason-help">{copy("revisionReasonHelp")}</p>
     <button className="primary-action workspace-primary-action" data-primary-action="true" type="button" disabled={busy || !candidate || !onConfirm || !validRevisionReason(reason)} onClick={() => onConfirm?.(reason.trim())}>{copy("confirmRevisionFactAction")}</button>
+    {candidate?.fact_key === "student.intake" ? <button className="secondary-action" type="button" disabled={busy || !onReject || !validRevisionReason(reason)} onClick={() => onReject?.(reason.trim())}>{copy("rejectIntakeProposalAction")}</button> : null}
   </div>;
 }
 
@@ -97,6 +98,7 @@ function ActionControls({
   onSecondaryAction,
   revisionCandidates = [],
   onConfirmRevision,
+  onRejectRevision,
 }: {
   ledger: Ledger;
   primaryAction: string | null;
@@ -105,11 +107,12 @@ function ActionControls({
   onSecondaryAction?: () => void;
   revisionCandidates?: readonly MemoryCandidateAdvisor[];
   onConfirmRevision?: (reason: string) => void;
+  onRejectRevision?: (reason: string) => void;
 }) {
   const { copy } = usePresentation();
   if (ledger.phase === "revision_fact_pending") {
     const candidate = pendingRevisionCandidate(revisionCandidates, ledger.case_revision);
-    return <RevisionConfirmation key={`${ledger.case_revision}:${candidate?.candidate_id}:${JSON.stringify(candidate?.value)}`} candidate={candidate} busy={busy} onConfirm={onConfirmRevision} />;
+    return <RevisionConfirmation key={`${ledger.case_revision}:${candidate?.candidate_id}:${JSON.stringify(candidate?.value)}`} candidate={candidate} busy={busy} onConfirm={onConfirmRevision} onReject={onRejectRevision} />;
   }
   if (hasTerminalRecoveryAction(ledger)) {
     return <TerminalRetryConsent key={`${ledger.task.task_id}:${ledger.task.row_version}:${ledger.case_revision}`} busy={busy} onSubmit={onPrimaryAction} />;
@@ -139,6 +142,7 @@ export function AdvisorLedgerAction({
   busy = false,
   revisionCandidates,
   onConfirmRevision,
+  onRejectRevision,
 }: {
   ledger: Ledger;
   onPrimaryAction: () => void;
@@ -146,6 +150,7 @@ export function AdvisorLedgerAction({
   busy?: boolean;
   revisionCandidates?: readonly MemoryCandidateAdvisor[];
   onConfirmRevision?: (reason: string) => void;
+  onRejectRevision?: (reason: string) => void;
 }) {
   const { locale, copy } = usePresentation();
   const primaryActionKey = actionKey(ledger.phase);
@@ -166,7 +171,7 @@ export function AdvisorLedgerAction({
           onPrimaryAction={onPrimaryAction}
           onSecondaryAction={onSecondaryAction}
           revisionCandidates={revisionCandidates}
-          onConfirmRevision={onConfirmRevision}
+          onConfirmRevision={onConfirmRevision} onRejectRevision={onRejectRevision}
         />
       </div>
       {busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
@@ -183,6 +188,7 @@ export function AdvisorLedger({
   renderAction = true,
   revisionCandidates,
   onConfirmRevision,
+  onRejectRevision,
 }: {
   ledger: Ledger;
   confirmedFacts?: readonly ConfirmedFactAdvisor[] | null;
@@ -192,6 +198,7 @@ export function AdvisorLedger({
   renderAction?: boolean;
   revisionCandidates?: readonly MemoryCandidateAdvisor[];
   onConfirmRevision?: (reason: string) => void;
+  onRejectRevision?: (reason: string) => void;
 }) {
   const { locale, copy } = usePresentation();
   const routes = ledger.routes;
@@ -215,6 +222,7 @@ export function AdvisorLedger({
         <p className="stage-outcome"><strong>{presentCode(locale, "demoPhase", ledger.phase)}</strong></p>
         <p>{copy("advisorRoleAuthority")}</p>
         <p>{copy("caseRevisionLabel")} {ledger.case_revision}</p>
+        <p>{copy("currentIntakeLabel")}: {ledger.case_intake}</p>
       </header>
 
       {ledger.comparison ? <PlanningRevisionComparison comparison={ledger.comparison} /> : null}
@@ -224,7 +232,7 @@ export function AdvisorLedger({
           <h2>{stageTitle(ledger, primaryAction, copy, locale)}</h2>
           <p>{stageDescription(ledger, primaryAction, copy)}</p>
         </div>
-        {renderAction ? <ActionControls ledger={ledger} primaryAction={primaryAction} busy={busy} onPrimaryAction={onPrimaryAction} onSecondaryAction={onSecondaryAction} revisionCandidates={revisionCandidates} onConfirmRevision={onConfirmRevision} /> : null}
+        {renderAction ? <ActionControls ledger={ledger} primaryAction={primaryAction} busy={busy} onPrimaryAction={onPrimaryAction} onSecondaryAction={onSecondaryAction} revisionCandidates={revisionCandidates} onConfirmRevision={onConfirmRevision} onRejectRevision={onRejectRevision} /> : null}
       </div>
       {renderAction && busy ? <p aria-live="polite">{copy("busyStatus")}</p> : null}
 
@@ -272,6 +280,14 @@ export function AdvisorLedger({
         </>
       ) : !ledger.comparison ? <p className="empty-state">{copy("noRoutes")}</p> : null}
 
+      {routes.some(route => route.cost !== null) ? <section className="changed-fact-summary" aria-label={copy("syntheticCostTitle")}>
+        <h4>{copy("syntheticCostTitle")}</h4>
+        {routes.filter(route => route.cost !== null).map(route => <dl key={route.route_id}>
+          <div><dt>{presentCode(locale, "country", route.country)} · {copy("costTotalLabel")}</dt><dd>{formatCnyMinor(locale, route.cost!.cny_total_minor, "CNY")}</dd></div>
+          <div><dt>{copy("costIntakeLabel")}</dt><dd>{route.cost!.intake}</dd></div>
+          <div><dt>{copy("costFxDateLabel")}</dt><dd>{formatIsoDate(locale, route.cost!.fx_date)}</dd></div>
+        </dl>)}
+      </section> : null}
       <CurrentConfirmedFacts facts={confirmedFacts} caseRevision={ledger.case_revision} />
       <TaskProgress ledger={ledger} />
     </section>

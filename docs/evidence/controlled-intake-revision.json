@@ -1,0 +1,336 @@
+{
+  "checks": {
+    "default_python_suite": {
+      "command": ".venv/bin/python -m pytest -q",
+      "deselected": 421,
+      "passed": 1570
+    },
+    "documentation_governance": {
+      "passed": 32
+    },
+    "frontend_lint": "passed",
+    "frontend_typecheck": "passed",
+    "frontend_units": {
+      "passed": 614
+    },
+    "isolated_migration": {
+      "passed": 4
+    },
+    "legacy_task_create_and_http": {
+      "passed": 15
+    },
+    "persisted_flow": {
+      "command": ".venv/bin/python -m pytest -o addopts= -q -m database tests/integration/connected_demo/test_intake_revision_flow.py",
+      "passed": 4
+    },
+    "pyright": "0 errors",
+    "related_runtime_roles": {
+      "current_head_seed_passed": 80,
+      "legacy_seed_context_passed": 1
+    },
+    "ruff": "passed"
+  },
+  "documentation_followup": {
+    "date": "2026-10-06",
+    "initial_budget_lineage_wording": "corrected; intake ConfirmedFact chain and budget revision preferences distinguished",
+    "runtime_verification": "reused unchanged inputs"
+  },
+  "final_review": {
+    "critical": 0,
+    "deferred_minors": [],
+    "fix_pass": "one TDD pass and green relevant suites; no re-review",
+    "historical_deferred_minors": [
+      {
+        "file": "docs/operations/controlled-intake-revision.md",
+        "finding": "initial budget values are revision preferences, not a budget ConfirmedFact seed chain",
+        "line": 24
+      }
+    ],
+    "important_fixed": 1,
+    "important_found": 1,
+    "reviewed_head": "d91085b0e365f8b9a6537bb07412a839e3daf15c"
+  },
+  "low_cost_test_followup": {
+    "bounds_seconds": {
+      "action_and_screenshot": 10,
+      "api_read_or_replay": 10,
+      "navigation": 20,
+      "post_response": 15,
+      "review_observer": 45,
+      "whole_test": 240,
+      "worker_phase": 60
+    },
+    "checks": {
+      "documentation_governance_passed": 32,
+      "e2e_discovery_tests": 1,
+      "focused_unit_files": 7,
+      "focused_unit_passed": 96,
+      "frontend_lint": "passed",
+      "frontend_typecheck": "passed"
+    },
+    "new_diagnostics": {
+      "fixed_stage_names": true,
+      "focused_trace": "off",
+      "old_ignored_failure_evidence_retained": true,
+      "plaintext_session_csrf_or_idempotency_key_saved": false
+    },
+    "new_image_builds_or_pulls": 0,
+    "new_native_attempts": 0,
+    "next_acceptance": {
+      "automatic_fourth_attempt": false,
+      "derive_browser_only_from": "sha256:bf83541bd19eb042c7ea753edbf2c5f1760776b4d917479d7d1d198a927979fb",
+      "new_dependencies_or_base_pulls": false,
+      "reuse": [
+        "API/worker/migrator/seed",
+        "Web",
+        "PostgreSQL-init"
+      ],
+      "status": "authorized third attempt completed successfully; no additional runtime attempt authorized"
+    },
+    "production_business_or_lock_changes": false,
+    "remaining_step_audit": {
+      "basis": [
+        "actual components and catalog",
+        "BFF/HTTP DTOs",
+        "existing successful E2E and unit cases",
+        "earlier successful PostgreSQL runtime-role records"
+      ],
+      "business_gap_found": false,
+      "new_browser_acceptance": false,
+      "steps": [
+        "confirmation reason and verification-decisions",
+        "canonical pack17 Task and worker",
+        "actual month/cost/comparison and fresh approval",
+        "parent budget/tradeoff/acknowledgement",
+        "direct receipt/timeline/reload/replay"
+      ]
+    },
+    "replay_regression": {
+      "cause": "participant projection has no candidate_id; old assertion compared two undefined values",
+      "green_passed": 6,
+      "red_failed": 2,
+      "red_passed": 1,
+      "repair": "exact parsed participant replay; unique matching advisor array entry; candidate-bound confirmation"
+    },
+    "selector_regression": {
+      "exact_label_matches": 0,
+      "exact_role_name_matches": 1,
+      "green_passed": 2,
+      "method": "actual RevisionFactEditor markup; installed Playwright 1.58.2 selector engine in local JSDOM",
+      "real_browser_run": false,
+      "red_failed": 1,
+      "red_passed": 1
+    },
+    "status": "local test repair and source/readback audit complete; native/browser was DEFERRED at that checkpoint, before the later authorized third attempt passed",
+    "substantive_native_failures": 2,
+    "test_source_head": "34acfa87b38e7813bcd29f2915c36d4015f4b0ac",
+    "test_source_tree": "63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff",
+    "unchanged_full_suites_and_database_evidence_reused": true,
+    "verification_date": "2026-10-06"
+  },
+  "native_followup": {
+    "additional_run_requires_explicit_route_decision": true,
+    "application_source_head": "6154bfd1b4a56e79527b0c03109fefc75f8a1193",
+    "application_source_tree": "37291ccb39d1fdb2032aa1163643ad95ac1a99a9",
+    "browser": {
+      "attempts": [
+        {
+          "attempt": 1,
+          "cause": "E2E expected revision fixture 490...001 instead of ordinary /demo Case 400...002; fixed in 2542195",
+          "controlled_case_unchanged": true,
+          "result": "failed",
+          "test_elapsed_seconds": 14.5
+        },
+        {
+          "attempt": 2,
+          "cause": "exact getByLabel text does not match label wrapping the intake option; accessible combobox exists",
+          "proposed_fix": "at the second-failure checkpoint: exact combobox role/name was proposed and a third browser run was not yet authorized; later repaired in the low-cost phase and passed in the explicitly authorized third attempt",
+          "result": "failed",
+          "test_elapsed_seconds": 240
+        },
+        {
+          "attempt": 3,
+          "automatic_fourth_attempt": false,
+          "browser_process_elapsed_seconds": 18.854,
+          "prior_substantive_failures": 2,
+          "result": "passed",
+          "test_elapsed_seconds": 16.362
+        }
+      ],
+      "completed_stages": [
+        "existing-journey-not-overwritten",
+        "explicit-controlled-start",
+        "real-request-revision",
+        "student-proposal-replay-and-reload",
+        "unique-advisor-candidate-confirmation-revision-2",
+        "canonical-task-and-real-worker-pack17-cost",
+        "chinese-and-english-comparison",
+        "fresh-advisor-approval",
+        "explicit-parent-budget-tradeoff-and-acknowledgement",
+        "direct-receipt-timeline-and-reload"
+      ],
+      "parent_receipt_timeline_verified": true,
+      "passed": true,
+      "revision_submitted": true,
+      "successor_worker_execution_verified": true
+    },
+    "browser_source_head": "34acfa87b38e7813bcd29f2915c36d4015f4b0ac",
+    "browser_source_tree": "63a597c7fc92ff31bdb1b1a4ced24ceb4bc19eff",
+    "built_images": {
+      "api_web_postgres": 1,
+      "browser": 3
+    },
+    "cleanup": {
+      "buildkit_builders_and_cache_volumes_released": true,
+      "caffeinate_released": true,
+      "candidate_images_and_ignored_diagnostics_retained": true,
+      "containers_networks_pg_artifact_volumes_released": true
+    },
+    "frozen": false,
+    "hosted_delivery": "not established by this local native acceptance record; ordinary PR/CI/merge delivery is separately authorized",
+    "image_ids": {
+      "api": "sha256:37db0d264e9644281c680735e6bd7433520ab76be62144d4727bbbc7f132a557",
+      "browser": "sha256:8a1d65defcd9632e0554faf0525068594eabb3621c14d66a091d1e4cf56ddbc3",
+      "postgres": "sha256:9f66e90766d16b77d613d0c26b0e8e881fff72aef312355b294e30b8a043e58e",
+      "web": "sha256:760c5a55cec497d0c21702b8f4bddeae402bafeb5166591cf1ec01217ec4036d"
+    },
+    "installed_assets": {
+      "browser_assets_equal": true,
+      "embedded_fixture_and_skill_manifests_equal": true,
+      "fixture_migration_script_files_equal": true,
+      "next_version": "16.3.6",
+      "package_version": "0.1.6",
+      "playwright_version": "1.58.2",
+      "python_source_files_equal": 134,
+      "source_overlays": false
+    },
+    "post_failure_readback": {
+      "browser_completed": false,
+      "case_revision": 1,
+      "new_briefs": 0,
+      "new_candidates": 0,
+      "new_facts": 0,
+      "new_family_decisions": 0,
+      "new_runs": 0,
+      "new_tasks": 0,
+      "new_timelines": 0,
+      "old_output_and_evidence_unchanged": true,
+      "request_review_unchanged": true
+    },
+    "prior_runtime_identity": {
+      "alembic_head": "0017",
+      "api_role": "night_voyager_api",
+      "cluster_system_identifier": "7693533378250997799",
+      "compose_project": "night-voyager-intake-native-n2-20261006-a3",
+      "database": "night_voyager",
+      "worker_role": "night_voyager_worker"
+    },
+    "retained_prior_browser_image_ids": [
+      "sha256:cd70a5d396c6c3328f8f0fc7320d4c0ca902f466556d8f584fafd4b0af38bb87",
+      "sha256:bf83541bd19eb042c7ea753edbf2c5f1760776b4d917479d7d1d198a927979fb"
+    ],
+    "runtime_identity": {
+      "alembic_head": "0017",
+      "api_role": "night_voyager_api",
+      "cluster_system_identifier": "7693533378250997799",
+      "compose_project": "night-voyager-intake-native-n2-20261006-a3",
+      "database": "night_voyager",
+      "worker_role": "night_voyager_worker"
+    },
+    "status": "local native/browser passed; hosted delivery pending",
+    "substantive_failures": 2,
+    "third_attempt": {
+      "actual_browser_mutations": 6,
+      "api_web_postgres_images_reused": true,
+      "automatic_fourth_attempt": false,
+      "browser_exit_code": 0,
+      "browser_image_id": "sha256:8a1d65defcd9632e0554faf0525068594eabb3621c14d66a091d1e4cf56ddbc3",
+      "cleanup": {
+        "builder_cache_and_caffeinate_released": true,
+        "candidate_images_retained": 6,
+        "exited_profiled_oneoff_removed": true,
+        "other_docker_resources_unchanged": true,
+        "task_containers_networks_volumes_released": true
+      },
+      "four_frozen_browser_files_verified": true,
+      "new_trace_archives": 0,
+      "old_output_evidence_review_revision_equal": true,
+      "participant_replay_exact": true,
+      "persisted_matching_candidate_count": 1,
+      "prior_substantive_failures": 2,
+      "runtime_role_readback_verifier": "passed",
+      "screenshots_inspected": 12,
+      "status": "passed",
+      "substantive_failures_after": 2,
+      "viewports": [
+        1440,
+        390
+      ],
+      "visual_limits": [
+        "comparison country/change columns wrap tightly; English history/authority captions are adjacent to labels"
+      ]
+    },
+    "verification_date": "2026-10-06"
+  },
+  "persisted_readback": {
+    "accepted_budget_minor": [
+      32000000,
+      36000000
+    ],
+    "as_of": "2026-07-01",
+    "browser_image_acceptance": "passed in authorized third native attempt",
+    "case_id": "49000000-0000-0000-0000-000000000003",
+    "hosted_delivery": "pending",
+    "new_cost_minor": 32640000,
+    "new_intake": "2028-02",
+    "new_output_sha256": "8bc15aaeeb4d32a353aff1a483c37e1ec7631a86c926e32fd48573eafbd13b08",
+    "new_run_id": "f6b7f68f-d2d0-4a66-ac44-c2227fb81b1f",
+    "new_source_pack_id": "50000000-0000-0000-0000-000000000017",
+    "old_cost_minor": 30550000,
+    "old_intake": "2027-02",
+    "old_output_sha256": "ab7ed680bdabf6737c87c748501efb4340d85e68aed33c7e6620c1fbe4dc0621",
+    "old_run_id": "79000000-0000-0000-0000-000000000003",
+    "proof_mode": "local-synthetic-runtime-role-database-and-browser",
+    "receipt_id": "d9b1774d-c7fa-40e2-8208-612191a68c7d",
+    "timeline_dates": [
+      "2027-09-01",
+      "2027-10-15",
+      "2027-12-15",
+      "2028-01-20"
+    ]
+  },
+  "prior_bounded_persisted_readback": {
+    "accepted_budget_minor": [
+      32000000,
+      36000000
+    ],
+    "as_of": "2026-07-01",
+    "browser_image_acceptance": "pending",
+    "case_id": "49000000-0000-0000-0000-000000000003",
+    "hosted_delivery": "pending",
+    "new_cost_minor": 32640000,
+    "new_intake": "2028-02",
+    "new_output_sha256": "8bc15aaeeb4d32a353aff1a483c37e1ec7631a86c926e32fd48573eafbd13b08",
+    "new_run_id": "097be2e5-7917-4730-b10d-15d8b693217c",
+    "new_source_pack_id": "50000000-0000-0000-0000-000000000017",
+    "old_cost_minor": 30550000,
+    "old_intake": "2027-02",
+    "old_output_sha256": "ab7ed680bdabf6737c87c748501efb4340d85e68aed33c7e6620c1fbe4dc0621",
+    "old_run_id": "79000000-0000-0000-0000-000000000003",
+    "proof_mode": "local-synthetic-runtime-role-database",
+    "receipt_id": "9f5f7bc9-4d87-417a-b673-539660c618ca",
+    "timeline_dates": [
+      "2027-09-01",
+      "2027-10-15",
+      "2027-12-15",
+      "2028-01-20"
+    ]
+  },
+  "remaining_gates": [
+    "hosted PR checks, standard merge and exact merge-SHA main CI/CodeQL acceptance; separate from this local native record"
+  ],
+  "schema_version": 1,
+  "scope": "local synthetic unit, runtime-role database and full native/browser acceptance passed; hosted acceptance pending at this local checkpoint",
+  "verification_date": "2026-10-06",
+  "verified_implementation_head": "816ced9bd32af2977d5a269344575c7881b149ab"
+}

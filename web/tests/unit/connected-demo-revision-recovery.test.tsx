@@ -15,8 +15,9 @@ const facts = [
   { schema_version: 1, fact_key: "student.preferred_countries", value: ["japan", "malaysia"], fact_version: 1, confirmed_at: AT, subject_role: "student", confirming_advisor_role: "advisor" },
   { schema_version: 1, fact_key: "family.budget", value: budget, fact_version: 1, confirmed_at: AT, subject_role: "parent", confirming_advisor_role: "advisor" },
 ];
-function setup(candidateStatus = 201, bootstrapFailures = 0, parentFactFailures = 0, revisionAfterParentMint = 1, sharedParticipantFacts = false) {
+function setup(candidateStatus = 201, bootstrapFailures = 0, parentFactFailures = 0, revisionAfterParentMint = 1, sharedParticipantFacts = false, includeIntake = false) {
   saveRecoveryMetadata({ schema_version: 3, journey: "advisor-family", role: "student", csrf: "csrf", caseId: CASE_ID, currentRevision: 1, currentTaskId: null, predecessorRunId: null, currentRunId: null, cursor: 0, phase: "revision_requested", mutations: {} });
+  const currentFacts = includeIntake ? [...facts, { ...facts[0], fact_key: "student.intake", value: "2027-02" }] : facts;
   const writes: Array<{ path: string; body: Record<string, unknown>; key: string }> = [];
   const sessionEvents: string[] = [];
   const mutationRoles: string[] = [];
@@ -77,7 +78,7 @@ function setup(candidateStatus = 201, bootstrapFailures = 0, parentFactFailures 
     if (path.endsWith("/confirmed-facts")) {
       if (role === "parent" && parentFactFailures-- > 0) return Response.json({ code: "unavailable" }, { status: 503 });
       if (role === "student" && studentFactFailures-- > 0) return Response.json({ code: "unavailable" }, { status: 503 });
-      return Response.json({ schema_version: 1, current: sharedParticipantFacts ? facts : facts.filter((fact) => fact.subject_role === role) });
+      return Response.json({ schema_version: 1, current: sharedParticipantFacts ? currentFacts : currentFacts.filter((fact) => fact.subject_role === role) });
     }
     if (path.endsWith("/memory-candidates")) return Response.json([]);
     if (path.includes("/messages?")) return Response.json({ schema_version: 1, items: [], next_after_sequence: null });
@@ -94,8 +95,9 @@ afterEach(() => { cleanup(); sessionStorage.clear(); localStorage.clear(); vi.un
 it.each([
   { factKey: "student.preferred_countries" as const, value: ["malaysia"] as const },
   { factKey: "family.budget" as const, value: { ...budget, preferred_minor: 32000000, hard_ceiling_minor: 42000000 } },
+  { factKey: "student.intake" as const, value: "2028-02" },
 ])("submits the entered $factKey body and saves its intention for same-tab recovery", async (proposal) => {
-  const { writes, mutationRoles, sessionEvents } = setup();
+  const { writes, mutationRoles, sessionEvents } = setup(201, 0, 0, 1, false, proposal.factKey === "student.intake");
   const { result } = renderHook(() => useConnectedDemo());
   await waitFor(() => expect(result.current.state.value).toBe("revision_requested"));
   if (proposal.factKey === "family.budget") await act(() => result.current.prepareRevisionFact("family.budget"));
@@ -359,4 +361,21 @@ it("hands back to student authority before editing countries from the parent bud
   expect(writes[1].body).toEqual({ schema_version: 1, case_revision: 1, proposal: { schema_version: 1, fact_key: "student.preferred_countries", value: ["australia", "japan", "malaysia"] } });
   expect(mutationRoles).toEqual(["student", "student"]);
   expect(sessionEvents).toEqual(["revoke", "bootstrap", "mint:parent", "revoke", "bootstrap", "mint:student"]);
+});
+
+
+it("restores and replays an exact submitted intake month while preserving its two mutation keys", async () => {
+  const { writes } = setup(503, 0, 0, 1, false, true);
+  const current = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(current.result.current.state.value).toBe("revision_requested"));
+  const intent = { expectedCaseRevision: 1, factKey: "student.intake" as const, value: "2028-02" };
+  await act(() => current.result.current.submitRevision(intent));
+  current.unmount();
+  const restored = renderHook(() => useConnectedDemo());
+  await waitFor(() => expect(restored.result.current.state.value).toBe("revision_requested"));
+  expect(restored.result.current.revisionIntent).toEqual(intent);
+  await act(() => restored.result.current.submitRevision(intent));
+  expect(writes[0]).toEqual(writes[2]);
+  expect(writes[1]).toEqual(writes[3]);
+  expect(writes.every(write => JSON.stringify(write.body).includes("2028-02"))).toBe(true);
 });

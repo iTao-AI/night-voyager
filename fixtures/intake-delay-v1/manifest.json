@@ -1,0 +1,214 @@
+{
+  "schema_version": 1,
+  "organization_id": "10000000-0000-0000-0000-000000000001",
+  "case": {
+    "schema_version": 1,
+    "organization_id": "10000000-0000-0000-0000-000000000001",
+    "case_id": "49000000-0000-0000-0000-000000000003",
+    "revision": 2,
+    "student": {
+      "schema_version": 1,
+      "intended_field": "computing",
+      "preferred_countries": [
+        "australia",
+        "japan",
+        "malaysia"
+      ],
+      "intake": "2028-02"
+    },
+    "family": {
+      "schema_version": 1,
+      "risk_tolerance": "high",
+      "japan_risk_accepted": true,
+      "budget": {
+        "schema_version": 1,
+        "currency": "CNY",
+        "period": "program_total",
+        "preferred_minor": 34000000,
+        "hard_ceiling_minor": 40000000,
+        "elasticity_bps": 1000,
+        "refused": false
+      }
+    }
+  },
+  "source_pack": {
+    "schema_version": 1,
+    "organization_id": "10000000-0000-0000-0000-000000000001",
+    "pack_id": "50000000-0000-0000-0000-000000000017",
+    "version": 1,
+    "entries": [
+      {
+        "schema_version": 1,
+        "entry_id": "51000000-0000-0000-0000-000000001701",
+        "path": "sources/australia.txt",
+        "sha256": "b2ce10322347c2e68b0e342f9cc25f48fd844e72580238caef1c3b998921b647",
+        "snapshot_date": "2026-07-01",
+        "publisher": "Synthetic Demo Publisher",
+        "institution": "Synthetic Australia Institution",
+        "canonical_url": "https://example.invalid/intake-delay-v1/australia",
+        "freshness_days": 365,
+        "redistribution_class": "synthetic_public",
+        "evidence_class": "synthetic_demo",
+        "coverage": [
+          "australia_program_fit",
+          "australia_tuition",
+          "australia_living_cost",
+          "australia_fx",
+          "australia_ranking"
+        ],
+        "known_gaps": []
+      },
+      {
+        "schema_version": 1,
+        "entry_id": "51000000-0000-0000-0000-000000001702",
+        "path": "sources/japan.txt",
+        "sha256": "72c030094a536ec85421c5121a4b51998f7711cda6f5aac402a04b3bf0377c60",
+        "snapshot_date": "2026-07-01",
+        "publisher": "Synthetic Demo Publisher",
+        "institution": "Synthetic Japan Institution",
+        "canonical_url": "https://example.invalid/intake-delay-v1/japan",
+        "freshness_days": 365,
+        "redistribution_class": "synthetic_public",
+        "evidence_class": "synthetic_demo",
+        "coverage": [
+          "japan_program_fit"
+        ],
+        "known_gaps": [
+          "high_risk_alternative"
+        ]
+      },
+      {
+        "schema_version": 1,
+        "entry_id": "51000000-0000-0000-0000-000000001703",
+        "path": "sources/malaysia.txt",
+        "sha256": "e0bdb667e402c8a034c608f574ab1747866c22fe89f3ed32f766a6d20287ac6b",
+        "snapshot_date": "2026-07-01",
+        "publisher": "Synthetic Demo Publisher",
+        "institution": "Synthetic Malaysia Institution",
+        "canonical_url": "https://example.invalid/intake-delay-v1/malaysia",
+        "freshness_days": 365,
+        "redistribution_class": "synthetic_public",
+        "evidence_class": "synthetic_demo",
+        "coverage": [
+          "malaysia_context"
+        ],
+        "known_gaps": [
+          "direct_program_fit"
+        ]
+      }
+    ]
+  },
+  "evidence": [
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "evidence_id": "60000000-0000-0000-0000-000000001701",
+      "claim": "australia_program_fit",
+      "source_pack_id": "50000000-0000-0000-0000-000000000017",
+      "source_pack_version": 1,
+      "source_entry_id": "51000000-0000-0000-0000-000000001701",
+      "source_sha256": "b2ce10322347c2e68b0e342f9cc25f48fd844e72580238caef1c3b998921b647",
+      "authority": "accepted_synthetic_demo"
+    },
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "evidence_id": "60000000-0000-0000-0000-000000001702",
+      "claim": "australia_tuition",
+      "source_pack_id": "50000000-0000-0000-0000-000000000017",
+      "source_pack_version": 1,
+      "source_entry_id": "51000000-0000-0000-0000-000000001701",
+      "source_sha256": "b2ce10322347c2e68b0e342f9cc25f48fd844e72580238caef1c3b998921b647",
+      "authority": "accepted_synthetic_demo"
+    },
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "evidence_id": "60000000-0000-0000-0000-000000001703",
+      "claim": "australia_living_cost",
+      "source_pack_id": "50000000-0000-0000-0000-000000000017",
+      "source_pack_version": 1,
+      "source_entry_id": "51000000-0000-0000-0000-000000001701",
+      "source_sha256": "b2ce10322347c2e68b0e342f9cc25f48fd844e72580238caef1c3b998921b647",
+      "authority": "accepted_synthetic_demo"
+    },
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "evidence_id": "60000000-0000-0000-0000-000000001704",
+      "claim": "australia_fx",
+      "source_pack_id": "50000000-0000-0000-0000-000000000017",
+      "source_pack_version": 1,
+      "source_entry_id": "51000000-0000-0000-0000-000000001701",
+      "source_sha256": "b2ce10322347c2e68b0e342f9cc25f48fd844e72580238caef1c3b998921b647",
+      "authority": "accepted_synthetic_demo"
+    },
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "evidence_id": "60000000-0000-0000-0000-000000001705",
+      "claim": "japan_program_fit",
+      "source_pack_id": "50000000-0000-0000-0000-000000000017",
+      "source_pack_version": 1,
+      "source_entry_id": "51000000-0000-0000-0000-000000001702",
+      "source_sha256": "72c030094a536ec85421c5121a4b51998f7711cda6f5aac402a04b3bf0377c60",
+      "authority": "accepted_synthetic_demo"
+    },
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "evidence_id": "60000000-0000-0000-0000-000000001706",
+      "claim": "australia_ranking",
+      "source_pack_id": "50000000-0000-0000-0000-000000000017",
+      "source_pack_version": 1,
+      "source_entry_id": "51000000-0000-0000-0000-000000001701",
+      "source_sha256": "b2ce10322347c2e68b0e342f9cc25f48fd844e72580238caef1c3b998921b647",
+      "authority": "accepted_synthetic_demo"
+    }
+  ],
+  "costs": [
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "country": "australia",
+      "intake": "2028-02",
+      "period": "program_total",
+      "currency": "AUD",
+      "tuition_minor": 4200000,
+      "living_minor": 2600000,
+      "fx_rate": "4.80",
+      "fx_source": "Synthetic hypothetical February 2028 FX fixture",
+      "fx_date": "2026-07-01",
+      "tuition_evidence_id": "60000000-0000-0000-0000-000000001702",
+      "living_evidence_id": "60000000-0000-0000-0000-000000001703",
+      "fx_evidence_id": "60000000-0000-0000-0000-000000001704"
+    }
+  ],
+  "rankings": [
+    {
+      "schema_version": 1,
+      "organization_id": "10000000-0000-0000-0000-000000000001",
+      "country": "australia",
+      "ranking_system": "synthetic_demo_scale",
+      "rank": 10,
+      "publication_year": 2026,
+      "evidence_id": "60000000-0000-0000-0000-000000001706"
+    }
+  ],
+  "expected": {
+    "australia": "recommended_with_condition",
+    "japan": "conditional",
+    "malaysia": "blocked",
+    "run_state": "review_required"
+  },
+  "eval": {
+    "golden_australia_conditional": "review_required",
+    "budget_refused": "blocked",
+    "japan_risk_accepted": "conditional",
+    "malaysia_program_fit_gap": "blocked",
+    "stale_cost_ranking": "failed",
+    "dra_fallback_ready": "failed",
+    "mke_zero_hit": "blocked",
+    "family_preference_conflict": "blocked"
+  }
+}

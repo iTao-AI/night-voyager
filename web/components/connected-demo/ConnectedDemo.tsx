@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 import type { ConfirmedFactAdvisor, MemoryCandidateAdvisor } from "../../lib/collaboration-demo/contracts";
+import type { ConnectedDemoScenario } from "../../lib/connected-demo/scenario";
 import { useConnectedDemo } from "../../lib/connected-demo/use-connected-demo";
 import type { AdvisorLedger as Ledger } from "../../lib/connected-demo/contracts";
 import type { DemoDisplayState } from "../../lib/connected-demo/reducer";
@@ -41,8 +42,8 @@ function activeRole(state: DemoDisplayState): "student" | "parent" | "advisor" |
   return null;
 }
 
-export function ConnectedDemo() {
-  const demo = useConnectedDemo();
+export function ConnectedDemo({ scenario = "default" }: { scenario?: ConnectedDemoScenario } = {}) {
+  const demo = useConnectedDemo(scenario);
   const { locale, copy } = usePresentation();
   const { state } = demo;
   const userTransition = useRef(false);
@@ -121,8 +122,8 @@ export function ConnectedDemo() {
   })();
   const authorityAction = demo.journeyConflict ? (
     <JourneyConflictNotice
-      currentJourney="collaboration"
-      returnHref="/demo/collaboration"
+      currentJourney={demo.journeyConflict}
+      returnHref={demo.journeyConflict === "collaboration" ? "/demo/collaboration" : "/demo"}
       headingRef={conflictHeading}
       onEnd={() => void demo.endConflictingJourney()}
     />
@@ -155,6 +156,7 @@ export function ConnectedDemo() {
       busy={busy}
       revisionCandidates={demo.revision?.candidates.filter((candidate): candidate is MemoryCandidateAdvisor => "candidate_id" in candidate)}
       onConfirmRevision={(reason) => runUserAction(() => demo.confirmRevision(reason))}
+      onRejectRevision={(reason) => runUserAction(() => demo.rejectRevision(reason))}
       onPrimaryAction={() => runUserAction(primaryFor(ledger))}
       onSecondaryAction={ledger.phase === "review_required" ? () => runUserAction(() => demo.requestRevision()) : undefined}
     />
@@ -183,8 +185,9 @@ export function ConnectedDemo() {
       }
       titleKey="connectedWorkspaceTitle"
     >
-      {demo.journeyConflict === "collaboration" ? <p className="workspace-authority-status">{copy("journeyConflictBody")}</p> : null}
+      {demo.journeyConflict ? <p className="workspace-authority-status">{copy("journeyConflictBody")}</p> : null}
 
+      {scenario === "intake-delay" ? <p>{copy("intakeScenarioLabel")} — {copy("intakeScenarioBody")}</p> : null}
       {!demo.journeyConflict && state.value === "bootstrapping" ? (
         <section className="ledger-hero"><p className="overline">{copy("demoStartOverline")}</p><h3>{copy("demoStartTitle")}</h3><p className="lede">{copy("demoStartBody")}</p></section>
       ) : null}

@@ -183,8 +183,8 @@ TIMELINE_EXECUTION_FUNCTION_IDENTITIES = {
 }
 TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES = TIMELINE_EXECUTION_FUNCTION_IDENTITIES
 TIMELINE_EXECUTION_WORKER_FUNCTION_IDENTITIES: set[tuple[str, str]] = set()
-PLANNING_REVISION_PENDING_REVISIONS = {"0012", "0013", "0014", "0015", "0016"}
-PLANNING_REVISION_SEED_REVISIONS = {"0013", "0014", "0015", "0016"}
+PLANNING_REVISION_PENDING_REVISIONS = {"0012", "0013", "0014", "0015", "0016", "0017"}
+PLANNING_REVISION_SEED_REVISIONS = {"0013", "0014", "0015", "0016", "0017"}
 PLANNING_REVISION_PENDING_IDENTITY = (
     "read_connected_journey_fact_pending",
     "uuid, uuid, text, uuid",
@@ -200,7 +200,7 @@ PLANNING_REVISION_SEED_IDENTITY: tuple[str, str] = (
 
 
 def expected_app_policy_count(alembic_revision: str) -> int:
-    return 44 if alembic_revision in {"0014", "0015", "0016"} else 38
+    return 44 if alembic_revision in {"0014", "0015", "0016", "0017"} else 38
 
 
 def timeline_execution_function_identities(
@@ -208,9 +208,11 @@ def timeline_execution_function_identities(
 ) -> set[tuple[str, str]]:
     return (
         set(TIMELINE_EXECUTION_FUNCTION_IDENTITIES)
-        if alembic_revision in {"0014", "0015", "0016"}
+        if alembic_revision in {"0014", "0015", "0016", "0017"}
         else set()
     )
+
+
 IGNORED_DIRECTORIES = {
     ".git",
     ".next",
@@ -550,6 +552,14 @@ PLANNING_REVISION_SURFACE = (
     "docs/reference/http-api-v1.md",
     "docs/design/projection-matrix.md",
     "docs/design/state-and-interaction-matrix.md",
+)
+INTAKE_REVISION_SOURCE_SURFACE = (
+    "migrations/versions/0017_controlled_intake_revision.py",
+    "fixtures/intake-delay-v1/manifest.json",
+    "fixtures/intake-delay-v1/sources/australia.txt",
+    "fixtures/intake-delay-v1/sources/japan.txt",
+    "fixtures/intake-delay-v1/sources/malaysia.txt",
+    "src/night_voyager/planning/intake_fixture.py",
 )
 
 os.environ.setdefault("UV_BUILD_CONSTRAINT", "build-constraints.txt")
@@ -1035,6 +1045,11 @@ def verify_skill_surface() -> None:
 
 
 def verify_planning_revision_surface() -> None:
+    from night_voyager.planning.intake_fixture import load_exact_intake_delay_fixture
+
+    if any(not (ROOT / relative).is_file() for relative in INTAKE_REVISION_SOURCE_SURFACE):
+        raise SystemExit("controlled intake source surface is incomplete")
+    load_exact_intake_delay_fixture(manifest_path=ROOT / "fixtures/intake-delay-v1/manifest.json")
     if any(not (ROOT / relative).is_file() for relative in PLANNING_REVISION_SURFACE):
         raise SystemExit("planning revision authority surface is incomplete")
     migration, adr, database_roles, worker, tasks, collaboration, http, projection, state = (
@@ -1300,8 +1315,8 @@ def verify_alembic_contract() -> None:
         if isinstance(parent, str):
             parents.add(parent)
     heads = revisions - parents
-    if heads != {"0016"}:
-        raise SystemExit("repository must expose exactly one Alembic head 0016")
+    if heads != {"0017"}:
+        raise SystemExit("repository must expose exactly one Alembic head 0017")
 
     gate = (ROOT / "scripts/run_db_tests.sh").read_text(encoding="utf-8")
     required_node_counts = {
@@ -1353,7 +1368,7 @@ def verify_alembic_contract() -> None:
     if any(gate.count(node) != count for node, count in required_node_counts.items()):
         raise SystemExit("migration gate drift")
     print(
-        "proof migrations: exact Alembic head 0016 with planning-start, "
+        "proof migrations: exact Alembic head 0017 with planning-start, "
         "DRA live, strict parity, planning-revision, migrator-only "
         "revision-seed and initial-budget seed, governed timeline-execution, "
         "and closed demo-identity "
@@ -1493,12 +1508,18 @@ def verify_wheel() -> None:
             "import sys; from night_voyager.api import create_app; "
             "from night_voyager.skills.registry import SkillRuntimeRegistry; "
             "from night_voyager.skills.evaluation import SkillEvaluator; "
+            "from night_voyager.planning.intake_fixture import load_exact_intake_delay_fixture; "
+            "intake = load_exact_intake_delay_fixture(); "
+            "assert intake.case.student.intake == '2028-02'; "
+            "assert int((intake.costs[0].tuition_minor + intake.costs[0].living_minor) "
+            "* intake.costs[0].fx_rate) == 32640000; "
             "registry = SkillRuntimeRegistry.load_packaged(); "
             "evaluator = SkillEvaluator.load_packaged(registry); "
             "assert len(registry.entries) == 7; "
             "assert len(evaluator.manifest.datasets) == 7; "
             f"assert create_app().version == {VERSION!r}; "
             "assert \"httpx2\" not in sys.modules",
+            cwd=Path(temp),
         )
     print(f"proof wheel: isolated installed-wheel import and app factory passed ({wheel.name})")
 
@@ -1539,7 +1560,7 @@ async def verify_database_catalog(database_url: str) -> None:
             )
             timeline_execution_tables = (
                 TIMELINE_EXECUTION_TABLES
-                if alembic_revision in {"0014", "0015", "0016"}
+                if alembic_revision in {"0014", "0015", "0016", "0017"}
                 else set[str]()
             )
             tenant_tables = (
@@ -1674,7 +1695,8 @@ async def verify_database_catalog(database_url: str) -> None:
                            'read_connected_journey_fact_pending',
                            'seed_demo_collaboration',
                            'seed_demo_planning_revision_fact',
-                           'seed_demo_planning_revision_budget')
+                           'seed_demo_planning_revision_budget','seed_demo_intake_revision',
+                           'assert_controlled_intake_source')
                            OR p.proname IN
                           ('create_skill_change_candidate','record_skill_candidate_evaluation',
                            'promote_skill_change_candidate','rollback_skill_activation',
@@ -1719,10 +1741,15 @@ async def verify_database_catalog(database_url: str) -> None:
                 | SKILL_API_FUNCTIONS
                 | SKILL_WORKER_FUNCTIONS
             )
-            if alembic_revision == "0016":
+            if alembic_revision in {"0016", "0017"}:
                 expected_app_functions |= {
                     "retry_agent_task", "project_agent_task_retry_eligible",
                     PLANNING_REVISION_BUDGET_SEED_IDENTITY[0],
+                }
+            if alembic_revision == "0017":
+                expected_app_functions |= {
+                    "seed_demo_intake_revision",
+                    "assert_controlled_intake_source",
                 }
             app_function_identities = {
                 (row["proname"], row["identity_arguments"]) for row in app_functions
@@ -1808,12 +1835,12 @@ async def verify_database_catalog(database_url: str) -> None:
             if alembic_revision in PLANNING_REVISION_PENDING_REVISIONS:
                 api_functions.remove("persist_planning_result")
                 api_functions.add(PLANNING_REVISION_PENDING_IDENTITY[0])
-            if alembic_revision in {"0014", "0015", "0016"}:
+            if alembic_revision in {"0014", "0015", "0016", "0017"}:
                 api_functions |= {
                     identity[0]
                     for identity in TIMELINE_EXECUTION_API_FUNCTION_IDENTITIES
                 }
-            if alembic_revision == "0016":
+            if alembic_revision in {"0016", "0017"}:
                 api_functions |= {"retry_agent_task", "project_agent_task_retry_eligible"}
             worker_functions = {
                 "claim_agent_task",
@@ -1939,9 +1966,12 @@ async def verify_database_catalog(database_url: str) -> None:
                     row["worker_execute"],
                 )
                 for row in app_functions
-                if row["proname"] in {
+                if row["proname"]
+                in {
                     PLANNING_REVISION_SEED_IDENTITY[0],
                     PLANNING_REVISION_BUDGET_SEED_IDENTITY[0],
+                    "seed_demo_intake_revision",
+                    "assert_controlled_intake_source",
                 }
             }
             expected_planning_revision_seed_function = (
@@ -1949,9 +1979,22 @@ async def verify_database_catalog(database_url: str) -> None:
                 if alembic_revision in PLANNING_REVISION_SEED_REVISIONS
                 else {}
             )
-            if alembic_revision == "0016":
+            if alembic_revision in {"0016", "0017"}:
                 expected_planning_revision_seed_function[
                     PLANNING_REVISION_BUDGET_SEED_IDENTITY
+                ] = (False, False)
+            if alembic_revision == "0017":
+                expected_planning_revision_seed_function[
+                    (
+                        "seed_demo_intake_revision",
+                        PLANNING_REVISION_SEED_IDENTITY[1],
+                    )
+                ] = (False, False)
+                expected_planning_revision_seed_function[
+                    (
+                        "assert_controlled_intake_source",
+                        "uuid, uuid, integer, text",
+                    )
                 ] = (False, False)
             if (
                 planning_revision_seed_function

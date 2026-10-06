@@ -283,17 +283,26 @@ def test_connected_demo_read_routes_are_registered() -> None:
     "path",
     (
         f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=",
-        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=3",
+        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=4",
+        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=3&contract_version=3",
+        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/current-decision-brief?contract_version=3",
         f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?"
         "contract_version=2&contract_version=2",
-        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/current-decision-brief?"
-        "contract_version=unknown",
+        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/current-decision-brief?contract_version=unknown",
     ),
 )
 def test_connected_demo_contract_negotiation_fails_closed(path: str) -> None:
     response = TestClient(create_app()).get(path)
     assert response.status_code == 422
     assert response.json()["code"] == "request_validation_failed"
+
+
+def test_exact_ledger_v3_negotiation_reaches_authentication() -> None:
+    response = TestClient(create_app()).get(
+        f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=3"
+    )
+    assert response.status_code == 401
+
 
 def test_connected_demo_invalid_uuid_is_redacted_problem() -> None:
     response = TestClient(create_app()).get("/api/v1/cases/not-a-uuid/advisor-ledger")
@@ -356,20 +365,20 @@ async def test_task_ready_http_projection_is_real_and_no_store() -> None:
     )
     try:
         async with sessions() as session, session.begin():
-            issued = await IdentityService(
-                IdentityRepository(session), settings.secret_key
-            ).mint(DemoActorChoice.ADVISOR)
+            issued = await IdentityService(IdentityRepository(session), settings.secret_key).mint(
+                DemoActorChoice.ADVISOR
+            )
         app = create_app(settings=settings, session_factory=sessions)
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://127.0.0.1:3000"
         ) as client:
             client.cookies.set("night_voyager_session", issued.raw_session_token)
-            response = await client.get(
-                f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger"
-            )
+            response = await client.get(f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger")
             response_v2 = await client.get(
-                f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger"
-                "?contract_version=2"
+                f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=2"
+            )
+            response_v3 = await client.get(
+                f"/api/v1/cases/{CONNECTED_DEMO_CASE_ID}/advisor-ledger?contract_version=3"
             )
         assert response.status_code == 200, response.text
         assert response.headers["cache-control"] == "no-store"
@@ -379,6 +388,11 @@ async def test_task_ready_http_projection_is_real_and_no_store() -> None:
         assert response_v2.json()["schema_version"] == 2
         assert response_v2.json()["phase"] == "task_ready"
         assert "comparison" in response_v2.json()
+        assert "case_intake" not in response.json()
+        assert "case_intake" not in response_v2.json()
+        assert response_v3.status_code == 200, response_v3.text
+        assert response_v3.json()["schema_version"] == 3
+        assert response_v3.json()["case_intake"] == "2027-02"
     finally:
         await engine.dispose()
 

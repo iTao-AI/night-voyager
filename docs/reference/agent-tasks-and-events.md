@@ -114,6 +114,22 @@ cannot replace them. Preferred countries are a non-empty sorted unique subset of
 Australia, Japan, and Malaysia. Route, cost, ranking, route-to-Evidence, and eligible
 advisor-review product projections contain selected countries only.
 
+For the controlled `2027-02` to `2028-02` revision, migration `0017` resolves
+the successor from the persisted intake delta and frozen predecessor to
+`50000000-0000-0000-0000-000000000017/v1`. A later non-intake revision retains
+its predecessor's source. Wrong Task pins or drifted registered source cannot
+reuse old costs. Worker snapshot loading repeats the source checks; the new
+pack is excluded from the existing terminal retry allowlist. See
+[ADR 0016](../decisions/0016-controlled-intake-revision-source-pins.md).
+
+Task creation maps `NV027` to bounded `409 intake_evidence_unavailable`, including
+source disappearance or drift after fact confirmation. A valid calendar month
+does not grant source authority. The actual new Task pins the active packaged
+Skill; the controlled seed's copied baseline Task remains `legacy_unpinned`.
+Only explicit, frozen retirement of a historical `waiting_review` result removes
+its publication block; a queued, leased, running, current or orphan result retains
+the existing guard. See the [controlled intake walkthrough](../operations/controlled-intake-revision.md).
+
 ## Versioned planning predecessor and successor
 
 Migration `0012` binds a revision task to one predecessor through
