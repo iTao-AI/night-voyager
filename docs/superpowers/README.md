@@ -15,7 +15,7 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 
 | Scope | Status | Specs and plans |
 | --- | --- | --- |
-| Controlled February intake revision | Locally implemented, runtime-role verified and reviewed with fixes; documentation minor corrected; authorized native/browser/image phase pending; hosted delivery separately gated | [Spec](specs/2026-10-06-controlled-intake-revision.md) · [Plan](plans/2026-10-06-controlled-intake-revision.md) |
+| Controlled February intake revision | Locally implemented and reviewed with fixes; full runtime-role/native/browser acceptance passed in the authorized third attempt; two prior failures retained; hosted acceptance tracked separately | [Spec](specs/2026-10-06-controlled-intake-revision.md) · [Plan](plans/2026-10-06-controlled-intake-revision.md) |
 | M2 identity, session, and RLS | Implemented | [Spec](specs/2026-07-12-m2-identity-session-rls-design.md) · [Plan](plans/2026-07-12-m2-identity-session-rls.md) |
 | M3A deterministic planning | Implemented | [Spec](specs/2026-07-12-m3a-deterministic-planning-design.md) · [Plan](plans/2026-07-12-m3a-deterministic-planning.md) |
 | M3B advisor and family decision | Implemented | [Spec](specs/2026-07-13-m3b-advisor-family-decision-design.md) · [Plan](plans/2026-07-13-m3b-advisor-family-decision.md) |
@@ -43,9 +43,10 @@ The [approved design](specs/2026-10-01-customer-revision-recovery.md) and
 [completed local implementation plan](plans/2026-10-01-customer-revision-recovery.md) cover
 supported household revisions, explicit family choices, and advisor-authorized
 fresh-task recovery. The revision and family input slices are implemented locally.
-Recovery implementation is independently reviewed locally. Migration `0016` is
-current in this branch; complete native/Compose and bilingual browser acceptance
-is locally verified. See the [walkthrough](../operations/customer-revision-recovery.md)
+Recovery implementation is independently reviewed locally. Its authority was
+established at migration `0016`; current source adds `0017` for the separately
+documented intake revision. Complete native/Compose and bilingual browser
+acceptance for that recovery scope is locally verified. See the [walkthrough](../operations/customer-revision-recovery.md)
 and [acceptance record](../evidence/customer-revision-recovery.md). Final branch
 review, scoped correction review and owner acceptance are complete locally.
 Task-owned ephemeral resources are released; the branch/worktree and evidence are
