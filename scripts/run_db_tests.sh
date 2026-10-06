@@ -50,6 +50,7 @@ if [ "${1:-}" = "inside" ]; then
         --ignore=tests/integration/planning/test_intake_revision_source_pins.py \
         --ignore=tests/integration/planning/test_intake_revision_authority.py \
         --ignore=tests/integration/planning/test_intake_revision_migration.py \
+        --ignore=tests/integration/connected_demo/test_http_intake_read_models.py \
         --ignore=tests/integration/connected_demo/test_intake_read_models.py \
         --ignore=tests/integration/connected_demo/test_intake_revision_flow.py \
         --ignore=tests/security/test_terminal_recovery_authority.py \
@@ -391,6 +392,7 @@ if [ "${1:-}" = "inside-intake-revision" ]; then
     PYTEST_ADDOPTS= uv run --no-editable pytest -q -o addopts='' -m database \
         tests/integration/planning/test_intake_revision_source_pins.py \
         tests/integration/planning/test_intake_revision_authority.py \
+        tests/integration/connected_demo/test_http_intake_read_models.py \
         tests/integration/connected_demo/test_intake_read_models.py \
         tests/integration/connected_demo/test_intake_revision_flow.py
     uv run alembic current | grep '0017'

@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_TESTS = (
     "tests/integration/planning/test_intake_revision_source_pins.py",
     "tests/integration/planning/test_intake_revision_authority.py",
+    "tests/integration/connected_demo/test_http_intake_read_models.py",
     "tests/integration/connected_demo/test_intake_read_models.py",
     "tests/integration/connected_demo/test_intake_revision_flow.py",
 )
