@@ -97,11 +97,40 @@ fi
 base_project=${COMPOSE_PROJECT_NAME:-night-voyager-collaboration-db-check-$$}
 active_project=
 
-cleanup() {
-    if [ -n "$active_project" ]; then
+bounded_diagnostic_output() {
+    sed -E 's#([[:alpha:]][[:alnum:]+.-]*://)[^/@[:space:]]+@#\1[redacted]@#g' |
+        awk 'NR <= 160 {
+            if (tolower($0) ~ /password|passwd|secret|token|cookie|authorization|credential|api[ _-]?key|database[ _-]?url/) {
+                print "[redacted sensitive diagnostic line]"
+            } else {
+                print substr($0, 1, 500)
+            }
+        }'
+}
+
+failure_diagnostics() {
+    printf '%s\n' 'collaboration-db-check: startup diagnostics before teardown' >&2
+    {
         COMPOSE_PROJECT_NAME="$active_project" docker compose --profile db-test \
-            down --volumes --remove-orphans --rmi local
+            ps --all migrator postgres || printf '%s\n' 'service state unavailable'
+    } 2>&1 | bounded_diagnostic_output >&2 || true
+    {
+        COMPOSE_PROJECT_NAME="$active_project" docker compose --profile db-test \
+            logs --no-color --tail 80 migrator postgres || printf '%s\n' 'service logs unavailable'
+    } 2>&1 | bounded_diagnostic_output >&2 || true
+}
+
+cleanup() {
+    original_status=$?
+    trap - EXIT INT TERM
+    if [ -n "$active_project" ]; then
+        if [ "$original_status" -ne 0 ]; then
+            failure_diagnostics || true
+        fi
+        COMPOSE_PROJECT_NAME="$active_project" docker compose --profile db-test \
+            down --volumes --remove-orphans --rmi local || true
     fi
+    exit "$original_status"
 }
 trap cleanup EXIT INT TERM
 
