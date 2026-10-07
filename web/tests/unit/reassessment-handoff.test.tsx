@@ -5,11 +5,12 @@ import { parsePlanExecutionContext, parseTimelineExecutionView } from "../../lib
 import { buildReassessmentHandoff } from "../../lib/plan-execution/reassessment-handoff";
 import { handoffFixture, handoffId } from "../fixtures/reassessment-handoff";
 import { PlanExecutionWorkspace } from "../../components/plan-execution/PlanExecutionWorkspace";
-import type { PlanExecutionController } from "../../lib/plan-execution/use-plan-execution";
+import { usePlanExecution, type PlanExecutionController } from "../../lib/plan-execution/use-plan-execution";
+import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
 import { PresentationProvider } from "../../lib/presentation/context";
 
 afterEach(() => {
-  cleanup(); window.localStorage.clear(); vi.restoreAllMocks();
+  cleanup(); window.localStorage.clear(); window.sessionStorage.clear(); vi.restoreAllMocks();
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
 });
 
@@ -89,6 +90,7 @@ it("does not export an active execution or unsaved reassessment", () => {
 function controllerFixture(): PlanExecutionController {
   const { context, view } = handoffFixture();
   return {
+    readAuthority: { kind: "seeded", scenario: "happy" },
     state: { value: "reassessment_required", context, view, receipt: null,
       error: null, operation: null, safeDisplayState: null },
     busy: false, connect: async () => {}, switchRole: async () => {},
@@ -199,4 +201,66 @@ it("rejects a changed requested connected Case before an old controller can be c
   render(<PresentationProvider><PlanExecutionWorkspace controller={controller}
     authority={{ kind: "connected", caseId: handoffId(99) }} /></PresentationProvider>);
   expect(screen.queryByRole("button", { name: "复制交接摘要" })).not.toBeInTheDocument();
+});
+
+function LiveWorkspace({ scenario }: { scenario: PlanExecutionDemoScenario }) {
+  const controller = usePlanExecution(undefined, scenario);
+  return <PresentationProvider>
+    <button onClick={() => void controller.connect("advisor")}>Read requested scenario</button>
+    <PlanExecutionWorkspace controller={controller} scenario={scenario} />
+  </PresentationProvider>;
+}
+
+it.each([
+  ["happy", "blocked", "resolved"], ["happy", "blocked", "rejected"],
+  ["blocked", "happy", "resolved"], ["blocked", "happy", "rejected"],
+] as const)("withdraws %s facts on a live switch to %s and isolates a %s copy completion", async (from, to, outcome) => {
+  const fixtures = {
+    happy: handoffFixture("deadline_elapsed"),
+    blocked: handoffFixture("blocked_attestation", 100),
+  };
+  let active = from;
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (path, init) => {
+    const url = String(path);
+    let body: unknown;
+    if (url === "/api/demo/session-bootstrap") body = { csrf_token: "synthetic-bootstrap" };
+    else if (url === "/api/demo/sessions") {
+      const { demo_actor } = JSON.parse(String(init?.body));
+      if (demo_actor === "plan_execution_happy_advisor") active = "happy";
+      else if (demo_actor === "plan_execution_blocked_advisor") active = "blocked";
+      else throw new Error("unexpected synthetic principal");
+      body = { role: "advisor", csrf_token: "synthetic-session" };
+    } else if (url === "/api/demo/plan-execution-context") body = fixtures[active].context;
+    else if (url === `/api/demo/cases/${fixtures[active].context.case_id}/timeline-execution`) body = fixtures[active].view;
+    else throw new Error(`unexpected synthetic read: ${url}`);
+    return new Response(JSON.stringify(body), { headers: { "Content-Type": "application/json" } });
+  });
+  let finishCopy!: () => void;
+  const write = vi.fn().mockResolvedValue(undefined).mockImplementationOnce(() =>
+    new Promise<void>((resolve, reject) => {
+      finishCopy = () => outcome === "resolved" ? resolve() : reject(new Error("late denial"));
+    }));
+  clipboard(write);
+  const rendered = render(<LiveWorkspace scenario={from} />);
+  fireEvent.click(screen.getByRole("button", { name: "Read requested scenario" }));
+  await screen.findByRole("button", { name: "复制交接摘要" });
+  fireEvent.click(screen.getByRole("button", { name: "复制交接摘要" }));
+  expect(write.mock.calls[0][0]).toContain(fixtures[from].context.case_id);
+  const readsBeforeSwitch = fetchMock.mock.calls.length;
+
+  rendered.rerender(<LiveWorkspace scenario={to} />);
+  expect(screen.queryByRole("region", { name: "重新评估交接" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "可选择的交接摘要" })).not.toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledTimes(readsBeforeSwitch);
+
+  fireEvent.click(screen.getByRole("button", { name: "Read requested scenario" }));
+  await screen.findByRole("button", { name: "复制交接摘要" });
+  await act(async () => finishCopy());
+  expect(screen.queryByText("交接摘要已复制。")).not.toBeInTheDocument();
+  expect(screen.queryByText("无法复制，请选择下方文本手动复制。")).not.toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "可选择的交接摘要" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "复制交接摘要" }));
+  await screen.findByText("交接摘要已复制。");
+  expect(write.mock.calls[1][0]).toContain(fixtures[to].context.case_id);
+  expect(write.mock.calls[1][0]).not.toContain(fixtures[from].context.case_id);
 });

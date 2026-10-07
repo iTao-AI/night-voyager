@@ -35,15 +35,18 @@ export function PlanExecutionWorkspace({
   const authority = normalizePlanExecutionAuthority(suppliedAuthority ?? scenario);
   const liveController = usePlanExecution(undefined, authority);
   const controller = suppliedController ?? liveController;
-  const { state, busy } = controller;
+  const { state, readAuthority, busy } = controller;
   const { copy, locale } = usePresentation();
   const workflowStage = planExecutionWorkflowStage(state.value);
   const role = state.context?.active_role;
+  const readMatchesAuthority = readAuthority !== null && (readAuthority.kind === "connected"
+    ? authority.kind === "connected" && readAuthority.caseId === authority.caseId
+    : authority.kind === "seeded" && readAuthority.scenario === authority.scenario);
   const contextMatchesAuthority = state.context && (authority.kind === "connected"
     ? isConnectedPlanExecutionContext(state.context) && state.context.case_id === authority.caseId
     : !isConnectedPlanExecutionContext(state.context));
   const handoff = !busy && state.value === "reassessment_required"
-    && contextMatchesAuthority && state.context && state.view
+    && readMatchesAuthority && contextMatchesAuthority && state.context && state.view
       ? buildReassessmentHandoff(state.context, state.view, locale) : null;
   const checkpoint = state.view?.current_checkpoint ?? null;
   const canAttest = state.value === "checkpoint_active"

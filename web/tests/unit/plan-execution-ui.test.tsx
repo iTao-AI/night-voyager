@@ -14,6 +14,7 @@ afterEach(() => {
 
 function activeController(): PlanExecutionController {
   return {
+    readAuthority: { kind: "seeded", scenario: "happy" },
     state: {
       value: "checkpoint_active" as const,
       context: contextFixture,
