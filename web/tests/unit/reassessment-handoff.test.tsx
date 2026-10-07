@@ -9,6 +9,9 @@ import { usePlanExecution, type PlanExecutionController } from "../../lib/plan-e
 import type { PlanExecutionDemoScenario } from "../../lib/plan-execution/scenario";
 import { PresentationProvider } from "../../lib/presentation/context";
 
+// Preserve the native fact-to-plan whole-main pattern, including hidden DOM text.
+const rawPublicData = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|schema_version|confirmed_fact_id|candidate_id|request_sha256|night_voyager_(?:api|worker|migrator)|\/Users\/|Traceback|csrf|cookie/i;
+
 afterEach(() => {
   cleanup(); window.localStorage.clear(); window.sessionStorage.clear(); vi.restoreAllMocks();
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined });
@@ -105,14 +108,15 @@ function clipboard(writeText: (text: string) => Promise<void>) {
   Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
 }
 
-it("copies the visible saved facts only on user action, keeping source identities collapsed", async () => {
+it("copies the complete saved text on user action while unrequested source identities stay out of main DOM", async () => {
   const write = vi.fn().mockResolvedValue(undefined);
   clipboard(write);
   render(workspace(controllerFixture()));
   const handoff = screen.getByRole("region", { name: "重新评估交接" });
   expect(within(handoff).getByText("申请提交")).toBeVisible();
   expect(within(handoff).getByText("缺少必需输入")).toBeVisible();
-  expect(within(handoff).getByText(handoffId(30))).not.toBeVisible();
+  expect(screen.getByRole("main")).not.toHaveTextContent(rawPublicData);
+  expect(within(handoff).queryByText(handoffId(30))).not.toBeInTheDocument();
   expect(write).not.toHaveBeenCalled();
   fireEvent.click(within(handoff).getByRole("button", { name: "复制交接摘要" }));
   await waitFor(() => expect(within(handoff).getByText("交接摘要已复制。")).toBeVisible());
@@ -120,8 +124,32 @@ it("copies the visible saved facts only on user action, keeping source identitie
   expect(write.mock.calls[0][0]).toContain("保存的行动节点：申请提交");
   expect(write.mock.calls[0][0]).toContain("已知原因：缺少必需输入");
   expect(write.mock.calls[0][0]).toContain("不会创建新计划");
+  expect(write.mock.calls[0][0]).toContain(handoffId(30));
   expect(write.mock.calls[0][0]).not.toContain(handoffId(91));
   expect(screen.getAllByRole("status")).toHaveLength(1);
+});
+
+it("renders exact source identities only on disclosure and removes them and the projection note on close", () => {
+  render(workspace(controllerFixture()));
+  const handoff = screen.getByRole("region", { name: "重新评估交接" });
+  const details = handoff.querySelector("details")!;
+  const note = "保存的投影指纹仅供引用；浏览器未重新验证触发条件。";
+  expect(screen.getByRole("main")).not.toHaveTextContent(rawPublicData);
+  expect(within(handoff).queryByText(note)).not.toBeInTheDocument();
+  details.open = true;
+  fireEvent(details, new Event("toggle"));
+  for (const id of [1, 2, 3, 4, 5, 11, 20, 30]) {
+    expect(within(details).getByText(handoffId(id))).toBeInTheDocument();
+  }
+  expect(within(details).getByText(note)).toBeInTheDocument();
+  expect(details.textContent).not.toContain(handoffId(90));
+  expect(details.textContent).not.toContain(handoffId(91));
+  expect(details.textContent).not.toMatch(/actor_id|csrf|cookie|authorization:/i);
+  details.open = false;
+  fireEvent(details, new Event("toggle"));
+  expect(screen.getByRole("main")).not.toHaveTextContent(rawPublicData);
+  expect(within(handoff).queryByText(handoffId(30))).not.toBeInTheDocument();
+  expect(within(handoff).queryByText(note)).not.toBeInTheDocument();
 });
 
 it.each(["rejected", "unavailable"] as const)(
@@ -166,6 +194,10 @@ it("drops fallback and delayed feedback on a new context rather than exporting o
   clipboard(() => new Promise<void>((_resolve, reject) => { rejectCopy = reject; }));
   const controller = controllerFixture();
   const rendered = render(workspace(controller));
+  const details = screen.getByRole("region", { name: "重新评估交接" }).querySelector("details")!;
+  details.open = true;
+  fireEvent(details, new Event("toggle"));
+  expect(within(details).getByText(handoffId(1))).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "复制交接摘要" }));
   const next = handoffFixture("deadline_elapsed", 100);
   controller.state = { ...controller.state, context: next.context, view: next.view };
@@ -173,6 +205,8 @@ it("drops fallback and delayed feedback on a new context rather than exporting o
   await act(async () => rejectCopy(new Error("late denial")));
   expect(screen.queryByRole("textbox", { name: "可选择的交接摘要" })).not.toBeInTheDocument();
   expect(screen.queryByText("无法复制，请选择下方文本手动复制。")).not.toBeInTheDocument();
+  expect(screen.queryByText(handoffId(1))).not.toBeInTheDocument();
+  expect(screen.queryByText(handoffId(101))).not.toBeInTheDocument();
   clipboard(vi.fn().mockRejectedValue(new Error("denied")));
   fireEvent.click(screen.getByRole("button", { name: "复制交接摘要" }));
   const fallback = await screen.findByRole("textbox", { name: "可选择的交接摘要" });

@@ -7,6 +7,7 @@ import { usePresentation } from "../../lib/presentation/context";
 export function ReassessmentHandoff({ summary }: { summary: ReassessmentHandoffSummary }) {
   const { copy } = usePresentation();
   const [outcome, setOutcome] = useState<"idle" | "copying" | "copied" | "failed">("idle");
+  const [identitiesOpen, setIdentitiesOpen] = useState(false);
   const alive = useRef(false);
   const copying = useRef(false);
   const fallback = useRef<HTMLTextAreaElement>(null);
@@ -50,14 +51,17 @@ export function ReassessmentHandoff({ summary }: { summary: ReassessmentHandoffS
           <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
         ))}
       </dl>
-      <details className="handoff-identities">
+      <details className="handoff-identities"
+        onToggle={(event) => setIdentitiesOpen(event.currentTarget.open)}>
         <summary>{copy("handoffIdentities")}</summary>
-        <dl className="handoff-facts">
-          {summary.identities.map(({ label, value }) => (
-            <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
-          ))}
-        </dl>
-        <p>{copy("handoffProjectionNote")}</p>
+        {identitiesOpen && <>
+          <dl className="handoff-facts">
+            {summary.identities.map(({ label, value }) => (
+              <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+            ))}
+          </dl>
+          <p>{copy("handoffProjectionNote")}</p>
+        </>}
       </details>
       <button type="button" disabled={outcome === "copying"}
         aria-describedby={outcome === "copied" || outcome === "failed" ? "handoff-copy-feedback" : undefined}

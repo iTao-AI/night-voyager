@@ -3,6 +3,9 @@ import { handoffFixture, handoffId } from "../tests/fixtures/reassessment-handof
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
+// Same whole-main guard as fact-to-plan; do not filter out hidden DOM content.
+const rawPublicData = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|schema_version|confirmed_fact_id|candidate_id|request_sha256|night_voyager_(?:api|worker|migrator)|\/Users\/|Traceback|csrf|cookie/i;
+
 // HTTP reads and demo sessions are routed synthetic fixtures. No native business
 // mutation, receipt, database persistence or recovery proof is claimed here.
 async function routeFixture(page: Page, fixture = handoffFixture()) {
@@ -91,6 +94,8 @@ for (const locale of ["zh-CN", "en"] as const) {
         await expect(handoff.getByText("2026-10-15", { exact: true })).toBeVisible();
         if (trigger === "blocked_attestation") await expect(handoff.getByText(copy.reason, { exact: true })).toBeVisible();
         await expect(handoff.locator("details")).not.toHaveAttribute("open", "");
+        await expect(page.getByRole("main")).not.toContainText(rawPublicData, { timeout: 15000 });
+        await expect(handoff.locator("details dl")).toHaveCount(0);
         await expectReadable(page);
         await handoff.screenshot({ path: info.outputPath("handoff.png") });
         await handoff.getByRole("button", { name: copy.copy, exact: true }).click();
@@ -103,13 +108,28 @@ for (const locale of ["zh-CN", "en"] as const) {
         expect(exported).not.toContain(handoffId(90));
         expect(exported).not.toContain(handoffId(91));
         expect(exported).not.toMatch(/actor_id|csrf_token|x-csrf|cookie|authorization:/i);
-        await handoff.getByText(copy.identities, { exact: true }).click();
+        const requestsBeforeDisclosure = [...state.requests];
+        const disclosure = handoff.locator("details summary");
+        await disclosure.focus();
+        await disclosure.press("Enter");
+        await expect(handoff.locator("details")).toHaveAttribute("open", "");
+        for (const id of [1, 2, 3, 4, 5, 11, 30]) {
+          await expect(handoff.locator("details").getByText(handoffId(id), { exact: true })).toBeVisible();
+        }
+        await expect(handoff.locator("details")).not.toContainText(/actor_id|csrf|cookie|authorization:/i);
+        await expect(handoff.locator("details")).not.toContainText(handoffId(90));
+        await expect(handoff.locator("details")).not.toContainText(handoffId(91));
         const rows = await handoff.locator("dl > div").evaluateAll((elements) => elements.map((element) => ({
           label: element.querySelector("dt")!.textContent!, value: element.querySelector("dd")!.textContent!,
         })));
         for (const { label, value } of rows) expect(exported).toContain(`${label}${separator}${value}`);
         await expectReadable(page);
         await page.screenshot({ path: info.outputPath("source-identities.png"), fullPage: true });
+        await disclosure.press("Space");
+        await expect(handoff.locator("details")).not.toHaveAttribute("open", "");
+        await expect(handoff.locator("details dl, details p")).toHaveCount(0);
+        await expect(page.getByRole("main")).not.toContainText(rawPublicData, { timeout: 15000 });
+        expect(state.requests).toEqual(requestsBeforeDisclosure);
         expect(state.requests.filter((request) => request.startsWith("POST") && request.includes("timeline-"))).toEqual([]);
       });
     }
