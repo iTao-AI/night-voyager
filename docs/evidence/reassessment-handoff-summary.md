@@ -1,11 +1,11 @@
 # Saved reassessment handoff acceptance
 
-Status: local application implementation and frontend checks passed; final
-branch review pending. Hosted delivery and publication are separate.
+Status: local implementation, frontend/browser acceptance and review repair
+complete. Hosted delivery and publication are separate.
 
 Verification date: 2026-10-07. Base:
 `0017d364995ca59e9b71cad48433d9e485fb6c3a`. Application implementation:
-`8134d94ff29a05f94e78288a2a0c56c0a57b072e`.
+`7ee5e287535e1f00829b5a7f9da2a86a0fbaead0`.
 
 ## Scope
 
@@ -17,10 +17,14 @@ recovery or replanning-authority change.
 
 ## Current local checks
 
-- `npm --prefix web test`: 54 files and 663 tests passed. The new projection/UI
+- `npm --prefix web test`: 54 files and 667 tests passed. The 31 projection/UI
   tests cover the saved checkpoint, blocked/deadline facts, mismatched reference,
   checkpoint/execution, absent detail, context anchors, export privacy, clipboard
   failure/unavailability and invalidation across state, role and locale changes.
+  Four live-hook regressions cover Happy/Blocked source changes in both
+  directions and delayed clipboard success/failure. They failed before the
+  source-binding fix and passed afterward; a different requested source cannot
+  copy the retained Case before a fresh validated read.
 - `npm --prefix web run lint`: passed.
 - `npm --prefix web run typecheck`: passed.
 - `NEXT_TELEMETRY_DISABLED=1 npm --prefix web run build`: passed.
@@ -67,6 +71,16 @@ The targeted `document-release` audit covers the reference contract, existing
 walkthrough, docs entry/index and this acceptance classification. Existing
 explanation and walkthrough coverage is sufficient; no new architecture ADR or
 duplicate tutorial is needed. Historical release notes/guides remain untouched.
+
+A fresh read-only whole-branch review at
+`0b7bf1a5c20b7cd34fa3de7dd332563d269ed2af` found one Important issue: a retained
+seeded controller could copy the old Case after its requested scenario changed.
+The fix records the source of each validated read in client metadata and gates
+copy on that source matching the current request. It changes no HTTP/DB or
+business authority. The delivery owner reviewed the targeted repair and reran
+the full frontend/static/build and 17-test browser acceptance on the repaired
+implementation. No Critical or Minor findings remain from that review; no
+second independent review is claimed.
 
 Clipboard copy is initiated by the user. Already initiated operating-system
 clipboard writes cannot be recalled after navigation; delayed completion cannot

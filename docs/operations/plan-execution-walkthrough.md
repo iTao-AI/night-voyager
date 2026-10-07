@@ -110,7 +110,8 @@ as plain text. On failure, the page focuses and selects the current summary for
 manual copy. Share it only through a separately chosen human channel; the page
 sends no message and grants no next-workflow permission. Changing role, locale,
 context or session clears the old fallback; a busy or unsettled page cannot
-copy its previous handoff.
+copy its previous handoff. Changing the requested demo scenario or Case also
+withdraws the old summary until a fresh validated read supplies matching facts.
 
 For the fixture-only UI test, with the locked frontend dependencies and the
 configured Playwright browser already available, run:

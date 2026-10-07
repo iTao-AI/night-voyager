@@ -104,6 +104,12 @@ sends no message. Unsettled, busy, changed-session or mismatched-context state
 has no copyable handoff; new role, locale or summary clears previous copy
 feedback/fallback.
 
+Each settled frontend read retains its requested seeded scenario or connected
+Case as client source metadata. Copy requires that source to match the current
+request. Changing Happy/Blocked or the requested Case withdraws the old summary
+until a fresh validated read supplies matching facts. This source marker is
+kept in memory and grants no business authority.
+
 ## Closed synthetic identity
 
 Migration `0015` is identity-only. It retains the generic demo principals and

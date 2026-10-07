@@ -1,7 +1,7 @@
 # Reassessment handoff summary implementation plan
 
-Status: application implementation and local verification complete; final branch
-review and closeout pending.
+Status: completed locally. Frontend/browser acceptance, final branch review,
+regression repair and documentation closeout passed. Hosted delivery is separate.
 
 **Goal:** turn a saved reassessment into a specific bilingual, user-copyable
 handoff while preserving its authority boundary.
@@ -23,6 +23,8 @@ delivery and heavy native recovery are separate gates.
 **Review focus:** saved checkpoint differs from current; wrong trigger reference;
 wrong execution/checkpoint attestation; saved date differs from observed date;
 clipboard failure or delayed completion across loading/session/context changes.
+Also cover a retained live controller switching Happy/Blocked in either
+direction before a new validated read.
 
 ## Task 1: Derive the saved facts
 
@@ -65,8 +67,15 @@ clipboard failure or delayed completion across loading/session/context changes.
   applicable walkthrough and docs indexes for the new handoff behavior.
 - [x] Run `cd web && npm run lint`, `npm run typecheck`, `npm run build`, and
   link/diff checks. Do not restart frozen native recovery acceptance.
-- [ ] Run targeted `gstack-workflows:document-release` audit and one fresh
+- [x] Run targeted `gstack-workflows:document-release` audit and one fresh
   whole-branch review; fix Important/Critical findings with regression checks.
-- [ ] Mark this plan/spec complete only after evidence is available. Commit
+- [x] Mark this plan/spec complete only after evidence is available. Commit
   docs/browser proof assets, then report exact HEAD, commands, evidence classes,
   limits and the remote-delivery approval candidate.
+
+The final review's seeded scenario finding was fixed with four live-hook
+RED/GREEN regressions and targeted owner review. The repaired tree passed 54
+frontend files / 667 tests, lint, typecheck, build and 17 browser tests. See the
+[acceptance record](../../evidence/reassessment-handoff-summary.md) for source
+mapping and evidence limits. Ignored execution evidence and the local worktree
+are retained; no hosted delivery is implied.

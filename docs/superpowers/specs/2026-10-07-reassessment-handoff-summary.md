@@ -1,7 +1,7 @@
 # Reassessment handoff summary
 
-Status: implemented locally; frontend and fixture/browser acceptance passed;
-final branch review pending. Hosted delivery is separate.
+Status: implemented and locally verified; frontend/fixture browser acceptance
+and final review repair are complete. Hosted delivery is separate.
 
 The saved reassessment becomes a readable, bilingual handoff for an advisor who
 must judge changed circumstances and obtain any future authorization. This is a
@@ -37,7 +37,9 @@ The current published release boundary remains unchanged.
    languages. Reference/checkpoint mismatches and missing attestations never
    become a claimed blocker reason.
 2. The saved checkpoint wins even if `current_checkpoint` differs. Context and
-   view anchors must agree before the summary can be copied.
+   view anchors must agree before the summary can be copied. The validated read's
+   seeded scenario or connected Case must also match the current request; a
+   scenario switch cannot copy the retained source before a new validated read.
 3. Actual browser fixtures cover Chinese and English at 1440 and 390 pixels,
    readable layout, copy, clipboard failure and context/session changes.
 4. Export includes saved/view dates and source anchors, with no actor IDs or
