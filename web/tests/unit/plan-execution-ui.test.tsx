@@ -157,6 +157,7 @@ it("shows reassessment only to the advisor for server-blocked authority", () => 
 
 it("renders terminal handoff without any resume or mutation action", () => {
   const controller = controllerFor("advisor", "blocked");
+  controller.state.context = { ...controller.state.context!, execution_id: controller.state.view!.execution.execution_id };
   controller.state.value = "reassessment_required";
   controller.state.view!.execution.state = "reassessment_required";
   controller.state.view!.reassessment = {
@@ -197,6 +198,7 @@ it("renders terminal handoff without any resume or mutation action", () => {
 it("renders the deadline trigger through the English catalog without raw codes", async () => {
   window.localStorage.setItem(PRESENTATION_LOCALE_STORAGE_KEY, "en");
   const controller = controllerFor("advisor", "blocked");
+  controller.state.context = { ...controller.state.context!, execution_id: controller.state.view!.execution.execution_id };
   controller.state.value = "reassessment_required";
   controller.state.view!.execution.state = "reassessment_required";
   controller.state.view!.reassessment = {

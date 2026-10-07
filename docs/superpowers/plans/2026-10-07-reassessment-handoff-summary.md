@@ -38,17 +38,17 @@ clipboard failure or delayed completion across loading/session/context changes.
 
 ## Task 2: Present and copy the current handoff
 
-- [ ] Extend regression tests for real `ReassessmentHandoff` and
+- [x] Extend regression tests for real `ReassessmentHandoff` and
   `PlanExecutionWorkspace`: copy, rejected/unavailable clipboard, new context,
   busy/mutation/loading/session state and pending asynchronous results.
-- [ ] Update `web/components/plan-execution/ReassessmentHandoff.tsx` to display
+- [x] Update `web/components/plan-execution/ReassessmentHandoff.tsx` to display
   facts, collapsed identities, copy feedback and a read-only selectable fallback.
   Reuse the existing Stop/trigger copy and add scoped styles to
   `web/app/workspace.css`.
-- [ ] Update `PlanExecutionWorkspace.tsx` to gate the component on settled state,
+- [x] Update `PlanExecutionWorkspace.tsx` to gate the component on settled state,
   matching requested authority, context and projection; remount copy state on
   changed summary/role/authority/locale rather than carrying stale fallback.
-- [ ] Run focused RED/GREEN tests, then `cd web && npm test`, inspect the diff
+- [x] Run focused RED/GREEN tests, then `cd web && npm test`, inspect the diff
   and commit the current-summary copy behavior.
 
 ## Task 3: Browser acceptance and documentation

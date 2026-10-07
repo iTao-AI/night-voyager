@@ -14,6 +14,8 @@ import { CurrentCheckpoint } from "./CurrentCheckpoint";
 import { ExecutionActivity } from "./ExecutionActivity";
 import { ExecutionRecoveryNotice } from "./ExecutionRecoveryNotice";
 import { ReassessmentHandoff } from "./ReassessmentHandoff";
+import { buildReassessmentHandoff } from "../../lib/plan-execution/reassessment-handoff";
+import { isConnectedPlanExecutionContext } from "../../lib/plan-execution/contracts";
 import { AdvisorWorkspaceShell } from "../presentation/AdvisorWorkspaceShell";
 import {
   normalizePlanExecutionAuthority,
@@ -34,9 +36,15 @@ export function PlanExecutionWorkspace({
   const liveController = usePlanExecution(undefined, authority);
   const controller = suppliedController ?? liveController;
   const { state, busy } = controller;
-  const { copy } = usePresentation();
+  const { copy, locale } = usePresentation();
   const workflowStage = planExecutionWorkflowStage(state.value);
   const role = state.context?.active_role;
+  const contextMatchesAuthority = state.context && (authority.kind === "connected"
+    ? isConnectedPlanExecutionContext(state.context) && state.context.case_id === authority.caseId
+    : !isConnectedPlanExecutionContext(state.context));
+  const handoff = !busy && state.value === "reassessment_required"
+    && contextMatchesAuthority && state.context && state.view
+      ? buildReassessmentHandoff(state.context, state.view, locale) : null;
   const checkpoint = state.view?.current_checkpoint ?? null;
   const canAttest = state.value === "checkpoint_active"
     && checkpoint?.state === "in_progress"
@@ -296,17 +304,10 @@ export function PlanExecutionWorkspace({
           </div>
         </div>
       </section>
-      {state.value === "reassessment_required" && state.view?.reassessment && (
+      {handoff && (
         <ReassessmentHandoff
-          reassessment={state.view.reassessment}
-          labels={{
-            title: copy("planExecutionHandoffTitle"),
-            stop: copy("planExecutionReassessmentStop"),
-            pending: copy("planExecutionHandoffPending"),
-            whoNext: copy("planExecutionWhoNext"),
-            blockedTrigger: copy("planExecutionBlockedTrigger"),
-            deadlineTrigger: copy("planExecutionDeadlineTrigger"),
-          }}
+          key={`${authority.kind}:${authority.kind === "seeded" ? authority.scenario : authority.caseId}:${role}:${handoff.text}`}
+          summary={handoff}
         />
       )}
     </AdvisorWorkspaceShell>

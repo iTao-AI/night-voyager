@@ -528,6 +528,37 @@
   }
 }
 
+.reassessment-handoff {
+  min-width: 0;
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(38, 70, 79, .2);
+}
+
+.handoff-facts {
+  display: grid;
+  gap: .75rem;
+  margin-block: 1.25rem;
+}
+
+.handoff-facts > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: .5rem 1rem;
+  min-width: 0;
+}
+
+.handoff-facts dt { font-weight: 700; }
+.handoff-facts dd { margin: 0; overflow-wrap: anywhere; }
+.handoff-identities { margin-block: 1rem; }
+.handoff-identities summary { cursor: pointer; }
+.handoff-fallback { display: grid; gap: .5rem; margin-top: 1rem; }
+.handoff-fallback textarea { width: 100%; min-width: 0; font-size: .875rem; line-height: 1.5; }
+
+@media (max-width: 600px) {
+  .handoff-facts > div { grid-template-columns: minmax(0, 1fr); gap: .25rem; }
+}
+
 /* Reference-driven product frame: solid surfaces carry the hierarchy first. */
 .workspace-page {
   width: min(100%, 80rem);
