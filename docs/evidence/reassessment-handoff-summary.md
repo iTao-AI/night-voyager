@@ -1,11 +1,12 @@
 # Saved reassessment handoff acceptance
 
-Status: local implementation, frontend/browser acceptance and review repair
-complete. Hosted delivery and publication are separate.
+Status: local implementation and progressive-disclosure repair verified.
+The first hosted proof attempt failed on the preceding head; the repaired
+candidate has not been pushed or revalidated on hosted CI. Publication is separate.
 
 Verification date: 2026-10-07. Base:
 `0017d364995ca59e9b71cad48433d9e485fb6c3a`. Application implementation:
-`7ee5e287535e1f00829b5a7f9da2a86a0fbaead0`.
+`911a732c6b3e5ec37d4ab85739ce87bb8a2d7db3`.
 
 ## Scope
 
@@ -17,7 +18,7 @@ recovery or replanning-authority change.
 
 ## Current local checks
 
-- `npm --prefix web test`: 54 files and 667 tests passed. The 31 projection/UI
+- `npm --prefix web test`: 54 files and 668 tests passed. The 32 projection/UI
   tests cover the saved checkpoint, blocked/deadline facts, mismatched reference,
   checkpoint/execution, absent detail, context anchors, export privacy, clipboard
   failure/unavailability and invalidation across state, role and locale changes.
@@ -25,6 +26,10 @@ recovery or replanning-authority change.
   directions and delayed clipboard success/failure. They failed before the
   source-binding fix and passed afterward; a different requested source cannot
   copy the retained Case before a fresh validated read.
+  The same whole-main raw-data regex used by the native journey failed against
+  the old closed disclosure's DOM text, then passed after rendering technical
+  contents only on explicit expansion. Closing removes identities and the
+  projection explanation from the DOM; context changes remove open old content.
 - `npm --prefix web run lint`: passed.
 - `npm --prefix web run typecheck`: passed.
 - `NEXT_TELEMETRY_DISABLED=1 npm --prefix web run build`: passed.
@@ -33,6 +38,10 @@ recovery or replanning-authority change.
   accepted blocked/deadline fixtures, native clipboard read/write, fault-injected
   clipboard denial, source disclosure and context/session invalidation passed.
   Exported text matched the displayed rows and excluded synthetic actor IDs.
+  The repaired tests also check the unchanged whole-main pattern before
+  disclosure and after close, native Enter/Space interaction, exact disclosed
+  IDs, and no request triggered by open/close. Copy retains its complete
+  whitelist while the source disclosure is closed.
   Browser geometry checked page/section overflow. Raw screenshots, logs and
   reports remain ignored task artifacts, not public product evidence assets.
 
@@ -81,6 +90,33 @@ business authority. The delivery owner reviewed the targeted repair and reran
 the full frontend/static/build and 17-test browser acceptance on the repaired
 implementation. No Critical or Minor findings remain from that review; no
 second independent review is claimed.
+
+## Hosted failure and local disclosure repair
+
+[Draft PR #133](https://github.com/iTao-AI/night-voyager/pull/133) published the
+previous head `e51764a0587c01a16df3f00313efed2f7594a7b9`.
+[CI run 37614480946](https://github.com/iTao-AI/night-voyager/actions/runs/37614480946)
+failed `make compose-proof`: `expectPublicSurface` in
+`web/e2e/fact-to-plan.spec.ts` read UUIDs from the closed handoff disclosure
+through its whole-main text assertion. Visual closure did not remove DOM text.
+The original failure log and local review captures remain retained; hosted
+failure count is 1, with no retry or relabeling as a flaky failure. The job log
+lists a failure screenshot/trace, but its diagnostic upload was skipped and
+the run has no downloadable artifact; those runner files are not claimed as
+locally retained images.
+
+The repair follows progressive disclosure: source identities and their saved
+projection explanation are rendered only while the user has opened the native
+details element and are removed on close. Read facts, copy/fallback and business
+authority remain unchanged. The native journey's regex, whole-main assertion,
+timeout and gate are unchanged; no shared-frame relocation was made.
+
+Focused DOM regressions were RED before this repair and GREEN afterward. The
+local full suite, static/build checks and 17 actual fixture/browser cases passed
+on the repaired implementation. This is a cheap consumer guard proof; it does
+not prove a successful subsequent native or hosted run. The repaired commit is
+local only and requires separate acceptance and a concrete hosted route before
+the draft PR can satisfy merge gates.
 
 Clipboard copy is initiated by the user. Already initiated operating-system
 clipboard writes cannot be recalled after navigation; delayed completion cannot

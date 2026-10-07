@@ -1,7 +1,8 @@
 # Reassessment handoff summary
 
-Status: implemented and locally verified; frontend/fixture browser acceptance
-and final review repair are complete. Hosted delivery is separate.
+Status: implemented and locally verified, including the post-hosted
+progressive-disclosure repair. The first hosted proof attempt failed on the
+preceding head; renewed hosted delivery remains separately authorized.
 
 The saved reassessment becomes a readable, bilingual handoff for an advisor who
 must judge changed circumstances and obtain any future authorization. This is a
@@ -21,6 +22,9 @@ read-only consumer of `PlanExecutionContext` and `TimelineExecutionView`.
 - Collapse technical source identities. User-initiated copy exports the same
   facts and identities as plain text. Clipboard failure exposes selectable text.
   Export excludes actor identities, credentials and request headers.
+  Technical identity contents and the projection explanation enter the DOM
+  only on explicit expansion and are removed on close. Copy remains complete
+  while closed; disclosure itself starts no request.
 - Loading, mutation, authority/context change or session loss removes the old
   copyable summary. A completed asynchronous clipboard operation cannot attach
   stale success/failure UI to a different summary.
@@ -42,6 +46,8 @@ The current published release boundary remains unchanged.
    scenario switch cannot copy the retained source before a new validated read.
 3. Actual browser fixtures cover Chinese and English at 1440 and 390 pixels,
    readable layout, copy, clipboard failure and context/session changes.
+   The original whole-main raw-data pattern passes before expansion and after
+   close, with native keyboard disclosure and exact legal source IDs verified.
 4. Export includes saved/view dates and source anchors, with no actor IDs or
    request credentials. A new render never exposes a stale fallback.
 5. Relevant frontend tests, lint, typecheck, build, diff and documentation review

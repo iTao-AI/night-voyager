@@ -95,14 +95,21 @@ date. `accepted_database_date` is the saved acceptance date; `observed_date` is
 the current read's database-observed date.
 
 Source identities and `pending_future_authorization` appear in a disclosure.
+The disclosure initially contains only its native summary control. Technical
+identities and the projection explanation enter the DOM only while explicitly
+opened; closing removes them again, preserving the default business-text guard.
 `accepted_trigger_projection_sha256` is a saved reference only; the browser does
 not claim to revalidate the accepted trigger projection. User-initiated copy
-exports the displayed facts, source identities, dates and Stop as plain text,
-excluding actor IDs, session credentials and request headers. Clipboard failure
+exports the known read facts, whitelisted source identities, dates and Stop as
+plain text, excluding actor IDs, session credentials and request headers. Clipboard failure
 exposes a read-only selectable text area. Copy creates no canonical record and
 sends no message. Unsettled, busy, changed-session or mismatched-context state
 has no copyable handoff; new role, locale or summary clears previous copy
 feedback/fallback.
+
+Copy and its selectable fallback retain that complete text even while the
+source disclosure is closed. Opening/closing the disclosure makes no request
+and changes no business authority.
 
 Each settled frontend read retains its requested seeded scenario or connected
 Case as client source metadata. Copy requires that source to match the current

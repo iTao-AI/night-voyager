@@ -1,7 +1,7 @@
 # Reassessment handoff summary implementation plan
 
-Status: completed locally. Frontend/browser acceptance, final branch review,
-regression repair and documentation closeout passed. Hosted delivery is separate.
+Status: completed locally, including the progressive-disclosure repair after
+the first hosted proof failure. Renewed hosted delivery remains separately authorized.
 
 **Goal:** turn a saved reassessment into a specific bilingual, user-copyable
 handoff while preserving its authority boundary.
@@ -46,6 +46,7 @@ direction before a new validated read.
   busy/mutation/loading/session state and pending asynchronous results.
 - [x] Update `web/components/plan-execution/ReassessmentHandoff.tsx` to display
   facts, collapsed identities, copy feedback and a read-only selectable fallback.
+  Render technical contents only while explicitly expanded and remove on close.
   Reuse the existing Stop/trigger copy and add scoped styles to
   `web/app/workspace.css`.
 - [x] Update `PlanExecutionWorkspace.tsx` to gate the component on settled state,
@@ -75,7 +76,29 @@ direction before a new validated read.
 
 The final review's seeded scenario finding was fixed with four live-hook
 RED/GREEN regressions and targeted owner review. The repaired tree passed 54
-frontend files / 667 tests, lint, typecheck, build and 17 browser tests. See the
+frontend files / 667 tests, lint, typecheck, build and 17 browser tests. The
+subsequent hosted guard repair is recorded below. See the
 [acceptance record](../../evidence/reassessment-handoff-summary.md) for source
 mapping and evidence limits. Ignored execution evidence and the local worktree
 are retained; no hosted delivery is implied.
+
+## Hosted guard repair
+
+The first hosted `compose / proof` attempt on `e51764a` failed because the
+whole-main text guard consumed IDs from visually closed details. Retain that
+failure count of 1, its log and existing local captures; the runner's failure
+screenshot/trace was not uploaded and is unavailable as a retained artifact.
+The accepted repair changes only
+this component's disclosure DOM lifecycle; native guard/regex/timeout/gate,
+shared frame, copy whitelist and business authority are unchanged.
+
+- [x] Reproduce the exact raw-data pattern in the actual DOM consumer (RED).
+- [x] Render identities/projection explanation on native open and remove on close (GREEN).
+- [x] Verify default/closed DOM, exact disclosed IDs, copy/fallback and new-context isolation.
+- [x] Run the full frontend suite (54 files / 668 tests), static/build checks and
+  17 bilingual 1440/390 fixture/browser cases, including Enter/Space and no new requests.
+- [x] Update current reference/walkthrough and acceptance classification; commit locally.
+
+No new push, hosted rerun, local native/Compose proof, merge or cleanup is part
+of this repair. The revised candidate returns for acceptance and a concrete
+next hosted authorization.

@@ -104,11 +104,15 @@ filled from an unrelated latest attestation.
 Open **View handoff source identities** (`查看交接来源身份`) to inspect the Case,
 decision/receipt, timeline, execution, saved checkpoint and reassessment IDs.
 The saved projection digest is a reference, not a new browser verification.
+The control supports native keyboard interaction. Technical contents are added
+when opened and removed when closed; default reading contains only business
+facts, dates and responsibilities.
 
 Choose **Copy handoff summary** (`复制交接摘要`) to copy those facts and identities
 as plain text. On failure, the page focuses and selects the current summary for
-manual copy. Share it only through a separately chosen human channel; the page
-sends no message and grants no next-workflow permission. Changing role, locale,
+manual copy. Copy includes the known source identities even while their
+disclosure is closed. Share it only through a separately chosen human channel;
+the page sends no message and grants no next-workflow permission. Changing role, locale,
 context or session clears the old fallback; a busy or unsettled page cannot
 copy its previous handoff. Changing the requested demo scenario or Case also
 withdraws the old summary until a fresh validated read supplies matching facts.
