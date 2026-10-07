@@ -88,6 +88,46 @@ stops at `reassessment_required`; the handoff retains predecessor identities and
 states `pending_future_authorization`. No resume, successor planning run,
 decision, timeline, execution, task, provider, or model action is created.
 
+## Read and copy a saved handoff
+
+Once the server returns a saved reassessment, read **Reassessment handoff**
+(`重新评估交接`). The summary identifies the saved Case revision and checkpoint,
+its deadline and family responsibility, accepted trigger and available reason.
+The next responsible role is the advisor who assesses changed conditions and
+the authorization needed next; the existing execution remains stopped.
+
+**Accepted database date** is the date stored with the reassessment.
+**View observed date** belongs to the current server read. These dates may
+differ. Missing matching blocker details are stated as unavailable rather than
+filled from an unrelated latest attestation.
+
+Open **View handoff source identities** (`查看交接来源身份`) to inspect the Case,
+decision/receipt, timeline, execution, saved checkpoint and reassessment IDs.
+The saved projection digest is a reference, not a new browser verification.
+The control supports native keyboard interaction. Technical contents are added
+when opened and removed when closed; default reading contains only business
+facts, dates and responsibilities.
+
+Choose **Copy handoff summary** (`复制交接摘要`) to copy those facts and identities
+as plain text. On failure, the page focuses and selects the current summary for
+manual copy. Copy includes the known source identities even while their
+disclosure is closed. Share it only through a separately chosen human channel;
+the page sends no message and grants no next-workflow permission. Changing role, locale,
+context or session clears the old fallback; a busy or unsettled page cannot
+copy its previous handoff. Changing the requested demo scenario or Case also
+withdraws the old summary until a fresh validated read supplies matching facts.
+
+For the fixture-only UI test, with the locked frontend dependencies and the
+configured Playwright browser already available, run:
+
+```bash
+npm --prefix web run test:e2e -- e2e/reassessment-handoff.spec.ts
+```
+
+This test routes synthetic reads and demo sessions. It verifies browser reading,
+copy, fallback and invalidation, and does not replace native database/Compose
+acceptance. See the [acceptance classification](../evidence/reassessment-handoff-summary.md).
+
 ## Recovery boundaries
 
 - Stale versions require a fresh server read before a new user action.

@@ -45,6 +45,20 @@ on success or failure. Unknown suite names fail before Docker starts. These comm
 are verification procedures; treat a gate as passed only after its actual process
 exits successfully.
 
+If the focused runner fails, it reads only the active task project's `migrator`
+and `postgres` service state and last 80 log lines per service before teardown.
+Each diagnostic command prints at most 160 lines of 500 characters; connection
+URL user information is removed and sensitive credential lines are redacted.
+Unavailable diagnostics or cleanup errors do not replace an existing config/run
+failure code. Successful runs do not collect these diagnostics. This captures a future
+startup error; adding diagnostics does not establish that a migration failure is
+fixed or that a database gate passed. The
+[launcher regression tests](../../tests/architecture/test_collaboration_runner_diagnostics.py)
+exercise these failure, redaction, ordering, and project boundaries with a fake
+Docker CLI, without starting containers.
+This offline launcher regression was verified on 2026-10-08. Retain the emitted
+stderr before another diagnostic attempt; teardown removes the service containers.
+
 Run the complete database migration and regression proof with:
 
 ```bash

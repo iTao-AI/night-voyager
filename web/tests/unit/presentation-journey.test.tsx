@@ -149,6 +149,7 @@ function connectedState(value: string) {
 
 function planState(value: string) {
   planHook.current = {
+    readAuthority: null,
     state: {
       value,
       context: {

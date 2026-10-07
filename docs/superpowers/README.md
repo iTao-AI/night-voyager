@@ -15,6 +15,7 @@ the time. They do not override the current repository rules in [AGENTS.md](../..
 
 | Scope | Status | Specs and plans |
 | --- | --- | --- |
+| Saved reassessment handoff summary | Completed and repaired locally after the first hosted guard failure; renewed hosted acceptance is separate | [Spec](specs/2026-10-07-reassessment-handoff-summary.md) · [Plan](plans/2026-10-07-reassessment-handoff-summary.md) · [Evidence](../evidence/reassessment-handoff-summary.md) |
 | Controlled February intake revision | Locally implemented and reviewed with fixes; full runtime-role/native/browser acceptance passed in the authorized third attempt; two prior failures retained; hosted acceptance tracked separately | [Spec](specs/2026-10-06-controlled-intake-revision.md) · [Plan](plans/2026-10-06-controlled-intake-revision.md) |
 | M2 identity, session, and RLS | Implemented | [Spec](specs/2026-07-12-m2-identity-session-rls-design.md) · [Plan](plans/2026-07-12-m2-identity-session-rls.md) |
 | M3A deterministic planning | Implemented | [Spec](specs/2026-07-12-m3a-deterministic-planning-design.md) · [Plan](plans/2026-07-12-m3a-deterministic-planning.md) |

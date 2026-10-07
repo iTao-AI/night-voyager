@@ -37,6 +37,7 @@ import {
 
 export interface PlanExecutionController {
   state: PlanExecutionState;
+  readAuthority: PlanExecutionAuthority | null;
   busy: boolean;
   connect(role: PlanExecutionRole): Promise<void>;
   switchRole(role: PlanExecutionRole): Promise<void>;
@@ -233,6 +234,7 @@ export function usePlanExecution(
   const authority = normalizePlanExecutionAuthority(authorityInput);
   const api = suppliedApi ?? createPlanExecutionApi(authority);
   const [state, setState] = useState<PlanExecutionState>(loadingPlanExecutionState);
+  const [readAuthority, setReadAuthority] = useState<PlanExecutionAuthority | null>(null);
   const [busy, setBusy] = useState(false);
   const csrf = useRef<string | null>(null);
   const locked = useRef(false);
@@ -316,6 +318,7 @@ export function usePlanExecution(
     }
     const next = derivePlanExecutionState(confirmed, view, receipt);
     setState(next);
+    setReadAuthority(authority);
     savePlanExecutionEnvelope(envelopeFor(next, role, authority, loadPlanExecutionEnvelope()));
   }, [api, authority, closeSessionChanged]);
 
@@ -458,6 +461,7 @@ export function usePlanExecution(
       }
       const next = derivePlanExecutionState(context, view, receipt);
       setState(next);
+      setReadAuthority(authority);
       savePlanExecutionEnvelope(envelopeFor(next, context.active_role, authority, { ...withReceipt, mutations: {} }));
       pendingMutation.current = null;
     } catch (error) {
@@ -637,6 +641,7 @@ export function usePlanExecution(
         };
         const next = derivePlanExecutionState(confirmed, view, receipt);
         setState(next);
+        setReadAuthority(pending.authority);
         savePlanExecutionEnvelope(envelopeFor(
           next,
           pending.role,
@@ -751,6 +756,7 @@ export function usePlanExecution(
       }
       const next = derivePlanExecutionState(confirmed, view);
       setState(next);
+      setReadAuthority(authority);
       savePlanExecutionEnvelope(envelopeFor(next, stored.role, authority, stored));
     } catch (error) {
       if (expectedGeneration === generation.current) {
@@ -786,5 +792,5 @@ export function usePlanExecution(
     }
   }, [recover]);
 
-  return { state, busy, connect, switchRole, start, attest, verify, reassess, recover };
+  return { state, readAuthority, busy, connect, switchRole, start, attest, verify, reassess, recover };
 }
