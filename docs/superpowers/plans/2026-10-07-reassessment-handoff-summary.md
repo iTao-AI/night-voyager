@@ -1,6 +1,7 @@
 # Reassessment handoff summary implementation plan
 
-Status: approved; implementation in progress.
+Status: application implementation and local verification complete; final branch
+review and closeout pending.
 
 **Goal:** turn a saved reassessment into a specific bilingual, user-copyable
 handoff while preserving its authority boundary.
@@ -53,16 +54,16 @@ clipboard failure or delayed completion across loading/session/context changes.
 
 ## Task 3: Browser acceptance and documentation
 
-- [ ] Add `web/e2e/reassessment-handoff.spec.ts`: explicitly fixture-only routed
+- [x] Add `web/e2e/reassessment-handoff.spec.ts`: explicitly fixture-only routed
   HTTP reads, blocked/deadline in both languages at 1440/390, actual clipboard
   copy, failed-copy selection and session/context refresh. No native mutations.
-- [ ] Run the new browser file in a task-owned server/browser profile and retain
+- [x] Run the new browser file in a task-owned server/browser profile and retain
   screenshots/results under ignored `tmp/`. Existing installed browser may be
   reused read-only; no unapproved external tools are downloaded.
-- [ ] Inspect existing HTTP/DB projection tests and
+- [x] Inspect existing HTTP/DB projection tests and
   `docs/reference/timeline-execution-contract.md`; update the reference,
   applicable walkthrough and docs indexes for the new handoff behavior.
-- [ ] Run `cd web && npm run lint`, `npm run typecheck`, `npm run build`, and
+- [x] Run `cd web && npm run lint`, `npm run typecheck`, `npm run build`, and
   link/diff checks. Do not restart frozen native recovery acceptance.
 - [ ] Run targeted `gstack-workflows:document-release` audit and one fresh
   whole-branch review; fix Important/Critical findings with regression checks.

@@ -54,7 +54,7 @@ it.each(["reference", "checkpoint", "execution", "kind", "missing"] as const)(
     else view.latest_attestation!.attestation_kind = "progress";
     const summary = buildReassessmentHandoff(context, view, "en");
     expect(summary?.text).toContain("Matching blocked attestation details are unavailable in this view.");
-    expect(summary?.text).not.toContain("Missing required input");
+    expect(summary?.text).not.toContain("Required input is missing");
   },
 );
 
@@ -65,7 +65,7 @@ it("reports saved deadline acceptance and both server dates without attributing 
   expect(summary?.text).toContain("Accepted database date: 2026-10-16");
   expect(summary?.text).toContain("View observed date: 2026-10-20");
   expect(summary?.text).toContain("The server accepted the saved checkpoint's elapsed deadline. No further reason was provided.");
-  expect(summary?.text).not.toContain("Missing required input");
+  expect(summary?.text).not.toContain("Required input is missing");
   expect(summary?.text).toContain("Saved projection reference only; the browser has not revalidated the trigger.");
 });
 

@@ -1,6 +1,7 @@
 # Reassessment handoff summary
 
-Status: approved for local implementation; acceptance pending.
+Status: implemented locally; frontend and fixture/browser acceptance passed;
+final branch review pending. Hosted delivery is separate.
 
 The saved reassessment becomes a readable, bilingual handoff for an advisor who
 must judge changed circumstances and obtain any future authorization. This is a

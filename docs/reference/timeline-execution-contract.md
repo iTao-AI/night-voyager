@@ -78,6 +78,32 @@ Case, revision, decision, decision receipt, timeline, and execution, while the
 checkpoint remains bound to that execution. It creates no successor business
 row. PR B exposes that UI and proves its terminal recovery boundary.
 
+### Saved handoff summary
+
+The current frontend consumes the existing saved `TimelineReassessment` and
+validated context/view anchors. It shows the Case revision, saved checkpoint,
+immutable due date, accountable family role, accepted trigger, known reason,
+next advisor responsibility and two distinct server dates.
+
+The checkpoint is selected by `reassessment.checkpoint_id`, independently of
+`current_checkpoint`. A blocked reason is displayed only when the projected
+attestation's ID equals `trigger_reference_id` and its execution/checkpoint IDs
+match the saved reassessment, with blocked kind/status. Otherwise matching
+attestation detail is explicitly unavailable. A deadline trigger reports saved
+server acceptance; the browser neither recomputes it nor substitutes a local
+date. `accepted_database_date` is the saved acceptance date; `observed_date` is
+the current read's database-observed date.
+
+Source identities and `pending_future_authorization` appear in a disclosure.
+`accepted_trigger_projection_sha256` is a saved reference only; the browser does
+not claim to revalidate the accepted trigger projection. User-initiated copy
+exports the displayed facts, source identities, dates and Stop as plain text,
+excluding actor IDs, session credentials and request headers. Clipboard failure
+exposes a read-only selectable text area. Copy creates no canonical record and
+sends no message. Unsettled, busy, changed-session or mismatched-context state
+has no copyable handoff; new role, locale or summary clears previous copy
+feedback/fallback.
+
 ## Closed synthetic identity
 
 Migration `0015` is identity-only. It retains the generic demo principals and
@@ -102,3 +128,8 @@ accessibility projections, not business state.
 The semantic Playwright assertions and browser-to-database receipt/GET proof are
 the pass/fail authority. The four checked-in screenshots are review evidence and
 use only visibly labelled synthetic data.
+
+The [saved handoff acceptance record](../evidence/reassessment-handoff-summary.md)
+separately classifies the new routed-fixture browser checks. They verify parser,
+presentation and clipboard behavior, while reusing the existing projection
+contract; they do not establish new HTTP/database or native recovery acceptance.
