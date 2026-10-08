@@ -2,18 +2,17 @@
 
 Night Voyager 帮助留学顾问把已确认事实整理成从路线比较到客户决定的清晰、可复核路径。
 
-## 体验当前预算变更闭环
+## 体验当前本地流程
 
-当前 source 支持修改已有合成 Case 的已确认预算：
+当前源码提供三条使用合成数据与确定性适配器的路径：
 
-1. 顾问发起修订，家长提出新的首选预算与硬上限。
-2. 顾问将提案确认为事实，生成同一 Case 的新 revision。
-3. 显式启动修订规划；新结果与前后比较需要重新经过顾问审核。
-4. 家长选择路线、填写实际接受的预算区间、逐项确认取舍并同意。决策回执记录这些实际值及家长权限。
+1. **修改已确认预算。** 顾问发起修订，家长提出新的首选预算与硬上限，顾问为同一 Case 确认新事实。显式启动修订规划，审核新结果及前后比较；家长再选择路线、接受预算区间与必要取舍，并明确同意。决策回执记录这些实际选择。在新的 pilot volume 中按 [已确认事实修订指南](docs/operations/customer-revision-recovery.md#revise-one-confirmed-fact) 操作。
+2. **推迟受支持的入学时间。** 单独启用可选合成 Case 后，打开 `/demo?scenario=intake-delay`。学生提出从 `2027-02` 推迟到 `2028-02`，顾问确认受支持的月份，再显式启动新规划。更新后的月份、证据与费用需要重新经过顾问审核和家长同意，最终形成决策回执与时间线。该场景仅支持这一个已登记的替代月份。按 [受控入学时间修订指南](docs/operations/controlled-intake-revision.md) 完成可选场景准备；默认 seed 不会启用此 Case。
+3. **交接已保存的重评事实。** 执行因已保存的重评而停止后，查看检查点、已记录的触发原因、日期和顾问下一步责任，再复制事实文本供人工交接。原执行仍保持停止，后续流程需要另行授权；阅读或复制不会恢复执行，也不会创建后继流程。操作步骤见 [阅读并复制已保存的交接摘要](docs/operations/plan-execution-walkthrough.md#read-and-copy-a-saved-handoff)。
 
-在新的 pilot volume 中按 [已确认事实修订指南](docs/operations/customer-revision-recovery.md#revise-one-confirmed-fact) 操作。符合条件的终态 Task 按 [恢复指南](docs/operations/customer-revision-recovery.md#recover-a-qualified-failed-task) 由顾问明确同意后创建新 Task，使用新的 SSE 并重新审核；原 Task 保持不变。
+符合条件的终态规划 Task 使用单独的 [恢复指南](docs/operations/customer-revision-recovery.md#recover-a-qualified-failed-task)：顾问明确同意后创建新 Task，使用新的 SSE 并重新审核；原 Task 保持不变。
 
-`/` 是静态展示入口。Live 本地流程从 `/demo/collaboration` 进入 `/demo`，在决定完成后通过 `/demo/plan?case_id=<case_id>` 继续同一 Case；裸 `/demo/plan` 是独立场景。当前 source 使用 migration `0016`；已发布的 [v0.1.6 Release](https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6) 固定在历史 migration `0015`。两者都使用合成数据与确定性适配器，不构成生产部署证据。
+`/` 是静态展示入口。Live 本地流程从 `/demo/collaboration` 进入 `/demo`，在决定完成后通过 `/demo/plan?case_id=<case_id>` 继续同一 Case；裸 `/demo/plan` 是独立场景。当前 source 使用 migration `0017`；已发布的 [v0.1.6 Release](https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6) 固定在历史 migration `0015`，不包含这些后续变化。两者都使用合成数据与确定性适配器，不构成生产部署证据。
 
 ## 顾问工作台概览
 
@@ -57,7 +56,7 @@ Night Voyager 面向留学顾问团队，支持他们与参与确认的学生和
 
 - **快速开始：** 运行 `make help`、`make doctor`、`make demo` 与 `make proof`，然后打开 `http://127.0.0.1:3000/`。
 - **架构：** 阅读 [架构与里程碑历史](DESIGN.md) 与 [文档索引](docs/README.md)。
-- **发布：** [v0.1.6 发布说明](docs/releases/v0.1.6.md) 与 [v0.1.6 发布验证指南](docs/how-to/verify-v0.1.6-release.md) 说明当前 local synthetic portfolio release；当前 source 的预算修订与终态恢复属于后续变更。
+- **发布：** [v0.1.6 发布说明](docs/releases/v0.1.6.md) 与 [v0.1.6 发布验证指南](docs/how-to/verify-v0.1.6-release.md) 说明当前 local synthetic portfolio release；当前 source 的预算修订、受控入学时间修订、终态恢复与已保存重评摘要属于后续变更。
 
 ## 详细证明
 

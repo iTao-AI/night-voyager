@@ -2,18 +2,17 @@
 
 Night Voyager helps study-abroad advisors turn confirmed facts into a clear, reviewable path from route comparison to client decision.
 
-## Try the current budget-change journey
+## Try the current local workflows
 
-The current source supports revising an existing synthetic Case's confirmed budget:
+The current source offers three paths using synthetic data and deterministic adapters:
 
-1. The advisor requests a revision; the parent proposes a new preferred budget and hard ceiling.
-2. The advisor confirms the proposal as a fact, producing a new revision of the same Case.
-3. An explicit action starts revised planning. Its fresh result and comparison require new advisor review.
-4. The parent chooses a route, enters the accepted budget interval, acknowledges required trade-offs and gives consent. The decision receipt records those actual values and parent authority.
+1. **Change the confirmed budget.** The advisor requests a revision, the parent proposes a new preferred budget and hard ceiling, and the advisor confirms the fact for the same Case. Explicitly start revised planning and review its new result and comparison. The parent then chooses a route, accepts a budget interval and required trade-offs, and gives consent; the receipt records those actual choices. Follow the [confirmed-fact revision walkthrough](docs/operations/customer-revision-recovery.md#revise-one-confirmed-fact) on a fresh pilot volume.
+2. **Defer a supported intake.** Separately enable the opt-in synthetic Case, then open `/demo?scenario=intake-delay`. The student proposes moving from `2027-02` to `2028-02`; the advisor confirms the supported month and explicitly starts new planning. The updated month, evidence and cost lead to fresh advisor review and parent consent, with a decision receipt and timeline. This scenario is limited to that registered alternate. Follow the [controlled intake revision walkthrough](docs/operations/controlled-intake-revision.md), including its opt-in preparation; default seeding does not enable this Case.
+3. **Hand off a saved reassessment.** When execution stops for a saved reassessment, read the checkpoint, recorded trigger, dates and next advisor responsibility, then copy the facts as text for a human handoff. The existing execution stays stopped, and any next workflow requires separate authorization; reading or copying does not resume it or create a successor. Follow [Read and copy a saved handoff](docs/operations/plan-execution-walkthrough.md#read-and-copy-a-saved-handoff).
 
-Follow the [confirmed-fact revision walkthrough](docs/operations/customer-revision-recovery.md#revise-one-confirmed-fact) on a fresh pilot volume. For a qualified terminal task, the [recovery walkthrough](docs/operations/customer-revision-recovery.md#recover-a-qualified-failed-task) requires advisor consent, a fresh Task/SSE stream and fresh review; the original task remains unchanged.
+For a qualified terminal planning task, the separate [recovery walkthrough](docs/operations/customer-revision-recovery.md#recover-a-qualified-failed-task) requires advisor consent, a fresh Task/SSE stream and fresh review; the original task remains unchanged.
 
-`/` is a static presentation entry. The live local flow starts at `/demo/collaboration` and continues the same Case through `/demo`, then `/demo/plan?case_id=<case_id>` after a decision. Bare `/demo/plan` is an independent scenario. Current source uses migration `0016`; the published [v0.1.6 release](https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6) is historical migration `0015`. Both use synthetic data and deterministic adapters; neither establishes a production deployment.
+`/` is a static presentation entry. The live local flow starts at `/demo/collaboration` and continues the same Case through `/demo`, then `/demo/plan?case_id=<case_id>` after a decision. Bare `/demo/plan` is an independent scenario. Current source uses migration `0017`; the published [v0.1.6 release](https://github.com/iTao-AI/night-voyager/releases/tag/v0.1.6) is historical migration `0015` and does not include these subsequent changes. Both use synthetic data and deterministic adapters; neither establishes a production deployment.
 
 ## Advisor workspace overview
 
@@ -57,7 +56,7 @@ The mobile frame shows the same real route-analysis workspace at the standard 39
 
 - **Quickstart:** run `make help`, `make doctor`, `make demo`, and `make proof`; then open `http://127.0.0.1:3000/`.
 - **Architecture:** read the [architecture and milestone history](DESIGN.md) and the [documentation index](docs/README.md).
-- **Release:** the [v0.1.6 release notes](docs/releases/v0.1.6.md) and [release verification guide](docs/how-to/verify-v0.1.6-release.md) describe the current local synthetic portfolio release; current-source budget revision and terminal recovery are subsequent changes.
+- **Release:** the [v0.1.6 release notes](docs/releases/v0.1.6.md) and [release verification guide](docs/how-to/verify-v0.1.6-release.md) describe the current local synthetic portfolio release; current-source budget revision, controlled intake revision, terminal recovery and saved reassessment summaries are subsequent changes.
 
 ## Detailed proof
 
