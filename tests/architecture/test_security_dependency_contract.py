@@ -4,10 +4,12 @@ import json
 import tomllib
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 NEXT_VERSION = "16.3.6"
 POSTCSS_VERSION = "8.5.23"
-NANOID_VERSION = "3.3.18"
+NANOID_MINIMUM_VERSION = (3, 3, 18)
 REACT_VERSION = "19.2.8"
 PROJECT_VERSION = "0.1.6"
 SHARP_MINIMUM_VERSION = (0, 35, 4)
@@ -71,7 +73,10 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert locked_packages["node_modules/next"]["version"] == NEXT_VERSION
     assert locked_packages["node_modules/eslint-config-next"]["version"] == NEXT_VERSION
     assert locked_packages["node_modules/postcss"]["version"] == POSTCSS_VERSION
-    assert locked_packages["node_modules/nanoid"]["version"] == NANOID_VERSION
+    nanoid_version = tuple(
+        int(part) for part in locked_packages["node_modules/nanoid"]["version"].split(".")
+    )
+    assert NANOID_MINIMUM_VERSION <= nanoid_version < (3, 4)
     assert "overrides" not in locked_root
 
     next_family = {
@@ -92,6 +97,31 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert locked_sharp["optional"] is True
 
 
+@pytest.mark.parametrize(
+    ("nanoid_version", "accepted"),
+    [("3.3.20", True), ("3.3.17", False), ("3.4.0", False), ("4.0.0", False)],
+)
+def test_next_security_contract_checks_nanoid_patch_compatibility(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    nanoid_version: str,
+    accepted: bool,
+) -> None:
+    manifest = (ROOT / "web/package.json").read_text(encoding="utf-8")
+    lock = json.loads((ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
+    lock["packages"]["node_modules/nanoid"]["version"] = nanoid_version
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web/package.json").write_text(manifest, encoding="utf-8")
+    (tmp_path / "web/package-lock.json").write_text(json.dumps(lock), encoding="utf-8")
+    monkeypatch.setitem(globals(), "ROOT", tmp_path)
+
+    if accepted:
+        test_next_family_stays_on_approved_security_patch()
+    else:
+        with pytest.raises(AssertionError):
+            test_next_family_stays_on_approved_security_patch()
+
+
 def test_locked_web_dependencies_meet_open_security_advisories() -> None:
     web_lock = json.loads((ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
     minimum_versions = {
@@ -99,6 +129,7 @@ def test_locked_web_dependencies_meet_open_security_advisories() -> None:
         "browserslist": (4, 28, 7),
         "js-yaml": (4, 3, 2),
         "sharp": SHARP_MINIMUM_VERSION,
+        "source-map-js": (1, 2, 2),
     }
     locked_packages = web_lock["packages"]
     for name, minimum in minimum_versions.items():

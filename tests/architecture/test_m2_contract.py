@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_m2_dependencies_and_alembic_head_are_declared() -> None:
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
 
-    assert "sqlalchemy>=2.0.51,<2.1" in pyproject["project"]["dependencies"]
+    assert "sqlalchemy[asyncio]>=2.0.51,<2.1" in pyproject["project"]["dependencies"]
     assert "alembic>=1.18.5,<1.19" in pyproject["project"]["dependencies"]
     assert "asyncpg>=0.31,<0.32" in pyproject["project"]["dependencies"]
     assert "pytest-asyncio>=1.4,<2" in pyproject["dependency-groups"]["dev"]
