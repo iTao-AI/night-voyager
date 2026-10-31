@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.3.8"
+NEXT_VERSION = "16.4.1"
 POSTCSS_VERSION = "8.5.23"
 NANOID_MINIMUM_VERSION = (3, 3, 18)
 REACT_VERSION = "19.2.8"
@@ -88,7 +88,7 @@ def test_next_family_stays_on_approved_security_patch() -> None:
     assert set(next_family.values()) == {NEXT_VERSION}
 
     locked_next = locked_packages["node_modules/next"]
-    assert locked_next["optionalDependencies"]["sharp"] == "^0.35.4"
+    assert locked_next["optionalDependencies"]["sharp"] == "^0.35.5"
     locked_sharp = locked_packages["node_modules/sharp"]
     sharp_version = tuple(
         int(part) for part in locked_sharp["version"].split(".")
@@ -132,6 +132,7 @@ def test_locked_web_dependencies_meet_open_security_advisories() -> None:
         "source-map-js": (1, 2, 2),
         "vite": (8, 1, 6),
         "@vitest/mocker": (4, 1, 12),
+        "zod": (4, 6, 6),
     }
     locked_packages = web_lock["packages"]
     for name, minimum in minimum_versions.items():
