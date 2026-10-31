@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.3.6"
+NEXT_VERSION = "16.3.8"
 POSTCSS_VERSION = "8.5.23"
 NANOID_MINIMUM_VERSION = (3, 3, 18)
 REACT_VERSION = "19.2.8"
 PROJECT_VERSION = "0.1.6"
-SHARP_MINIMUM_VERSION = (0, 35, 4)
+SHARP_MINIMUM_VERSION = (0, 35, 5)
 
 
 def _locked_version(packages: list[dict[str, object]], name: str) -> tuple[int, ...]:
@@ -130,8 +130,26 @@ def test_locked_web_dependencies_meet_open_security_advisories() -> None:
         "js-yaml": (4, 3, 2),
         "sharp": SHARP_MINIMUM_VERSION,
         "source-map-js": (1, 2, 2),
+        "vite": (8, 1, 6),
+        "@vitest/mocker": (4, 1, 12),
     }
     locked_packages = web_lock["packages"]
     for name, minimum in minimum_versions.items():
         version = locked_packages[f"node_modules/{name}"]["version"]
         assert tuple(int(part) for part in version.split(".")) >= minimum, name
+
+
+def test_vitest_family_stays_on_the_patched_compatible_line() -> None:
+    package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
+    lock = json.loads((ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
+    packages = lock["packages"]
+
+    assert package["devDependencies"]["vitest"] == "4.1.12"
+    assert packages[""]["devDependencies"]["vitest"] == "4.1.12"
+    assert packages["node_modules/vitest"]["version"] == "4.1.12"
+    family = {
+        item["version"]
+        for path, item in packages.items()
+        if path.startswith("node_modules/@vitest/")
+    }
+    assert family == {"4.1.12"}

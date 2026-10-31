@@ -945,7 +945,7 @@ def test_current_dependency_and_security_truth_is_dated() -> None:
     assert "zero advisory objects" in security
     assert "js-yaml" not in security
     assert "brace-expansion" not in security
-    assert "minimatch" not in security
+    assert "minimatch and Zod" in security
     assert "Fresh full and runtime/omit-dev npm audits report zero advisory objects" not in security
     assert "0.34.5" not in security
 
