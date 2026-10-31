@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -905,9 +906,11 @@ def test_current_advisor_redesign_keeps_development_and_release_boundaries() -> 
 
 def test_current_dependency_and_security_truth_is_dated() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    web_lock = json.loads((ROOT / "web/package-lock.json").read_text(encoding="utf-8"))
+    locked_packages = web_lock["packages"]
 
-    assert "16.3.3" in security
-    assert "sharp 0.35.3" in security
+    assert f'`{locked_packages["node_modules/next"]["version"]}`' in security
+    assert f'sharp {locked_packages["node_modules/sharp"]["version"]}' in security
     assert "GHSA-f88m-g3jw-g9cj" in security
     assert "no direct postcss, nanoid, or sharp dependency" in security
     assert "no npm override" in security
@@ -943,7 +946,7 @@ def test_current_dependency_and_security_truth_is_dated() -> None:
     assert "js-yaml" not in security
     assert "brace-expansion" not in security
     assert "minimatch" not in security
-    assert "Fresh full and runtime/omit-dev npm audits report zero advisory objects" in security
+    assert "Fresh full and runtime/omit-dev npm audits report zero advisory objects" not in security
     assert "0.34.5" not in security
 
     docs_index = (ROOT / "docs/README.md").read_text(encoding="utf-8")
