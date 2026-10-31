@@ -44,7 +44,6 @@ function writeBrowserPresentationLocale(locale: PresentationLocale): void {
 
 function applyDocumentPresentation(locale: PresentationLocale): void {
   document.documentElement.lang = locale;
-  document.title = getPresentationCopy(locale, "documentTitle");
   document
     .querySelector('meta[name="description"]')
     ?.setAttribute("content", getPresentationCopy(locale, "documentDescription"));
@@ -84,6 +83,7 @@ export function PresentationProvider({ children }: { children: ReactNode }) {
 
   return (
     <PresentationContext.Provider value={value}>
+      <title>{copy("documentTitle")}</title>
       {children}
     </PresentationContext.Provider>
   );

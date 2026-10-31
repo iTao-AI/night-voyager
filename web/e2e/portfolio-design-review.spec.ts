@@ -66,6 +66,54 @@ async function expectRootRows(page: Page, locale: "zh-CN" | "en") {
   }
 }
 
+test("keeps the root hero title and primary action inside the first desktop viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+
+  for (const locale of ["zh-CN", "en"] as const) {
+    await page.getByRole("button", { name: locale === "en" ? "English" : "中文", exact: true }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", locale);
+    await expect(page.getByRole("heading", { level: 1 })).toBeInViewport({ ratio: 1 });
+    await expect(page.locator(".portfolio-hero-actions .portfolio-primary-action")).toBeInViewport({ ratio: 1 });
+
+    const preview = page.locator(".portfolio-hero-product .advisor-workspace-preview");
+    const geometry = await preview.evaluate((element) => {
+      const context = element.querySelector<HTMLElement>(".workspace-context-plane")!;
+      const authority = element.querySelector<HTMLElement>(".workspace-authority-plane")!;
+      return {
+        height: element.getBoundingClientRect().height,
+        contextWidth: context.getBoundingClientRect().width,
+        authorityWidth: authority.getBoundingClientRect().width,
+      };
+    });
+    expect(geometry.height).toBeLessThan(1500);
+    expect(geometry.contextWidth).toBeGreaterThanOrEqual(80);
+    expect(geometry.authorityWidth).toBeGreaterThanOrEqual(100);
+    await expectRootRows(page, locale);
+  }
+});
+
+for (const locale of ["zh-CN", "en"] as const) {
+  test(`keeps the saved ${locale} title and visible language consistent after reload`, async ({ page }) => {
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await page.getByRole("button", { name: "English", exact: true }).click();
+      if (locale === "zh-CN") await page.getByRole("button", { name: "中文", exact: true }).click();
+      await page.reload();
+      await expect(page.locator("html")).toHaveAttribute("lang", locale);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveAttribute(
+        "aria-label",
+        locale === "en" ? "Move complex study-abroad planning forward with clarity." : "让复杂的留学规划，清晰地向前。",
+      );
+      await expect(page).toHaveTitle(locale === "en"
+        ? "Night Voyager | An AI Collaboration Platform Built for Study-Abroad Advisors"
+        : "Night Voyager｜为留学顾问打造的 AI 协作平台");
+      await expect(page.locator("head > title")).toHaveCount(1);
+    }
+  });
+}
+
 test("keeps the primary portfolio action readable in both locales", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/");

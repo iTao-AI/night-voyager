@@ -765,8 +765,8 @@
   grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
   gap: clamp(2rem, 6vw, 7rem);
   min-height: min(840px, calc(100vh - 76px));
-  align-items: center;
-  padding-block: clamp(4rem, 10vw, 8rem);
+  align-items: start;
+  padding-block: clamp(3rem, 5vw, 4rem);
 }
 
 .portfolio-hero-copy {
@@ -785,7 +785,7 @@
   max-width: 22ch;
   color: var(--nv-work-surface);
   font-family: var(--font-ui);
-  font-size: clamp(2.65rem, 5.2vw, 5.7rem);
+  font-size: clamp(2.65rem, 4.4vw, 4rem);
   font-weight: 650;
   letter-spacing: -.06em;
   line-height: 1.03;
@@ -1265,6 +1265,33 @@
 }
 
 @media (min-width: 901px) {
+  .portfolio-product-preview {
+    padding: 0;
+  }
+
+  .portfolio-product-preview .workspace-top-band-grid > div {
+    padding: .75rem;
+  }
+
+  .portfolio-product-preview .advisor-product-frame-context {
+    padding: .5rem;
+  }
+
+  .portfolio-product-preview .advisor-product-frame-work,
+  .portfolio-product-preview .advisor-product-frame-evidence,
+  .portfolio-product-preview .advisor-product-frame-authority {
+    padding: .75rem;
+  }
+
+  .portfolio-product-preview .workspace-context-value,
+  .portfolio-product-preview .workspace-context-budget {
+    font-size: 1rem;
+  }
+
+  .portfolio-product-preview .workspace-context-label {
+    letter-spacing: 0;
+  }
+
   .portfolio-product-frame .advisor-product-frame-workflow {
     padding-inline: .25rem;
   }
