@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.4.1"
+NEXT_VERSION = "16.4.3"
 POSTCSS_VERSION = "8.5.23"
 NANOID_MINIMUM_VERSION = (3, 3, 18)
-REACT_VERSION = "19.2.8"
+REACT_VERSION = "19.2.9"
 PROJECT_VERSION = "0.1.6"
 SHARP_MINIMUM_VERSION = (0, 35, 5)
 
@@ -46,6 +46,21 @@ def test_fastapi_and_starlette_stay_on_approved_security_lines() -> None:
     assert (1, 3, 1) <= locked_starlette < (1, 4)
     assert locked_httpx2 == (2, 12, 0)
     assert locked_httpcore2 >= (2, 10, 0)
+
+
+@pytest.mark.parametrize(
+    ("package_name", "minimum_version"),
+    [
+        ("mako", (1, 4, 2)),
+        ("mcp", (1, 30, 0)),
+        ("certifi", (2026, 10, 18)),
+    ],
+)
+def test_locked_python_dependencies_meet_reviewed_security_floors(
+    package_name: str, minimum_version: tuple[int, ...]
+) -> None:
+    uv_lock = tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))
+    assert _locked_version(uv_lock["package"], package_name) >= minimum_version
 
 
 def test_next_family_stays_on_approved_security_patch() -> None:

@@ -35,9 +35,15 @@ is not a real-world negative claim.
 
 ## Isolation and bounds
 
-`mcp>=1.28.1,<2` is an optional extra locked at `1.28.1`. Default pytest, `make check`,
-Compose, API, worker, SSE, frontend, `/demo`, and installed-wheel proof do not install or
-import it. The process adapter has fixed startup/tool deadlines, response/text/stderr
+`mcp>=1.28.1,<2` is an optional extra locked at the reviewed 1.x security revision
+`1.30.0`. This restricts tool output-schema references to the supplied document and
+standard metaschemas, including for stdio clients. Night Voyager's public v1 tool
+contracts and authority checks remain unchanged. This consumer SDK update does not
+change an independently pinned native producer environment or establish a new real-MKE
+quality proof. The base installation, Compose, API, worker, SSE, frontend, `/demo`, and
+installed-wheel proof do not require MCP. Default pytest and `make check` exclude the
+optional adapter suite; CI explicitly installs the extra and runs its fake stdio
+compatibility tests. The process adapter has fixed startup/tool deadlines, response/text/stderr
 bounds, trusted executable and paths, an allowlisted child environment, and SDK-owned
 stdin-close/terminate/kill cleanup. The proof copies candidate bytes into a private
 controller-owned directory, fully revalidates that copy, and never installs from the
