@@ -846,13 +846,13 @@ def test_native_mcp_environment_does_not_forward_python_import_redirectors(
     }
 
 
-def test_tagged_mcp_default_stdio_environment_excludes_pythonpath() -> None:
+def test_reviewed_mcp_default_stdio_environment_excludes_pythonpath() -> None:
     pytest.importorskip("mcp")
     from importlib import metadata
 
     from mcp.client.stdio import get_default_environment
 
-    assert metadata.version("mcp") == "1.28.1"
+    assert metadata.version("mcp") == "1.30.0"
     assert "PYTHONPATH" not in get_default_environment()
 
 

@@ -1407,8 +1407,8 @@ def verify_config() -> None:
         )
     if optional_dependencies.get("mke") != ["mcp>=1.28.1,<2"]:
         raise SystemExit("MKE must remain an exact optional dependency range")
-    if package_version(uv_lock["package"], "mcp") != "1.28.1":
-        raise SystemExit("MCP optional lock must remain at the reviewed 1.28.1 version")
+    if package_version(uv_lock["package"], "mcp") != "1.30.0":
+        raise SystemExit("MCP optional lock must remain at the reviewed 1.30.0 version")
     if "fastapi>=0.139,<0.140" not in runtime_dependencies:
         raise SystemExit("FastAPI runtime dependency must remain on approved 0.139.x")
     if "starlette>=1.3.1,<1.4" not in runtime_dependencies:

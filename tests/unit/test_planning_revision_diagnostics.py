@@ -293,7 +293,7 @@ def test_failure_upload_uses_explicit_safe_paths_and_preserves_existing_gate() -
         ),
     }
     assert len(paths) == 7
-    assert upload["uses"] == "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a"
+    assert upload["uses"] == "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
     assert upload["with"]["retention-days"] == 7
     assert [step["run"] for step in steps if step.get("run") == "make compose-proof"] == [
         "make compose-proof"
