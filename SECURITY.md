@@ -42,7 +42,7 @@ The 2026-11-01 maintenance also locks optional MCP to `1.30.0`, Mako to `1.4.2`,
 
 For [GHSA-6q48-6c7w-9gw2](https://github.com/advisories/GHSA-6q48-6c7w-9gw2), certifi `2026.10.18` first removed emSign roots after intermediate key compromise. The selected `2026.10.19` keeps the affected `emSign ECC Root CA - G3` removed and restores unaffected emSign roots. Dependency synchronization and image rebuilds must use the updated lock to receive this trust-store change. Routine tooling patches are pyright `1.1.414`, pytest-asyncio `1.4.1`, and the SHA-pinned `actions/upload-artifact` `v7.0.2`.
 
-The 2026-11-01 review of [GHSA-g3hv-75wg-m249](https://github.com/isaacs/minimatch/security/advisories/GHSA-g3hv-75wg-m249) found that Dependabot could resolve minimatch only to `10.2.5` through the installed tooling constraints. The same day's npm audit reported zero runtime package entries and 16 moderate development package entries. On 2026-11-18, GitHub reported repository alert #76 as withdrawn. The upstream advisory still lists `>=7.0.0,<11.0.1`, which covers the locked development-only `10.2.5` copy. A compatible update requires the parent toolchain to admit a patched version.
+GitHub reported one development-only minimatch alert on 2026-11-18 for [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249). The lockfile updates transitive `typescript-eslint` to `8.73.0`, which resolves minimatch to `11.0.9` under the TypeScript parser. ESLint's separate `3.1.5` copy falls below the advisory's affected range of `>=7.0.0,<11.0.1`. GitHub records the repository alert status after analyzing the default branch.
 
 ## Historical security records
 
