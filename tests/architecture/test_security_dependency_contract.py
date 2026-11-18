@@ -154,6 +154,11 @@ def test_locked_web_dependencies_meet_open_security_advisories() -> None:
         version = locked_packages[f"node_modules/{name}"]["version"]
         assert tuple(int(part) for part in version.split(".")) >= minimum, name
 
+    for path, package in locked_packages.items():
+        if path.endswith("/minimatch"):
+            version = tuple(int(part) for part in package["version"].split("."))
+            assert not (7, 0, 0) <= version < (11, 0, 1), (path, package["version"])
+
 
 def test_vitest_family_stays_on_the_patched_compatible_line() -> None:
     package = json.loads((ROOT / "web/package.json").read_text(encoding="utf-8"))
