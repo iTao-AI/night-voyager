@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-NEXT_VERSION = "16.4.3"
+NEXT_VERSION = "16.4.5"
 POSTCSS_VERSION = "8.5.23"
 NANOID_MINIMUM_VERSION = (3, 3, 18)
 REACT_VERSION = "19.2.9"
@@ -153,6 +153,11 @@ def test_locked_web_dependencies_meet_open_security_advisories() -> None:
     for name, minimum in minimum_versions.items():
         version = locked_packages[f"node_modules/{name}"]["version"]
         assert tuple(int(part) for part in version.split(".")) >= minimum, name
+
+    for path, package in locked_packages.items():
+        if path.endswith("/minimatch"):
+            version = tuple(int(part) for part in package["version"].split("."))
+            assert not (7, 0, 0) <= version < (11, 0, 1), (path, package["version"])
 
 
 def test_vitest_family_stays_on_the_patched_compatible_line() -> None:
